@@ -51,6 +51,13 @@ describe("Case Hub payload 形状", () => {
     expectCode(() => assertPayloadShape({ profile: {}, extensions: { "case:owner": 1 } }), "VALIDATION_FAILED");
   });
 
+  it("payload 本身不是对象被拒绝（null / 数组 / 标量）", () => {
+    for (const bad of [null, [], ["profile"], "profile", 1, true]) {
+      const error = expectCode(() => assertPayloadShape(bad), "VALIDATION_FAILED");
+      expect(error.details.map((detail) => detail.path)).toEqual(["payload"]);
+    }
+  });
+
   it("未识别的顶层分组被拒绝，并带 path 明细", () => {
     const error = expectCode(
       () => assertPayloadGroups({ profile: {}, summary: {}, attachments: [] }),

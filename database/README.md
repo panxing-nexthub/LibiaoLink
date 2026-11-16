@@ -1,3 +1,17 @@
+> **2026-11-15 · 公共节点审核企微通知个人设置与及时通知**：`0100_task_node_reviewer_notification_settings.sql` 新增 `task_node_reviewer_notification_settings`（`reviewer_id uuid` 主键 → `users.id on delete cascade`、`enabled boolean`、`notification_mode text` immediate / scheduled CHECK、`daily_time text` HH:mm CHECK、按人 `last_dispatched_on date`、`updated_at` / `updated_by`；2 个 CHECK）。迁移把 0099 全局开关 / 时间 / 当日派发标记复制给当前审核人，通知方式默认 scheduled；旧表保留历史，不再由应用读写。缺行按开启 · 固定时间 · 09:00 处理；及时通知在申请创建时写 outbox，固定时间由 worker 按人派发。只追加 DDL，回滚语句入头注。
+
+> **2026-11-15 · 公共节点审核企微通知设置**：`0099_task_node_review_notification_settings.sql` 新增单例 `task_node_review_notification_settings`（`id boolean` 主键恒 true、`enabled boolean`、`daily_time text` HH:mm CHECK、`last_dispatched_on date`、`updated_at` / `updated_by`；2 个 CHECK）。迁移即插入默认行（开启 · 09:00）；`last_dispatched_on` 保证同一上海业务日只派发一次，同一申请同一审核人的通知去重仍由 outbox `dedupe_key` 兜底。只追加 DDL，回滚语句入头注。
+
+> **2026-11-14 · 公共节点审核人白名单**：`0097_task_node_reviewers.sql` 新增 `task_node_reviewers`（`user_id uuid` 主键 → `users.id` 级联；`assigned_by uuid not null` → `users.id`；`created_at timestamptz`）。只存权限页「公共节点审核」勾选的系统管理员；表为空表示尚未配置，任何管理员都不可审核，保存至少一名后以本表为准。审核接口仍先校验当前管理员身份，因此撤销管理员后残留行不再生效。只追加 DDL，应用角色随 default privileges 自动授权；回滚语句入头注（`drop table if exists task_node_reviewers`）。
+
+> **2026-11-13 · 任务模板「入库审核」独立板块**：`0095_template_inbound_review_section.sql` 将 `task_templates.stage_key` 与 `task_nodes.stage_key` 的 CHECK 扩为九阶段 + `inbound_review`；该值只用于任务模板页独立板块，不属于项目阶段，不进入 `STAGE_KEYS`、项目任务、看板 / 甘特图 / 日报。入库审核不能生成项目任务；模板私有节点继续按 `owner_template_id` 隔离。迁移不新增表 / 列，回滚须先清该分组数据，语句见头注。
+
+> **模型管理（本机实现）**：迁移 0093 新增模型服务与当前模型选择；密钥只保存加密结果，需部署前准备独立密钥保护配置。
+
+> **2026-11-13 · 公共任务节点申请**：`0096_task_node_requests.sql` 新增 `task_node_requests`（15 列：阶段 / 中英文名 / 状态 / 申请人 + 时间 / 来源项目 + 预览票据 / 审核人 + 时间 + 意见 / 最终节点 id；4 个显式索引含 1 个部分唯一、4 个 CHECK；主键 + 时间戳默认值）。同阶段同名只允许一条 `pending`（`uq_task_node_requests_pending_title`），状态机 pending → approved / rejected / withdrawn 由 `ck_task_node_requests_node_source` 兜底（approved 必须有审核人与最终节点、rejected 必须有审核意见、pending / withdrawn 不得带审核字段）。申请本身不写 `task_nodes`：审核通过时才建或关联公共节点。导入侧与申请同事务提交，导入回滚则申请一起回滚。只追加 DDL，应用角色随 default privileges 自动授权；回滚语句入头注（`drop table if exists task_node_requests`）。
+
+> **2026-11-13 · 任务模板私有节点**：`0094_template_local_task_nodes.sql` 给 `task_nodes` 增可空 `owner_template_id`（→ `task_templates.id`，`on delete cascade`）；为空 = 公共节点库，非空 = 指定模板私有节点。原 `uq_task_nodes_stage_title` 改为两个部分唯一索引：公共节点按 `(stage_key, title)`、私有节点按 `(owner_template_id, title)`。`GET /api/v1/task-nodes` 与左侧节点库只读公共行；模板只可引用公共行或本模板私有行。模板内新增走 `POST /api/v1/task-templates/{id}/nodes`，模板保存时移除的私有行会清理；不部署 AI 导入相关 0093 时本迁移可独立执行。
+
 > **2026-11-13 · 任务模板个人 / 公共可见范围**：`0092_task_template_visibility.sql` 给 `task_templates` 增 `visibility text not null default 'public'` 与 CHECK（`private` / `public`）；存量与种子保持公共模板。`private` 仅填写人可在列表 / 详情 / 项目添加任务模板标签中看到并用于生成任务；`public` 沿用现有模板浏览权。编辑 / 删除权限不变；创建后由填写人或管理员在卡片内切换可见范围并随「保存」落库，系统预置模板保持 `public`。
 
 > **2026-11-13 · 投产节点与投产阶段模板显示名补充改名**：`0091_production_node_and_template_display_rename.sql` 只改现行 `blueprints.draft_payload` 中 `production` 阶段的 `production.record` 节点精确旧名“生产运行记录”→“投产运行记录”，并把一条未删除、系统创建且仍名为“生产阶段模板”或“生产阶段参考模板”的模板改为“投产阶段模板”；已有“投产阶段模板”时模板命中 0。历史 `blueprint_versions.payload` 保留原文并由服务读面映射阶段名与节点名；模板节点“产能爬坡”、用户模板、通知、发送归档、导入预览、翻译缓存、outbox、审计原文与其它业务正文均不改。迁移幂等，重复执行命中 0 行。
@@ -9,6 +23,8 @@
 > **2026-11-10 · CAD**　迁移 0088_cad_dwg_companion_sets.sql 允许 DWG 归档保存已选的固定版本配套文件。启用该入口前使用项目迁移器应用；原有 STEP 限制继续生效。
 
 # database/ · 数据库基线（g3 · S5）
+
+> **2026-11-14 · 公共任务节点申请号**：`0098_task_node_request_no.sql` 给 `task_node_requests` 增加 `request_no integer not null`；历史行按申请人在 `requested_at, id` 顺序回填，`> 0` CHECK，并以部分唯一索引 `uq_task_node_requests_pending_no (requested_by, request_no) where status = pending` 保证同一申请人的 pending 申请号不重复。申请人没有 pending 时新申请从 1 重新开始；已处理历史行不占用新批编号。字段只用于企微审核通知与回复寻址，不改 HTTP 契约。只追加 DDL，应用角色随 default privileges 自动授权；回滚语句入头注。
 
 > 物料变更补发（2026-11-09 · 待测试机部署）：`0084_material_reissue.sql` 为 `change_requests` 增加 `change_type`（默认 `file_change`）与 `material_reissue jsonb`，并用 CHECK 保证普通变更无补发载荷、补发变更必有载荷。存量行自动按普通变更回填，不改既有列、不复制文件版本。回滚语句见迁移头注；部署新版 API / worker 前先执行迁移。
 
@@ -100,6 +116,12 @@ PostgreSQL 基线的唯一来源：只追加的迁移脚本、最小权限角色
 | `migrations/0075_group_access_scope_permissions.sql` | 多范围部门 / 个人权限（2026-10-27 · **高风险 DDL / 权限，请 wmj 复核** · CONTRIBUTING §15）：新增 `group_access_scope_permissions`（部门 + 项目范围主键，`all` / `own` / `selected`，`edit` / `view`，项目范围枚举与档位 CHECK）与 `group_access_member_scope_permissions`（个人规则 + 项目范围主键，组合外键级联）；从存量 `group_access_rules` / `group_access_member_rules` 的非 `none` 行无损回填。`scopePermissions=[]` 表示不显示项目数据；多范围取并集，同一项目取最高 `edit > view`。旧 `project_scope` / `access_level` 列保留为旧客户端摘要，不参与新裁决。只追加，应用角色随 roles/0001 default privileges 自动授权；回滚语句入头注。 |
 | `migrations/0076_audit_project_snapshot.sql` | 操作记录项目名称快照（2026-10-28 · **高风险 DDL，请 wmj 复核** · CONTRIBUTING §15）：`audit_logs` 增 `project_code text` / `project_name text`（均可空、无外键、无回填）；审计写入保存项目编号 / 名称，读面左连接 `projects` 且不按 `deleted_at` 过滤，项目仍在（含回收站）优先当前值，项目行彻底删除后回退快照。只追加 DDL，应用角色随 roles/0001 default privileges 自动授权；回滚语句入头注。 |
 | `migrations/0092_task_template_visibility.sql` | 任务模板可见范围（2026-11-13）：`task_templates` 增 `visibility text not null default 'public'` 与 `ck_task_templates_visibility`（`private` / `public`）。`private` 仅填写人可见；`public` 对通过模板浏览权校验的账号可见。存量 / 种子默认 public；编辑 / 删除权限不变。只追加 DDL，应用角色随 roles/0001 default privileges 自动授权；回滚语句入头注。 |
+| `migrations/0098_task_node_request_no.sql` | 公共任务节点申请号（2026-11-14）：`task_node_requests` 增 `request_no integer not null`；历史行按申请人 `requested_at, id` 回填，`request_no > 0` CHECK，部分唯一索引 `uq_task_node_requests_pending_no (requested_by, request_no) where status = pending`。申请人在无 pending 时新申请从 1 开始；已处理行不占用新批编号。只用于企微审核通知与回复寻址，不改 HTTP 契约。只追加 DDL，回滚语句入头注。 |
+| `migrations/0099_task_node_review_notification_settings.sql` | 公共节点审核企微通知全局设置（2026-11-15）：新增单例 `task_node_review_notification_settings`（id 恒 true、enabled、daily_time HH:mm、last_dispatched_on、updated_*）。0100 已改为审核人个人设置，本表仅保留历史与回滚依据。 |
+| `migrations/0100_task_node_reviewer_notification_settings.sql` | 公共节点审核企微通知个人设置（2026-11-15）：新增 `task_node_reviewer_notification_settings`（reviewer_id 主键 → users.id 级联、enabled、notification_mode immediate / scheduled、daily_time HH:mm、按人 last_dispatched_on、updated_*）；从 0099 全局行复制给当前审核人并默认 scheduled。及时通知在申请创建时写 outbox，固定时间由 worker 按本人时间派发；审批结果通知不变。 |
+| `migrations/0096_task_node_requests.sql` | 公共任务节点申请（2026-11-13）：新增 `task_node_requests`（阶段 / 中英文名 / 状态 pending·approved·rejected·withdrawn / 申请人 + 时间 / 来源项目 `projects.id`（on delete set null）+ 来源预览票据 `project_import_previews.id`（on delete set null）/ 审核人 + 时间 + 意见 / 最终节点 `task_nodes.id`（on delete set null））。部分唯一索引 `uq_task_node_requests_pending_title (stage_key, title) where status = 'pending'`；查询索引 `ix_task_node_requests_status` / `ix_task_node_requests_requester` / `ix_task_node_requests_node`。导入模块在导入事务内写申请（不写 `task_nodes`），审核通过才建或关联公共节点；不部署 AI 导入相关 0093 时本迁移可独立执行。只追加 DDL，回滚语句入头注。 |
+| `migrations/0094_template_local_task_nodes.sql` | 任务模板私有节点（2026-11-13）：`task_nodes` 增 `owner_template_id uuid references task_templates(id) on delete cascade`；删除旧全局唯一约束 `uq_task_nodes_stage_title`，改为 `uq_task_nodes_shared_stage_title (stage_key, title) where owner_template_id is null` + `uq_task_nodes_owner_title (owner_template_id, title) where owner_template_id is not null`，并增 `ix_task_nodes_owner_seq`。存量行保持 null（公共节点）；公共读接口与左侧节点库不变，模板内新增节点只写当前模板私有范围。只追加 DDL，应用角色随 default privileges 自动授权；回滚语句入头注。 |
+| `migrations/0095_template_inbound_review_section.sql` | 任务模板「入库审核」独立板块（2026-11-13）：仅重建 `ck_task_templates_stage_key` 与 `ck_task_nodes_stage_key`，在九阶段外增加 `inbound_review`；不新增表 / 列。该值只对任务模板 / 模板节点接口开放，服务端禁止该分组生成项目任务；模板私有节点继续按 `owner_template_id` 隔离。回滚前先清理该分组的模板与节点，语句入头注。 |
 | `seeds/README.md` | 种子数据规格（M0-03 · Push 73）：可重跑、幂等、与迁移分离 |
 | `seeds/roles.mjs` / `seeds/index.mjs` | 种子 #6a：一期六个内置角色（h1 · Push 74）；index 为按序注册表，新种子追加到末尾 |
 | `seeds/blueprint.mjs` | 种子 #7：default 蓝图模板（9 阶段 19 节点 + 版本 1，h3 · Push 83）；节点清单待业务补全，库内已修订时不覆盖 |
@@ -241,6 +263,7 @@ seed: 完成，本次执行 4 个种子
 - **2026-10-26 0074 复算**：65 表 / **655 列** / 205 索引（含唯一）/ **239 CHECK**（0074 = 新增 `group_access_member_rules` 6 列 / 4 CHECK / 主键 + 1 显式索引，`project_group_member_access` 4 列 / 主键 + 1 显式索引 + 组合外键级联；本机 PostgreSQL 18 @55434 空库迁移 `0001~0074` + 幂等复跑无漂移，`check:db-schema` 通过）。
 - **2026-10-27 0075 复算**：67 表 / **666 列** / 208 索引（含唯一）/ **243 CHECK**（0075 = 新增两张多范围权限表，共 12 列 / 3 索引含主键 / 4 CHECK；临时 PostgreSQL 18 @55434 空库迁移 74 件至 0075 + 幂等复跑无漂移，存量部门 / 个人规则回填事务验证通过，`check:db-schema` 通过）。
 - **2026-10-28 0076 复算**：67 表 / **668 列** / 208 索引（含唯一）/ **243 CHECK**（0076 = `audit_logs` +2 可空列；临时 PostgreSQL 18 @55435 空库迁移 75 件至 0076 + 幂等复跑无漂移，`check:db-schema` 通过；回收站当前项目名与彻底删除后快照回退 SQL 行为已验证）。
+- **2026-11-13 0096 复算**：71 表 / **711 列** / 222 索引（含唯一）/ **257 CHECK**（临时 PostgreSQL（Homebrew，端口 55442）执行 `roles/0001` + 迁移 `0001~0096`（95 件）+ 幂等复跑无漂移；`check:db-schema` 通过并与 Drizzle schema 一致。约束实测：同阶段同名第二条 pending 被 `uq_task_node_requests_pending_title` 拒绝；`approved` 缺 `node_id`、`rejected` 缺 `review_note` 均被 `ck_task_node_requests_node_source` 拒绝；带 `node_id` 的 approved 与 withdrawn 可正常落库）。
 - **Drizzle 对齐**：`server` 构建后跑 `npm run check:db-schema`（比对表 / 列类型 / 可空性 / 索引 / CHECK 名称）。
 - **已合入迁移不可变**：改文件 / 删文件 / 中间插队三种情形均退出码 1，并给出中文原因（`scripts/migrate.mjs` 的 `verifyNoDrift`）。
 

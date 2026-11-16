@@ -148,6 +148,7 @@ export class PermissionService {
       groupOwnEdit: groupAccess.ownEdit,
       groupSelectedEdit: groupAccess.selectedEdit,
       taskNodeManage: await this.canManageTaskNodes(actorId),
+      taskNodeReview: await this.canReviewTaskNodeRequests(actorId),
       taskTemplateRead: await this.canReadBlueprint(actorId),
       taskTemplateManage: await this.canManageTaskTemplates(actorId),
       auditScope,
@@ -249,14 +250,42 @@ export class PermissionService {
     throw new AppError("FORBIDDEN", message ?? "维护流程蓝图需要系统管理员权限");
   }
 
-  /** 任务节点库维护：系统管理员，或至少管理一个未软删项目的项目经理；部门编辑范围不授予。 */
+  /** 公共任务节点库维护：仅系统管理员；项目经理、部门编辑范围与普通成员均不授予。模板私有节点另随模板编辑权。 */
   async canManageTaskNodes(actorId: string): Promise<boolean> {
-    return this.hasActiveManagedProject(actorId);
+    return (await this.groupAccessOf(actorId)).admin;
   }
 
   async assertCanManageTaskNodes(actorId: string, message?: string): Promise<void> {
     if (await this.canManageTaskNodes(actorId)) return;
-    throw new AppError("FORBIDDEN", message ?? "维护任务节点库需要项目经理或管理员权限");
+    throw new AppError("FORBIDDEN", message ?? "维护公共任务节点库需要系统管理员权限");
+  }
+
+  /**
+   * 公共任务节点申请审核：必须先仍是系统管理员，再命中权限页保存的审核人白名单。
+   * 名单为空 = 尚未配置，任何管理员都不可审核；管理员保存至少一名审核人后，审核权才生效。
+   * 公共节点库本身的维护权仍走 taskNodeManage，两者不混用。
+   */
+  async canReviewTaskNodeRequests(actorId: string): Promise<boolean> {
+    if (!(await this.canManageTaskNodes(actorId))) return false;
+    const reviewerIds = await this.repository.listTaskNodeReviewerUserIds();
+    return reviewerIds.includes(actorId);
+  }
+
+  async assertCanReviewTaskNodeRequests(actorId: string, message?: string): Promise<void> {
+    if (await this.canReviewTaskNodeRequests(actorId)) return;
+    throw new AppError("FORBIDDEN", message ?? "审核公共节点申请需要已授权的系统管理员权限");
+  }
+
+  /**
+   * 当前真正可审核的审核人：名单 ∩ 仍生效的系统管理员。
+   * 申请创建时按此名单投递企微；被移出管理员或审核名单的账号不再收到新通知。
+   */
+  async listEffectiveTaskNodeReviewers(): Promise<string[]> {
+    const reviewerIds = await this.repository.listTaskNodeReviewerUserIds();
+    const effective = await Promise.all(
+      reviewerIds.map(async (userId) => ((await this.canReviewTaskNodeRequests(userId)) ? userId : null)),
+    );
+    return effective.filter((userId): userId is string => userId !== null);
   }
 
   /**
@@ -321,6 +350,19 @@ export class PermissionService {
   async assertCanReadBlueprint(actorId: string, message?: string): Promise<void> {
     if (await this.canReadBlueprint(actorId)) return;
     throw new AppError("FORBIDDEN", message ?? "当前账号仅可登录，不能查看任务节点与模板");
+  }
+
+  /**
+   * 蓝图地图总览读取权：只要有任意项目数据范围（含当前选中为空），或存在有效项目关系，
+   * 即可读取全部未删项目的概况；项目详情仍走 resolveProjectAccess，不会因本放行而可见。
+   */
+  async canBrowseProjectOverview(actorId: string): Promise<boolean> {
+    const groupAccess = await this.groupAccessOf(actorId);
+    if (!groupAccess.enforced || groupAccess.admin) return true;
+    if (hasProjectDataScope(groupAccess)) return true;
+    const relatedProjectIds = await this.repository.listRelatedProjectIds(actorId);
+    if (relatedProjectIds.length === 0) return false;
+    return (await this.repository.listActiveProjectIds(relatedProjectIds)).length > 0;
   }
 
   /** 全局写入口兜底（无项目上下文）：部门规则开启时仅全部项目编辑 / 管理员可写。 */

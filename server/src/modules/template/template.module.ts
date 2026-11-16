@@ -1,8 +1,14 @@
 import { Module } from "@nestjs/common";
+import { ClockService } from "../../common/clock/clock.service.js";
 import { AdminModule } from "../admin/index.js";
 import { IdentityModule } from "../identity/index.js";
 import { PermissionModule } from "../permission/index.js";
 import { TaskNodeRepository } from "./task-node.repository.js";
+import { TaskNodeRequestController } from "./task-node-request.controller.js";
+import { TaskNodeRequestRepository } from "./task-node-request.repository.js";
+import { TaskNodeRequestService } from "./task-node-request.service.js";
+import { TaskNodeReviewNotificationSettingsRepository } from "./task-node-review-notification.repository.js";
+import { TaskNodeReviewNotificationService } from "./task-node-review-notification.service.js";
 import { TaskTemplateController } from "./task-template.controller.js";
 import { TaskTemplateRepository } from "./template.repository.js";
 import { TemplateController } from "./template.controller.js";
@@ -17,8 +23,17 @@ import { TemplateService } from "./template.service.js";
  */
 @Module({
   imports: [IdentityModule, PermissionModule, AdminModule],
-  controllers: [TemplateController, TaskTemplateController],
-  providers: [TaskNodeRepository, TaskTemplateRepository, TemplateService],
-  exports: [TemplateService, TaskNodeRepository],
+  controllers: [TemplateController, TaskTemplateController, TaskNodeRequestController],
+  providers: [
+    TaskNodeRepository,
+    TaskNodeRequestRepository,
+    TaskNodeRequestService,
+    TaskNodeReviewNotificationSettingsRepository,
+    TaskNodeReviewNotificationService,
+    ClockService,
+    TaskTemplateRepository,
+    TemplateService,
+  ],
+  exports: [TemplateService, TaskNodeRepository, TaskNodeRequestService, TaskNodeReviewNotificationService],
 })
 export class TemplateModule {}

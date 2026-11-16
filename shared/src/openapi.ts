@@ -1,5 +1,7 @@
 import { OpenAPIRegistry, OpenApiGeneratorV31 } from "@asteasolutions/zod-to-openapi";
 import { z } from "./zod.ts";
+import { AiModelActivateSchema, AiModelListSchema, AiModelProviderCreateSchema, AiModelProviderSchema, AiModelProviderUpdateSchema, AiModelSettingsSchema } from "./modules/ai-models.ts";
+import { ProjectImportCommitBodySchema, ProjectImportPreviewSchema, ProjectImportResultSchema } from "./modules/imports.ts";
 import { CadJobSchema, CadJobCreateBodySchema, CadJobCreateResponseSchema, CadNameCodepageSchema } from "./modules/cad.ts";
 import { DateOnlySchema, IdempotencyKeySchema, UuidSchema } from "./common/conventions.ts";
 import { StageKeySchema } from "./common/dicts.ts";
@@ -16,6 +18,7 @@ import {
   ProjectGroupPutBodySchema,
   ProjectListQuerySchema,
   ProjectListResponseSchema,
+  ProjectMapOverviewResponseSchema,
   ProjectManagerCandidateListSchema,
   ProjectMemberCreateBodySchema,
   ProjectMemberListResponseSchema,
@@ -54,11 +57,20 @@ import {
   TaskNodeUpdateBodySchema,
   TaskNodeListQuerySchema,
   TaskNodeListResponseSchema,
+  TaskNodeRequestApproveBodySchema,
+  TaskNodeRequestDecisionResponseSchema,
+  TaskNodeRequestListQuerySchema,
+  TaskNodeRequestListResponseSchema,
+  TaskNodeRequestRejectBodySchema,
+  TaskNodeReviewNotificationSettingsBodySchema,
+  TaskNodeReviewNotificationSettingsSchema,
   TaskTemplateCreateBodySchema,
   TaskTemplateDeleteBodySchema,
   TaskTemplateDeleteResponseSchema,
   TaskTemplateListQuerySchema,
   TaskTemplateListResponseSchema,
+  TaskTemplateNodeCreateBodySchema,
+  TaskTemplateNodeSchema,
   TaskTemplateSchema,
   TaskTemplateUpdateBodySchema,
 } from "./modules/templates.ts";
@@ -199,6 +211,8 @@ import {
   GroupAccessOverviewSchema,
   GroupAccessRuleInputSchema,
   GroupAccessRuleResponseSchema,
+  GroupAccessTaskNodeReviewersInputSchema,
+  GroupAccessTaskNodeReviewersResponseSchema,
 } from "./modules/group-access.ts";
 import {
   ChangeRequestDetailSchema,
@@ -271,6 +285,73 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
   const registry = new OpenAPIRegistry();
   registry.register("ResourceInvalidationPayload", ResourceInvalidationPayloadSchema);
 
+
+  // ---- 系统模型配置（仅系统管理员）----
+  registry.registerPath({
+    method: "get", path: "/api/v1/model-settings", tags: ["model-settings"], summary: "读取模型服务与当前模型",
+    responses: { 200: { description: "不返回 API Key", ...json(AiModelSettingsSchema) }, 401: commonErrors[401], 403: commonErrors[403] },
+  });
+  registry.registerPath({
+    method: "post", path: "/api/v1/model-settings/providers", tags: ["model-settings"], summary: "新增模型服务",
+    request: { body: json(AiModelProviderCreateSchema) },
+    responses: { 201: { description: "模型服务", ...json(AiModelProviderSchema) }, 400: commonErrors[400], 403: commonErrors[403] },
+  });
+  registry.registerPath({
+    method: "put", path: "/api/v1/model-settings/providers/{id}", tags: ["model-settings"], summary: "修改模型服务",
+    request: { params: idParams, body: json(AiModelProviderUpdateSchema) },
+    responses: { 200: { description: "模型服务", ...json(AiModelProviderSchema) }, 400: commonErrors[400], 403: commonErrors[403], 404: commonErrors[404], 409: commonErrors[409] },
+  });
+  registry.registerPath({
+    method: "delete", path: "/api/v1/model-settings/providers/{id}", tags: ["model-settings"], summary: "删除模型服务",
+    request: { params: idParams },
+    responses: { 204: { description: "已删除" }, 403: commonErrors[403], 404: commonErrors[404] },
+  });
+  registry.registerPath({
+    method: "get", path: "/api/v1/model-settings/providers/{id}/models", tags: ["model-settings"], summary: "自动识别模型列表",
+    request: { params: idParams },
+    responses: { 200: { description: "模型列表", ...json(AiModelListSchema) }, 400: commonErrors[400], 403: commonErrors[403], 404: commonErrors[404] },
+  });
+  registry.registerPath({
+    method: "put", path: "/api/v1/model-settings/active", tags: ["model-settings"], summary: "设置全系统当前模型",
+    request: { body: json(AiModelActivateSchema) },
+    responses: { 204: { description: "已启用" }, 400: commonErrors[400], 403: commonErrors[403], 404: commonErrors[404] },
+  });
+
+  // ---- Excel 项目导入 ----
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/project-imports/preview",
+    tags: ["projects"],
+    summary: "解析 Excel 并预览项目、节点语义匹配与待确认项",
+    request: { body: { content: { "multipart/form-data": { schema: z.object({ file: z.string().openapi({ format: "binary" }) }) } } } },
+    responses: {
+      200: { description: "导入预览票据与节点匹配结果", ...json(ProjectImportPreviewSchema) },
+      400: commonErrors[400],
+      401: commonErrors[401],
+      403: commonErrors[403],
+      422: commonErrors[422],
+      429: errorResponse("导入任务正在处理中（RATE_LIMITED）"),
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/project-imports/commit",
+    tags: ["projects"],
+    summary: "确认节点选择并导入项目",
+    request: { body: json(ProjectImportCommitBodySchema) },
+    responses: {
+      200: { description: "导入结果", ...json(ProjectImportResultSchema) },
+      400: commonErrors[400],
+      401: commonErrors[401],
+      403: commonErrors[403],
+      404: commonErrors[404],
+      409: commonErrors[409],
+      410: commonErrors[410],
+      429: errorResponse("导入任务正在处理中（RATE_LIMITED）"),
+    },
+  });
+
   // ---- 项目与首页分类 ----
   registry.registerPath({
     method: "get",
@@ -316,6 +397,17 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     summary: "项目经理候选（有效项目部成员 ∪ 系统管理员；仅启用且未离职）",
     responses: {
       200: { description: "候选名单", ...json(ProjectManagerCandidateListSchema) },
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/projects/map-overview",
+    tags: ["projects"],
+    summary: "蓝图地图项目概况（有项目浏览权即可读取全部未删除项目的最少字段；accessLevel=null 不可进入详情）",
+    responses: {
+      200: { description: "全部未删除项目概况 + 当前账号可否进入详情", ...json(ProjectMapOverviewResponseSchema) },
+      403: commonErrors[403],
     },
   });
 
@@ -735,7 +827,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "get",
     path: "/api/v1/task-nodes",
     tags: ["templates"],
-    summary: "任务节点库（任务模板的节点来源；按阶段过滤）",
+    summary: "任务节点库（任务模板的节点来源；按九阶段或入库审核过滤）",
     request: { query: TaskNodeListQuerySchema },
     responses: { 200: { description: "节点库列表", ...json(TaskNodeListResponseSchema) } },
   });
@@ -744,7 +836,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "post",
     path: "/api/v1/task-nodes",
     tags: ["templates"],
-    summary: "新增任务节点（管理端维护节点库；同阶段同名 409）",
+    summary: "新增公共任务节点（仅系统管理员；同板块同名 409）",
     request: { headers: idempotencyHeader, body: json(TaskNodeCreateBodySchema) },
     responses: {
       201: { description: "创建成功", ...json(TaskNodeSchema) },
@@ -758,7 +850,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "patch",
     path: "/api/v1/task-nodes/{id}",
     tags: ["templates"],
-    summary: "编辑任务节点（改名 / 英文名；乐观锁 version 必传）",
+    summary: "编辑公共任务节点（仅系统管理员；乐观锁 version 必传）",
     request: { params: idParams, body: json(TaskNodeUpdateBodySchema) },
     responses: {
       200: { description: "编辑成功", ...json(TaskNodeSchema) },
@@ -773,7 +865,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "delete",
     path: "/api/v1/task-nodes/{id}",
     tags: ["templates"],
-    summary: "删除任务节点（物理删行；删除前快照写审计；已生成的项目任务不变）",
+    summary: "删除公共任务节点（仅系统管理员；物理删行；已生成的项目任务不变）",
     request: { params: idParams },
     responses: {
       200: { description: "已删除", ...json(TaskNodeDeleteResponseSchema) },
@@ -782,11 +874,92 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     },
   });
 
+  // ---- 公共任务节点申请（2026-11-13：导入侧发起、节点库维护侧审核） ----
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/task-node-requests",
+    tags: ["templates"],
+    summary: "公共任务节点申请列表（审核人看全部；本人视角只看自己）",
+    request: { query: TaskNodeRequestListQuerySchema },
+    responses: {
+      200: { description: "申请列表 + 待审条数", ...json(TaskNodeRequestListResponseSchema) },
+      403: commonErrors[403],
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/task-node-requests/notification-settings",
+    tags: ["templates"],
+    summary: "读取当前审核人的公共节点审核企微通知设置（仅公共节点审核管理员）",
+    responses: {
+      200: { description: "当前审核人的通知开关、通知方式与固定时间", ...json(TaskNodeReviewNotificationSettingsSchema) },
+      403: commonErrors[403],
+    },
+  });
+
+  registry.registerPath({
+    method: "put",
+    path: "/api/v1/task-node-requests/notification-settings",
+    tags: ["templates"],
+    summary: "保存当前审核人的公共节点审核企微通知设置（仅公共节点审核管理员）",
+    request: { body: json(TaskNodeReviewNotificationSettingsBodySchema) },
+    responses: {
+      200: { description: "保存后的本人通知设置", ...json(TaskNodeReviewNotificationSettingsSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/task-node-requests/{id}/approve",
+    tags: ["templates"],
+    summary: "通过公共节点申请（可先改中英文名；同阶段已有同名节点则直接关联）",
+    request: { params: idParams, body: json(TaskNodeRequestApproveBodySchema) },
+    responses: {
+      200: { description: "审核结果（含创建或关联到的节点）", ...json(TaskNodeRequestDecisionResponseSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+      409: commonErrors[409],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/task-node-requests/{id}/reject",
+    tags: ["templates"],
+    summary: "驳回公共节点申请（原因必填，申请人可见）",
+    request: { params: idParams, body: json(TaskNodeRequestRejectBodySchema) },
+    responses: {
+      200: { description: "驳回结果", ...json(TaskNodeRequestDecisionResponseSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+      409: commonErrors[409],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/task-node-requests/{id}/withdraw",
+    tags: ["templates"],
+    summary: "撤销本人的待审申请（仅 pending 可撤销）",
+    request: { params: idParams },
+    responses: {
+      200: { description: "撤销结果", ...json(TaskNodeRequestDecisionResponseSchema) },
+      403: commonErrors[403],
+      404: commonErrors[404],
+      409: commonErrors[409],
+    },
+  });
+
   registry.registerPath({
     method: "get",
     path: "/api/v1/task-templates",
     tags: ["templates"],
-    summary: "任务模板列表（按阶段过滤；含节点顺序与名称摘要）",
+    summary: "任务模板列表（按板块过滤；含节点顺序与名称摘要）",
     request: { query: TaskTemplateListQuerySchema },
     responses: { 200: { description: "模板列表", ...json(TaskTemplateListResponseSchema) } },
   });
@@ -807,7 +980,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "post",
     path: "/api/v1/task-templates",
     tags: ["templates"],
-    summary: "新建任务模板（名称 + 阶段 + 节点顺序）",
+    summary: "新建任务模板（名称 + 模板板块 + 节点顺序）",
     request: { headers: idempotencyHeader, body: json(TaskTemplateCreateBodySchema) },
     responses: {
       201: { description: "创建成功", ...json(TaskTemplateSchema) },
@@ -824,6 +997,21 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     responses: {
       200: { description: "更新后的模板", ...json(TaskTemplateSchema) },
       400: commonErrors[400],
+      404: commonErrors[404],
+      409: commonErrors[409],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/task-templates/{id}/nodes",
+    tags: ["templates"],
+    summary: "在模板内新增私有节点（只属于当前模板，不进入公共节点库）",
+    request: { params: idParams, headers: idempotencyHeader, body: json(TaskTemplateNodeCreateBodySchema) },
+    responses: {
+      201: { description: "创建成功", ...json(TaskTemplateNodeSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
       404: commonErrors[404],
       409: commonErrors[409],
     },
@@ -1568,6 +1756,21 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     request: { body: json(GroupAccessMemberRuleDeleteInputSchema) },
     responses: {
       204: { description: "已恢复部门默认" },
+      400: commonErrors[400],
+      401: commonErrors[401],
+      403: commonErrors[403],
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "put",
+    path: "/api/v1/access/task-node-reviewers",
+    tags: ["access"],
+    summary: "保存公共任务节点审核人名单（仅权限管理员；只能选择当前生效的系统管理员，至少一名）",
+    request: { body: json(GroupAccessTaskNodeReviewersInputSchema) },
+    responses: {
+      200: { description: "保存后的审核人名单", ...json(GroupAccessTaskNodeReviewersResponseSchema) },
       400: commonErrors[400],
       401: commonErrors[401],
       403: commonErrors[403],

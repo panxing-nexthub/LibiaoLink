@@ -4,13 +4,14 @@
  * - POST /api/v1/project-imports/preview：multipart/form-data（字段 file）→ 解析 + 口径校验 → 预览报告（不写库）
  * - POST /api/v1/project-imports/commit：JSON（previewId + 落位确认）→ 建项目并写入全量数据
  * 转换口径（业务已回执，研究记录见 D:\LibiaoLink_help\_conv）：完成日期未填不算完成、进度五档（进行中封顶 75%）、
- * 日期笔误照原值导入 + 提醒、任务节点按文件原名、变更阶段映射（实施→install、发货→assembly）、
+ * 日期笔误照原值导入 + 提醒、任务节点按精确及语义匹配复用或人工确认、变更阶段映射（实施→install、发货→assembly）、
  * 微盘图片出「需手动导入」清单、账号 = 拼音登录名 + 中文名加 -test 显示名 + 初始密码 123456；
  * 干系人（Push 324）：「干系人」表随导入落台账（公司分类自由写法映射四值 / 「填写者」匹配库内账号 / 提交时间）；
  * 干系人信息随导入表内的「干系人」表一并导入。
  * 字段面 = 前端消费面；正式契约由后端落 shared/src/modules/imports.ts（见《前端功能需求》§3.9）。
  */
 import { apiRequest, apiSend } from "./api";
+import type { TaskNodeRequestStatus } from "./templateApi";
 
 /** 提醒等级：error = 阻断（处理完才能导入）；warning = 照原值导入只提示；info = 口径说明。 */
 export type ImportIssueLevel = "error" | "warning" | "info";
@@ -47,12 +48,18 @@ export type ImportManualImage = {
   reason: string;
 };
 
-/** 任务节点匹配：matched = 已在节点库；未匹配按文件原名导入，勾选后可补进节点库。 */
+/** 任务节点匹配：精确命中复用，语义建议逐条选择，保留原名可加入个人模板。 */
 export type ImportTaskNode = {
   name: string;
   /** 节点英文名（节点库 title_en 口径 / 未匹配时取源表英文列）：节点库中英文名成对，导入新节点时一并落库；源表没英文 = null。 */
   nameEn: string | null;
+  sourceNameEn: string | null;
   matched: boolean;
+  groupIndex: number;
+  stageKey: string | null;
+  matchKind: "exact" | "semantic" | "new" | "uncertain" | "temporary";
+  libraryId: string | null;
+  tasks: Array<{ index: number; row: number }>;
   inStageScope: boolean;
   taskCount: number;
 };
@@ -84,18 +91,29 @@ export type ProjectImportPreview = {
   accounts: ImportAccount[];
   imagesManual: ImportManualImage[];
   nodes: ImportTaskNode[];
+  nodeLibrary: Array<{ id: string; stageKey: string; title: string; titleEn: string | null; version: number }>;
+  personalTemplates: Array<{ id: string; name: string; stageKey: string; version: number }>;
   issues: ImportIssue[];
 };
 
-/** 确认导入（落位确认 + 节点补库开关）。 */
+/** 确认导入（落位、人工确认及冲突选择）。 */
 export type ProjectImportCommitInput = {
   previewId: string;
   /** 项目地区（标准国家 / 地区名或字典码）—— 源表识别不出时必须由用户在面板里选。 */
   region: string;
   /** 项目类型（字典 projectType 的码）；空串 = 未指定（解析按源表关键字给默认，如 AIRROB → 飞箱）。 */
   projectType: string;
-  /** 是否把文件里未匹配的新任务节点补进「任务节点」库（阶段范围外的任务按临时任务处理）。 */
-  addMissingNodes: boolean;
+  /** 兼容旧服务端，明确关闭节点补库。 */
+  addMissingNodes?: false;
+  nodeDecisions?: Array<{ groupIndex: number; action: "existing" | "standalone"; nodeId: string | null }>;
+  personalTemplateSelections?: Array<{ groupIndex: number; templateId: string; version: number }>;
+  /**
+   * 公共节点申请（可选）：只允许对「保留 Excel 原名」的阶段内节点提交，同一 groupIndex 只能出现一次。
+   * title 缺省 = 源表原名；titleEn 缺省 = 预览补全的英文；显式 null = 无英文。
+   * 申请与导入同一事务提交 —— 申请失败不影响项目写入，反之亦然（整批回滚）。
+   */
+  nodeRequests?: Array<{ groupIndex: number; title?: string; titleEn?: string | null }>;
+  conflictChoices?: Array<{ key: string; taskIndex: number }>;
 };
 
 /** 手动文件落位目标（提交结果回传；前端据此在导入后把选中的文件直传到对应任务 / 变更）。 */
@@ -123,6 +141,8 @@ export type ProjectImportResult = {
   };
   /** 手动文件落位目标（与预览 imagesManual 同序；旧服务端缺省 = 空数组）。 */
   manualTargets?: ImportManualTarget[];
+  /** 本次随导入提交的公共节点申请（含合并到同名待审申请的；旧服务端缺省 = 空数组）。完成页据此提示「等待管理员审核」。 */
+  nodeRequests?: Array<{ id: string; stageKey: string; title: string; status: TaskNodeRequestStatus }>;
   issues: ImportIssue[];
 };
 

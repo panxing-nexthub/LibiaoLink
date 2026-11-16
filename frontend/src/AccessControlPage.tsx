@@ -7,6 +7,7 @@ import {
   revokeGroupAccessAdmin,
   saveGroupAccessMemberRules,
   saveGroupAccessRule,
+  saveTaskNodeReviewers,
   type GroupAccessAdmin,
   type GroupAccessGroup,
   type GroupAccessMember,
@@ -14,6 +15,7 @@ import {
 } from "./accessApi";
 import { AccessDashboard, AccessDashboardSkeleton } from "./AccessDashboard";
 import { AccessPermissionMatrix } from "./AccessPermissionMatrix";
+import { AccessTaskNodeReviewers } from "./AccessTaskNodeReviewers";
 import { buildAccessDashboardModel } from "./accessDashboardModel";
 import {
   automaticCountsForMembers,
@@ -41,7 +43,7 @@ type LoadState =
   | { kind: "error"; message: string };
 
 type Notice = { kind: ToastKind; text: string };
-type AccessView = "departments" | "people" | "dashboard";
+type AccessView = "departments" | "people" | "reviewers" | "dashboard";
 type Translate = (key: TextKey, params?: Record<string, string | number>) => string;
 type DirectorySection = { key: string; label: string; items: Array<{ group: GroupAccessGroup; pathText: string }> };
 
@@ -59,6 +61,13 @@ function memberSearchText(member: GroupAccessMember): string {
 function memberInitial(member: Pick<GroupAccessMember, "displayName">): string {
   const chars = Array.from(member.displayName.trim());
   return chars.length === 0 ? "?" : chars[0] ?? "?";
+}
+
+function sameIdSelection(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  const leftSorted = [...left].sort();
+  const rightSorted = [...right].sort();
+  return leftSorted.every((value, index) => value === rightSorted[index]);
 }
 
 function departmentPathOf(groupKey: string, groups: ReadonlyMap<string, GroupAccessGroup>): string[] {
@@ -321,6 +330,11 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
   const [savingPersonal, setSavingPersonal] = useState(false);
   const [restoringPersonal, setRestoringPersonal] = useState(false);
   const [adminBusyUserId, setAdminBusyUserId] = useState<string | null>(null);
+  const [reviewerUserIds, setReviewerUserIds] = useState<string[]>([]);
+  const [savedReviewerUserIds, setSavedReviewerUserIds] = useState<string[]>([]);
+  const [reviewerDirty, setReviewerDirty] = useState(false);
+  const reviewerDirtyRef = useRef(false);
+  const [savingReviewers, setSavingReviewers] = useState(false);
   const [matrixOpen, setMatrixOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -339,6 +353,11 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
       if (requestId !== requestIdRef.current) return false;
       hasDataRef.current = true;
       setLastSyncedAt(new Date());
+      if (!reviewerDirtyRef.current) {
+        const nextReviewerIds = next.taskNodeReviewerUserIds ?? [];
+        setReviewerUserIds(nextReviewerIds);
+        setSavedReviewerUserIds(nextReviewerIds);
+      }
       const nextSignature = JSON.stringify(next);
       if (nextSignature !== dataSignatureRef.current) {
         dataSignatureRef.current = nextSignature;
@@ -642,6 +661,46 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
     }
   }
 
+  function toggleReviewer(userId: string): void {
+    if (savingReviewers) return;
+    const next = reviewerUserIds.includes(userId)
+      ? reviewerUserIds.filter((value) => value !== userId)
+      : reviewerUserIds.concat(userId);
+    const dirty = !sameIdSelection(next, savedReviewerUserIds);
+    reviewerDirtyRef.current = dirty;
+    setReviewerUserIds(next);
+    setReviewerDirty(dirty);
+  }
+
+  function resetReviewers(): void {
+    if (savingReviewers) return;
+    reviewerDirtyRef.current = false;
+    setReviewerUserIds(savedReviewerUserIds);
+    setReviewerDirty(false);
+  }
+
+  async function handleSaveReviewers(): Promise<void> {
+    if (savingReviewers || reviewerUserIds.length === 0) return;
+    setSavingReviewers(true);
+    try {
+      const result = await saveTaskNodeReviewers({ userIds: reviewerUserIds });
+      reviewerDirtyRef.current = false;
+      setReviewerUserIds(result.userIds);
+      setSavedReviewerUserIds(result.userIds);
+      setReviewerDirty(false);
+      setNotice({ kind: "ok", text: t("access.reviewers.saved") });
+      void loadMyPermissions(true);
+      setReload((value) => value + 1);
+    } catch (error: unknown) {
+      setNotice({
+        kind: "error",
+        text: t("access.reviewers.saveFailed", { message: error instanceof Error ? error.message : String(error) }),
+      });
+    } finally {
+      setSavingReviewers(false);
+    }
+  }
+
   async function handleAccessChanged(): Promise<boolean> {
     const ok = await loadAccessData();
     if (ok) void loadMyPermissions(true);
@@ -651,6 +710,7 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
   const tabs: Array<{ value: AccessView; labelKey: TextKey }> = [
     { value: "departments", labelKey: "access.tabDepartment" },
     { value: "people", labelKey: "access.tabPeople" },
+    { value: "reviewers", labelKey: "access.tabTaskNodeReview" },
     { value: "dashboard", labelKey: "access.tabDashboard" },
   ];
 
@@ -680,7 +740,7 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
           </header>
 
           <section data-access-admin-roster="" className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-sm font-semibold text-zinc-900">{t("access.adminTitle")}</h2><p className="mt-0.5 text-[11px] text-zinc-500">{t("access.adminHint")}</p></div><span className="text-[10px] tabular-nums text-zinc-400">{data === null ? "—" : t("access.adminSummary", { n: data.admins.length })}</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-sm font-semibold text-zinc-900">{t("access.adminTitle")}</h2></div><span className="text-[10px] tabular-nums text-zinc-400">{data === null ? "—" : t("access.adminSummary", { n: data.admins.length })}</span></div>
             <div className="mt-2.5 flex flex-wrap gap-1.5">{data === null ? <span className="h-6 w-40 animate-pulse rounded-full bg-zinc-100" aria-hidden="true" /> : data.admins.length === 0 ? <span className="text-xs text-zinc-400">{t("access.adminEmpty")}</span> : data.admins.map((admin) => <span key={admin.userId} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-medium text-emerald-700">{admin.displayName}<span className="text-emerald-500/80">{t(adminSourceKey(admin.source))}</span></span>)}</div>
           </section>
 
@@ -699,7 +759,13 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
           </div>
 
           {state.kind === "loading" && accessView === "dashboard" ? <AccessDashboardSkeleton /> : null}
-          {state.kind === "loading" && accessView !== "dashboard" ? (
+          {state.kind === "loading" && accessView === "reviewers" ? (
+            <div className="mx-auto w-full max-w-6xl space-y-4">
+              <div className="h-40 animate-pulse rounded-2xl border border-zinc-200 bg-white" />
+              <div className="h-[420px] animate-pulse rounded-2xl border border-zinc-200 bg-white" />
+            </div>
+          ) : null}
+          {state.kind === "loading" && accessView !== "dashboard" && accessView !== "reviewers" ? (
             <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
               <div className="h-[520px] animate-pulse rounded-2xl border border-zinc-200 bg-white" />
               <div className="space-y-4"><div className="h-36 animate-pulse rounded-2xl border border-zinc-200 bg-white" /><div className="h-64 animate-pulse rounded-2xl border border-zinc-200 bg-white" /></div>
@@ -707,7 +773,18 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
           ) : null}
           {state.kind === "error" ? <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{t("access.loadFailed", { message: state.message })}</p> : null}
 
-          {data === null ? null : accessView === "dashboard" ? (
+          {data === null ? null : accessView === "reviewers" ? (
+            <AccessTaskNodeReviewers
+              admins={data.admins}
+              selectedIds={reviewerUserIds}
+              savedIds={savedReviewerUserIds}
+              dirty={reviewerDirty}
+              busy={savingReviewers}
+              onToggle={toggleReviewer}
+              onReset={resetReviewers}
+              onSave={() => { void handleSaveReviewers(); }}
+            />
+          ) : accessView === "dashboard" ? (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3">
                 <span className="text-xs font-medium text-zinc-600">{t("access.dashboard.departmentScope")}</span>
@@ -743,7 +820,6 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
                     </div>
                   ))}
                 </div>
-                <div className="border-t border-zinc-100 bg-zinc-50/60 px-3 py-2.5 text-[10px] leading-4 text-zinc-400">{t("access.directorySideNote")}</div>
               </aside>
 
               <section className="min-w-0 space-y-4">
@@ -774,7 +850,7 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
                       </div>
                       <div className="mt-3"><AccessScopePicker scopePermissions={departmentScopePermissions} onChange={setDepartmentScopePermissions} /></div>
                       {departmentScopePermissions.some((permission) => permission.projectScope === "selected") ? <ProjectPicker projects={filteredDepartmentProjects} selectedIds={departmentProjectIds} query={departmentProjectQuery} t={t} onQueryChange={setDepartmentProjectQuery} onToggle={toggleDepartmentProject} /> : null}
-                      <p className="mt-3 flex items-start gap-1.5 text-[10px] leading-4 text-zinc-400"><svg viewBox="0 0 20 20" aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M10 9v4M10 6.6v.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg><span>{t("access.scopeFootNote")}</span></p>
+                      <p className="mt-3 flex items-start gap-1.5 text-[10px] leading-4 text-zinc-400"><svg viewBox="0 0 20 20" aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M10 9v4M10 6.6v.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg><span title={t("access.scopeFootNoteTitle")}>{t("access.scopeFootNote")}</span></p>
                     </div>
 
                     <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
@@ -818,18 +894,19 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
                               );
                             })}
                           </div>
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 px-4 py-2.5 text-[10px] text-zinc-400">
-                            <span>{t("access.memberTableFoot")}</span>
-                            {selectedMembers.length > 8 ? <button type="button" onClick={() => { setShowAllMembers((value) => !value); }} className="font-medium text-blue-600 hover:text-blue-800">{showAllMembers ? t("access.showFewerMembers") : t("access.viewAllMembers", { n: selectedMembers.length })}</button> : null}
-                          </div>
+                          {selectedMembers.length > 8 ? (
+                            <div className="flex justify-end border-t border-zinc-100 px-4 py-2.5">
+                              <button type="button" onClick={() => { setShowAllMembers((value) => !value); }} className="text-[10px] font-medium text-blue-600 hover:text-blue-800">{showAllMembers ? t("access.showFewerMembers") : t("access.viewAllMembers", { n: selectedMembers.length })}</button>
+                            </div>
+                          ) : null}
                         </div>
                       )}
                     </div>
 
 
                     <div className="sticky bottom-3 z-20 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-[0_12px_32px_rgba(15,23,42,0.12)] backdrop-blur sm:flex-row sm:items-center">
-                      <p className="flex min-w-0 items-start gap-1.5 text-[10px] leading-4 text-zinc-400"><svg viewBox="0 0 20 20" aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500"><path d="m10 2 1.5 4.3L16 8l-4.5 1.7L10 14l-1.5-4.3L4 8l4.5-1.7L10 2Z" fill="currentColor" /></svg><span>{t("access.saveBarDepartment")}</span></p>
-                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <p className="flex min-w-0 items-start gap-1.5 text-[10px] leading-4 text-zinc-400"><svg viewBox="0 0 20 20" aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500"><path d="m10 2 1.5 4.3L16 8l-4.5 1.7L10 14l-1.5-4.3L4 8l4.5-1.7L10 2Z" fill="currentColor" /></svg><span>{t("access.saveBarDepartment")}</span></p>
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                         {selectedRule === null ? null : <button type="button" onClick={() => { void handleDeleteDepartment(); }} disabled={deletingDepartment || savingDepartment} className="rounded-lg px-2.5 py-2 text-[11px] font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-40">{deletingDepartment ? t("access.deleting") : t("access.deleteDepartmentDefault")}</button>}
                         <button type="button" onClick={resetDepartmentDraft} className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50">{t("access.reset")}</button>
                         <button type="button" onClick={() => { void handleSaveDepartment(); }} disabled={savingDepartment || deletingDepartment} className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50">{savingDepartment ? t("access.saving") : t("access.saveDepartmentDefault")}</button>

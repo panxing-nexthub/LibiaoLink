@@ -1038,12 +1038,10 @@ describe("NotifyDmService.ingestCallback（单聊绑定码 · 口径 §5）", ()
   it("欢迎语定稿：含可显示 emoji，4–120 字符", () => {
     expect(DM_WELCOME_MESSAGE).toBe(
       "你好，我是 LibiaoLink 项目助手 👋\n" +
-        "📣 我会把与你相关的项目动态推送到企业微信；项目群还可接收日报汇总和任务喜报。\n" +
-        "📌 本机器人主要承担消息提醒与绑定；查看项目详情、填写日报或处理文件，请登录 LibiaoLink。",
+        "首次使用请在「设置 > 企微绑定」取绑定码发给我；仅进入会话不等于绑定。\n" +
+        "可收项目动态、任务提醒、日报汇总与喜报；已绑定项目群可发「@机器人 干系人」查干系人。",
     );
     expect(DM_WELCOME_MESSAGE).toContain("👋");
-    expect(DM_WELCOME_MESSAGE).toContain("📣");
-    expect(DM_WELCOME_MESSAGE).toContain("📌");
     expect(DM_WELCOME_MESSAGE.length).toBeGreaterThanOrEqual(4);
     expect(DM_WELCOME_MESSAGE.length).toBeLessThanOrEqual(120);
   });

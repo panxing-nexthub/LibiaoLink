@@ -5,8 +5,9 @@
  * - 编辑 PATCH /api/v1/task-nodes/{id}（写 = 公共节点库维护权（仅系统管理员）；乐观锁 version 必传：过期 409 VERSION_CONFLICT）
  * - 删除 DELETE /api/v1/task-nodes/{id}（写 = blueprint.manage；物理删行 + 审计留痕；已生成的项目任务不受影响）
  * - 模板内新增 POST /api/v1/task-templates/{id}/nodes（只写当前模板私有节点，不进入公共节点库）
- * - 公共节点申请：GET /api/v1/task-node-requests（mine = true 看本人申请，任何账号可用；缺省 = 审核人看全部，需节点库维护权）
+ * - 公共节点申请：GET /api/v1/task-node-requests（mine = true 看本人申请，任何账号可用；缺省 = 审核人看全部，需 `taskNodeReview`）
  *   + POST .../{id}/approve（通过时按同阶段同名判重：已存在则关联、否则建节点）/ .../{id}/reject（原因必填）/ .../{id}/withdraw
+ *   + GET / PUT .../notification-settings（本人企微通知开关、及时 / 固定时间与每日时刻；仅审核管理员）
  *   —— 导入面板里「保留 Excel 原名」的节点可顺带申请；申请本身不改节点库，审核通过才落 task_nodes。
  * 任务模板（第二段 · Push 182）：GET/POST /api/v1/task-templates、PATCH/DELETE /api/v1/task-templates/{id}
  *   —— 写同样 = 模板管理权（新建：管理员或有效项目经理；编辑 / 删除：创建人或管理员）；新建时可选 private（仅自己）/ public（有浏览权的人），
@@ -157,6 +158,13 @@ export type TaskNodeRequest = {
   updatedAt: string;
 };
 
+/** 公共节点审核企微通知个人设置：notificationMode = immediate 及时 / scheduled 固定时间；dailyTime = Asia/Shanghai 的 HH:mm。 */
+export type TaskNodeReviewNotificationSettings = {
+  enabled: boolean;
+  notificationMode: "immediate" | "scheduled";
+  dailyTime: string;
+};
+
 /** 申请列表：pendingCount = 当前视角下的待审条数（审核人 = 全局待审；本人视角 = 本人待审）。 */
 export type TaskNodeRequestList = { items: TaskNodeRequest[]; total: number; pendingCount: number };
 
@@ -169,7 +177,7 @@ export type TaskNodeRequestDecision = {
 
 /**
  * 列出公共节点申请：mine = true 只看本人申请（任何登录账号可用）；
- * mine 缺省 = 审核人视角看全部（需节点库维护权，否则 403 FORBIDDEN）。
+ * mine 缺省 = 审核人视角看全部（需系统管理员且命中公共节点审核人白名单，否则 403 FORBIDDEN）。
  * 查询串只带真正用到的筛选项（mine 只在 true 时带，避免把 false 当成「也看全部」的歧义写法传上去）。
  */
 export async function listTaskNodeRequests(
@@ -187,6 +195,22 @@ export async function listTaskNodeRequests(
   }
   const path = "/api/v1/task-node-requests" + (query.length === 0 ? "" : "?" + query.join("&"));
   return apiRequest<TaskNodeRequestList>(path);
+}
+
+/** 读取审核页左侧的企微通知设置（仅当前公共节点审核管理员）。 */
+export function getTaskNodeReviewNotificationSettings(): Promise<TaskNodeReviewNotificationSettings> {
+  return apiRequest<TaskNodeReviewNotificationSettings>("/api/v1/task-node-requests/notification-settings");
+}
+
+/** 保存当前审核人的开关、通知方式与固定时间（整份保存；Asia/Shanghai HH:mm）。 */
+export function updateTaskNodeReviewNotificationSettings(
+  settings: TaskNodeReviewNotificationSettings,
+): Promise<TaskNodeReviewNotificationSettings> {
+  return apiSend<TaskNodeReviewNotificationSettings>(
+    "/api/v1/task-node-requests/notification-settings",
+    "PUT",
+    settings,
+  );
 }
 
 /** 审核通过：中英文名缺省 = 按申请原值定稿（titleEn 显式 null = 清空）；同阶段同名已有公共节点则直接关联。 */
@@ -221,7 +245,7 @@ export function withdrawTaskNodeRequest(id: string): Promise<TaskNodeRequestDeci
 /** 申请写入失败的统一文案（403 无审核权 / 409 并发 / VALIDATION_FAILED 已处理等；服务端仍是最终裁决）。 */
 export function nodeRequestWriteMessage(error: { code: string; message: string }): string {
   if (error.code === "FORBIDDEN") {
-    return "审核公共节点申请需要节点库维护权限（项目经理或管理员）";
+    return "审核公共节点申请需要已授权的系统管理员权限";
   }
   if (error.code === "VALIDATION_FAILED") {
     return "申请状态已变化：" + error.message;

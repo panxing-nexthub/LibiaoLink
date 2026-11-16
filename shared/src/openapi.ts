@@ -62,6 +62,8 @@ import {
   TaskNodeRequestListQuerySchema,
   TaskNodeRequestListResponseSchema,
   TaskNodeRequestRejectBodySchema,
+  TaskNodeReviewNotificationSettingsBodySchema,
+  TaskNodeReviewNotificationSettingsSchema,
   TaskTemplateCreateBodySchema,
   TaskTemplateDeleteBodySchema,
   TaskTemplateDeleteResponseSchema,
@@ -209,6 +211,8 @@ import {
   GroupAccessOverviewSchema,
   GroupAccessRuleInputSchema,
   GroupAccessRuleResponseSchema,
+  GroupAccessTaskNodeReviewersInputSchema,
+  GroupAccessTaskNodeReviewersResponseSchema,
 } from "./modules/group-access.ts";
 import {
   ChangeRequestDetailSchema,
@@ -879,6 +883,30 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     request: { query: TaskNodeRequestListQuerySchema },
     responses: {
       200: { description: "申请列表 + 待审条数", ...json(TaskNodeRequestListResponseSchema) },
+      403: commonErrors[403],
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/task-node-requests/notification-settings",
+    tags: ["templates"],
+    summary: "读取当前审核人的公共节点审核企微通知设置（仅公共节点审核管理员）",
+    responses: {
+      200: { description: "当前审核人的通知开关、通知方式与固定时间", ...json(TaskNodeReviewNotificationSettingsSchema) },
+      403: commonErrors[403],
+    },
+  });
+
+  registry.registerPath({
+    method: "put",
+    path: "/api/v1/task-node-requests/notification-settings",
+    tags: ["templates"],
+    summary: "保存当前审核人的公共节点审核企微通知设置（仅公共节点审核管理员）",
+    request: { body: json(TaskNodeReviewNotificationSettingsBodySchema) },
+    responses: {
+      200: { description: "保存后的本人通知设置", ...json(TaskNodeReviewNotificationSettingsSchema) },
+      400: commonErrors[400],
       403: commonErrors[403],
     },
   });
@@ -1728,6 +1756,21 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     request: { body: json(GroupAccessMemberRuleDeleteInputSchema) },
     responses: {
       204: { description: "已恢复部门默认" },
+      400: commonErrors[400],
+      401: commonErrors[401],
+      403: commonErrors[403],
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "put",
+    path: "/api/v1/access/task-node-reviewers",
+    tags: ["access"],
+    summary: "保存公共任务节点审核人名单（仅权限管理员；只能选择当前生效的系统管理员，至少一名）",
+    request: { body: json(GroupAccessTaskNodeReviewersInputSchema) },
+    responses: {
+      200: { description: "保存后的审核人名单", ...json(GroupAccessTaskNodeReviewersResponseSchema) },
       400: commonErrors[400],
       401: commonErrors[401],
       403: commonErrors[403],

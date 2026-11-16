@@ -76,7 +76,7 @@ export const TaskNodeListResponseSchema = z
 /**
  * 公共任务节点申请（2026-11-13 业务口径「给一个申请的渠道，那边能够申请加入公共，然后让管理员审核」）：
  * - 导入时未匹配 / 选择保留 Excel 原名的任务可申请加入公共节点库（入口只在导入面板，一期单一入口）；
- * - 申请本身不改节点库；审核人（与 taskNodeManage 同口径）逐条通过或驳回，通过时可按同阶段同名判重直接建公共节点，
+ * - 申请本身不改节点库；只有已被权限页勾选为「公共节点审核」的系统管理员可逐条通过或驳回，通过时可按同阶段同名判重直接建公共节点，
  *   若该阶段已出现同名公共节点则直接关联到它；驳回必须填原因；
  * - 申请不阻塞导入：导入与申请在同一事务提交，申请失败不影响项目写入（反之亦然，整批回滚）。
  */
@@ -115,7 +115,7 @@ export const TaskNodeRequestListQuerySchema = z.object({
   mine: z
     .enum(["true", "false"])
     .optional()
-    .openapi({ description: "true = 只看本人申请（任何登录账号可用）；false / 缺省 = 审核人视角看全部申请（需节点库维护权）" }),
+    .openapi({ description: "true = 只看本人申请（任何登录账号可用）；false / 缺省 = 审核人视角看全部申请（需系统管理员且命中公共节点审核人白名单；未配置时无人可审）" }),
 });
 
 export const TaskNodeRequestListResponseSchema = z
@@ -148,6 +148,32 @@ export const TaskNodeRequestDecisionResponseSchema = z
     linkedExisting: z.boolean().openapi({ description: "true = 通过时该阶段已有同名公共节点，本次直接关联而未新建" }),
   })
   .openapi("TaskNodeRequestDecisionResponse", { description: "申请审核 / 撤销结果" });
+
+/**
+ * 公共节点审核企微通知个人设置：当前审核人的开关、通知方式与固定时间。
+ * immediate = 新申请创建即通知；scheduled = 到本人 dailyTime 派发尚未通知的 pending 申请；关闭 = 不发送待审核申请通知。
+ * 时刻按 Asia/Shanghai（北京时间）解释；审批结果通知不走本设置，仍即时发送。
+ */
+export const TaskNodeReviewNotificationModeSchema = z
+  .enum(["immediate", "scheduled"])
+  .openapi("TaskNodeReviewNotificationMode", {
+    description: "通知方式：immediate = 新申请即时通知；scheduled = 固定时间通知",
+  });
+
+export const TaskNodeReviewNotificationSettingsSchema = z
+  .object({
+    enabled: z.boolean().openapi({ description: "是否向本人发送待审核申请企微通知" }),
+    notificationMode: TaskNodeReviewNotificationModeSchema,
+    dailyTime: z
+      .string()
+      .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/)
+      .openapi({ example: "09:00", description: "固定时间模式的本人每日通知时刻（Asia/Shanghai，HH:mm）；及时通知模式保留上次值" }),
+  })
+  .openapi("TaskNodeReviewNotificationSettings", {
+    description: "公共节点审核企微通知个人设置（当前审核人；审批结果通知仍即时）",
+  });
+
+export const TaskNodeReviewNotificationSettingsBodySchema = TaskNodeReviewNotificationSettingsSchema;
 
 /**
  * 模板可见范围：private = 仅填写人可见；public = 有任务模板浏览权的账号均可见。
@@ -250,6 +276,8 @@ export type TaskNodeRequestListResponse = z.infer<typeof TaskNodeRequestListResp
 export type TaskNodeRequestApproveBody = z.infer<typeof TaskNodeRequestApproveBodySchema>;
 export type TaskNodeRequestRejectBody = z.infer<typeof TaskNodeRequestRejectBodySchema>;
 export type TaskNodeRequestDecisionResponse = z.infer<typeof TaskNodeRequestDecisionResponseSchema>;
+export type TaskNodeReviewNotificationSettings = z.infer<typeof TaskNodeReviewNotificationSettingsSchema>;
+export type TaskNodeReviewNotificationSettingsBody = z.infer<typeof TaskNodeReviewNotificationSettingsBodySchema>;
 
 /** 模板侧别名（第二段落库：名称 + 阶段 + 可见范围 + 节点顺序；可见范围与节点顺序均可随编辑更新，乐观锁必传）。 */
 export type TaskTemplateVisibility = z.infer<typeof TaskTemplateVisibilitySchema>;

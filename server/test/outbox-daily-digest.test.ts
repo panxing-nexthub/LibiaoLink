@@ -173,7 +173,10 @@ describe("管理员日报领域计算", () => {
 
     expect(report.delivery.lateDelivered).toBe(1);
     expect(report.delivery.maxLatencyMs).toBe(6 * 60_000);
-    expect(composeDigestText(report)).toContain("超过 5 分钟送达 1 条，最长等待 6 分");
+    const text = composeDigestText(report);
+    expect(text).toContain("超过 5 分钟送达 1 条，最长等待 6 分");
+    expect(text).toContain("重复问题：无");
+    expect(text).not.toContain("• 无");
   });
 
   it("恢复计数只取昨日自然日窗口，窗口外恢复不串到日报", () => {

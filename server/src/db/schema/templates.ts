@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "./identity.js";
 import { projects } from "./projects.js";
 import { projectImportPreviews } from "./imports.js";
@@ -83,6 +83,8 @@ export const taskNodeRequests = pgTable(
     status: text("status").notNull().default("pending"),
     requestedBy: uuid("requested_by").notNull().references(() => users.id),
     requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    /** 申请人维度申请号：企微回复“潘兴的1号申请”的稳定寻址键（0098）。 */
+    requestNo: integer("request_no").notNull(),
     projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
     sourcePreviewId: uuid("source_preview_id").references(() => projectImportPreviews.id, { onDelete: "set null" }),
     reviewedBy: uuid("reviewed_by").references(() => users.id),
@@ -96,11 +98,15 @@ export const taskNodeRequests = pgTable(
     uniqueIndex("uq_task_node_requests_pending_title")
       .on(table.stageKey, table.title)
       .where(sql`status = 'pending'`),
+    uniqueIndex("uq_task_node_requests_pending_no")
+      .on(table.requestedBy, table.requestNo)
+      .where(sql`status = 'pending'`),
     index("ix_task_node_requests_status").on(table.status, table.requestedAt, table.id),
     index("ix_task_node_requests_requester").on(table.requestedBy, table.requestedAt, table.id),
     index("ix_task_node_requests_node").on(table.nodeId).where(sql`node_id is not null`),
     check("ck_task_node_requests_stage_key", sql`${table.stageKey} in ${sql.raw(sqlValueList(STAGE_KEYS))}`),
     check("ck_task_node_requests_status", sql`${table.status} in ('pending', 'approved', 'rejected', 'withdrawn')`),
+    check("ck_task_node_requests_request_no", sql`${table.requestNo} > 0`),
     check("ck_task_node_requests_title", sql`char_length(btrim(${table.title})) between 1 and 200`),
     check(
       "ck_task_node_requests_title_en",
@@ -112,6 +118,63 @@ export const taskNodeRequests = pgTable(
         or (${table.status} = 'approved' and ${table.reviewedBy} is not null and ${table.reviewedAt} is not null and ${table.nodeId} is not null)
         or (${table.status} = 'rejected' and ${table.reviewedBy} is not null and ${table.reviewedAt} is not null and ${table.reviewNote} is not null and ${table.nodeId} is null)
         or (${table.status} = 'withdrawn' and ${table.reviewedBy} is null and ${table.reviewedAt} is null and ${table.nodeId} is null)`,
+    ),
+  ],
+);
+
+/**
+ * task_node_review_notification_settings（0099 · 2026-11-15）：公共节点审核企微通知全局设置。
+ * 单例 id = true；enabled = 是否发送待审核申请通知；daily_time = 每日派发时刻（Asia/Shanghai）；
+ * last_dispatched_on = 最近一次派发所在上海业务日，用于保证同一业务日只派发一次。
+ * 审批结果通知不走本设置，仍由审核动作即时发送。
+ */
+export const taskNodeReviewNotificationSettings = pgTable(
+  "task_node_review_notification_settings",
+  {
+    id: boolean("id").primaryKey().default(true),
+    enabled: boolean("enabled").notNull().default(true),
+    dailyTime: text("daily_time").notNull().default("09:00"),
+    lastDispatchedOn: date("last_dispatched_on"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by").references(() => users.id),
+  },
+  () => [
+    check("ck_task_node_review_notification_settings_single", sql.raw("id")),
+    check(
+      "ck_task_node_review_notification_settings_daily_time",
+      sql.raw("daily_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'"),
+    ),
+  ],
+);
+
+/**
+ * task_node_reviewer_notification_settings（0100 · 2026-11-15）：公共节点审核企微通知个人设置。
+ * reviewer_id = users.id（删用户级联清设置）；enabled = 是否发送待审核申请通知；
+ * notification_mode = immediate（申请创建即通知） / scheduled（到本人 daily_time 派发）；
+ * daily_time = 固定时间 HH:mm（Asia/Shanghai）；last_dispatched_on = 最近一次固定时间派发的业务日。
+ * 审批结果通知不走本设置，仍由审核动作即时发送。
+ */
+export const taskNodeReviewerNotificationSettings = pgTable(
+  "task_node_reviewer_notification_settings",
+  {
+    reviewerId: uuid("reviewer_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(true),
+    notificationMode: text("notification_mode").notNull().default("scheduled"),
+    dailyTime: text("daily_time").notNull().default("09:00"),
+    lastDispatchedOn: date("last_dispatched_on"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by").references(() => users.id),
+  },
+  () => [
+    check(
+      "ck_task_node_reviewer_notification_settings_mode",
+      sql.raw("notification_mode in ('immediate', 'scheduled')"),
+    ),
+    check(
+      "ck_task_node_reviewer_notification_settings_daily_time",
+      sql.raw("daily_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'"),
     ),
   ],
 );

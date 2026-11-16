@@ -154,7 +154,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "access.page.files": "휴지통",
   "access.page.audit": "작업 기록",
   "access.scope.all": "모든 프로젝트",
-  "access.scope.own": "내가 관리하거나 참여하는 프로젝트",
+  "access.scope.own": "본인이 프로젝트 관리자인 프로젝트만",
   "access.readOnlyTitle": "이 부서는 보기 전용입니다",
   "access.readOnlyHint": "업무 페이지는 볼 수 있지만 생성, 편집, 삭제, 업로드, 가져오기, 흐름 진행 작업은 비활성화됩니다. 관리자는 예외입니다.",
   "access.scope.selected": "지정한 프로젝트만",

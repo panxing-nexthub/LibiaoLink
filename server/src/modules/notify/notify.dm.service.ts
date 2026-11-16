@@ -136,8 +136,8 @@ export const DM_BINDING_REPLY_LOCKED = "尝试次数过多，请稍后再试";
 /** 单聊首次进入欢迎语（企微后台口径 4–120 字符；含可直接显示的 emoji，换行按字符计数）。 */
 export const DM_WELCOME_MESSAGE =
   "你好，我是 LibiaoLink 项目助手 👋\n" +
-  "📣 我会把与你相关的项目动态推送到企业微信；项目群还可接收日报汇总和任务喜报。\n" +
-  "📌 本机器人主要承担消息提醒与绑定；查看项目详情、填写日报或处理文件，请登录 LibiaoLink。";
+  "首次使用请在「设置 > 企微绑定」取绑定码发给我；仅进入会话不等于绑定。\n" +
+  "可收项目动态、任务提醒、日报汇总与喜报；已绑定项目群可发「@机器人 干系人」查干系人。";
 
 /** markdown 组装（同群口径）：加粗标题 + 空行 + 正文；标题空白防御（解析后已 trim，非空为常态）。 */
 export function composeDmMarkdown(message: Pick<NotifyMessagePayload, "title" | "body">): string {

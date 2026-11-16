@@ -873,8 +873,6 @@ async function main() {
         aibot.welcomes[0].reqId === "ReqIdCallback0001" &&
         aibot.welcomes[0].content === welcome &&
         welcome.includes("👋") &&
-        welcome.includes("📣") &&
-        welcome.includes("📌") &&
         welcome.length >= 4 &&
         welcome.length <= 120,
       JSON.stringify(aibot.welcomes),

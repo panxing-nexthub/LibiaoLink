@@ -136,8 +136,8 @@ export const DM_BINDING_REPLY_LOCKED = "尝试次数过多，请稍后再试";
 /** 单聊首次进入欢迎语（企微后台口径 4–120 字符；含可直接显示的 emoji，换行按字符计数）。 */
 export const DM_WELCOME_MESSAGE =
   "你好，我是 LibiaoLink 项目助手 👋\n" +
-  "📣 我会把与你相关的项目动态推送到企业微信；项目群还可接收日报汇总和任务喜报。\n" +
-  "📌 本机器人主要承担消息提醒与绑定；查看项目详情、填写日报或处理文件，请登录 LibiaoLink。";
+  "首次使用请在「设置 > 企微绑定」取绑定码发给我；仅进入会话不等于绑定。\n" +
+  "可收项目动态、任务提醒、日报汇总与喜报；已绑定项目群可发「@机器人 干系人」查干系人。";
 
 /** markdown 组装（同群口径）：加粗标题 + 空行 + 正文；标题空白防御（解析后已 trim，非空为常态）。 */
 export function composeDmMarkdown(message: Pick<NotifyMessagePayload, "title" | "body">): string {
@@ -253,6 +253,26 @@ export class NotifyDmService {
     const contact = await this.repository.findContact(binding.userId);
     if (contact === null || contact.removedAt !== null || contact.status !== "active") return null;
     return binding.userId;
+  }
+
+  /**
+   * 企微业务回复的统一身份入口：先登记单聊激活，再按 (bot_id, from.userid) 解析绑定用户。
+   * 审核命令等“会话内动作”复用绑定态，不接受未绑定账号或非活跃账号。
+   */
+  async resolveBoundDmActor(incoming: AibotIncomingMessage): Promise<string | null> {
+    if (incoming.cmd !== "aibot_msg_callback" || incoming.chattype !== "single" || incoming.fromUserId === null) {
+      return null;
+    }
+    const userid = incoming.fromUserId;
+    if (!DM_USERID_PATTERN.test(userid)) return null;
+    await this.repository.upsertActivationFromCallback({ botId: this.botId(), wecomUserid: userid, at: this.clock.now() });
+    return await this.resolveReportQueryActor(userid);
+  }
+
+  /** 业务命令的会话内纯文本回执（审核通过 / 驳回等即时反馈）。 */
+  async replyToDmCallback(incoming: AibotIncomingMessage, content: string): Promise<void> {
+    if (incoming.fromUserId === null) return;
+    await this.replyToCallback(incoming, incoming.fromUserId, content);
   }
 
   /**

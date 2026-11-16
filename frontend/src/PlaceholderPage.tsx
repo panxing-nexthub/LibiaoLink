@@ -19,16 +19,19 @@ import {
   deleteTaskTemplate,
   fetchStageNodes,
   fetchStageTemplates,
+  getTaskNodeReviewNotificationSettings,
   listTaskNodeRequests,
   nodeRequestWriteMessage,
   nodeWriteMessage,
   rejectTaskNodeRequest,
   templateWriteMessage,
   updateStageNode,
+  updateTaskNodeReviewNotificationSettings,
   updateTaskTemplate,
   withdrawTaskNodeRequest,
   type TaskNodeItem,
   type TaskNodeRequest,
+  type TaskNodeReviewNotificationSettings,
   type TemplateItem,
   type TemplateVisibility,
 } from "./templateApi";
@@ -57,6 +60,16 @@ function templateTabClass(active: boolean): string {
 
 /** 左列节点池的兜底空数组（取不到该板块那份时用，避免每次渲染都新建一个）。 */
 const EMPTY_NODE_LIST: readonly TaskNodeItem[] = [];
+
+/** 每日通知时间下拉：小时 / 分钟都用系统自绘 SelectMenu，不再使用浏览器原生 time 选择器。 */
+const REVIEW_NOTIFY_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => {
+  const value = String(index).padStart(2, "0");
+  return { value, label: value };
+});
+const REVIEW_NOTIFY_MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => {
+  const value = String(index).padStart(2, "0");
+  return { value, label: value };
+});
 
 type TemplateNode = TaskNodeItem;
 
@@ -356,11 +369,13 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
    * 「待审核」只给有公共节点审核权（canReviewNodes = taskNodeReview，管理员名单由权限页勾选）的账号，可逐条改中英文名后通过 / 驳回；
    * 「我的申请」任何登录账号都能看自己的申请与结果（pending 可撤销）。
    */
-  const [nodeRequestsTab, setNodeRequestsTab] = useState<"pending" | "mine">("pending");
+  const [nodeRequestsTab, setNodeRequestsTab] = useState<"pending" | "records" | "mine">("pending");
   /** 审核视角的待审列表（需 `taskNodeReview`；无权限时保持空数组，不发请求）。 */
   const [pendingRequests, setPendingRequests] = useState<TaskNodeRequest[]>([]);
   /** 本人视角的申请（全部状态；任何登录账号都可看）。 */
   const [myRequests, setMyRequests] = useState<TaskNodeRequest[]>([]);
+  /** 审核记录：审核管理员视角的全部已处理申请（通过 / 驳回 / 撤销，展示所有申请人）。 */
+  const [reviewRecords, setReviewRecords] = useState<TaskNodeRequest[]>([]);
   /** 两个视角各自的待审条数（审核视角 = 全局待审；本人视角 = 本人待审）。 */
   const [reviewPendingCount, setReviewPendingCount] = useState(0);
   const [myPendingCount, setMyPendingCount] = useState(0);
@@ -377,6 +392,15 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   const [actingRequestId, setActingRequestId] = useState<string | null>(null);
   /** 审核动作的结果提示（顶部 Toast，成功 / 失败同一位置）。 */
   const [nodeRequestNotice, setNodeRequestNotice] = useState<{ kind: "ok" | "error" | "info"; text: string } | null>(null);
+  /** 审核页左侧的企微通知个人设置（只有 canReviewNodes 时读取 / 可编辑）。 */
+  const [reviewNotifySettings, setReviewNotifySettings] = useState<TaskNodeReviewNotificationSettings>({
+    enabled: true,
+    notificationMode: "scheduled",
+    dailyTime: "09:00",
+  });
+  const [reviewNotifyReady, setReviewNotifyReady] = useState(false);
+  const [reviewNotifySaving, setReviewNotifySaving] = useState(false);
+  const [reviewNotifyError, setReviewNotifyError] = useState<string | null>(null);
 
   useEffect(() => subscribeLiveHints((resources) => {
     if (!resources.includes("templates")) return;
@@ -455,11 +479,12 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         if (!canReviewNodes) {
           return;
         }
-        const all = await listTaskNodeRequests({ status: "pending" });
+        const all = await listTaskNodeRequests();
         if (!alive) {
           return;
         }
-        setPendingRequests(all.items);
+        setPendingRequests(all.items.filter((request) => request.status === "pending"));
+        setReviewRecords(all.items.filter((request) => request.status !== "pending"));
         setReviewPendingCount(all.pendingCount);
       } catch (error) {
         if (alive) {
@@ -482,6 +507,47 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       alive = false;
     };
   }, [nodeRequestsSectionActive, canReviewNodes, nodeRequestsVersion]);
+
+  /** 审核页左侧设置单独取数：失败不影响申请列表；只有审核管理员会请求。 */
+  useEffect(() => {
+    if (!nodeRequestsSectionActive || !canReviewNodes) {
+      return;
+    }
+    let alive = true;
+    setReviewNotifyError(null);
+    void (async () => {
+      try {
+        const settings = await getTaskNodeReviewNotificationSettings();
+        if (!alive) return;
+        setReviewNotifySettings(settings);
+        setReviewNotifyReady(true);
+      } catch (error) {
+        if (!alive) return;
+        setReviewNotifyReady(false);
+        setReviewNotifyError(error instanceof Error ? error.message : t("tpl.err.retryLater"));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [nodeRequestsSectionActive, canReviewNodes]);
+
+  /** 进入「入库审核」= 当前通知已读：顶栏与标签红点同时熄灭；后续只有新申请 / 新驳回才重新亮。 */
+  useEffect(() => {
+    if (!nodeRequestsSectionActive) {
+      return;
+    }
+    const notificationKeys = [
+      ...taskNodeNotificationKeys(pendingRequests, true),
+      ...taskNodeNotificationKeys(myRequests, false),
+    ];
+    if (notificationKeys.length === 0) {
+      return;
+    }
+    if (markTaskNodeNotificationsSeen(notificationKeys)) {
+      void refreshTaskNodePending(canReviewNodes);
+    }
+  }, [nodeRequestsSectionActive, pendingRequests, myRequests, canReviewNodes]);
 
   /** 进入「入库审核」= 当前通知已读：顶栏与标签红点同时熄灭；后续只有新申请 / 新驳回才重新亮。 */
   useEffect(() => {
@@ -965,6 +1031,43 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   const nodeRequestErrorMessage = (error: unknown, fallback: string): string =>
     error instanceof ApiError ? nodeRequestWriteMessage(error) : fallback;
 
+  /** 通知设置采用「立即保存」：乐观更新，失败回滚并出 Toast；保存中禁用开关与时间，防连点竞态。 */
+  const saveReviewNotifySettings = (next: TaskNodeReviewNotificationSettings): void => {
+    if (!reviewNotifyReady || reviewNotifySaving) {
+      return;
+    }
+    const previous = reviewNotifySettings;
+    setReviewNotifySettings(next);
+    setReviewNotifySaving(true);
+    setReviewNotifyError(null);
+    void (async () => {
+      try {
+        const saved = await updateTaskNodeReviewNotificationSettings(next);
+        setReviewNotifySettings(saved);
+        setNodeRequestNotice({ kind: "ok", text: t("nodeRequests.notify.saved") });
+      } catch (error) {
+        setReviewNotifySettings(previous);
+        setNodeRequestNotice({
+          kind: "error",
+          text: t("nodeRequests.notify.saveFailed", {
+            message: error instanceof Error ? error.message : t("tpl.err.retryLater"),
+          }),
+        });
+      } finally {
+        setReviewNotifySaving(false);
+      }
+    })();
+  };
+
+  /** 时 / 分下拉分别保存；另一边保持当前值，仍走同一整份 PUT。 */
+  const saveReviewNotifyTimePart = (part: "hour" | "minute", value: string): void => {
+    const [hour = "00", minute = "00"] = reviewNotifySettings.dailyTime.split(":");
+    saveReviewNotifySettings({
+      ...reviewNotifySettings,
+      dailyTime: part === "hour" ? value + ":" + minute : hour + ":" + value,
+    });
+  };
+
   /** 审核行当前的中英文名（没编辑过 = 申请原值；英文名空串 = 无英文，提交时传 null）。 */
   const requestDraftOf = (request: TaskNodeRequest): { title: string; titleEn: string } =>
     requestDrafts[request.id] ?? { title: request.title, titleEn: request.titleEn ?? "" };
@@ -1085,7 +1188,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   };
 
   /** 实际展示的标签：没有 `taskNodeReview` 时「待审核」这个标签不存在，一律回落到「我的申请」。 */
-  const shownRequestsTab: "pending" | "mine" = canReviewNodes ? nodeRequestsTab : "mine";
+  const shownRequestsTab: "pending" | "records" | "mine" = canReviewNodes ? nodeRequestsTab : "mine";
 
   /**
    * 鼠标底下是「哪块面板的第几格」（Push 116）：`data-template-panel` 认面板、卡片中线认格 ——
@@ -1373,6 +1476,120 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
               <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-zinc-200 px-4 py-2.5">
                 <h2 className="text-base font-semibold text-zinc-900">{t("nodeRequests.entry")}</h2>
               </div>
+              <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+                {canReviewNodes ? (
+                  <aside
+                    data-node-review-notification-settings=""
+                    className="shrink-0 border-b border-zinc-100 bg-zinc-50/65 px-4 py-3 lg:w-52 lg:border-b-0 lg:border-r lg:px-3 lg:py-4"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-zinc-800">{t("nodeRequests.notify.title")}</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={reviewNotifySettings.enabled}
+                        aria-label={t("nodeRequests.notify.title")}
+                        data-node-review-notification-switch=""
+                        disabled={!reviewNotifyReady || reviewNotifySaving}
+                        onClick={() => {
+                          saveReviewNotifySettings({ ...reviewNotifySettings, enabled: !reviewNotifySettings.enabled });
+                        }}
+                        className={
+                          "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 " +
+                          (reviewNotifySettings.enabled ? "bg-emerald-500" : "bg-zinc-300")
+                        }
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={
+                            "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform " +
+                            (reviewNotifySettings.enabled ? "translate-x-[18px]" : "translate-x-0.5")
+                          }
+                        />
+                      </button>
+                    </div>
+                    {reviewNotifySettings.enabled ? (
+                      <>
+                        <div className="mt-2.5 text-[11px] font-medium text-zinc-600">
+                          {t("nodeRequests.notify.mode")}
+                        </div>
+                        <div
+                          role="group"
+                          aria-label={t("nodeRequests.notify.mode")}
+                          className="mt-1 grid grid-cols-2 gap-0.5 rounded-lg bg-zinc-200/60 p-0.5"
+                        >
+                          {(["immediate", "scheduled"] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              aria-pressed={reviewNotifySettings.notificationMode === mode}
+                              data-node-review-notification-mode={mode}
+                              disabled={!reviewNotifyReady || reviewNotifySaving}
+                              onClick={() => {
+                                saveReviewNotifySettings({ ...reviewNotifySettings, notificationMode: mode });
+                              }}
+                              className={
+                                "rounded-md px-1 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 " +
+                                (reviewNotifySettings.notificationMode === mode
+                                  ? "bg-white text-zinc-900 shadow-sm"
+                                  : "text-zinc-500 hover:text-zinc-800")
+                              }
+                            >
+                              {t(mode === "immediate" ? "nodeRequests.notify.modeImmediate" : "nodeRequests.notify.modeScheduled")}
+                            </button>
+                          ))}
+                        </div>
+                        {reviewNotifySettings.notificationMode === "scheduled" ? (
+                          <>
+                            <div className="mt-2.5 text-[11px] font-medium text-zinc-600">
+                              {t("nodeRequests.notify.dailyTime")} {t("nodeRequests.notify.beijingTime")}
+                            </div>
+                            <div
+                              data-node-review-notification-time=""
+                              className="mt-1.5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1"
+                            >
+                              <SelectMenu
+                                value={reviewNotifySettings.dailyTime.slice(0, 2)}
+                                options={REVIEW_NOTIFY_HOUR_OPTIONS}
+                                onChange={(hour) => {
+                                  saveReviewNotifyTimePart("hour", hour);
+                                }}
+                                ariaLabel={t("nodeRequests.notify.hour")}
+                                disabled={!reviewNotifyReady || reviewNotifySaving}
+                              />
+                              <span aria-hidden="true" className="text-center text-xs font-semibold text-zinc-400">
+                                :
+                              </span>
+                              <SelectMenu
+                                value={reviewNotifySettings.dailyTime.slice(3, 5)}
+                                options={REVIEW_NOTIFY_MINUTE_OPTIONS}
+                                onChange={(minute) => {
+                                  saveReviewNotifyTimePart("minute", minute);
+                                }}
+                                ariaLabel={t("nodeRequests.notify.minute")}
+                                disabled={!reviewNotifyReady || reviewNotifySaving}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <p className="mt-2 text-[10px] leading-4 text-zinc-500">
+                            {t("nodeRequests.notify.immediateHint")}
+                          </p>
+                        )}
+                      </>
+                    ) : null}
+                    {reviewNotifyError !== null || !reviewNotifyReady || !reviewNotifySettings.enabled ? (
+                      <p className="mt-1.5 text-[10px] leading-4 text-zinc-500">
+                        {reviewNotifyError !== null
+                          ? t("nodeRequests.notify.loadFailed", { message: reviewNotifyError })
+                          : !reviewNotifyReady
+                            ? t("common.loading")
+                            : t("nodeRequests.notify.offHint")}
+                      </p>
+                    ) : null}
+                  </aside>
+                ) : null}
+                <div className="flex min-h-0 flex-1 flex-col">
               <div role="tablist" aria-label={t("nodeRequests.entry")} className="flex shrink-0 flex-wrap items-center gap-1 border-b border-zinc-100 px-4 text-sm">
                 {canReviewNodes ? (
                   <button
@@ -1394,6 +1611,23 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                         {t("nodeRequests.pendingBadge", { n: reviewPendingCount })}
                       </span>
                     )}
+                  </button>
+                ) : null}
+                {canReviewNodes ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={shownRequestsTab === "records"}
+                    data-node-request-tab="records"
+                    onClick={() => { setNodeRequestsTab("records"); setRejectingRequestId(null); setRejectReason(""); }}
+                    className={
+                      "border-b-2 px-2.5 py-1.5 font-medium transition " +
+                      (shownRequestsTab === "records"
+                        ? "border-zinc-900 text-zinc-900"
+                        : "border-transparent text-zinc-500 hover:text-zinc-800")
+                    }
+                  >
+                    {t("nodeRequests.tabRecords")}
                   </button>
                 ) : null}
                 <button
@@ -1563,6 +1797,68 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                   )
                 ) : null}
 
+                {!nodeRequestsLoading && nodeRequestsError === null && canReviewNodes && shownRequestsTab === "records" ? (
+                  reviewRecords.length === 0 ? (
+                    <p className="py-10 text-center text-xs text-zinc-500">{t("nodeRequests.emptyRecords")}</p>
+                  ) : (
+                    <ul data-node-request-records="" className="space-y-1.5">
+                      {reviewRecords.map((request) => {
+                        const reviewedAt = request.reviewedAt ?? request.updatedAt;
+                        return (
+                          <li
+                            key={request.id}
+                            data-node-request-item={request.id}
+                            data-node-request-record={request.id}
+                            data-node-request-status={request.status}
+                            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
+                          >
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium text-zinc-600">
+                                {stageText(locale, stageNameOf(request.stageKey))}
+                              </span>
+                              <span className="min-w-0 font-medium text-zinc-800">
+                                {request.title}
+                                {request.titleEn === null || request.titleEn === "" ? "" : " · " + request.titleEn}
+                              </span>
+                              <span
+                                className={"ml-auto rounded-md border px-1.5 py-0.5 text-[11px] font-medium " + NODE_REQUEST_STATUS_STYLE[request.status]}
+                                data-node-request-status-badge={request.status}
+                              >
+                                {t(NODE_REQUEST_STATUS_KEY[request.status])}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-500">
+                              <span>{t("nodeRequests.requestedBy", { name: request.requestedByName ?? "—" })}</span>
+                              <span>· {" "}{t("nodeRequests.submittedAt", { time: formatDateTime(request.requestedAt) })}</span>
+                              <span>· {" "}{t("nodeRequests.sourceProject", { name: sourceProjectLabel(request) })}</span>
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-500">
+                              {request.status === "withdrawn" ? (
+                                <>
+                                  <span>{t("nodeRequests.withdrawnByApplicant")}</span>
+                                  <span>· {" "}{t("nodeRequests.processedAt", { time: formatDateTime(reviewedAt) })}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>{t("nodeRequests.reviewedBy", { name: request.reviewedByName ?? "—" })}</span>
+                                  <span>· {" "}{t("nodeRequests.reviewedAt", { time: formatDateTime(reviewedAt) })}</span>
+                                </>
+                              )}
+                            </div>
+                            {request.reviewNote === null || request.reviewNote === "" ? null : (
+                              <p className="mt-1 text-[11px] text-zinc-600">
+                                {(request.status === "rejected" ? t("nodeRequests.rejectReason") : t("nodeRequests.reviewNote")) +
+                                  " · " +
+                                  request.reviewNote}
+                              </p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )
+                ) : null}
+
                 {!nodeRequestsLoading && nodeRequestsError === null && shownRequestsTab === "mine" ? (
                   myRequests.length === 0 ? (
                     <p className="py-10 text-center text-xs text-zinc-500">{t("nodeRequests.emptyMine")}</p>
@@ -1620,6 +1916,8 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                     </ul>
                   )
                 ) : null}
+              </div>
+                </div>
               </div>
             </section>
           ) : null}

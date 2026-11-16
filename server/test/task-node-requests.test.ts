@@ -5,6 +5,7 @@
  * 3) 通过：可先改中英文名，按同阶段同名判重建公共节点并写节点 / 申请两条审计；已有同名节点时直接关联（linkedExisting）；
  * 4) 驳回：原因必填；已处理申请再审核 / 撤销一律 400；撤销仅本人且仅 pending；
  * 5) 权限：通过 / 驳回 / 审核人列表都走公共节点审核人白名单判定。
+ * 6) 结果通知：审批成功后只给另一位当前有效审核人写一条五行 Markdown；并发后到者只回已处理，不重复建节点 / 发通知。
  * 契约见 shared/src/modules/templates.ts；真机口径见 server/src/modules/template/README.md。
  */
 import { describe, expect, it } from "vitest";
@@ -19,10 +20,15 @@ import type {
   TaskNodeRequestRepository,
   TaskNodeRequestRow,
 } from "../src/modules/template/index.js";
+import type {
+  TaskNodeReviewNotificationSettingsRepository,
+  TaskNodeReviewNotificationSettingsUpdate,
+} from "../src/modules/template/index.js";
 import { TaskNodeRequestService } from "../src/modules/template/index.js";
 
 const ACTOR = "11111111-1111-4111-8111-111111111111";
 const REVIEWER = "22222222-2222-4222-8222-222222222222";
+const REVIEWER_B = "88888888-8888-4888-8888-888888888888";
 const REQUEST_ID = "33333333-3333-4333-8333-333333333333";
 const PROJECT_ID = "44444444-4444-4444-8444-444444444444";
 const PREVIEW_ID = "55555555-5555-4555-8555-555555555555";
@@ -38,6 +44,7 @@ function makeRequest(overrides: Partial<TaskNodeRequestRow> = {}): TaskNodeReque
     requestedBy: ACTOR,
     requestedByName: "潘兴",
     requestedAt: AT,
+    requestNo: 1,
     projectId: PROJECT_ID,
     projectCode: "LBGW-20260331-1459",
     projectName: "UK-VANILLA",
@@ -102,6 +109,28 @@ class FakeRequestRepository {
     return row === undefined ? null : { ...row };
   }
 
+  async lockRequestNumbering(): Promise<void> {}
+
+  async nextRequestNo(requestedBy: string): Promise<number> {
+    const pendingNumbers = this.rows
+      .filter((row) => row.requestedBy === requestedBy && row.status === "pending")
+      .map((row) => row.requestNo);
+    return (pendingNumbers.length === 0 ? 0 : Math.max(...pendingNumbers)) + 1;
+  }
+
+  async findPendingByRequesterNameAndNo(requestedByName: string, requestNo: number): Promise<TaskNodeRequestRow | null> {
+    const row = this.rows.find(
+      (item) => item.requestedByName === requestedByName && item.requestNo === requestNo && item.status === "pending",
+    );
+    return row === undefined ? null : { ...row };
+  }
+
+  async findLatestByRequesterNameAndNo(requestedByName: string, requestNo: number): Promise<TaskNodeRequestRow | null> {
+    const rows = this.rows.filter((item) => item.requestedByName === requestedByName && item.requestNo === requestNo);
+    const row = rows.at(-1);
+    return row === undefined ? null : { ...row };
+  }
+
   async insertIfAbsent(input: TaskNodeRequestInsertInput): Promise<TaskNodeRequestRow | null> {
     this.inserts.push({ ...input });
     const conflict = this.rows.some((row) => row.stageKey === input.stageKey && row.title === input.title && row.status === "pending");
@@ -114,6 +143,7 @@ class FakeRequestRepository {
       titleEn: input.titleEn,
       requestedBy: input.requestedBy,
       requestedAt: input.requestedAt,
+      requestNo: input.requestNo,
       projectId: input.projectId,
       status: "pending",
     });
@@ -131,6 +161,7 @@ class FakeRequestRepository {
       ...this.rows[index]!,
       status: input.status,
       reviewedBy: input.reviewedBy,
+      reviewedByName: input.reviewedBy === REVIEWER ? "吴孟杰" : "李侠伟",
       reviewedAt: input.reviewedAt,
       reviewNote: input.reviewNote,
       nodeId: input.nodeId,
@@ -165,6 +196,10 @@ class FakeNodeRepository {
     return this.rows.length === 0 ? 0 : Math.max(...this.rows.map((row) => row.seq));
   }
 
+  async list(stageKey: string): Promise<TaskNodeRow[]> {
+    return this.rows.filter((row) => row.stageKey === stageKey).map((row) => ({ ...row }));
+  }
+
   async insert(input: TaskNodeInsertInput): Promise<TaskNodeRow> {
     this.counter += 1;
     this.inserts.push({ ...input });
@@ -182,8 +217,34 @@ class FakeNodeRepository {
 
 class FakePermission {
   allowed = true;
+  reviewers: string[] = [];
   async assertCanReviewTaskNodeRequests(): Promise<void> {
     if (!this.allowed) throw new AppError("FORBIDDEN", "审核公共节点申请需要已授权的管理员权限");
+  }
+  async listEffectiveTaskNodeReviewers(): Promise<string[]> {
+    return this.allowed ? [...this.reviewers] : [];
+  }
+}
+
+class FakeNotificationSettingsRepository {
+  rows = new Map<string, { enabled: boolean; notificationMode: "immediate" | "scheduled"; dailyTime: string }>();
+  updates: Array<{ reviewerId: string; input: TaskNodeReviewNotificationSettingsUpdate; actorId: string }> = [];
+
+  async listImmediateEnabledReviewerIds(reviewerIds: readonly string[]): Promise<string[]> {
+    return reviewerIds.filter((reviewerId) => {
+      const row = this.rows.get(reviewerId);
+      return row !== undefined && row.enabled && row.notificationMode === "immediate";
+    });
+  }
+
+  async updateSettings(
+    reviewerId: string,
+    input: TaskNodeReviewNotificationSettingsUpdate,
+    actorId: string,
+  ): Promise<unknown> {
+    this.updates.push({ reviewerId, input: { ...input }, actorId });
+    this.rows.set(reviewerId, { ...input });
+    return { reviewerId, ...input };
   }
 }
 
@@ -194,26 +255,46 @@ class FakeAudit {
   }
 }
 
+type OutboxRecord = { topic: string; dedupeKey: string; payload: Record<string, unknown> };
+
+class FakeDatabase {
+  readonly outbox: OutboxRecord[] = [];
+  readonly tx = {
+    insert: () => ({
+      values: (value: OutboxRecord) => {
+        this.outbox.push(value);
+        return { onConflictDoUpdate: async () => {} };
+      },
+    }),
+  };
+  db = { transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(this.tx) };
+}
+
 function createHarness(): {
   service: TaskNodeRequestService;
   requests: FakeRequestRepository;
   nodes: FakeNodeRepository;
   permission: FakePermission;
   audit: FakeAudit;
+  database: FakeDatabase;
+  reviewNotifications: FakeNotificationSettingsRepository;
 } {
   const requests = new FakeRequestRepository();
   const nodes = new FakeNodeRepository();
   const permission = new FakePermission();
   const audit = new FakeAudit();
-  const database = { db: { transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({}) } };
+  const database = new FakeDatabase();
+  const reviewNotifications = new FakeNotificationSettingsRepository();
   const service = new TaskNodeRequestService(
     requests as unknown as TaskNodeRequestRepository,
     nodes as unknown as TaskNodeRepository,
     permission as unknown as PermissionService,
     audit as unknown as AuditService,
     database as unknown as DatabaseService,
+    reviewNotifications as unknown as TaskNodeReviewNotificationSettingsRepository,
+    { env: { PUBLIC_APP_BASE_URL: "https://test.example" } } as never,
   );
-  return { service, requests, nodes, permission, audit };
+  return { service, requests, nodes, permission, audit, database, reviewNotifications };
 }
 
 async function expectCode(fn: () => Promise<unknown>, code: string): Promise<void> {
@@ -293,6 +374,48 @@ describe("TaskNodeRequestService.createFromImport（导入内提交）", () => {
     expect(h.nodes.inserts).toEqual([]);
   });
 
+  it("未配置个人及时通知时，申请创建不即时写企微通知，等待固定时间派发", async () => {
+    const h = createHarness();
+    h.permission.reviewers = [REVIEWER];
+    await h.service.createFromImport(
+      {
+        actorId: ACTOR,
+        projectId: PROJECT_ID,
+        previewId: PREVIEW_ID,
+        items: [{ stageKey: "install", title: "企微联调节点", titleEn: null }],
+      },
+      {} as never,
+    );
+    expect(h.database.outbox).toEqual([]);
+  });
+
+  it("及时通知的审核人在申请创建时立即收到一条，固定时间审核人不即时收到", async () => {
+    const h = createHarness();
+    h.permission.reviewers = [REVIEWER, REVIEWER_B];
+    h.reviewNotifications.rows.set(REVIEWER, { enabled: true, notificationMode: "immediate", dailyTime: "09:00" });
+    h.reviewNotifications.rows.set(REVIEWER_B, { enabled: true, notificationMode: "scheduled", dailyTime: "11:00" });
+    const outcome = await h.service.createFromImport(
+      {
+        actorId: ACTOR,
+        projectId: PROJECT_ID,
+        previewId: PREVIEW_ID,
+        items: [{ stageKey: "install", title: "及时通知节点", titleEn: null }],
+      },
+      h.database.tx as never,
+    );
+    expect(h.database.outbox).toHaveLength(1);
+    const event = h.database.outbox[0];
+    if (event === undefined) throw new Error("缺少及时通知");
+    expect(event.dedupeKey).toBe("task-node-request-review:" + outcome.requests[0]!.id + ":" + REVIEWER);
+    expect(event.payload).toMatchObject({
+      recipientId: REVIEWER,
+      templateCode: "TASK_NODE_REQUEST_REVIEW",
+      refType: "task_node_request",
+      refId: outcome.requests[0]!.id,
+    });
+    expect(String(event.payload.body ?? "")).toContain("及时通知节点");
+  });
+
   it("并发下插入撞唯一索引（返回 null）时复用既有待审申请", async () => {
     const h = createHarness();
     h.requests.rows = [makeRequest({ id: REQUEST_ID, title: "并发节点" })];
@@ -311,6 +434,37 @@ describe("TaskNodeRequestService.createFromImport（导入内提交）", () => {
   });
 });
 
+describe("TaskNodeRequestService.handleWecomReview（企微回复）", () => {
+  it("同意：按申请人 + 申请号定位 pending，回执带通过后的节点名", async () => {
+    const h = createHarness();
+    h.requests.rows = [makeRequest({ requestNo: 1, title: "第四批空箱上架" })];
+    const reply = await h.service.handleWecomReview(REVIEWER, "同意潘兴的1号申请");
+    expect(reply).toBe("已同意：潘兴的1号申请，第四批空箱上架");
+    expect(h.requests.rows[0]?.status).toBe("approved");
+  });
+
+  it("驳回：省略理由记「无」，带理由按原文落库", async () => {
+    const h = createHarness();
+    h.requests.rows = [makeRequest({ requestNo: 2, status: "pending" })];
+    const reply = await h.service.handleWecomReview(REVIEWER, "驳回潘兴的2号申请");
+    expect(reply).toBe("已驳回：潘兴的2号申请，原因：无");
+    expect(h.requests.rows[0]?.reviewNote).toBe("无");
+    h.requests.rows = [makeRequest({ id: "77777777-7777-4777-8777-777777777777", requestNo: 3, status: "pending" })];
+    const withReason = await h.service.handleWecomReview(REVIEWER, "驳回潘兴的3号申请 与节点重复");
+    expect(withReason).toBe("已驳回：潘兴的3号申请，原因：与节点重复");
+  });
+
+  it("无权限 / 已处理 / 不存在都回可读中文", async () => {
+    const h = createHarness();
+    h.permission.allowed = false;
+    expect(await h.service.handleWecomReview(REVIEWER, "同意潘兴的1号申请")).toContain("无审核权限");
+    h.permission.allowed = true;
+    h.requests.rows = [makeRequest({ requestNo: 1, status: "approved" })];
+    expect(await h.service.handleWecomReview(REVIEWER, "同意潘兴的1号申请")).toBe("该申请已处理：潘兴的1号申请");
+    expect(await h.service.handleWecomReview(REVIEWER, "同意潘兴的9号申请")).toBe("未找到待审核申请：潘兴的9号申请");
+  });
+});
+
 describe("TaskNodeRequestService.approve / reject / withdraw", () => {
   it("通过：按审核人口径改名建公共节点（追加到阶段末尾），写节点与申请两条审计", async () => {
     const h = createHarness();
@@ -324,6 +478,42 @@ describe("TaskNodeRequestService.approve / reject / withdraw", () => {
     expect(h.audit.records.map((record) => record.objectType)).toEqual(["task_node", "task_node_request"]);
     expect(h.audit.records[0]?.action).toBe("create");
     expect(h.audit.records[1]?.action).toBe("update");
+  });
+
+  it("通过：只给另一位审核人补发五行结果通知，并绑定申请去重键", async () => {
+    const h = createHarness();
+    h.requests.rows = [makeRequest()];
+    h.permission.reviewers = [REVIEWER, REVIEWER_B];
+    await h.service.approve(REQUEST_ID, {}, REVIEWER);
+    expect(h.database.outbox).toHaveLength(1);
+    const event = h.database.outbox[0];
+    if (event === undefined) throw new Error("缺少结果通知");
+    expect(event).toMatchObject({
+      topic: "notify.message",
+      dedupeKey: "task-node-request-review-result:" + REQUEST_ID + ":" + REVIEWER_B,
+      payload: {
+        recipientId: REVIEWER_B,
+        type: "approval",
+        channel: "wecom_aibot",
+        title: "公共节点审核结果｜硬件实施",
+        refType: "task_node_request",
+        refId: REQUEST_ID,
+        templateCode: "TASK_NODE_REQUEST_REVIEW_RESULT",
+        mergeKey: "task-node-request-result:" + REQUEST_ID,
+      },
+    });
+    expect(event.payload.body).toBe("**阶段**：硬件实施\n**任务**：货架复检\n**申请人**：潘兴\n**审核人**：吴孟杰\n**审核结果**：审核通过");
+  });
+
+  it("并发只有一个赢家：后到审核返回已处理，不重复建节点或发结果", async () => {
+    const h = createHarness();
+    h.requests.rows = [makeRequest()];
+    h.permission.reviewers = [REVIEWER, REVIEWER_B];
+    await h.service.approve(REQUEST_ID, {}, REVIEWER);
+    await expectCode(() => h.service.approve(REQUEST_ID, {}, REVIEWER_B), "VALIDATION_FAILED");
+    expect(h.nodes.inserts).toHaveLength(1);
+    expect(h.database.outbox).toHaveLength(1);
+    expect(h.requests.rows[0]?.reviewedBy).toBe(REVIEWER);
   });
 
   it("通过：该阶段已有同名节点时直接关联，不新建节点", async () => {
@@ -346,6 +536,19 @@ describe("TaskNodeRequestService.approve / reject / withdraw", () => {
     h.permission.allowed = false;
     await expectCode(() => h.service.approve(REQUEST_ID, {}, REVIEWER), "FORBIDDEN");
     expect(h.nodes.inserts).toEqual([]);
+  });
+
+  it("驳回：只给另一位审核人发一条简洁结果通知", async () => {
+    const h = createHarness();
+    h.requests.rows = [makeRequest()];
+    h.permission.reviewers = [REVIEWER, REVIEWER_B];
+    await h.service.reject(REQUEST_ID, { reason: "与现有节点重复" }, REVIEWER);
+    expect(h.database.outbox).toHaveLength(1);
+    const event = h.database.outbox[0];
+    if (event === undefined) throw new Error("缺少结果通知");
+    expect(event.dedupeKey).toBe("task-node-request-review-result:" + REQUEST_ID + ":" + REVIEWER_B);
+    expect(event.payload).toMatchObject({ recipientId: REVIEWER_B, templateCode: "TASK_NODE_REQUEST_REVIEW_RESULT" });
+    expect(event.payload.body).toBe("**阶段**：硬件实施\n**任务**：货架复检\n**申请人**：潘兴\n**审核人**：吴孟杰\n**审核结果**：审核驳回");
   });
 
   it("驳回：原因必填；驳回后不再建节点", async () => {

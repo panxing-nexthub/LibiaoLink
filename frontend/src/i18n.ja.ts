@@ -154,7 +154,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "access.page.files": "ごみ箱",
   "access.page.audit": "操作履歴",
   "access.scope.all": "すべてのプロジェクト",
-  "access.scope.own": "自分が担当または参加するプロジェクト",
+  "access.scope.own": "本人がプロジェクトマネージャーのプロジェクトのみ",
   "access.readOnlyTitle": "この部門は閲覧のみです",
   "access.readOnlyHint": "業務ページは閲覧できますが、新規作成・編集・削除・アップロード・インポート・フロー操作は無効です。管理者は対象外です。",
   "access.scope.selected": "指定プロジェクトのみ",

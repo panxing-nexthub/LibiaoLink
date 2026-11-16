@@ -1,5 +1,12 @@
 # notify 模块（S7·outbox · S7-4 · 通知投递内核 j1 / M5-04 首刀 · Push 178 + 接线段渠道护栏 · Push 180） + S8-3 契约落地（SSE 实时流 / 稍后提醒）· Push 210 + M5-04-1 SSE 实现 · Push 211 + M5-04-2 稍后提醒实现 · Push 212 + M5-04 收口 · Push 213 + M5-03-1 企微适配器内核 · Push 215 + M5-03-2 契约段 · Push 221 + 群通道迁移 0046 · Push 222 + M5-03-2 智能机器人长连接客户端（webhook 面退役）· Push 223 + M5-03-2 接线段（群绑定读写 + notify.group 消费 + 回调 ingest）· Push 224 + M5-03-3 应用消息 + C5-04 降级 + 告警出口 · Push 226 + M5-03-4 开工（T3-6 收官 · 93001 锁定 · PoC-2 证据骨架）· Push 227 + M5-03-4 T5 反向修复（告警复报去重）· Push 229 + M5-03-4 告警 / 失败文案收敛（核心语义口径）· Push 230 + M5-03-5-3 单聊 aibot 实现段（sendUserMarkdown + 限速 single + NotifyDmService + 激活仓储 + 回放）· Push 237 + M5-03-5-4 单聊 aibot 接线段（outbox 路由分流 + `:aibot` 产出接线 + worker 回调分流 + 集成回放）· Push 238 + M5-03-5-6 绑定码链路（迁移 0055 · 单聊 ingest 绑定 + 密文 open_userid 寻址 + D4 话术）· Push 247 + M5-03-5-6 契约刀（取码 / 查绑定态 / 解绑 + `audit_logs` + 生成客户端）· Push 249 + outbox 告警可执行化与恢复日报 · Push 257 + 单聊 enter_chat 欢迎语 · Push 261
 
+## 公共节点申请审核通知与回复（2026-11-14 · 0098）
+
+- 通知来源：模板域在申请创建 / 导入事务内写 `notify.message`（`channel=wecom_aibot`、`templateCode=TASK_NODE_REQUEST_REVIEW`、`refType=task_node_request`），每条申请对每个当前仍生效的审核管理员生成一条单聊消息；文案由模板域生成单申请横向 Markdown 表。
+- 回调分流：worker 在普通单聊 ingest 之前识别「同意 / 驳回」意图；完整命令由模板域解析，绑定身份统一走 `NotifyDmService.resolveBoundDmActor()`（登记激活 + `(bot_id, from.userid)` 绑定行 → 本地用户），回复走 `replyToDmCallback()`。
+- 权限 / 边界：企微回复仍由 `TaskNodeRequestService` 复核 `taskNodeReview`，未绑定、无权限、申请已处理 / 不存在均回中文提示；不改群回调、单聊绑定码 ingest、站内信或既有 `notify.message` 路由。
+- 回归：`server/test/task-node-review-wecom.test.ts` 覆盖 Markdown / 命令解析；`server/test/task-node-requests.test.ts` 覆盖企微同意、驳回（理由默认「无」）与异常回执。
+
 ## 群内查询项目干系人（2026-11-12）
 
 - 触发：严格匹配「@机器人 干系人」；裸 @机器人、未 @ 的关键词、其他命令变体、普通群聊与群名命令均不触发查询。
@@ -115,7 +122,7 @@
 
 - **R06 火箭前缀（2026-10-21 · 无契约改动 / 无迁移）**：R06 项目喜报在项目状态 `done` 且全部未删任务完成、全部按期为真时，按「文字喜报 → 240×288 火箭 GIF → 640×768 火箭 GIF → 动态 / 静态喜报海报」顺序发送；其余情况按「文字喜报 → 200×200 兜底火箭 GIF → 动态 / 静态喜报海报」发送。新增 `WECOM_R06_ROCKET_240_IMAGE_PATH` / `WECOM_R06_ROCKET_640_IMAGE_PATH` / `WECOM_R06_ROCKET_FALLBACK_IMAGE_PATH`（默认 `assets/wecom-rocket-first-frame-240.gif` / `assets/wecom-rocket-first-frame-640.gif` / `assets/wecom-r06-acceptance.gif`，空串可单独关闭）；门槛读取失败按不发送火箭处理。火箭属增强项：单张读取 / 发送失败只 warn，继续尝试后续火箭与海报，不回滚已送达文字、不触发文字重发；投递 `attempts` 汇总文字与所有图片帧。`notify-group` 回归锁「全部按时顺序发送」「非全部按时发兜底火箭」「240 失败仍继续 640 + 海报」。`server/` 属 wmj 线，请 wmj 复核。
 
-- **单聊进入会话欢迎语 · Push 261（2026-10-19 · 无契约改动 / 无迁移 · lan 线）**：`AibotIncomingMessage` 解析 `body.event.eventtype`；`WecomAibotClient.replyWelcome` 在订阅态下发送 `aibot_respond_welcome_msg`（透传事件 `req_id`，body = `{ msgtype: "text", text: { content } }`，不占本地单聊限速桶）；worker 将单聊 `enter_chat` 分流到 `NotifyDmService.replyWelcomeToEnterChat`。欢迎语常量为 `DM_WELCOME_MESSAGE`（含 👋 / 📣 / 📌，4–120 字符），**只做引导，不登记激活、不触发绑定**；失败只 warn。`wecom-aibot` / `notify-dm` / `notify-group` 测试与 `m5-03-5-dm-replay` 已同步锁帧。`server/` 属 wmj 线代记请 wmj 复核；`docs/` / `开发日志.md` 属 px 线代记请 px 复核。
+- **单聊进入会话欢迎语 · Push 261（2026-10-19；2026-11-16 文案更新 · 无契约改动 / 无迁移 · lan 线）**：`AibotIncomingMessage` 解析 `body.event.eventtype`；`WecomAibotClient.replyWelcome` 在订阅态下发送 `aibot_respond_welcome_msg`（透传事件 `req_id`，body = `{ msgtype: "text", text: { content } }`，不占本地单聊限速桶）；worker 将单聊 `enter_chat` 分流到 `NotifyDmService.replyWelcomeToEnterChat`。欢迎语常量为 `DM_WELCOME_MESSAGE`（含 👋，4–120 字符），引导用户从设置页取绑定码、说明进入会话不等于绑定，并列出消息提醒与已绑定项目群干系人命令；**只做引导，不登记激活、不触发绑定**；失败只 warn。`wecom-aibot` / `notify-dm` / `notify-group` 测试与 `m5-03-5-dm-replay` 已同步锁帧。`server/` 属 wmj 线代记请 wmj 复核；`docs/` / `开发日志.md` 属 px 线代记请 px 复核。
 
 - **未绑定群自动发现候选 · 0058（2026-10-19 · 群回调 ingest 扩面）**：`AibotIncomingMessage` 防御性解析可选 `body.chatname` / `body.chat_name`（trim 后非空才携带，保持旧回调对象兼容）；群 ingest 仅处理 `cmd=aibot_msg_callback` + `chattype=group` + 合法 `chatid`（`^[A-Za-z0-9_-]{8,128}$`）。已绑定群仍只置位 `activated_at`（幂等）；未绑定群不再丢弃，而是按 `chatid` 幂等 upsert `wecom_group_candidates`（回调实测不携带群名 —— 官方仅 chatid / chattype / from；群名空值不覆盖已有名、首末活跃时间维护；候选名可由群内 @机器人 发送「群名 XXX」/「群名：XXX」/「设置群名 XXX」回填（解析回调正文，最多 64 字符；仅改展示名、不做绑定授权），也可由绑定页人工填写 / 覆盖，名称仅本系统展示。自动获取内部群名仍需会话内容存档 msgaudit/groupchat/get 与独立存档 Secret，当前未接入）。候选由 project 模块 `GET …/group/candidates` 只读掩码与最近活跃时间，绑定成功后同事务删除。日志仍只回 chatid 末 4 位。`notify-group` / `wecom-aibot` 已补候选、过滤与群名解析回归。
 

@@ -10,6 +10,7 @@ import { PROJECT_RECYCLE_SWEEP_BATCH, ProjectService } from "../modules/project/
 import { IMPORT_PREVIEW_SWEEP_INTERVAL_MS, ProjectImportService } from "../modules/project-import/index.js";
 import { NotifyDmService, NotifyGroupService, NotifyService, WecomAibotClient } from "../modules/notify/index.js";
 import { ReportQueryService } from "../modules/report-query/index.js";
+import { TaskNodeRequestService, TaskNodeReviewNotificationService } from "../modules/template/index.js";
 import {
   buildOutboxLanes,
   JobScheduler,
@@ -49,6 +50,8 @@ async function bootstrap(): Promise<void> {
   const groupNotify = app.get(NotifyGroupService);
   const dmNotify = app.get(NotifyDmService);
   const reportQuery = app.get(ReportQueryService);
+  const taskNodeRequests = app.get(TaskNodeRequestService);
+  const taskNodeReviewNotifications = app.get(TaskNodeReviewNotificationService);
   const dispatcher = app.get(OutboxDispatcher);
   const alerts = app.get(OutboxAlertProbe);
   const retention = app.get(OutboxRetention);
@@ -220,14 +223,34 @@ async function bootstrap(): Promise<void> {
       // 其余单聊 enter_chat → 欢迎语，普通单聊 → 单聊 ingest，普通群聊 → 群 ingest。
       // ReportQueryService.accepts 已按精确字符串开关和 chattype 过滤；未命中时原行为不变。
       const queryCandidate = reportQuery.accepts(message);
-      const ingest =
-        queryCandidate
-          ? reportQuery.handle(message)
-          : message.chattype === "single"
-          ? message.cmd === "aibot_event_callback" && message.eventType === "enter_chat"
-            ? dmNotify.replyWelcomeToEnterChat(message)
-            : dmNotify.ingestCallback(message)
-          : groupNotify.activateFromCallback(message);
+      const reviewCandidate =
+        message.chattype === "single" &&
+        message.cmd === "aibot_msg_callback" &&
+        message.text !== null &&
+        taskNodeRequests.looksLikeWecomReview(message.text);
+      const ingest = (async (): Promise<void> => {
+        if (reviewCandidate) {
+          const actorId = await dmNotify.resolveBoundDmActor(message);
+          const reply = actorId === null
+            ? "请先在 LibiaoLink「设置 → 企业微信绑定」完成绑定"
+            : await taskNodeRequests.handleWecomReview(actorId, message.text ?? "");
+          await dmNotify.replyToDmCallback(message, reply);
+          return;
+        }
+        if (queryCandidate) {
+          await reportQuery.handle(message);
+          return;
+        }
+        if (message.chattype === "single") {
+          if (message.cmd === "aibot_event_callback" && message.eventType === "enter_chat") {
+            await dmNotify.replyWelcomeToEnterChat(message);
+            return;
+          }
+          await dmNotify.ingestCallback(message);
+          return;
+        }
+        await groupNotify.activateFromCallback(message);
+      })();
       void ingest.catch((error) => {
         logger.warn("回调 ingest 失败（忽略本次；待下次回调或人工核查）：" + messageOf(error));
       });
@@ -297,6 +320,14 @@ async function bootstrap(): Promise<void> {
           "调度 tick：领取 " + stats.claimed + " / 执行 " + stats.executed + " / 失败 " + stats.failed + " / 产出 " +
             stats.produced,
         );
+      }
+      try {
+        const nodeNotify = await taskNodeReviewNotifications.flushScheduledNotifications();
+        if (nodeNotify.state === "dispatched" && nodeNotify.produced > 0) {
+          logger.log("公共节点审核通知已按每日时间派发：产出 " + nodeNotify.produced + " 条");
+        }
+      } catch (error) {
+        logger.error("公共节点审核通知派发失败（下一分钟重试）：" + messageOf(error));
       }
     } catch (error) {
       logger.error("调度 tick 失败：" + messageOf(error));

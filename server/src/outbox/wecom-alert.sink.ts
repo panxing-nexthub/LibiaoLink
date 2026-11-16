@@ -109,10 +109,10 @@ export function composeDigestText(report: OutboxDailyDigest): string {
   }
 
   lines.push("");
-  lines.push("重复问题：");
   if (report.repeatedIssues.length === 0) {
-    lines.push("• 无");
+    lines.push("重复问题：无");
   } else {
+    lines.push("重复问题：");
     for (const issue of report.repeatedIssues) {
       lines.push("• " + composeRepeatedIssue(issue));
     }

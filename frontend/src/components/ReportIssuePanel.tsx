@@ -54,8 +54,8 @@ import { fieldText, fullDateText, isLocalizedLocale, stageText, statusText, text
  *   **Push 214**（业务口径「这几个页面也要做路由」）：四块子视图进地址 ?view=daily&sub=form|records|issues|board ——
  *   中文标签 ↔ slug 映射见 components/DailySubMenu.tsx 的 SUB_TAB_KEYS，当前块由 ProjectDetail 从地址派生后透传（本组件不自持子视图状态），
  * - 数据口径承 `系统功能书.md` A3：日报字段 A3-01 / 草稿与补填 A3-02 / 提交校验 A3-04 / 自动生成问题 A3-09 / 问题三态 A3-10（Push 207 业务口径「取消未分组 未分组就是未解决」修订 —— 原四态的四态 → 三态契约修订挂 wmj 线）；处理时限 SLA 见 ADR-026。
- * - 内容列宽：视图整体**全宽**（日报记录 / 问题追踪 / 问题看板 照旧铺满）；只有「日报填写」收成**居中窄栏**
- *   （max-w-3xl = 768px），业务口径「我只要日报填写页面居中然后尺寸舒适一点、像一个表单，其它的不变还是全屏」。
+ * - 内容列宽：视图整体**全宽**（日报记录 / 问题追踪 / 问题看板 照旧铺满）；「日报填写」= **左侧草稿列表 + 右侧舒适窄栏表单**
+ *   （2026-11-17：左侧列显示草稿日期 / 填写人，点选整篇回填；表单保持原居中窄栏手感，其余子视图不变）。
  * - 「日报记录」= **列表 / 表格**（一行一篇；业务口径「日报记录还是做成列表 不要卡片」，原卡片网格已撤），列口径 = 时间
  *   （+ 状态签 + 提交时间）/ 填写者 / 关联阶段 / 当日完成工作 / 明日计划 / 现场工作附图（Push 199 收窄 —— 业务口径
  *   2026-09-28「只保留 填写者 / 关联任务 / 当日完成工作 / 明日计划 / 现场附图」）——「今日施工人数 / 现场发现问题 /
@@ -85,7 +85,7 @@ import { fieldText, fullDateText, isLocalizedLocale, stageText, statusText, text
  *      明日计划Tomorrow's plan / 现场工作附图On-site photos）；时间列改**年月日**（如 `2026年9月16日`）、
  *      撤「提交 HH:MM」小字与状态签（草稿 / 已提交 / 补填不再在列表出现；`state` 仍在数据模型里）；
  *   ④ 「暂存草稿」不写「日报记录」、不切子视图、**不清表单** —— 只保留表单里已填内容 + 顶部提示
- *      （业务口径「暂存就保留表单里面填的内容皆可」；原「左侧草稿卡片」方案已撤回）；
+ *      （业务口径「暂存就保留表单里面填的内容皆可」；2026-11-17 起恢复「左侧草稿卡片」：显示日期 / 填写人，点选回填继续填写）；
  *   ⑤ 撤「现场发现问题」的琥珀色特殊底 / 琥珀字色（业务口径「这个也不用搞特殊 样式和别的保持一致」）——
  *      标签走 FORM_LABEL、说明走灰色小字，与其它字段同一套；
  *   ⑥ 表单字段标题统一**加粗**（业务口径「标题都标标粗」：`FORM_LABEL` 字重 medium → bold；字色口径不变）；
@@ -640,6 +640,41 @@ function todayIso(): string {
 /** 空表单：日期默认今天，其余留空。 */
 function emptyDraft(): ReportDraft {
   return { dateIso: todayIso(), headcount: "", doneWork: "", plan: "", issues: [emptyIssueDraft()], stages: [], photos: [] };
+}
+
+/** 服务端草稿 → 表单：基础字段、阶段、附图与内联问题块整体回填；旧单问题口径兼容成一条问题块。 */
+function draftFromReport(report: DailyReport): ReportDraft {
+  const legacyIssue =
+    report.foundIssue.trim() !== "" ||
+    report.issueCategories.length > 0 ||
+    report.suggestion.trim() !== "" ||
+    report.issuePhotos.length > 0;
+  const issues = report.issueDrafts.length > 0
+    ? report.issueDrafts.map((item) => ({
+      title: item.title,
+      categories: [...item.categories],
+      ownerId: item.ownerId,
+      suggestion: item.solution,
+      photos: [...item.photos],
+    }))
+    : legacyIssue
+      ? [{
+        title: report.foundIssue,
+        categories: [...report.issueCategories],
+        ownerId: "",
+        suggestion: report.suggestion,
+        photos: [...report.issuePhotos],
+      }]
+      : [emptyIssueDraft()];
+  return {
+    dateIso: report.date,
+    headcount: report.headcount === null ? "" : String(report.headcount),
+    doneWork: report.doneWork,
+    plan: report.plan,
+    issues,
+    stages: [...report.stageNames],
+    photos: [...report.photos],
+  };
 }
 
 /** 接口错误 → 页面提示文案（ApiError.message 已是服务端中文口径）。 */
@@ -2509,6 +2544,7 @@ function ReportFillForm({
   onRemoveIssue,
   onSubmit,
   onSaveDraft,
+  dateLocked = false,
   groupSync,
 }: {
   project: Project;
@@ -2527,6 +2563,8 @@ function ReportFillForm({
   onRemoveIssue: (index: number) => void;
   onSubmit: () => void;
   onSaveDraft: () => void;
+  /** 已载入服务端草稿：填报日期与草稿绑定，PATCH 不可改日期，表单同步锁只读。 */
+  dateLocked?: boolean;
   /** 项目群同步复选框：仅项目经理 + 已绑定群时传入，默认不勾选。 */
   groupSync?: {
     checked: boolean;
@@ -2637,7 +2675,7 @@ function ReportFillForm({
           onSubmit();
         }
       }}
-      className="space-y-4 rounded-xl border border-zinc-200 bg-white p-5"
+      className="scroll-mt-[140px] space-y-4 rounded-xl border border-zinc-200 bg-white p-5"
     >
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block">
@@ -2650,18 +2688,28 @@ function ReportFillForm({
           <span className={FORM_LABEL}>
             {fieldText(locale, "时间")}<span className="ml-1 text-rose-500">*</span>
           </span>
-          {/* 时间 = 站内日期选择器（与分类筛选 / 任务编辑同一套 DateRangePicker，单选模式），不用浏览器原生日期控件 */}
-          <div data-field="date" className="mt-1">
-            <DateRangePicker
-              mode="single"
-              value={draft.dateIso === "" ? null : { from: draft.dateIso, to: draft.dateIso }}
-              onChange={(next) => onChange({ dateIso: next === null ? "" : next.from })}
-              hintDate={draft.dateIso}
-              placeholder={t("report.placeholder.date")}
-              ariaLabel={t("rp.datePickAria")}
-              triggerClassName="border-zinc-200 bg-white px-2.5! py-2 text-sm!"
-            />
-          </div>
+          {/* 时间 = 站内日期选择器（与分类筛选 / 任务编辑同一套 DateRangePicker，单选模式），不用浏览器原生日期控件；
+              已载入草稿时日期由服务端锁定（PATCH 不含 date），表单同步只读。 */}
+          {dateLocked ? (
+            <div data-field="date" className="mt-1">
+              <span className="flex items-center rounded-lg border border-zinc-100 bg-zinc-50 px-2.5 py-2 text-sm text-zinc-600">
+                {draft.dateIso === "" ? t("report.placeholder.date") : isoDateText(locale, draft.dateIso)}
+              </span>
+              <span className="mt-1 block text-[11px] text-zinc-400">{t("report.drafts.dateLocked")}</span>
+            </div>
+          ) : (
+            <div data-field="date" className="mt-1">
+              <DateRangePicker
+                mode="single"
+                value={draft.dateIso === "" ? null : { from: draft.dateIso, to: draft.dateIso }}
+                onChange={(next) => onChange({ dateIso: next === null ? "" : next.from })}
+                hintDate={draft.dateIso}
+                placeholder={t("report.placeholder.date")}
+                ariaLabel={t("rp.datePickAria")}
+                triggerClassName="border-zinc-200 bg-white px-2.5! py-2 text-sm!"
+              />
+            </div>
+          )}
         </div>
         <label className="block">
           <span className={FORM_LABEL}>{fieldText(locale, "提交人")}</span>
@@ -2875,6 +2923,97 @@ function ReportFillForm({
         </span>
       </div>
     </form>
+  );
+}
+
+/** 日报填写左侧草稿列表：只列 state=draft，显示填报日期 / 填写人；点选整篇载入右侧表单继续填写。 */
+function ReportDraftSidebar({ drafts, selectedId, locale, disabled = false, onSelect, onNew, onDelete }: {
+  drafts: readonly DailyReport[];
+  selectedId: string | null;
+  locale: Locale;
+  disabled?: boolean;
+  onSelect: (report: DailyReport) => void;
+  onNew: () => void;
+  onDelete: (report: DailyReport) => void;
+}) {
+  const t = useT();
+  return (
+    <aside data-report-drafts="" className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 lg:sticky lg:top-[124px]">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-zinc-900">{t("report.drafts.title")}</h2>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">{t("report.drafts.hint")}</p>
+        </div>
+        <button
+          type="button"
+          data-action="new-report"
+          onClick={onNew}
+          disabled={disabled}
+          className="ml-auto shrink-0 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition hover:border-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 disabled:cursor-not-allowed disabled:text-zinc-300"
+        >
+          {t("report.drafts.new")}
+        </button>
+      </div>
+      {drafts.length === 0 ? (
+        <div data-report-drafts-empty="" className="mt-4 rounded-lg border border-dashed border-zinc-200 bg-zinc-50/60 px-4 py-8 text-center">
+          <p className="text-sm font-medium text-zinc-600">{t("report.drafts.empty")}</p>
+          <p className="mt-1 text-xs leading-5 text-zinc-400">{t("report.drafts.emptyHint")}</p>
+        </div>
+      ) : (
+        <ul className="mt-3 max-h-[calc(100vh-16rem)] space-y-2 overflow-y-auto pr-0.5" aria-label={t("report.drafts.title")}>
+          {drafts.map((report) => {
+            const active = report.id === selectedId;
+            const dateText = isoDateText(locale, report.date);
+            return (
+              <li key={report.id}>
+                <div
+                  className={
+                    "group relative rounded-lg border transition " +
+                    (active
+                      ? "border-zinc-300 bg-zinc-50 ring-1 ring-zinc-200 shadow-sm"
+                      : "border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50")
+                  }
+                >
+                  <button
+                    type="button"
+                    data-report-draft-id={report.id}
+                    aria-pressed={active}
+                    aria-label={t("report.drafts.openAria", { date: dateText, author: report.author })}
+                    disabled={disabled}
+                    onClick={() => { onSelect(report); }}
+                    className="w-full rounded-lg px-3 py-3 pr-16 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="shrink-0 text-[11px] text-zinc-400">{fieldText(locale, "时间")}</span>
+                        <span className="truncate text-sm font-semibold text-zinc-900">{dateText}</span>
+                      </span>
+                    </span>
+                    <span className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-zinc-500">
+                      <span className="shrink-0">{fieldText(locale, "填写人")}</span>
+                      <span className="truncate font-medium text-zinc-700">{report.author}</span>
+                    </span>
+                  </button>
+                  {active ? (
+                    <span className="pointer-events-none absolute right-3 top-3 whitespace-nowrap rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-medium text-white">
+                      {t("report.drafts.selected")}
+                    </span>
+                  ) : null}
+                  {disabled ? null : (
+                    <span data-report-draft-delete-id={report.id} className="absolute bottom-2 right-2">
+                      <RowDeleteButton
+                        label={t("report.row.deleteReport", { date: dateText })}
+                        onDelete={() => { onDelete(report); }}
+                      />
+                    </span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </aside>
   );
 }
 
@@ -3274,6 +3413,10 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
   const [draft, setDraft] = useState<ReportDraft>(() => emptyDraft());
   /** 当前表单对应的草稿行 id（Push 216：暂存 = 写库 state=draft；提交 = 把这条草稿 PATCH 成已提交；null = 还没暂存过）。 */
   const [draftId, setDraftId] = useState<string | null>(null);
+  /** 当前表单对应草稿的填写人（载入他人草稿时保持原填写人显示；新建 = 当前账号）。 */
+  const [draftAuthor, setDraftAuthor] = useState<string | null>(null);
+  const draftIdRef = useRef<string | null>(draftId);
+  draftIdRef.current = draftId;
   const draftVersion = useRef<number | null>(null);
   /** 写请求防重入（提交 / 暂存）。 */
   const [saving, setSaving] = useState(false);
@@ -3554,7 +3697,13 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
           const open = issuesRef.current.find((item) => item.id === current);
           return open !== undefined && open.reportId === reportId ? null : current;
         });
-        // Keep the deleted draft identity so a later save cannot silently recreate it.
+        if (draftIdRef.current === reportId) {
+          setDraft(emptyDraft());
+          setDraftId(null);
+          setDraftAuthor(null);
+          draftVersion.current = null;
+          setSyncToGroup(false);
+        }
         notify("ok", t("report.notice.reportDeleted"));
       })
       .catch((error) => {
@@ -3629,6 +3778,35 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
   const editingIssue = editModal !== null && editModal.kind === "issue" ? issues.find((item) => item.id === editModal.id) ?? null : null;
 
   const author = me.user.displayName ?? me.user.name ?? t("header.unnamed");
+
+  /** 左侧草稿点选：整篇回填右侧表单，并把草稿 id / 版本 / 填写人一并挂上，后续暂存与提交都更新这一条。 */
+  const handleLoadDraft = (report: DailyReport) => {
+    if (readOnly || saving || report.id === draftId) {
+      return;
+    }
+    setDraft(draftFromReport(report));
+    setDraftId(report.id);
+    setDraftAuthor(report.author);
+    draftVersion.current = report.version;
+    setSyncToGroup(false);
+    notify("ok", t("report.drafts.loaded", { date: isoDateText(locale, report.date) }));
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>("[data-fill-form]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  /** 从已载入草稿切回空白新建；远端草稿仍保留在左侧列表。 */
+  const handleNewReport = () => {
+    if (readOnly || saving) {
+      return;
+    }
+    setDraft(emptyDraft());
+    setDraftId(null);
+    setDraftAuthor(null);
+    draftVersion.current = null;
+    setSyncToGroup(false);
+    notify("info", t("report.drafts.cleared"));
+  };
 
   /** 问题块增删改（Push 243）：默认保留一条；只剩一条时不允许删除（清内容即可）。 */
   const patchDraftIssue = (index: number, patch: Partial<ReportIssueDraftUi>) => {
@@ -3716,6 +3894,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
       .then(async (saved) => {
         setDraft(emptyDraft());
         setDraftId(null);
+        setDraftAuthor(null);
         draftVersion.current = null;
         setSyncToGroup(false);
         const submittedNotice =
@@ -3777,6 +3956,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
     write
       .then((saved) => {
         draftVersion.current = saved.version;
+        setDraftAuthor(saved.author);
         if (draftRow === null) {
           setDraftId(saved.id);
         }
@@ -3792,6 +3972,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
       });
   };
 
+  const draftReports = reports.filter((report) => report.state === "draft");
   const remoteDraft = draftId === null ? null : reports.find((item) => item.id === draftId) ?? null;
   const draftChanged = draftId !== null && (remoteDraft === null || remoteDraft.version !== draftVersion.current);
 
@@ -3857,33 +4038,45 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
       )}
 
       {subTab === "日报填写" ? (
-        /* 日报填写 = 居中窄栏（max-w-3xl = 768px，像一张表单）；其余三块子视图仍是全宽 */
+        /* 日报填写 = 左侧草稿列表 + 右侧填写表单；表单仍保持舒适窄栏，其他三块子视图全宽 */
         readOnly ? (
           <EmptyCard text={t("access.readOnlyTitle")} hint={t("access.readOnlyHint")} />
         ) : (
-        <div className="mx-auto w-full max-w-3xl">
-          <ReportFillForm
-            project={project}
-            author={author}
-            members={members}
-            draft={draft}
-            submitting={saving}
-            onChange={(patch) => setDraft((previous) => ({ ...previous, ...patch }))}
-            onPatchIssue={patchDraftIssue}
-            onAddIssue={addDraftIssue}
-            onRemoveIssue={removeDraftIssue}
-            onSubmit={handleSubmit}
-            onSaveDraft={handleSaveDraft}
-            groupSync={groupSyncOption}
+        <div className="mx-auto grid w-full max-w-6xl gap-5 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
+          <ReportDraftSidebar
+            drafts={draftReports}
+            selectedId={draftId}
+            locale={locale}
+            disabled={saving}
+            onSelect={handleLoadDraft}
+            onNew={handleNewReport}
+            onDelete={(report) => { requestDeleteReport(report.id); }}
           />
-          {draftChanged ? (
-            <div data-report-draft-conflict="" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
-              <p>{remoteDraft === null ? t("rp.draftRemoteGone") : t("rp.draftRemoteChanged")}</p>
-              {remoteDraft === null ? <button type="button" className="mt-2 underline" onClick={() => { setDraftId(null); draftVersion.current = null; }}>{t("rp.draftKeep")}</button> : (
-                <details className="mt-2"><summary>{t("rp.draftReview")}</summary><p className="whitespace-pre-wrap py-2">{remoteDraft.doneWork + "\n" + t("rp.planInline") + remoteDraft.plan}</p><button type="button" className="underline" onClick={() => { draftVersion.current = remoteDraft.version; notify("info", t("rp.draftConfirm")); }}>{t("rp.draftConfirmBtn")}</button></details>
-              )}
-            </div>
-          ) : null}
+          <div className="min-w-0">
+            <ReportFillForm
+              project={project}
+              author={draftAuthor ?? author}
+              members={members}
+              draft={draft}
+              submitting={saving}
+              onChange={(patch) => setDraft((previous) => ({ ...previous, ...patch }))}
+              onPatchIssue={patchDraftIssue}
+              onAddIssue={addDraftIssue}
+              onRemoveIssue={removeDraftIssue}
+              onSubmit={handleSubmit}
+              onSaveDraft={handleSaveDraft}
+              dateLocked={draftId !== null}
+              groupSync={groupSyncOption}
+            />
+            {draftChanged ? (
+              <div data-report-draft-conflict="" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+                <p>{remoteDraft === null ? t("rp.draftRemoteGone") : t("rp.draftRemoteChanged")}</p>
+                {remoteDraft === null ? <button type="button" className="mt-2 underline" onClick={() => { setDraftId(null); setDraftAuthor(null); draftVersion.current = null; }}>{t("rp.draftKeep")}</button> : (
+                  <details className="mt-2"><summary>{t("rp.draftReview")}</summary><p className="whitespace-pre-wrap py-2">{remoteDraft.doneWork + "\n" + t("rp.planInline") + remoteDraft.plan}</p><button type="button" className="underline" onClick={() => { draftVersion.current = remoteDraft.version; notify("info", t("rp.draftConfirm")); }}>{t("rp.draftConfirmBtn")}</button></details>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
         )
       ) : loadState === "loading" ? (

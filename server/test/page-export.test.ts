@@ -58,6 +58,7 @@ const report: DailyReport = {
     { fileId: MISSING_IMAGE_ID, name: "缺失.jpg" },
   ],
   issuePhotos: [],
+  issueDrafts: [],
   submittedAt: "2026-11-05T10:00:00.000Z",
   createdAt: "2026-11-05T09:00:00.000Z",
   updatedAt: "2026-11-05T10:00:00.000Z",

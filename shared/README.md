@@ -229,7 +229,7 @@ CI 已接入本检查（阶段 5 · CI 扩展任务）：PR / main 推送由 `.g
 
 | 卡片 | 契约增量 | 类型 |
 |---|---|---|
-| 日报 | **已入并 HTTP 落地（Push 155）**：`/api/v1/projects/{id}/reports` 族（草稿 / 提交 / 补填；`DailyReport*` schema + `DailyReportState` / `DailyReportWriteState`；补填由服务端按日期推导）。**Push 215 修订：同日多条（删重复 409）/ 草稿写库 / 关联阶段 `stageKeys` + `stageNames` / `issueCategories` 多值 / 附图 `photos` + `issuePhotos`（file_links kind）/ `DELETE …/reports/{reportId}` 成对删除** | 端点 / 字段 |
+| 日报 | **已入并 HTTP 落地（Push 155）**：`/api/v1/projects/{id}/reports` 族（草稿 / 提交 / 补填；`DailyReport*` schema + `DailyReportState` / `DailyReportWriteState`；补填由服务端按日期推导）。**Push 215 修订：同日多条（删重复 409）/ 草稿写库 / 关联阶段 `stageKeys` + `stageNames` / `issueCategories` 多值 / 附图 `photos` + `issuePhotos`（file_links kind）/ `DELETE …/reports/{reportId}` 成对删除**；**2026-11-17 读面补 `issueDrafts`**（内联问题草稿原文，左侧草稿点选继续填写时回填问题块；无 DDL） | 端点 / 字段 |
 | 问题 | **已入并 HTTP 落地（Push 155）**：`/api/v1/projects/{id}/issues` 族（状态流转 + 处理过程留痕；问题追踪表与看板同源；统计随 M7 仪表盘）。**Push 215 修订：三态 `open` / `in_progress` / `done`（`unassigned` 并入 `open`）/ `categories` 多值 / `photos` / PATCH 扩 `title` + `categories` / `dueAt` 删除（ADR-026 作废）/ `DELETE …/issues/{issueId}` 成对删除**；**允许回退** —— 不设流转白名单，不做 `ISSUE_TRANSITION_INVALID`（差异登记：写事件即留痕） | 端点 / 字段 |
 | 干系人 | 新增 `/stakeholders`（台账 + 批量导入 + 导出；隐私字段走字段级权限） | 端点 |
 | 工作台（A6-01 / A6-03 · M6-05 第一刀） | **已入并 HTTP 落地（Push 166）**：`GET /api/v1/workspace`（跨项目个人读面：我的任务三组 today / upcoming / overdue + 我的问题两栏 handling / raised；无项目路径参数、仅会话；`Workspace*` 五 schema；「我参与的任务」口径未定 · 本刀不含，差异登记） | 端点 |

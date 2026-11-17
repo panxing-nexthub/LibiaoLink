@@ -533,6 +533,7 @@ describe("日报（M6-01 / M6-02 · A3-01 ~ A3-09）", () => {
       ACTOR,
     );
     expect(issues.issues.size).toBe(0);
+    expect(created.issueDrafts.map((draft) => draft.title)).toEqual(["问题甲", "问题乙"]);
     expect(reports.reports.get(created.id)?.issueDrafts).toHaveLength(2);
     const submitted = await service.update(PROJECT, created.id, { version: created.version, state: "submitted" }, ACTOR);
     expect(submitted.state).toBe("supplement");

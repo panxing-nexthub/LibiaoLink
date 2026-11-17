@@ -549,6 +549,23 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     }
   }, [nodeRequestsSectionActive, pendingRequests, myRequests, canReviewNodes]);
 
+  /** 进入「入库审核」= 当前通知已读：顶栏与标签红点同时熄灭；后续只有新申请 / 新驳回才重新亮。 */
+  useEffect(() => {
+    if (!nodeRequestsSectionActive) {
+      return;
+    }
+    const notificationKeys = [
+      ...taskNodeNotificationKeys(pendingRequests, true),
+      ...taskNodeNotificationKeys(myRequests, false),
+    ];
+    if (notificationKeys.length === 0) {
+      return;
+    }
+    if (markTaskNodeNotificationsSeen(notificationKeys)) {
+      void refreshTaskNodePending(canReviewNodes);
+    }
+  }, [nodeRequestsSectionActive, pendingRequests, myRequests, canReviewNodes]);
+
   useEffect(() => {
     prefetchLocalizedText(Object.values(templatesByStage).flat().map((item) => item.name));
   }, [templatesByStage, locale]);

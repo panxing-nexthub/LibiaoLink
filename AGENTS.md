@@ -16,7 +16,7 @@
 
 ## 分工与路由（谁负责哪块）
 
-- 团队：`px`（前端 + 运维，交付负责人）、`wmj`（后端 A：领域负责人，兼技术负责人）、`lan`（后端 B：平台负责人）；完整口径见根目录 `团队分工.md`。
+- 团队：`px`（前端 + 运维，交付负责人）、`wmj`（后端 A：领域负责人，兼技术负责人）、`lan`（后端 B：平台负责人）；完整口径见根目录 `团队分工.md` —— **2026-11-16 起为「后端改造实现 v0.1」（案例库 / Case Hub）**：wmj 负责 W0–W4，lan 负责 L0–L5，px 负责前端 / Nginx / 部署，里程碑与红线见该文档 §6、§9。
 
 | 范围 | 主责 | 评审 / 协办 |
 |---|---|---|
@@ -24,12 +24,17 @@
 | `前端功能需求.md`、`字段对照清单.md`、`README.md`、`开发日志.md`、`团队分工.md` | px | wmj |
 | 后端领域：identity/org、project、blueprint/node、task、report/issue、stakeholder、automation、admin（字典 / 审计） | wmj | lan |
 | 后端平台：file、preview、notify、outbox 队列调度、search、dashboard、迁移工具链 | lan | wmj |
+| Case Hub 契约与领域（W0–W4）：案例字段 / 状态机 / 内外部视图 / 审核发布 / 策略投影、`shared/src/modules/case-hub/` | wmj | lan |
+| Case Hub 平台（L0–L5）：`case-api` / `case-worker` 入口与装配、外部认证 Scope、幂等 / 限流、素材与事件、存储适配 | lan | wmj |
+| Case Hub 前端联调、Nginx 路由与部署 | px | wmj、lan |
 | API 契约（Zod / OpenAPI / 生成客户端）、ADR、`技术设计*.md` | wmj | lan、px |
 | `系统功能书.md`（定档口径，与源文档双处同步） | 变更提出人 | wmj（技术可行性）、px（实现一致性） |
 
 - 代理（AI）动手前先按上表判断归属，改动只落在本线目录内；跨线改动（契约、字段口径、部署、权限）先对齐归属人再开工。
 - 分支：改动推给归属人的常驻分支（`px` / `wmj` / `lan`）再走 PR；不代他人创建或推送常驻分支（CONTRIBUTING.md 第 5 节）。
 - 后端目录（`server/`、`database/`、`shared/`）已落地；后端改动按本表归属落到对应目录，API 契约以 `shared/` 为唯一来源并同步生成物；跨线契约、字段口径、部署与权限改动先对齐归属人再开工。
+- Case Hub 边界（专项，详见 `团队分工.md` §1.3 与 §9 红线）：同仓库**独立** `case-api` / `case-worker` 进程，不注册进现有 `AppModule`、不向 `core-worker` 加案例任务、不在 core 的 `DatabaseService` 上增加案例查询；`case-hub` 不 import `project` / `task` / `file` 等领域模块，`sourceProjectId` 只作弱引用走 `ProjectLookupPort`；外部系统只能读不可变 release，不得直连案例库；`shared` 契约 wmj 唯一主责，`case-hub.module.ts` 装配 lan 唯一主责，避免两线同时修改同一文件。
+- 上述 Case Hub 分工为新增专项，**不改变**现有后端领域（wmj）与后端平台（lan）两行的模块归属。
 - 高风险变更（CONTRIBUTING.md 第 15 节）必须取得另一名合格评审者批准；评审路由见 `.github/CODEOWNERS`。
 
 ## 服务器与运维（正式机 / 测试机）

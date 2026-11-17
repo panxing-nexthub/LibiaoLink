@@ -1,6 +1,6 @@
 # Case Hub
 
-当前实现是 L0 运行骨架，不进入 `core-api` / `core-worker` 的依赖注入图。
+当前实现是 L0 运行骨架、L1 边界隔离与 L2a JWT/JWKS 验签内核，不进入 `core-api` / `core-worker` 的依赖注入图。
 
 ## L0 范围
 
@@ -17,12 +17,19 @@
 - `case-api` / `case-worker` 的入口依赖同样限定为 `case-hub` 与基础设施，避免间接把 core 运行时带进独立进程。
 - `npm run check:boundaries` 静态检查上述依赖方向；`case-hub-runtime.test.ts` 同时验证进程装配中不存在 core `DatabaseService`、`OutboxDispatcher` 与 `JobScheduler`。
 
+## L2a 验签内核
+
+- `case-client-jwt.ts` 只验证 RS256 Bearer Token：kid 选择、JWKS 拉取 / 缓存 / 未知 kid 单次刷新、`exp` / `nbf` / `iat` / `iss` / `aud`，返回原始 claims。
+- 不定义 `CasePrincipal`，不映射 clientId / scopes，不实现 `CaseClientGuard`、案例级授权或 controller；这些仍以 M0 / D04 冻结为前提。
+- `CASE_CLIENT_JWKS_URL` / `CASE_CLIENT_ISSUER` / `CASE_CLIENT_AUDIENCE` 均已纳入 `/readyz` 配置检查。
+- `index.ts` 归 wmj，作为领域公共 barrel；lan 的运行时装配与测试直接 import 具体文件。
+
 ## 明确未实现
 
-- 草稿 controller、认证、Scope、案例授权、字段脱敏。
+- 草稿 controller、认证 Guard、clientId / Scope 映射、案例授权、字段脱敏。
 - 幂等、ETag / If-Match、限流和外部交换接口。
 - SQL 仓储、案例对象存储、发布快照和案例任务。
-- D01 / D02 / D03 / D06 的未冻结业务语义。
+- D01 / D02 / D03 / D04 / D06 的未冻结业务语义。
 
 L0 的 `/readyz` 只检查关键配置是否齐备；真实案例数据库和对象存储探针随 L5 适配器接入。配置为空时进程仍可启动，但 `/readyz` 返回 503，避免把骨架误判为可接流量。
 

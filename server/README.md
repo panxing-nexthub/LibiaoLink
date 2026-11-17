@@ -13,6 +13,8 @@ server/
   src/
     entry/api.ts          # api 入口（HTTP）
     entry/worker.ts       # worker 入口（同镜像不同入口；支持 --health-check 一次性探针）
+    entry/case-api.ts     # Case Hub L0 独立 HTTP 入口
+    entry/case-worker.ts  # Case Hub L0 独立 worker 入口
     app.module.ts         # api 进程装配
     worker.module.ts      # worker 进程装配
     common/               # errors / http（校验管道）/ audit（越权留痕路径解析与 sink 令牌 · h7）/ clock（ClockService · h8）/ logging
@@ -36,6 +38,7 @@ server/
     modules/follow/    # 关注订阅（A1-15 · M2-06 首刀 · Push 168）：关注 / 取关 / 批量 / 我的关注清单（幂等 · 逐条计数 · 归档不可新关注）（见 src/modules/follow/README.md）
     modules/project-import/  # 导入表 Excel 直连导入（Push 316 · 业务口径 2026-10-14「直连 API 导入」）：preview（解析预览票据 30 分钟，不写库）+ commit（单事务建项目写全量数据：任务 / 日报 / 问题 / 变更 / 图片）+ 审计 + 资源变更登记；P1 起按请求体 / 源文件大小计权的进程内准入（preview 缺省 3、commit 缺省 1，额度不足 429，见 src/modules/project-import/README.md）
     modules/project-export/  # 项目数据导出（Push 417 · PR [#547](https://github.com/PanXing-Libiao/LibiaoLink/pull/547) · squash `acc6f0de`）：GET /api/v1/projects/{id}/export —— project.export + 项目可见性 + 下载审计；单个 xlsx 四表（任务 / 日报问题 / 变更 / 干系人），文件列只出文件名与文件库链接，日报 / 变更附图内嵌，列映射与限制见 src/modules/project-export/README.md
+    modules/case-hub/     # Case Hub（L0 运行骨架：独立入口 / 配置 / 健康检查；业务契约待 M0 冻结；见 src/modules/case-hub/README.md）
     outbox/               # Outbox worker 运行时（S7·outbox · S7-1 / S7-3 · Push 174 / 177）：dispatcher（按主题独立成批领取 + 消费 + 重试退避 + dead）/ 主题策略 / 死信与积压告警探针 / done 行保留期清理 / scheduler（cron 领取 + last_run_at 补发 + 单活锁 · schedule 纯函数求值）/ 规则接线（automation-subjects 主体读库 + automation-wiring：RULE_EVENT_TOPICS 事件消费 + automation-schedule.job → notify.message 生产 · 冷启动保护 / 渠道护栏 · Push 180）（见 src/outbox/index.ts）
   scripts/check-boundaries.mjs   # 依赖方向规则检查
   scripts/check-db-schema.mjs    # Drizzle schema 与实际库漂移检查
@@ -65,6 +68,8 @@ server/
 | `npm run typecheck` | tsc --noEmit（含 `test/`） |
 | `npm run dev:api` | nest start --watch（api） |
 | `npm run start:api` / `start:worker` | 运行构建产物（自带 `--env-file-if-exists=.env`） |
+| `npm run dev:case-api` / `start:case-api` | Case Hub 独立 HTTP 入口（L0 运行骨架） |
+| `npm run dev:case-worker` / `start:case-worker` | Case Hub 独立 worker 入口（L0 运行骨架） |
 | `npm run test` | vitest run |
 | `npm run check:boundaries` | 依赖方向规则（违规退出码 1） |
 | `npm run check:permission-matrix` | 权限矩阵自检：种子 #6b ↔ 契约 `PermissionKey` 枚举 ↔ 角色集（admin 必须全量；不连库，退出码 1） |
@@ -89,6 +94,13 @@ server/
 - api：HTTP、业务事务、Outbox 写入、SSE；无状态、不跑 CPU 密集任务。
 - worker：Outbox 投递 / 调度 / 规则 / 转换编排 / 导出；已接入 Outbox 运行时（S7-1：领取消费 / 重试退避 / 死信与积压告警 / done 行保留期清理；S7-3：调度 tick —— cron 领取 + last_run_at 补发 + 单活锁；S7-4：通知投递 —— notify.message 消费接线 + 按 deliver_at 到期 flush（免打扰 / 每日上限溢出次日补发）；M5-04-2：稍后提醒到点扫描 —— flushSnoozes 循环（NOTIFY_SNOOZE_SWEEP_INTERVAL_MS / NOTIFY_SNOOZE_BATCH；免打扰顺延、不耗日限）；规则接线 —— RULE_EVENT_TOPICS 事件消费 + automation-schedule.job 调度产出 → notify.message（受 AUTOMATION_WIRING_ENABLED 开关；调度注册表并含 automation-schedule.job —— 关 = 注册表为空 · 只存不跑排障态；M5-03-2 群通道 —— notify.group 消费注册（凭据齐备门控）+ 智能机器人长连接启停（订阅 / 心跳 / 回调 ingest 会话激活）；M5-03-3 —— notify.message 按 channel 分流（inbox → 站内信 / wecom_app → 应用消息）+ 告警出口换企微（未配置回退日志））+ 上传会话与回收站清理 + 预览转换器自检；心跳 60s，`--health-check` 供探针使用。
 - converter（沙箱）：一期由 file / preview（lan 线）落地，不在本骨架内。
+
+## Case Hub 独立进程（L0）
+
+- 入口为 `entry/case-api.ts` / `entry/case-worker.ts`，装配 `case-http.module.ts` / `case-worker.module.ts`，不导入 `app.module.ts`；不修改现有 `entry/api.ts` / `entry/worker.ts`。
+- Case Hub 自己读取 `CASE_*`（见 `.env.example`），不复用 core 的 `DATABASE_URL` / `S3_BUCKET`。
+- `case-api` 提供 `/healthz` 与 `/readyz`；L0 的就绪检查只覆盖关键配置，真实 PG / 对象存储探针随 L5 适配器接入。
+- 当前无业务 controller、认证、幂等、限流、业务仓储或案例任务；D01 / D02 / D03 / D06 冻结后再接业务链路。
 
 ## 模块结构约定
 

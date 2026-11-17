@@ -120,6 +120,7 @@ export function toDailyReportView(row: DailyReportRow, photos: { onsite: FilePho
     stageNames: row.stageKeys.map((key) => stageNameByKey[key] ?? key),
     photos: photos.onsite,
     issuePhotos: photos.issue,
+    issueDrafts: issueDraftsOf(row),
     submittedAt: row.submittedAt === null ? null : row.submittedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

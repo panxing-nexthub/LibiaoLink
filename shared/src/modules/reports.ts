@@ -34,6 +34,21 @@ export const DailyReportWriteStateSchema = z.enum(["draft", "submitted"]).openap
   description: "日报写入状态（A3-02）：draft 暂存草稿 / submitted 提交（对过去日期提交 = 服务端自动标记 supplement）",
 });
 
+/** 日报内联问题草稿（Push 243 · 业务口径「日报填写问题时新增 添加问题按钮 … 提交后各自独立便于追溯」+「新加可以选择 问题处理人/责任人」）：
+ *  一次填报可携带多条问题（1~N），提交时逐条生成独立问题记录 —— 各自归类 / 处理人 / 解决方案 / 附图。
+ *  `ownerId` 缺省（undefined / null）= 按归类自动分派责任部门（A3-12）；显式给出 = 直接落该责任人为处理人。 */
+export const ReportIssueDraftSchema = z
+  .object({
+    title: z.string().min(1).max(2000).openapi({ description: "问题描述（原文；问题记录标题超 500 字截短落库）" }),
+    categories: IssueCategoryListSchema.openapi({ description: "问题归类（多值 ≥1 项；C9 十项）" }),
+    ownerId: UuidSchema.nullable().optional().openapi({ description: "问题处理人 / 责任人（缺省 / null = 按归类自动分派责任部门）" }),
+    solution: z.string().min(1).max(2000).optional().openapi({ description: "解决方案或建议（落问题的 solution）" }),
+    photoFileIds: z.array(UuidSchema).max(30).optional().openapi({ description: "该问题附图（文件 id；提交时直接挂到生成的问题）" }),
+  })
+  .openapi("ReportIssueDraft", { description: "日报内联问题草稿（一次填报 1~N 条；提交时逐条生成问题记录）" });
+
+export type ReportIssueDraft = z.infer<typeof ReportIssueDraftSchema>;
+
 /** 一条日报（A3-01 表单字段 + 系统字段）。 */
 export const DailyReportSchema = z
   .object({
@@ -53,6 +68,7 @@ export const DailyReportSchema = z
     stageNames: z.array(z.string()).openapi({ description: "关联阶段名（与 stageKeys 同下标，查 STAGE_NAMES 展示）" }),
     photos: z.array(FilePhotoRefSchema).openapi({ description: "现场工作附图（file_links(object_type=report, kind=onsite)）；可增删" }),
     issuePhotos: z.array(FilePhotoRefSchema).openapi({ description: "当前问题附图（file_links(object_type=report, kind=issue)）；提交生成问题时转挂到问题（file_links(object_type=issue)），转挂后此处为空" }),
+    issueDrafts: z.array(ReportIssueDraftSchema).openapi({ description: "内联问题清单原文（草稿继续填写 / 已提交保留生成前快照）" }),
     submittedAt: DateTimeSchema.nullable().openapi({ description: "提交时间（草稿为空）" }),
     createdAt: DateTimeSchema,
     updatedAt: DateTimeSchema,
@@ -61,21 +77,6 @@ export const DailyReportSchema = z
   .openapi("DailyReport", { description: "一条日报（A3-01 全字段 + 系统字段）" });
 
 export type DailyReport = z.infer<typeof DailyReportSchema>;
-
-/** 日报内联问题草稿（Push 243 · 业务口径「日报填写问题时新增 添加问题按钮 … 提交后各自独立便于追溯」+「新加可以选择 问题处理人/责任人」）：
- *  一次填报可携带多条问题（1~N），提交时逐条生成独立问题记录 —— 各自归类 / 处理人 / 解决方案 / 附图。
- *  `ownerId` 缺省（undefined / null）= 按归类自动分派责任部门（A3-12）；显式给出 = 直接落该责任人为处理人。 */
-export const ReportIssueDraftSchema = z
-  .object({
-    title: z.string().min(1).max(2000).openapi({ description: "问题描述（原文；问题记录标题超 500 字截短落库）" }),
-    categories: IssueCategoryListSchema.openapi({ description: "问题归类（多值 ≥1 项；C9 十项）" }),
-    ownerId: UuidSchema.nullable().optional().openapi({ description: "问题处理人 / 责任人（缺省 / null = 按归类自动分派责任部门）" }),
-    solution: z.string().min(1).max(2000).optional().openapi({ description: "解决方案或建议（落问题的 solution）" }),
-    photoFileIds: z.array(UuidSchema).max(30).optional().openapi({ description: "该问题附图（文件 id；提交时直接挂到生成的问题）" }),
-  })
-  .openapi("ReportIssueDraft", { description: "日报内联问题草稿（一次填报 1~N 条；提交时逐条生成问题记录）" });
-
-export type ReportIssueDraft = z.infer<typeof ReportIssueDraftSchema>;
 
 /** 旧单问题字段是否携带内容（Push 243 · issues 二选一的判定基准）：null / 空数组 / 空串 / 全空白都算未携带 —— 「清空旧字段」的正常写法不该被判成二选一冲突。 */
 function legacyIssueInputUsed(value: {

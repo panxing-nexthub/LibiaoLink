@@ -12034,6 +12034,8 @@ export interface components {
             photos: components["schemas"]["FilePhotoRef"][];
             /** @description 当前问题附图（file_links(object_type=report, kind=issue)）；提交生成问题时转挂到问题（file_links(object_type=issue)），转挂后此处为空 */
             issuePhotos: components["schemas"]["FilePhotoRef"][];
+            /** @description 内联问题清单原文（草稿继续填写 / 已提交保留生成前快照） */
+            issueDrafts: components["schemas"]["ReportIssueDraft"][];
             submittedAt: components["schemas"]["DateTime"] & (string | null);
             createdAt: components["schemas"]["DateTime"];
             updatedAt: components["schemas"]["DateTime"];

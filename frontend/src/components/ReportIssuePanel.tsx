@@ -3973,6 +3973,8 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
   };
 
   const draftReports = reports.filter((report) => report.state === "draft");
+  /** 「日报记录」只展示已提交 / 补填；暂存草稿只在「日报填写」左栏出现。 */
+  const recordReports = reports.filter((report) => report.state !== "draft");
   const remoteDraft = draftId === null ? null : reports.find((item) => item.id === draftId) ?? null;
   const draftChanged = draftId !== null && (remoteDraft === null || remoteDraft.version !== draftVersion.current);
 
@@ -3983,7 +3985,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
   };
 
   /** 深链日期先过滤，再叠加页内搜索；计数与空态都以日期范围为准。 */
-  const datedReports = reports.filter((report) => matchesDailyDate(report.date, dateFilter));
+  const datedReports = recordReports.filter((report) => matchesDailyDate(report.date, dateFilter));
   const datedIssues = issues.filter((issue) => matchesDailyDate(issue.raisedAt, dateFilter));
   const dateText = dateFilter === null ? "" : fullDateText(locale, dateFilter);
 
@@ -3998,7 +4000,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
   );
   const recordsHint = recordKeyword.trim() === ""
     ? dateFilter === null
-      ? t("report.records.hint", { n: reports.length })
+      ? t("report.records.hint", { n: recordReports.length })
       : t("report.records.hintDate", { n: datedReports.length, date: dateText })
     : t("report.records.hintFound", { found: visibleReports.length, total: datedReports.length });
   const issuesHint = issueKeyword.trim() === ""
@@ -4113,7 +4115,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
           </div>
           {dateFilter !== null && datedReports.length === 0 ? (
             <EmptyCard text={t("report.records.emptyDate")} hint={t("report.dateFilter.emptyHint")} />
-          ) : reports.length === 0 ? (
+          ) : recordReports.length === 0 ? (
             <EmptyCard text={t("report.records.empty")} hint={t("report.records.emptyHint")} />
           ) : visibleReports.length === 0 ? (
             <EmptyCard text={t("report.records.emptyMatch", { kw: recordKeyword.trim() })} hint={t("report.emptyHint")} />

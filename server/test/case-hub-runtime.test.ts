@@ -1,13 +1,13 @@
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
-import {
-  CaseConfig,
-  CaseHttpModule,
-  CaseWorkerModule,
-  loadCaseEnv,
-  missingCaseConfig,
-} from "../src/modules/case-hub/index.js";
+import { DatabaseService } from "../src/db/database.service.js";
+import { CaseConfig } from "../src/modules/case-hub/case-config.module.js";
+import { loadCaseEnv, missingCaseConfig } from "../src/modules/case-hub/case-env.js";
+import { CaseHttpModule } from "../src/modules/case-hub/case-http.module.js";
+import { CaseWorkerModule } from "../src/modules/case-hub/case-worker.module.js";
+import { OutboxDispatcher } from "../src/outbox/dispatcher.js";
+import { JobScheduler } from "../src/outbox/scheduler.js";
 
 const completeEnv = loadCaseEnv({
   NODE_ENV: "test",
@@ -87,11 +87,23 @@ describe("Case Hub L0 运行骨架", () => {
     await app.close();
   });
 
-  it("case-worker 模块可以独立编译，不需要 core AppModule", async () => {
+  it("case-api 不注册 core 数据库与 worker 运行时", async () => {
+    const app = await createHttpApp();
+    expect(app.get(CaseConfig)).toBeInstanceOf(CaseConfig);
+    expect(() => app.get(DatabaseService, { strict: false })).toThrow();
+    expect(() => app.get(OutboxDispatcher, { strict: false })).toThrow();
+    expect(() => app.get(JobScheduler, { strict: false })).toThrow();
+    await app.close();
+  });
+
+  it("case-worker 模块可以独立编译，且不注册 core 数据库与现有 worker 任务", async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [CaseWorkerModule.forRoot(completeEnv)],
     }).compile();
     expect(moduleRef.get(CaseConfig).env.CASE_API_PORT).toBe(3100);
+    expect(() => moduleRef.get(DatabaseService, { strict: false })).toThrow();
+    expect(() => moduleRef.get(OutboxDispatcher, { strict: false })).toThrow();
+    expect(() => moduleRef.get(JobScheduler, { strict: false })).toThrow();
     await moduleRef.close();
   });
 });

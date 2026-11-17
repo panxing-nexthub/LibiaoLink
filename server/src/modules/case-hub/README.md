@@ -10,6 +10,13 @@
 - `CASE_*` 配置：由 Case Hub 自己读取，不复用 core 的 `DATABASE_URL` / `S3_BUCKET`。
 - 日志服务名固定为 `case-api` / `case-worker`，请求 ID 沿用公共 Pino 配置。
 
+## L1 边界
+
+- 只有 `entry/case-api.ts` / `entry/case-worker.ts` 可以装配 `case-hub`；core 入口、`AppModule`、`WorkerModule` 和其他业务模块不得依赖它。
+- `case-hub` 只允许依赖本模块以及 `common` / `config` / `db` / `storage` 等基础设施，不得 import `project`、`task`、`file` 等领域模块或 core outbox。
+- `case-api` / `case-worker` 的入口依赖同样限定为 `case-hub` 与基础设施，避免间接把 core 运行时带进独立进程。
+- `npm run check:boundaries` 静态检查上述依赖方向；`case-hub-runtime.test.ts` 同时验证进程装配中不存在 core `DatabaseService`、`OutboxDispatcher` 与 `JobScheduler`。
+
 ## 明确未实现
 
 - 草稿 controller、认证、Scope、案例授权、字段脱敏。

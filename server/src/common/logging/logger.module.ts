@@ -4,10 +4,14 @@ import { randomUUID } from "node:crypto";
 import type { Env } from "../../config/env.js";
 
 /** api / worker 共用的结构化日志（Pino JSON）；字段规范见 server/README.md。 */
-export function createLoggerModule(env: Env): DynamicModule {
+export function createLoggerModule(
+  env: Pick<Env, "LOG_LEVEL">,
+  serviceName?: string,
+): DynamicModule {
   return LoggerModule.forRoot({
     pinoHttp: {
       level: env.LOG_LEVEL,
+      ...(serviceName === undefined ? {} : { base: { service: serviceName } }),
       redact: ["req.body.apiKey", "req.headers.cookie", "req.headers.authorization", 'req.headers["x-csrf-token"]', 'req.headers["x-internal-token"]', 'res.headers["set-cookie"]'],
       genReqId: (request, response) => {
         const header = request.headers["x-request-id"];

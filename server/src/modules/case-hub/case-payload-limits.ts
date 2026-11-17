@@ -3,6 +3,7 @@ import { CaseHubError } from "./case-hub.error.js";
 /**
  * payload 形状与 extensions 限额校验（不依赖业务字段）。
  *
+ * 校验对象是「运行时收到的 JSON」，所以先判 payload 是否为对象，再判形状；
  * 顶层六个分组由《团队分工.md》§3 W0 固定；分组内的字段与必填项属待定项 D01，
  * 因此这里只校验形状：未识别的顶层分组会被拒绝、六个分组的值必须是对象，
  * 分组内字段（必填 / 枚举 / 语义）一律不在这里校验。
@@ -142,10 +143,23 @@ export function assertExtensions(extensions: unknown): void {
 }
 
 /**
- * payload 整体形状校验入口（校验顺序：顶层分组 → 分组类型 → extensions 限额）。
+ * payload 本身必须是对象：JSON 请求体可能送来 null / 数组 / 标量，
+ * 直接 `Object.keys(null)` 会抛 TypeError（500 而不是 400），数组则会被当成「没有未知分组」放过去。
+ */
+export function assertPayloadIsObject(payload: unknown): asserts payload is Record<string, unknown> {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new CaseHubError("VALIDATION_FAILED", "payload 必须是对象（六个顶层分组）", [
+      { path: "payload", message: "object expected" },
+    ]);
+  }
+}
+
+/**
+ * payload 整体形状校验入口（校验顺序：payload 是否对象 → 顶层分组 → 分组类型 → extensions 限额）。
  * 服务层（S5 `CaseService`）在写入前调用；仓储保持哑存储语义，不重复校验。
  */
-export function assertPayloadShape(payload: Record<string, unknown>): void {
+export function assertPayloadShape(payload: unknown): void {
+  assertPayloadIsObject(payload);
   assertPayloadGroups(payload);
   assertPayloadGroupTypes(payload);
   assertExtensions(payload.extensions);

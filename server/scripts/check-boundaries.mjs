@@ -27,6 +27,9 @@ const options = parsed.options;
 
 const DOMAIN_MODULES = ["identity", "project", "project-export", "blueprint", "node", "task", "report-issue", "stakeholder", "workspace", "view", "follow"];
 const PLATFORM_MODULES = ["file", "notify", "search", "dashboard", "automation", "admin", "audit"];
+// Case Hub 是独立进程边界：既不属于领域模块，也不属于可反依赖领域的平台模块。
+const CASE_HUB_MODULE = "case-hub";
+const CASE_HUB_INFRA_PREFIXES = ["common/", "config/", "db/", "storage/"];
 // 横切模块：领域与平台都可依赖，不参与「平台不得反依赖领域」判定（都不在两个列表里即豁免）。
 //   permission —— 权限策略层（h6）；calendar —— 工作日历（h8：平台侧 i8 规则引擎与领域侧任务提醒共用同一出口）。
 const CROSSCUT_MODULES = ["permission", "calendar", "translate", "model-config"];
@@ -40,6 +43,9 @@ const moduleOf = (rel) => {
   const match = /^modules\/([^/]+)\//.exec(rel);
   return match ? match[1] : null;
 };
+const isCaseHubEntry = (rel) => /^entry\/case-[^/]+\.ts$/.test(rel);
+const isCaseHubInfra = (rel) => CASE_HUB_INFRA_PREFIXES.some((prefix) => rel.startsWith(prefix));
+const isCaseHubEntryDependency = (rel) => rel.startsWith("modules/case-hub/") || isCaseHubInfra(rel);
 
 const violations = [];
 const edges = new Map();
@@ -54,6 +60,37 @@ const checkRules = (fromRel, toRel, spec) => {
   const fromModule = moduleOf(fromRel);
   const toModule = moduleOf(toRel);
 
+  if (isCaseHubEntry(fromRel) && !isCaseHubEntryDependency(toRel)) {
+    violations.push({
+      rule: "case-api / case-worker 入口只能依赖 case-hub 与基础设施",
+      fromRel,
+      toRel,
+      spec,
+    });
+    return;
+  }
+  if (
+    fromModule === CASE_HUB_MODULE &&
+    toModule !== CASE_HUB_MODULE &&
+    !isCaseHubInfra(toRel)
+  ) {
+    violations.push({
+      rule: "case-hub 只能依赖 common / config / db / storage 等基础设施",
+      fromRel,
+      toRel,
+      spec,
+    });
+    return;
+  }
+  if (toModule === CASE_HUB_MODULE && fromModule !== CASE_HUB_MODULE && !isCaseHubEntry(fromRel)) {
+    violations.push({
+      rule: "只有 case-api / case-worker 入口可以依赖 case-hub",
+      fromRel,
+      toRel,
+      spec,
+    });
+    return;
+  }
   if (fromModule && toModule && fromModule !== toModule && toRel !== "modules/" + toModule + "/index.ts") {
     violations.push({ rule: "跨模块只允许 import 目标模块 index.ts", fromRel, toRel, spec });
     return;

@@ -26,6 +26,15 @@ export type ReportPhoto = {
   pending?: "uploading" | "failed";
 };
 
+/** 日报内联问题草稿（读面回填用；与写面 ReportIssueDraft 同口径）。 */
+export type ReportIssueDraftEntry = {
+  title: string;
+  categories: string[];
+  ownerId: string;
+  solution: string;
+  photos: ReportPhoto[];
+};
+
 /** 一条日报（A3-01 表单字段 + 系统字段；字段口径见契约 DailyReport）。 */
 export type DailyReport = {
   id: string;
@@ -54,6 +63,8 @@ export type DailyReport = {
   photos: ReportPhoto[];
   /** 当前问题附图（提交生成问题时转挂到问题侧，转挂后此处为空） */
   issuePhotos: ReportPhoto[];
+  /** 内联问题清单原文（草稿继续填写时回填问题块；已提交保留生成前快照） */
+  issueDrafts: ReportIssueDraftEntry[];
   /** 乐观锁版本（写回传）。 */
   version: number;
 };

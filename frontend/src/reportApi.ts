@@ -29,6 +29,15 @@ export const ISSUE_STATE_NAMES: Record<IssueState, string> = {
 /** 附图引用（契约 FilePhotoRef：file_links 读面）。 */
 type ApiPhotoRef = { fileId: string; name: string };
 
+/** 契约 ReportIssueDraft（读面问题块原文）。 */
+type ApiReportIssueDraft = {
+  title: string;
+  categories: string[];
+  ownerId?: string | null;
+  solution?: string;
+  photoFileIds?: string[];
+};
+
 /** 契约 DailyReport（本文件用到的字段；服务端可能多给，忽略即可）。 */
 export type ApiDailyReport = {
   id: string;
@@ -43,6 +52,7 @@ export type ApiDailyReport = {
   stageKeys: string[];
   photos: ApiPhotoRef[];
   issuePhotos: ApiPhotoRef[];
+  issueDrafts?: ApiReportIssueDraft[];
   authorName: string | null;
   submittedAt: string | null;
   createdAt: string;
@@ -71,6 +81,10 @@ function photosOf(refs: readonly ApiPhotoRef[]): ReportPhoto[] {
   return refs.map((ref) => ({ fileId: ref.fileId, name: ref.name, url: null }));
 }
 
+function draftPhotosOf(fileIds: readonly string[] | undefined): ReportPhoto[] {
+  return (fileIds ?? []).map((fileId, index) => ({ fileId, name: "附件 " + String(index + 1), url: null }));
+}
+
 /** 契约日报 → 界面模型：日期 / 阶段 / 空值口径在此收口。 */
 export function toUiReport(api: ApiDailyReport): DailyReport {
   return {
@@ -88,6 +102,13 @@ export function toUiReport(api: ApiDailyReport): DailyReport {
     stageNames: api.stageKeys.map(stageNameOf).filter((name) => name !== ""),
     photos: photosOf(api.photos),
     issuePhotos: photosOf(api.issuePhotos),
+    issueDrafts: (api.issueDrafts ?? []).map((draft) => ({
+      title: draft.title,
+      categories: [...draft.categories],
+      ownerId: draft.ownerId ?? "",
+      solution: draft.solution ?? "",
+      photos: draftPhotosOf(draft.photoFileIds),
+    })),
     version: api.version,
   };
 }

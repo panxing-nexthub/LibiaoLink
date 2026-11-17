@@ -6,6 +6,8 @@ export const CASE_REQUIRED_CONFIG_KEYS = [
   "CASE_S3_BUCKET",
   "CASE_INTERNAL_TOKEN",
   "CASE_CLIENT_JWKS_URL",
+  "CASE_CLIENT_ISSUER",
+  "CASE_CLIENT_AUDIENCE",
 ] as const;
 
 export type CaseRequiredConfigKey = (typeof CASE_REQUIRED_CONFIG_KEYS)[number];
@@ -18,6 +20,8 @@ export const CaseEnvSchema = z.object({
   CASE_S3_BUCKET: z.string().default(""),
   CASE_INTERNAL_TOKEN: z.string().default(""),
   CASE_CLIENT_JWKS_URL: z.string().url().or(z.literal("")).default(""),
+  CASE_CLIENT_ISSUER: z.string().url().or(z.literal("")).default(""),
+  CASE_CLIENT_AUDIENCE: z.string().default(""),
   CASE_RATE_LIMIT_REQUESTS_PER_MINUTE: z.coerce.number().int().min(1).max(1_000_000).default(60),
   CASE_RATE_LIMIT_BURST: z.coerce.number().int().min(1).max(1_000_000).default(20),
   LOG_LEVEL: z

@@ -16,6 +16,8 @@ const completeEnv = loadCaseEnv({
   CASE_S3_BUCKET: "case-test",
   CASE_INTERNAL_TOKEN: "test-token",
   CASE_CLIENT_JWKS_URL: "https://idp.example.test/jwks",
+  CASE_CLIENT_ISSUER: "https://idp.example.test",
+  CASE_CLIENT_AUDIENCE: "case-exchange",
 });
 
 async function createHttpApp(env = completeEnv) {
@@ -38,6 +40,8 @@ describe("Case Hub L0 运行骨架", () => {
       "CASE_S3_BUCKET",
       "CASE_INTERNAL_TOKEN",
       "CASE_CLIENT_JWKS_URL",
+      "CASE_CLIENT_ISSUER",
+      "CASE_CLIENT_AUDIENCE",
     ]);
   });
 
@@ -61,6 +65,8 @@ describe("Case Hub L0 运行骨架", () => {
         { name: "object-storage:configured", ok: true },
         { name: "auth:internal-token-configured", ok: true },
         { name: "auth:client-jwks-configured", ok: true },
+        { name: "auth:client-issuer-configured", ok: true },
+        { name: "auth:client-audience-configured", ok: true },
       ],
     });
     await app.close();
@@ -73,7 +79,7 @@ describe("Case Hub L0 运行骨架", () => {
     expect(response.status).toBe(503);
     expect(response.body.status).toBe("degraded");
     expect(response.body.ok).toBe(false);
-    expect(response.body.checks.filter((check: { ok: boolean }) => !check.ok)).toHaveLength(4);
+    expect(response.body.checks.filter((check: { ok: boolean }) => !check.ok)).toHaveLength(6);
     expect(JSON.stringify(response.body)).not.toContain("test-token");
     await app.close();
   });

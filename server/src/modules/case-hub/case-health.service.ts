@@ -30,6 +30,8 @@ export class CaseHealthService {
       this.configCheck("object-storage:configured", "CASE_S3_BUCKET", missing),
       this.configCheck("auth:internal-token-configured", "CASE_INTERNAL_TOKEN", missing),
       this.configCheck("auth:client-jwks-configured", "CASE_CLIENT_JWKS_URL", missing),
+      this.configCheck("auth:client-issuer-configured", "CASE_CLIENT_ISSUER", missing),
+      this.configCheck("auth:client-audience-configured", "CASE_CLIENT_AUDIENCE", missing),
     ];
     const ok = checks.every((check) => check.ok);
     return { status: ok ? "ok" : "degraded", ok, checks };

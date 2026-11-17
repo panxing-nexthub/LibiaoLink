@@ -5,6 +5,7 @@ import { DatabaseService } from "../src/db/database.service.js";
 import { CaseConfig } from "../src/modules/case-hub/case-config.module.js";
 import { loadCaseEnv, missingCaseConfig } from "../src/modules/case-hub/case-env.js";
 import { CaseHttpModule } from "../src/modules/case-hub/case-http.module.js";
+import { CaseTokenBucketRateLimiter } from "../src/modules/case-hub/case-rate-limit.js";
 import { CaseWorkerModule } from "../src/modules/case-hub/case-worker.module.js";
 import { OutboxDispatcher } from "../src/outbox/dispatcher.js";
 import { JobScheduler } from "../src/outbox/scheduler.js";
@@ -102,6 +103,26 @@ describe("Case Hub L0 运行骨架", () => {
     await app.close();
   });
 
+  it("case-api 装配 L2b 通用限流桶并复用 CASE_RATE_LIMIT_*", async () => {
+    const app = await createHttpApp({
+      ...completeEnv,
+      CASE_RATE_LIMIT_REQUESTS_PER_MINUTE: 60,
+      CASE_RATE_LIMIT_BURST: 2,
+    });
+    const limiter = app.get(CaseTokenBucketRateLimiter);
+    expect(limiter.tryConsume("runtime-probe", 1, 0)).toMatchObject({
+      allowed: true,
+      capacity: 2,
+      remaining: 1,
+    });
+    expect(limiter.tryConsume("runtime-probe", 1, 0)).toMatchObject({ allowed: true, remaining: 0 });
+    expect(limiter.tryConsume("runtime-probe", 1, 0)).toMatchObject({
+      allowed: false,
+      retryAfterMs: 1_000,
+    });
+    await app.close();
+  });
+
   it("case-worker 模块可以独立编译，且不注册 core 数据库与现有 worker 任务", async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [CaseWorkerModule.forRoot(completeEnv)],
@@ -110,6 +131,7 @@ describe("Case Hub L0 运行骨架", () => {
     expect(() => moduleRef.get(DatabaseService, { strict: false })).toThrow();
     expect(() => moduleRef.get(OutboxDispatcher, { strict: false })).toThrow();
     expect(() => moduleRef.get(JobScheduler, { strict: false })).toThrow();
+    expect(() => moduleRef.get(CaseTokenBucketRateLimiter, { strict: false })).toThrow();
     await moduleRef.close();
   });
 });

@@ -12,6 +12,18 @@ import { apiRequest } from "./api";
 
 export const GROUP_ACCESS_PAGE_KEYS = ["dashboard", "projects", "templates", "workspace", "files", "audit"] as const;
 export type GroupAccessPage = (typeof GROUP_ACCESS_PAGE_KEYS)[number];
+/** 项目管理首批上线白名单：与服务端同一组企业邮箱，前端只负责隐藏入口与拦截直链。 */
+export const PROJECT_MANAGEMENT_ALLOWED_EMAILS = [
+  "panxing@libiaorobot.com",
+  "lixiawei@libiaorobot.com",
+  "yangm@libiaorobot.com",
+] as const;
+
+export function canUseProjectManagement(email: string | null | undefined): boolean {
+  if (email === null || email === undefined) return false;
+  return (PROJECT_MANAGEMENT_ALLOWED_EMAILS as readonly string[]).includes(email.trim().toLowerCase());
+}
+
 
 export type GroupProjectAccess = "allowed" | "empty" | "denied";
 /** 部门规则的项目范围；多个部门命中时按并集展示。 */

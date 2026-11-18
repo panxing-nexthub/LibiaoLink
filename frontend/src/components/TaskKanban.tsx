@@ -69,7 +69,7 @@ export const STAGE_TAG_CLASS: Record<string, string> = {
 
 
 /** 卡片外壳（样张结构：内边距 9px + 圆角 35px + 壳 + 三层投影）。配色按业务反馈（2026-09-20）改回**白色**：白壳 + 发丝边 + 柔和投影 + 底部内阴影。 */
-const CARD_SHELL =
+export const CARD_SHELL =
   "relative block w-full rounded-[35px] border border-zinc-900/[0.07] bg-white p-[9px] text-left transition " +
   "[box-shadow:0_18px_40px_-20px_rgba(15,23,42,0.18),0_4px_14px_-8px_rgba(15,23,42,0.06),inset_0_-2px_6px_rgba(15,23,42,0.05)] " +
   "hover:-translate-y-0.5 focus-visible:[outline:2px_solid_rgba(24,24,27,0.3)] focus-visible:[outline-offset:2px]";
@@ -90,12 +90,12 @@ const CARD_SHELL_GHOST =
   "[box-shadow:0_18px_40px_-20px_rgba(15,23,42,0.18),0_4px_14px_-8px_rgba(15,23,42,0.06),inset_0_-2px_6px_rgba(15,23,42,0.05)]";
 
 /** 细纹叠加（样张：`repeating-conic-gradient` 细纹 + 对比度 105%；白壳上透明度收到 6%，保持干净）。 */
-const CARD_NOISE =
+export const CARD_NOISE =
   "pointer-events-none absolute inset-0 rounded-[35px] opacity-[0.06] [filter:contrast(105%)] " +
   "bg-[repeating-conic-gradient(#e8e8e8_0.0000001%,#93a1a1_0.000104%)] [background-position:60%_60%] [background-size:600%_600%]";
 
 /** 看板列：列高随视口封顶，列头固定不动，卡片多时在列内滚动 —— 列不再一直往下延伸（Push 85）。 */
-const COLUMN_SHELL = "flex h-[calc(100vh-12.75rem)] max-h-[52rem] min-h-[22rem] w-[280px] shrink-0 flex-col";
+export const COLUMN_SHELL = "flex h-[calc(100vh-12.75rem)] max-h-[52rem] min-h-[22rem] w-[280px] shrink-0 flex-col";
 
 /** 列底「添加」区：在滚动视口之外 —— 按钮固定在列底，不随卡片滚动消失 / 出现（Push 86）。 */
 const COLUMN_FOOTER = "mt-3 shrink-0";
@@ -130,7 +130,7 @@ const STAGE_OPTIONS: readonly string[] = PROJECT_STAGES.filter((stage) => stage 
  * 卡片内容区（Push 106：业务口径「只保留外框 内框不要了」—— 原来的内层板（近白面板 + 发丝内边 + 圆角 30px）整块去掉，
  * 内容直接落在外层壳上，只保留原来的内边距，卡片就是「一个框 + 内容」。
  */
-const CARD_BODY = "relative px-4 py-3.5";
+export const CARD_BODY = "relative px-4 py-3.5";
 
 /** 拖动判定阈值（Push 108）：按下后位移不超过这么多像素 = 「点一下看详情」，不算拖动。 */
 const DRAG_THRESHOLD = 4;

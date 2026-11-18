@@ -732,7 +732,7 @@ function drawDailyHeader(ctx: SKRSContext2D, data: DailyReportPosterData, layout
 }
 
 /** 日报海报：只含项目信息、今日完成、明日计划与全部现场图；问题另发专报。 */
-export async function renderDailyReportPoster(
+async function renderDailyReportPosterLegacy(
   data: DailyReportPosterData,
   images: ReadonlyMap<string, Buffer> = new Map(),
   fonts?: DailyReportPosterFontPaths,
@@ -1133,8 +1133,8 @@ function drawIssueHeader(
   ctx.fillRect(0, layout.headerHeight - 7, WIDTH, 7);
 }
 
-/** 现场问题专报：全部问题、处理记录和问题附图；无问题时 service 不发送此图。 */
-export async function renderDailyReportIssuePoster(
+/** 旧版问题专报保留供历史回放；生产出口切到 v16。 */
+async function renderDailyReportIssuePosterLegacy(
   data: DailyReportPosterData,
   images: ReadonlyMap<string, Buffer> = new Map(),
   fonts?: DailyReportPosterFontPaths,
@@ -2052,3 +2052,6 @@ export async function renderDailyReportIssueDigestPoster(
   const canvasApi = await loadCanvasApi();
   return await drawDigestIssuePoster(canvasApi, data, images, fonts);
 }
+
+export { renderDailyReportPosterV14 as renderDailyReportPoster } from "./daily-report.poster.v14.js";
+export { renderDailyReportIssuePosterV16 as renderDailyReportIssuePoster } from "./daily-report.issue-poster.v16.js";

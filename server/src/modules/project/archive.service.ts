@@ -8,6 +8,7 @@ import { AuditService } from "../admin/index.js";
 import { ArchiveRepository, type ArchiveViewRow } from "./archive.repository.js";
 import { FlowService } from "./flow.service.js";
 import { ProjectRepository } from "./project.repository.js";
+import { toProjectView, type ProjectView } from "./project.service.js";
 import type { ProjectStageRow } from "./flow.repository.js";
 
 export type ProjectArchiveView = z.infer<typeof ProjectArchiveViewSchema>;
@@ -107,9 +108,47 @@ export class ArchiveService {
   async getArchive(projectId: string): Promise<ProjectArchiveView> {
     const view = await this.projects.findViewById(projectId);
     if (view === null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
+    if (view.project.status !== "archived") throw new AppError("NOT_FOUND", "项目未归档");
     const record = await this.archive.findArchive(this.database.db, projectId);
     if (record === null) throw new AppError("NOT_FOUND", "项目尚无归档记录（未归档）");
     return toArchiveView(record);
+  }
+
+  /**
+   * POST /projects/{id}/unarchive：归档后恢复到进行中。
+   * 保留 project_archives 中的最近一次归档清单；再次归档时覆盖该清单，避免一项目一份唯一约束冲突。
+   */
+  async restoreArchivedProject(projectId: string, body: ArchiveRequestBody, actorId: string): Promise<ProjectView> {
+    const view = await this.projects.findViewById(projectId);
+    if (view === null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
+    if (view.project.status !== "archived") throw new AppError("VALIDATION_FAILED", "项目未归档，无需恢复到进行中");
+    await this.flow.assertProjectEditor(projectId, actorId, "恢复项目");
+    const at = new Date();
+    const restored = await this.database.db.transaction(async (tx) => {
+      const locked = await this.archive.lockProjectRow(tx, projectId);
+      if (locked === null || locked.deletedAt !== null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
+      if (locked.status !== "archived") throw new AppError("VALIDATION_FAILED", "项目未归档，无需恢复到进行中");
+      if (locked.version !== body.version) throw new AppError("VERSION_CONFLICT", "项目已被他人更新，请刷新后重试");
+      const archiveRecord = await this.archive.findArchive(tx, projectId);
+      const row = await this.archive.restoreActiveWithVersion(tx, projectId, at, body.version);
+      if (row === null) throw new AppError("VERSION_CONFLICT", "项目已被他人更新，请刷新后重试");
+      await this.audit.record(tx, {
+        actorId,
+        action: "update",
+        objectType: "project",
+        objectId: projectId,
+        projectId,
+        summary: "恢复项目为进行中：" + locked.code + "（" + locked.name + "）",
+        changes: [
+          { field: "status", from: "archived", to: "active" },
+          { field: "archivedAt", from: locked.archivedAt === null ? null : locked.archivedAt.toISOString(), to: null },
+          { field: "archivedBy", from: locked.archivedBy, to: null },
+        ],
+        metadata: { restoredFrom: "project-archive", archiveId: archiveRecord?.archive.id ?? null },
+      });
+      return row;
+    });
+    return toProjectView({ project: restored, managerNames: view.managerNames }, "edit");
   }
 
   /** 清单快照（引用式）：任务数与状态分布 / 阶段状态 / 文件清单含版本 / 变更 / 日报 / 问题。 */

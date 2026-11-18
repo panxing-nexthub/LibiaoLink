@@ -107,14 +107,14 @@ export const TABLE_ROW_PADDING_X = 40;
  * 网格列模板：`fr` 列一律套 `minmax(最小宽, fr)` —— 视口不够时列**不再被压到最小宽以下**，
  * 而是整张表撑到最小宽、由外层横向滚动接住（`#task-board-scroll` / 工作台表同套模板）。
  */
-export function tableGridTemplate(columns: readonly ColumnDef[]): string {
+export function tableGridTemplate(columns: readonly Pick<ColumnDef, "width" | "min">[]): string {
   return columns
     .map((column) => (column.width.endsWith("fr") ? "minmax(" + column.min + "px, " + column.width + ")" : column.width))
     .join(" ");
 }
 
 /** 表格最小宽度 = 各显示列最小宽之和 + 行内衬（`TABLE_ROW_PADDING_X`）：窄于它的视口出横向滚动，各列保持最小宽不变。 */
-export function tableMinWidth(columns: readonly ColumnDef[]): number {
+export function tableMinWidth(columns: readonly Pick<ColumnDef, "width" | "min">[]): number {
   return columns.reduce((total, column) => total + column.min, TABLE_ROW_PADDING_X);
 }
 

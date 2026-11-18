@@ -18,6 +18,7 @@ import { IdentityModule } from "./modules/identity/index.js";
 import { NotifyModule } from "./modules/notify/index.js";
 import { PermissionModule } from "./modules/permission/index.js";
 import { ProjectModule } from "./modules/project/index.js";
+import { ProjectManagementModule } from "./modules/project-management/index.js";
 import { ProjectImportModule } from "./modules/project-import/index.js";
 import { ProjectExportModule } from "./modules/project-export/index.js";
 import { ReportIssueModule } from "./modules/report-issue/index.js";
@@ -47,6 +48,7 @@ export class AppModule {
         IdentityModule,
         PermissionModule,
         ProjectModule,
+        ProjectManagementModule,
         ProjectImportModule,
         ProjectExportModule,
         StakeholderModule,

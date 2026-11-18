@@ -15,6 +15,7 @@ import {
   TEMPLATE_SECTION_KEYS as CONTRACT_TEMPLATE_SECTION_KEYS,
   PREVIEW_STATUSES,
   PREVIEW_TARGETS,
+  PROJECT_MANAGEMENT_METHODS,
   VIEW_SCOPES,
 } from "@libiaolink/contracts";
 import {
@@ -25,6 +26,7 @@ import {
   TEMPLATE_SECTION_KEYS,
   PREVIEW_STATUS_KEYS,
   PREVIEW_TARGET_KEYS,
+  PROJECT_MANAGEMENT_METHOD_KEYS,
   VIEW_SCOPE_KEYS,
 } from "../src/db/schema/literals.js";
 
@@ -44,6 +46,10 @@ describe("库侧枚举字面量与契约一致（schema literals ↔ contracts�
 
   it("预览产物状态：PREVIEW_STATUS_KEYS = PREVIEW_STATUSES", () => {
     expect([...PREVIEW_STATUS_KEYS]).toEqual([...PREVIEW_STATUSES]);
+  });
+
+  it("项目管理实施方式：PROJECT_MANAGEMENT_METHOD_KEYS = PROJECT_MANAGEMENT_METHODS（2026-11-17）", () => {
+    expect([...PROJECT_MANAGEMENT_METHOD_KEYS]).toEqual([...PROJECT_MANAGEMENT_METHODS]);
   });
 
   it("视图范围：VIEW_SCOPE_KEYS = VIEW_SCOPES（M2-06 · A1-03 · Push 168）", () => {

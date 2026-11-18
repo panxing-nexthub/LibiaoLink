@@ -1038,7 +1038,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
 
   /**
    * 导出项目总览（PDF · 业务口径 2026-10-09 · §6.16）：把页面当前的 project / tasks / summary 交给报告模块
-   * （exportOverviewPdf.ts）拼 A4 横版报告，唤起系统打印窗口由用户选「另存为 PDF」；
+   * （exportOverviewPdf.ts）拼 A4 横版报告并直接生成、下载 PDF；
    * 2026-10-10 起导出前经翻译通道补「项目进展描述」列译文；2026-10-23 日 / 韩主体再补项目名与任务名（translateApi.ts；通道不通静默降级）；导出不改数据。
    * 2026-10-13 起译文已在「写进展描述」时后台预热（§6.16 ㉑）—— 命中缓存即取，只有未预热条目才现场翻。
    */
@@ -1056,6 +1056,8 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
       await exportProjectOverviewPdf({ project, tasks, summary }, options, (done, total) => {
         setExportTranslateProgress({ done, total });
       });
+    } catch {
+      setToolError(t("export.error"));
     } finally {
       window.clearTimeout(overlayTimer);
       setExportingOverview(false);

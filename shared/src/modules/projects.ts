@@ -230,7 +230,8 @@ export const ProjectDeliverableTypeCreateBodySchema = z
 const ZeroOrMore = z.number().int().min(0);
 
 /**
- * 归档（C4-02 / C4-03 · ADR-027 · M7-04）：门禁 + 引用式清单 + 冻结状态位（projects.status = archived）。
+ * 归档（C4-02 / C4-03 · ADR-027 · M7-04）：门禁 + 引用式清单 + 冻结状态位（projects.status = archived）；
+ * 归档项目可走 POST /projects/{id}/unarchive 恢复到 active，保留最近一次归档清单并写审计。
  * 门禁：项目内未删除任务全部完成（有未完成任务 409 ARCHIVE_NOT_READY，confirm=true 不可越过）；
  * 文件是否定档、节点必交成果是否齐全均不再阻断归档（2026-11-12 业务口径）；
  * 新归档 acknowledgedMissing 恒为空；旧缺项 422 与 file_not_final / doc_missing 仅用于历史读取。
@@ -245,7 +246,7 @@ export const ProjectArchiveBodySchema = z
       .default(false)
       .openapi({ description: "旧契约兼容字段：当前忽略；归档只校验任务是否全部完成，true 不能绕过 ARCHIVE_NOT_READY" }),
   })
-  .openapi("ProjectArchiveBody", { description: "归档请求：version 必带；confirm 仅兼容旧客户端，当前忽略" });
+  .openapi("ProjectArchiveBody", { description: "归档 / 恢复请求：version 必带；confirm 仅兼容旧客户端，当前忽略" });
 
 /** 归档缺项条目（历史兼容）：旧版本 422 明细与清单 acknowledgedMissing 同形；新归档只可能产生 task_not_done。 */
 export const ProjectArchiveMissingSchema = z

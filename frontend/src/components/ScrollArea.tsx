@@ -6,7 +6,7 @@ type ScrollAreaProps = {
   className?: string;
   viewportClassName?: string;
   ariaLabel?: string;
-  /** 有溢出时滑块常显（默认只在滚动 / 悬停时浮现）——弹窗这类「一眼要看出还有内容」的场景用。 */
+  /** 有溢出时轨道与滑块常显（默认只在滚动 / 悬停时浮现）——需要明确提示可滚动的看板 / 弹窗场景用。 */
   thumbAlwaysVisible?: boolean;
   /** 滚动方向：默认纵向（分类筛选侧栏 / 任务抽屉 / 看板列内卡片）；看板横向列排布用 horizontal。 */
   axis?: "vertical" | "horizontal";
@@ -132,7 +132,9 @@ export function ScrollArea({ children, className = "", viewportClassName = "", a
       {thumb === null ? null : (
         <div
           className={
-            "pointer-events-none absolute " + (horizontal ? "inset-x-0 bottom-0 h-3" : "inset-y-0 right-0 w-3")
+            "pointer-events-none absolute " +
+            (horizontal ? "inset-x-0 bottom-0 h-3" : "inset-y-0 right-0 w-3") +
+            (thumbAlwaysVisible ? " rounded-full bg-zinc-200/80" : "")
           }
         >
           <div
@@ -146,7 +148,7 @@ export function ScrollArea({ children, className = "", viewportClassName = "", a
             className={
               "pointer-events-auto absolute cursor-grab rounded-full bg-zinc-400/70 transition-opacity duration-200 hover:bg-zinc-500 active:cursor-grabbing active:bg-zinc-500 " +
               (horizontal ? "top-1/2 h-1.5 -translate-y-1/2 " : "left-1/2 w-1.5 -translate-x-1/2 ") +
-              (thumbAlwaysVisible ? "opacity-60 hover:opacity-100" : active ? "opacity-100" : "opacity-0 hover:opacity-100")
+              (thumbAlwaysVisible ? "opacity-80 hover:opacity-100" : active ? "opacity-100" : "opacity-0 hover:opacity-100")
             }
           />
         </div>

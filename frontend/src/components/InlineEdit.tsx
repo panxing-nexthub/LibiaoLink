@@ -351,6 +351,8 @@ export function InlineDateCell({
   ariaLabel,
   onChange,
   triggerClassName,
+  bare = false,
+  showAuto = false,
   disabled = false,
   disabledHint,
 }: {
@@ -359,6 +361,8 @@ export function InlineDateCell({
   ariaLabel: string;
   onChange: (iso: string) => void;
   triggerClassName?: string;
+  bare?: boolean;
+  showAuto?: boolean;
   /** 锁定入口（Push 264 · P1-1 定档锁定）：透传 InlineCell —— 定档任务的行内入口不弹编辑浮层，点击改弹站点同款顶部 Toast。 */
   disabled?: boolean;
   /** 锁定说明文案（定档口径同 409 TASK_FINALIZED 提示文案；悬停 title 与点击 Toast 共用）。 */
@@ -373,11 +377,13 @@ export function InlineDateCell({
       height={336}
       disabled={disabled}
       disabledHint={disabledHint}
+      bare={bare}
       display={display}
       triggerClassName={triggerClassName}
       render={(close) => (
         <MiniCalendar
           value={valueIso}
+          showAuto={showAuto}
           onChange={(iso) => {
             onChange(iso);
             close();
@@ -388,7 +394,7 @@ export function InlineDateCell({
   );
 }
 
-function MiniCalendar({ value, onChange }: { value: string; onChange: (iso: string) => void }) {
+function MiniCalendar({ value, onChange, showAuto = false }: { value: string; onChange: (iso: string) => void; showAuto?: boolean }) {
   const t = useT();
   const locale = useLocale();
   const [view, setView] = useState(() => {
@@ -470,15 +476,28 @@ function MiniCalendar({ value, onChange }: { value: string; onChange: (iso: stri
       </div>
 
       <div className="mt-3 flex items-center justify-between border-t border-zinc-100 pt-2">
-        <button
-          type="button"
-          onClick={() => {
-            onChange("");
-          }}
-          className="rounded-lg px-2.5 py-1.5 text-xs text-zinc-500 transition hover:bg-zinc-100"
-        >
-          {t("ie.clear")}
-        </button>
+        <div className="flex items-center gap-1">
+          {showAuto ? (
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+              }}
+              className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100"
+            >
+              {t("pm.field.auto")}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+            }}
+            className="rounded-lg px-2.5 py-1.5 text-xs text-zinc-500 transition hover:bg-zinc-100"
+          >
+            {t("ie.clear")}
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => {

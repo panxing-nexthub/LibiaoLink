@@ -87,16 +87,24 @@ function SearchRow({ item, selected, active, onHover, onPick }: SearchRowProps) 
   );
 }
 
+export type SearchListStatusButton = {
+  label: string;
+  active: boolean;
+  onToggle: () => void;
+};
+
 type SearchListProps = {
   items: readonly SearchSelectItem[];
   isSelected: (item: SearchSelectItem) => boolean;
   onPick: (item: SearchSelectItem) => void;
   ariaLabel: string;
   footer: string;
+  /** 顶部常驻状态按钮（显示在搜索框上方，不随搜索结果变化）。 */
+  topStatusButton?: SearchListStatusButton;
 };
 
 /** 搜索列表（搜索框 + 选项 + 页脚，无触发器）：人员下拉 / 行内编辑 / 通用搜索下拉共用。 */
-function SearchList({ items, isSelected, onPick, ariaLabel, footer }: SearchListProps) {
+function SearchList({ items, isSelected, onPick, ariaLabel, footer, topStatusButton }: SearchListProps) {
   const t = useT();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -141,6 +149,35 @@ function SearchList({ items, isSelected, onPick, ariaLabel, footer }: SearchList
 
   return (
     <div role="listbox" aria-label={ariaLabel}>
+      {topStatusButton === undefined ? null : (
+        <button
+          type="button"
+          aria-pressed={topStatusButton.active}
+          onClick={topStatusButton.onToggle}
+          className={
+            "flex w-full items-center gap-2 border-b px-3 py-2 text-left text-xs font-medium outline-none transition focus:ring-2 focus:ring-inset focus:ring-red-500 " +
+            (topStatusButton.active
+              ? "border-red-200 bg-red-600 text-white"
+              : "border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100")
+          }
+        >
+          <span
+            aria-hidden="true"
+            className={
+              "h-2 w-2 rounded-full " +
+              (topStatusButton.active ? "bg-white ring-4 ring-white/20" : "bg-red-500 ring-4 ring-red-500/10")
+            }
+          />
+          <span>{topStatusButton.label}</span>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0">
+            {topStatusButton.active ? (
+              <path d="M5 12.5l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            ) : (
+              <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            )}
+          </svg>
+        </button>
+      )}
       <div className="border-b border-zinc-100 p-2">
         <input
           ref={searchRef}
@@ -188,10 +225,12 @@ type MemberSearchListProps = {
   selectedIds?: readonly string[];
   onPick: (member: Member) => void;
   ariaLabel: string;
+  /** 顶部常驻状态按钮（可选，显示在搜索框上方）。 */
+  topStatusButton?: SearchListStatusButton;
 };
 
 /** 成员搜索列表（搜索框 + 选项 + 页脚）：人员下拉与任务表行内编辑共用。 */
-export function MemberSearchList({ options, value, onPick, ariaLabel, selectedIds }: MemberSearchListProps) {
+export function MemberSearchList({ options, value, onPick, ariaLabel, selectedIds, topStatusButton }: MemberSearchListProps) {
   const t = useT();
   const items = useMemo<SearchSelectItem[]>(() => options.map((member): SearchSelectItem => ({ kind: "member", value: member.id, member })), [options]);
   return (
@@ -205,6 +244,7 @@ export function MemberSearchList({ options, value, onPick, ariaLabel, selectedId
         }
       }}
       footer={t("ms.footer", { n: options.length })}
+      topStatusButton={topStatusButton}
     />
   );
 }

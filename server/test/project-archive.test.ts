@@ -110,6 +110,13 @@ class FakeArchiveRepository {
     return this.project;
   }
 
+  async restoreActiveWithVersion(_tx: unknown, _projectId: string, at: Date, expectedVersion: number): Promise<ProjectRow | null> {
+    this.lastExpectedVersion = expectedVersion;
+    if (this.project === null || this.project.status !== "archived" || this.project.version !== expectedVersion || this.project.deletedAt !== null) return null;
+    this.project = { ...this.project, status: "active", archivedAt: null, archivedBy: null, version: expectedVersion + 1, updatedAt: at };
+    return this.project;
+  }
+
   async insertArchive(_tx: unknown, input: ArchiveInserted): Promise<{ id: string }> {
     this.inserted = input;
     this.record = {
@@ -241,6 +248,51 @@ describe("项目归档（任务全部完成口径）", () => {
     expect(view.snapshot.issues.byState.in_progress).toBe(1);
   });
 
+  it("归档后可恢复到进行中：清归档状态、保留清单、递增版本并写审计", async () => {
+    const { service, repo, projects, flow, audit } = makeService();
+    repo.project = projectRow({ status: "archived", archivedAt: AT, archivedBy: ACTOR, version: 4 });
+    projects.view = { project: repo.project, managerNames: ["张工"] };
+    repo.record = {
+      archive: {
+        id: "archive-1",
+        projectId: PROJECT_ID,
+        archivedAt: AT,
+        archivedBy: ACTOR,
+        snapshot: {},
+        acknowledgedMissing: [],
+      },
+      archivedByName: "张工",
+    } as unknown as ArchiveViewRow;
+    const view = await service.restoreArchivedProject(PROJECT_ID, { version: 4, confirm: false }, ACTOR);
+    expect(view.status).toBe("active");
+    expect(view.archivedAt).toBeNull();
+    expect(view.archivedBy).toBeNull();
+    expect(view.version).toBe(5);
+    expect(repo.project?.status).toBe("active");
+    expect(repo.record?.archive.id).toBe("archive-1");
+    expect(flow.calls).toEqual(["恢复项目"]);
+    expect(audit.entries[0]?.action).toBe("update");
+    expect(audit.entries[0]?.metadata).toEqual({ restoredFrom: "project-archive", archiveId: "archive-1" });
+  });
+
+  it("恢复校验：仅归档项目可恢复；版本不匹配 409；无编辑权 403", async () => {
+    const activeCase = makeService();
+    await expectAppErrorAsync(() => activeCase.service.restoreArchivedProject(PROJECT_ID, { version: 3, confirm: false }, ACTOR), "VALIDATION_FAILED");
+
+    const conflictCase = makeService();
+    conflictCase.repo.project = projectRow({ status: "archived", archivedAt: AT, archivedBy: ACTOR, version: 4 });
+    conflictCase.projects.view = { project: conflictCase.repo.project, managerNames: ["张工"] };
+    await expectAppErrorAsync(() => conflictCase.service.restoreArchivedProject(PROJECT_ID, { version: 3, confirm: false }, ACTOR), "VERSION_CONFLICT");
+    expect(conflictCase.repo.project?.status).toBe("archived");
+
+    const deniedCase = makeService();
+    deniedCase.repo.project = projectRow({ status: "archived", archivedAt: AT, archivedBy: ACTOR, version: 4 });
+    deniedCase.projects.view = { project: deniedCase.repo.project, managerNames: ["张工"] };
+    deniedCase.flow.reject = true;
+    await expectAppErrorAsync(() => deniedCase.service.restoreArchivedProject(PROJECT_ID, { version: 4, confirm: false }, ACTOR), "FORBIDDEN");
+    expect(deniedCase.repo.project?.status).toBe("archived");
+  });
+
   it("幂等与并发：已归档 409 PROJECT_ARCHIVED；版本不匹配 409 VERSION_CONFLICT", async () => {
     const archivedCase = makeService();
     archivedCase.repo.project = projectRow({ status: "archived", archivedAt: AT, archivedBy: ACTOR });
@@ -259,8 +311,10 @@ describe("项目归档（任务全部完成口径）", () => {
   });
 
   it("清单读面：未归档 404；有记录返回视图（含操作人姓名快照）", async () => {
-    const { service, repo } = makeService();
+    const { service, repo, projects } = makeService();
     await expectAppErrorAsync(() => service.getArchive(PROJECT_ID), "NOT_FOUND");
+    repo.project = projectRow({ status: "archived", archivedAt: AT, archivedBy: ACTOR, version: 4 });
+    projects.view = { project: repo.project, managerNames: ["张工"] };
     repo.record = {
       archive: {
         id: "archive-1",

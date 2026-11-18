@@ -17,6 +17,10 @@
       "description": "项目主数据与首页分类（v0.2 §8）"
     },
     {
+      "name": "project-management",
+      "description": "项目管理独立准备记录：与项目空间、工作台、回收站无业务联动"
+    },
+    {
       "name": "tasks",
       "description": "任务与进度（v0.2 §2.3 / §2.4）"
     },
@@ -9004,7 +9008,7 @@
         "required": [
           "version"
         ],
-        "description": "归档请求：version 必带；confirm 仅兼容旧客户端，当前忽略"
+        "description": "归档 / 恢复请求：version 必带；confirm 仅兼容旧客户端，当前忽略"
       },
       "ProjectArchiveMissing": {
         "type": "object",
@@ -10055,6 +10059,507 @@
           "limit",
           "total"
         ]
+      },
+      "ProjectManagementRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "code": {
+            "type": "string",
+            "description": "项目编号：手填，最长 50 字；允许空串以支持逐格保存"
+          },
+          "name": {
+            "type": "string",
+            "description": "项目名称：手填，最长 200 字；允许空串以支持逐格保存"
+          },
+          "managerIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "description": "项目经理账号 id 快照；候选复用现有项目经理资格名单，数组顺序 = 展示顺序"
+          },
+          "managerNames": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": "项目经理姓名：按 managerIds 顺序解析；账号停用 / 删除后仍保留可解析的姓名，取不到为 null"
+          },
+          "implementationEngineerIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "description": "实施工程师账号 id 快照（0-50 位）；仅允许启用账号，不建立项目成员关系"
+          },
+          "implementationEngineerNames": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": "实施工程师姓名：按 implementationEngineerIds 顺序解析；取不到为 null"
+          },
+          "implementationHandedOver": {
+            "type": "boolean",
+            "description": "实施工程师已移交状态：true = 格子直接显示「已移交」，不再显示工程师姓名；前端与服务端均会清空 implementationEngineerIds，重新选择工程师会自动取消该状态"
+          },
+          "implementationMethod": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "onsite_installation_guidance",
+              "remote_installation_guidance",
+              "installation_delivery",
+              "remote_guidance",
+              "onsite_guidance",
+              null
+            ],
+            "description": "实施方式；未填写 = null"
+          },
+          "riskReminder": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "风险提醒：手填，最长 2000 字；未填写 = null"
+          },
+          "region": {
+            "type": "string",
+            "description": "项目地点字典值；清空时回落为未分类"
+          },
+          "currentStageOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "presale",
+              "design",
+              "purchase",
+              "assembly",
+              "install",
+              "deploy",
+              "trial",
+              "production",
+              "acceptance",
+              null
+            ],
+            "description": "项目当前阶段人工覆盖值；null = 使用只读自动识别值"
+          },
+          "startupCompletedAtOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "启动时间人工覆盖值；null = 使用只读自动识别值"
+          },
+          "arrivalDateOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "到货日期人工覆盖值；null = 使用只读自动识别值"
+          },
+          "plannedStartDateOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "计划实施开始人工覆盖值；null = 使用只读自动识别值"
+          },
+          "plannedEndDateOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "计划实施完成人工覆盖值；null = 使用只读自动识别值"
+          },
+          "implementationDaysOverride": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "实施天数人工覆盖值；null = 按有效计划实施起止日期自动计算"
+          },
+          "currentStage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "presale",
+              "design",
+              "purchase",
+              "assembly",
+              "install",
+              "deploy",
+              "trial",
+              "production",
+              "acceptance",
+              null
+            ],
+            "description": "项目当前阶段（只读派生）：按 code 匹配项目空间后，取已动工任务里阶段序最靠后的「最新阶段」；无匹配项目 = null"
+          },
+          "startupCompletedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "启动时间（只读派生）：项目空间「项目启动 / Project Startup」任务的实际完成日期；无匹配任务 = null"
+          },
+          "arrivalDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "到货日期（只读派生）：组装发货阶段全部未删除任务中最晚的实际完成日期；无值 = null"
+          },
+          "plannedStartDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "计划实施开始（只读派生）：硬件实施阶段全部未删除任务中最早的计划开始日期；无值 = null"
+          },
+          "plannedEndDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "计划实施完成（只读派生）：硬件实施阶段全部未删除任务中最晚的预计完成日期；无值 = null"
+          },
+          "implementationDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "实施天数（只读派生）：计划实施开始至计划实施完成含首尾天数；任一日期为空 = null"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "乐观锁版本：更新 / 删除时原样回传"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "创建时间（ISO 8601）"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "最后更新时间（ISO 8601）"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "managerIds",
+          "managerNames",
+          "implementationEngineerIds",
+          "implementationEngineerNames",
+          "implementationHandedOver",
+          "implementationMethod",
+          "riskReminder",
+          "region",
+          "currentStageOverride",
+          "startupCompletedAtOverride",
+          "arrivalDateOverride",
+          "plannedStartDateOverride",
+          "plannedEndDateOverride",
+          "implementationDaysOverride",
+          "currentStage",
+          "startupCompletedAt",
+          "arrivalDate",
+          "plannedStartDate",
+          "plannedEndDate",
+          "implementationDays",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "description": "项目管理页的独立准备记录：记录字段不进入项目空间；编号匹配项目时附项目空间只读派生字段"
+      },
+      "ProjectManagementRecordCreateBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "managerIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "maxItems": 200
+          },
+          "implementationEngineerIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "maxItems": 50
+          },
+          "implementationHandedOver": {
+            "type": "boolean"
+          },
+          "currentStageOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "presale",
+              "design",
+              "purchase",
+              "assembly",
+              "install",
+              "deploy",
+              "trial",
+              "production",
+              "acceptance",
+              null
+            ]
+          },
+          "startupCompletedAtOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "arrivalDateOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "plannedStartDateOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "plannedEndDateOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "implementationDaysOverride": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "implementationMethod": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "onsite_installation_guidance",
+              "remote_installation_guidance",
+              "installation_delivery",
+              "remote_guidance",
+              "onsite_guidance",
+              null
+            ]
+          },
+          "riskReminder": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000
+          },
+          "region": {
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "description": "新建记录：字段按需传入，支持第一笔输入即创建；全空请求返回 400，不生成空白行；项目经理 / 实施工程师由服务端校验账号资格；implementationHandedOver = true 时服务端强制清空实施工程师"
+      },
+      "ProjectManagementRecordDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "deleted": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ],
+        "description": "删除结果：项目管理记录物理删除，不进入项目回收站"
+      },
+      "ProjectManagementRecordList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectManagementRecord"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "description": "项目管理记录清单（按创建时间正序，无分页；表格逐格保存后即回显）"
+      },
+      "ProjectManagementRecordUpdateBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "managerIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "maxItems": 200
+          },
+          "implementationEngineerIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "maxItems": 50
+          },
+          "implementationHandedOver": {
+            "type": "boolean"
+          },
+          "currentStageOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "presale",
+              "design",
+              "purchase",
+              "assembly",
+              "install",
+              "deploy",
+              "trial",
+              "production",
+              "acceptance",
+              null
+            ]
+          },
+          "startupCompletedAtOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "arrivalDateOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "plannedStartDateOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "plannedEndDateOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "implementationDaysOverride": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "implementationMethod": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "onsite_installation_guidance",
+              "remote_installation_guidance",
+              "installation_delivery",
+              "remote_guidance",
+              "onsite_guidance",
+              null
+            ]
+          },
+          "riskReminder": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000
+          },
+          "region": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "description": "局部更新（必须带上 version）；全空结果返回 400，请改用 DELETE；项目经理 / 实施工程师变更时由服务端校验账号资格；已移交优先清空工程师，工程师非空则自动取消已移交"
       },
       "ProjectManagerCandidate": {
         "allOf": [
@@ -15494,6 +15999,243 @@
         }
       }
     },
+    "/api/v1/project-management-records": {
+      "get": {
+        "tags": [
+          "project-management"
+        ],
+        "summary": "项目管理记录清单：独立准备记录，按创建时间正序；不读取项目空间数据",
+        "responses": {
+          "200": {
+            "description": "记录清单（无分页）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectManagementRecordList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证（AUTH_REQUIRED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "project-management"
+        ],
+        "summary": "新建项目管理记录：所有字段可空，支持首笔输入即保存；项目经理 / 实施工程师由服务端校验账号资格",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectManagementRecordCreateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "新建的记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectManagementRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证（AUTH_REQUIRED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/project-management-records/{id}": {
+      "patch": {
+        "tags": [
+          "project-management"
+        ],
+        "summary": "更新项目管理记录：局部更新 + 乐观锁 version；与项目空间无联动",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectManagementRecordUpdateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新后的记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectManagementRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证（AUTH_REQUIRED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "冲突（VERSION_CONFLICT / 状态不允许当前操作）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "project-management"
+        ],
+        "summary": "删除项目管理记录：物理删除，不进入项目回收站；If-Match 回传 version",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "description": "当前 version（乐观锁）"
+            },
+            "required": true,
+            "description": "当前 version（乐观锁）",
+            "name": "If-Match",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "删除结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectManagementRecordDeleteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证（AUTH_REQUIRED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "冲突（VERSION_CONFLICT / 状态不允许当前操作）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/project-imports/preview": {
       "post": {
         "tags": [
@@ -16719,6 +17461,86 @@
           },
           "404": {
             "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{id}/unarchive": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "归档项目恢复为进行中（仅 archived 可恢复；清归档时点 / 操作人并递增 version，保留最近一次归档清单，写审计）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectArchiveBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "恢复为进行中后的项目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "冲突（VERSION_CONFLICT / 状态不允许当前操作）",
             "content": {
               "application/json": {
                 "schema": {

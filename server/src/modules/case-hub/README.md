@@ -1,6 +1,8 @@
 # Case Hub
 
-当前实现是 L0 运行骨架，不进入 `core-api` / `core-worker` 的依赖注入图。
+> **2026-11-17 目标架构已变更为 C 方案**：本目录仅保留历史 L0 运行骨架，不再扩展为正式案例业务后端，不部署、不接入核心 AppModule，也不是新的案例数据网关。案例业务操作和后端归案例小组；LibiaoLink 建设独立案例数据网关，托管独立 libiaolink_case、案例对象存储和 project_read 项目摘要投影；案例小组不持有数据库或对象存储永久凭据。正式口径见 [案例库隔离数据面技术设计](../../../../docs/案例库隔离数据面技术设计v1.0.md) 与 [ADR-043](../../../../docs/adr/ADR-043-案例库业务后端外置与隔离数据托管.md)。
+
+当前实现是历史 L0 运行骨架、L1 边界隔离、L2a JWT/JWKS 验签内核与 L2b 通用限流桶；C 方案下这些代码不再扩展、不部署，也不进入 `core-api` / `core-worker` 的依赖注入图，也不是新的案例数据网关。
 
 ## L0 范围
 
@@ -17,14 +19,29 @@
 - `case-api` / `case-worker` 的入口依赖同样限定为 `case-hub` 与基础设施，避免间接把 core 运行时带进独立进程。
 - `npm run check:boundaries` 静态检查上述依赖方向；`case-hub-runtime.test.ts` 同时验证进程装配中不存在 core `DatabaseService`、`OutboxDispatcher` 与 `JobScheduler`。
 
-## 明确未实现
+> 以下 L2a / L2b 为历史内核记录，C 方案下不再扩展。
 
-- 草稿 controller、认证、Scope、案例授权、字段脱敏。
-- 幂等、ETag / If-Match、限流和外部交换接口。
+## L2a 验签内核
+
+- `case-client-jwt.ts` 只验证 RS256 Bearer Token：kid 选择、JWKS 拉取 / 缓存 / 未知 kid 单次刷新、`exp` / `nbf` / `iat` / `iss` / `aud`，返回原始 claims。
+- 不定义 `CasePrincipal`，不映射 clientId / scopes，不实现 `CaseClientGuard`、案例级授权或 controller；这些仍以 M0 / D04 冻结为前提；C 方案下不再接入正式业务链路。
+- `CASE_CLIENT_JWKS_URL` / `CASE_CLIENT_ISSUER` / `CASE_CLIENT_AUDIENCE` 均已纳入 `/readyz` 配置检查。
+- `index.ts` 归 wmj，作为领域公共 barrel；lan 的运行时装配与测试直接 import 具体文件。
+
+## L2b 通用限流桶
+
+- `case-rate-limit.ts` 提供单进程 token bucket：字符串 key 隔离、`burst` 容量、按 `CASE_RATE_LIMIT_REQUESTS_PER_MINUTE` 连续补充，支持按 cost 扣减和 `retryAfterMs`。
+- `case-http.module.ts` 从 `CASE_RATE_LIMIT_*` 装配 `CaseTokenBucketRateLimiter`（`case-worker` 不加载）；当前不接 Guard / Interceptor，也不定义 client / 案例 / 路由的 key 组合，HTTP 429 与 `Retry-After` 映射仍待 D04 后评估；C 方案下不再接入正式业务链路。
+- 第一版只在单进程内一致；多实例部署必须换成共享存储，不能把本地桶当作全局业务配额。
+
+## 明确未实现（且不再由本仓库实现）
+
+- 草稿 controller、认证 Guard、clientId / Scope 映射、案例授权、字段脱敏。
+- 限流 Guard、业务配额、多实例共享计数、幂等、ETag / If-Match 和外部交换接口。
 - SQL 仓储、案例对象存储、发布快照和案例任务。
-- D01 / D02 / D03 / D06 的未冻结业务语义。
+- D01 / D02 / D03 / D04 / D06 的未冻结业务语义。
 
-L0 的 `/readyz` 只检查关键配置是否齐备；真实案例数据库和对象存储探针随 L5 适配器接入。配置为空时进程仍可启动，但 `/readyz` 返回 503，避免把骨架误判为可接流量。
+`/readyz` 只检查关键配置是否齐备（含 L2a 的 JWKS / issuer / audience）；C 方案下不再接入正式案例数据库或对象存储，正式数据面见 ADR-043。配置为空时进程仍可启动，但 `/readyz` 返回 503，避免把历史骨架误判为可接流量。
 
 ## 命令
 

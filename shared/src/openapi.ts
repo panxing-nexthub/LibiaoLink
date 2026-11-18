@@ -30,6 +30,13 @@ import {
   ProjectUpdateBodySchema,
 } from "./modules/projects.ts";
 import {
+  ProjectManagementRecordCreateBodySchema,
+  ProjectManagementRecordDeleteResponseSchema,
+  ProjectManagementRecordListSchema,
+  ProjectManagementRecordSchema,
+  ProjectManagementRecordUpdateBodySchema,
+} from "./modules/project-management.ts";
+import {
   TaskCanCompleteResponseSchema,
   TaskCompleteBodySchema,
   TaskCompleteResponseSchema,
@@ -317,6 +324,61 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     responses: { 204: { description: "已启用" }, 400: commonErrors[400], 403: commonErrors[403], 404: commonErrors[404] },
   });
 
+  // ---- 项目管理独立准备记录（与 projects 无业务联动）----
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/project-management-records",
+    tags: ["project-management"],
+    summary: "项目管理记录清单：独立准备记录，按创建时间正序；不读取项目空间数据",
+    responses: {
+      200: { description: "记录清单（无分页）", ...json(ProjectManagementRecordListSchema) },
+      401: commonErrors[401],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/project-management-records",
+    tags: ["project-management"],
+    summary: "新建项目管理记录：所有字段可空，支持首笔输入即保存；项目经理 / 实施工程师由服务端校验账号资格",
+    request: { body: json(ProjectManagementRecordCreateBodySchema) },
+    responses: {
+      201: { description: "新建的记录", ...json(ProjectManagementRecordSchema) },
+      400: commonErrors[400],
+      401: commonErrors[401],
+    },
+  });
+
+  registry.registerPath({
+    method: "patch",
+    path: "/api/v1/project-management-records/{id}",
+    tags: ["project-management"],
+    summary: "更新项目管理记录：局部更新 + 乐观锁 version；与项目空间无联动",
+    request: { params: idParams, body: json(ProjectManagementRecordUpdateBodySchema) },
+    responses: {
+      200: { description: "更新后的记录", ...json(ProjectManagementRecordSchema) },
+      400: commonErrors[400],
+      401: commonErrors[401],
+      404: commonErrors[404],
+      409: commonErrors[409],
+    },
+  });
+
+  registry.registerPath({
+    method: "delete",
+    path: "/api/v1/project-management-records/{id}",
+    tags: ["project-management"],
+    summary: "删除项目管理记录：物理删除，不进入项目回收站；If-Match 回传 version",
+    request: { params: idParams, headers: z.object({ "If-Match": z.string().regex(/^[0-9]+$/).openapi({ description: "当前 version（乐观锁）" }) }) },
+    responses: {
+      200: { description: "删除结果", ...json(ProjectManagementRecordDeleteResponseSchema) },
+      400: commonErrors[400],
+      401: commonErrors[401],
+      404: commonErrors[404],
+      409: commonErrors[409],
+    },
+  });
+
   // ---- Excel 项目导入 ----
   registry.registerPath({
     method: "post",
@@ -533,6 +595,21 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     responses: {
       200: { description: "归档记录与清单", ...json(ProjectArchiveViewSchema) },
       404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/unarchive",
+    tags: ["projects"],
+    summary: "归档项目恢复为进行中（仅 archived 可恢复；清归档时点 / 操作人并递增 version，保留最近一次归档清单，写审计）",
+    request: { params: idParams, body: json(ProjectArchiveBodySchema) },
+    responses: {
+      200: { description: "恢复为进行中后的项目", ...json(ProjectSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+      409: commonErrors[409],
     },
   });
 
@@ -2731,6 +2808,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     servers: [{ url: "/", description: "同源部署（Nginx 反代 /api/v1）" }],
     tags: [
       { name: "projects", description: "项目主数据与首页分类（v0.2 §8）" },
+      { name: "project-management", description: "项目管理独立准备记录：与项目空间、工作台、回收站无业务联动" },
       { name: "tasks", description: "任务与进度（v0.2 §2.3 / §2.4）" },
       { name: "templates", description: "任务节点库与任务模板（A1-16 / A1-17 流程节点模板化）" },
       { name: "flow", description: "流程节点与蓝图（v0.2 §3）" },

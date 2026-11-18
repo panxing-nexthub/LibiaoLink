@@ -1,3 +1,5 @@
+> **2026-11-17 项目管理独立准备记录契约**：新增 `ProjectManagementRecord`、`ProjectManagementRecordList`、`ProjectManagementRecordCreateBody`、`ProjectManagementRecordUpdateBody`、`ProjectManagementRecordDeleteResponse` 与五值枚举 `ProjectManagementMethod`。接口 `/api/v1/project-management-records` 只读写独立记录，不调用项目空间契约；项目经理候选仍复用 `ProjectManagerCandidateList`，实施工程师候选使用现有用户目录。创建请求全部字段可空，支持首笔输入即保存；更新必须带 `version`，删除使用 `If-Match: <version>` 物理删除。`Project` / 项目列表 / 详情 / 工作台项目行不新增任何准备字段，0101 对应契约已撤回；生成物随 `npm run generate` / `npm run build` 重出。
+
 > **2026-11-13 导入节点建议与个人模板（本机实现）**：预览提供本人个人模板；语义建议逐条选择沿用或保留原名，未关联任务可选择加入同阶段个人模板。提交校验归属与版本，模板节点不进入公共节点库；旧 addMissingNodes 无效，公共节点新增计数字段恒为 0。
 
 > **模型管理（本机实现）**：新增管理员模型服务增删改、自动获取模型列表与当前模型选择契约；API Key 仅在写请求中输入，读取接口只返回是否已保存。

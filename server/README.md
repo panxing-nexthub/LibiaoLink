@@ -95,22 +95,24 @@ server/
 - worker：Outbox 投递 / 调度 / 规则 / 转换编排 / 导出；已接入 Outbox 运行时（S7-1：领取消费 / 重试退避 / 死信与积压告警 / done 行保留期清理；S7-3：调度 tick —— cron 领取 + last_run_at 补发 + 单活锁；S7-4：通知投递 —— notify.message 消费接线 + 按 deliver_at 到期 flush（免打扰 / 每日上限溢出次日补发）；M5-04-2：稍后提醒到点扫描 —— flushSnoozes 循环（NOTIFY_SNOOZE_SWEEP_INTERVAL_MS / NOTIFY_SNOOZE_BATCH；免打扰顺延、不耗日限）；规则接线 —— RULE_EVENT_TOPICS 事件消费 + automation-schedule.job 调度产出 → notify.message（受 AUTOMATION_WIRING_ENABLED 开关；调度注册表并含 automation-schedule.job —— 关 = 注册表为空 · 只存不跑排障态；M5-03-2 群通道 —— notify.group 消费注册（凭据齐备门控）+ 智能机器人长连接启停（订阅 / 心跳 / 回调 ingest 会话激活）；M5-03-3 —— notify.message 按 channel 分流（inbox → 站内信 / wecom_app → 应用消息）+ 告警出口换企微（未配置回退日志））+ 上传会话与回收站清理 + 预览转换器自检；心跳 60s，`--health-check` 供探针使用。
 - converter（沙箱）：一期由 file / preview（lan 线）落地，不在本骨架内。
 
-## Case Hub 独立进程（L0）
+> **2026-11-17 目标架构已变更为 C 方案**：案例业务操作、审核发布、外部读取和后端归案例小组；LibiaoLink 建设独立案例数据网关，托管独立 libiaolink_case、案例对象存储和 project_read 项目摘要投影。案例小组不持有数据库或对象存储永久凭据，只走受控数据接口。下文 case-api / case-worker（含 L1 边界、L2a 验签内核、L2b 限流原语）仅为历史骨架，不再扩展、不部署、不接业务，也不是新的案例数据网关；正式口径见 [案例库隔离数据面技术设计](../docs/案例库隔离数据面技术设计v1.0.md) 与 [ADR-043](../docs/adr/ADR-043-案例库业务后端外置与隔离数据托管.md)。
+
+## Case Hub 历史 L0 骨架（不部署）
 
 - 入口为 `entry/case-api.ts` / `entry/case-worker.ts`，装配 `case-http.module.ts` / `case-worker.module.ts`，不导入 `app.module.ts`；不修改现有 `entry/api.ts` / `entry/worker.ts`。
 - Case Hub 自己读取 `CASE_*`（见 `.env.example`），不复用 core 的 `DATABASE_URL` / `S3_BUCKET`。
-- `case-api` 提供 `/healthz` 与 `/readyz`；L0 的就绪检查只覆盖关键配置，真实 PG / 对象存储探针随 L5 适配器接入。
-- 当前无业务 controller、认证、幂等、限流、业务仓储或案例任务；D01 / D02 / D03 / D06 冻结后再接业务链路。
+- `case-api` 提供 `/healthz` 与 `/readyz`；L0 的就绪检查只覆盖关键配置，不再接入真实 PG / 对象存储或业务适配器。
+- 当前无业务 controller、认证 Guard、身份 / Scope 映射、限流 Guard、幂等、业务仓储或案例任务；L2a 已提供独立 JWT/JWKS 验签内核，L2b 已提供按字符串 key 计费的进程内 token bucket；这些仍只是历史内核，C 方案下不再扩展，D01 / D02 / D03 / D04 / D06 冻结后也不再接入业务链路。
 
 ## 模块结构约定
 
 - 四层：controller（HTTP）/ service（用例）/ repository（数据访问）/ events（同事务写 Outbox），对外只经 `index.ts`。
-- 20 个模块目录（每个 README 标注类型 / 职责 / 主责 / 预留接口）；identity / project / blueprint / node / task / permission / admin / calendar / automation / template / workspace / file / report-issue / stakeholder / view / follow / notify / project-import / dashboard 已落地，search 仍为占位 README。
+- 21 个模块目录（每个 README 标注类型 / 职责 / 主责 / 预留接口）；identity / project / blueprint / node / task / permission / admin / calendar / automation / template / workspace / file / report-issue / stakeholder / view / follow / notify / project-import / dashboard / project-management 已落地，search 仍为占位 README。
 - DTO 一律用 `@libiaolink/contracts` 的 Zod schema（配 `ZodValidationPipe`），禁止另起一套类型。
 
 | 类型 | 模块 | 主责 |
 |---|---|---|
-| 领域（domain） | identity、project、blueprint、node、task、report-issue、stakeholder、view、follow、project-import（导入表导入 · Push 316） | wmj |
+| 领域（domain） | identity、project、blueprint、node、task、report-issue、stakeholder、view、follow、project-import（导入表导入 · Push 316）、project-management（项目管理独立准备记录） | wmj |
 | 领域（domain · 横切） | permission（权限策略层 · h6）、calendar（工作日历 · h8） | wmj |
 | 平台（platform） | file、notify、search、dashboard | lan |
 | 平台（platform） | automation、admin（字典 / 审计 · h7 落地） | wmj |

@@ -5,6 +5,7 @@ import { CsrfGuard, CurrentActorId, SessionGuard } from "../identity/index.js";
 import { ProjectAccessGuard, RequirePermission } from "../permission/index.js";
 import { ArchiveService } from "./archive.service.js";
 import type { ArchiveRequestBody, ProjectArchiveView } from "./archive.service.js";
+import type { ProjectView } from "./project.service.js";
 
 const uuidParam = new ZodValidationPipe(UuidSchema);
 
@@ -28,6 +29,18 @@ export class ArchiveController {
     @CurrentActorId() actorId: string,
   ): Promise<ProjectArchiveView> {
     return this.archive.archiveProject(id, body, actorId);
+  }
+
+  /** 恢复为进行中：仅归档项目可恢复；保留最近一次归档清单，写审计并递增 version。 */
+  @Post(":id/unarchive")
+  @HttpCode(200)
+  @RequirePermission("project.archive")
+  restoreArchivedProject(
+    @Param("id", uuidParam) id: string,
+    @Body(new ZodValidationPipe(ProjectArchiveBodySchema)) body: ArchiveRequestBody,
+    @CurrentActorId() actorId: string,
+  ): Promise<ProjectView> {
+    return this.archive.restoreArchivedProject(id, body, actorId);
   }
 
   /** 归档清单读面（C4-03）：归档时点 + 统计口径 + 文件清单含版本；未归档 404。 */

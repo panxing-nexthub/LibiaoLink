@@ -4,9 +4,9 @@
  * 口径（详见 `前端功能需求.md` §6.16）：
  * - 导出内容 = 当前项目的项目总览：项目信息 + 汇总统计 + 九阶段进度 + 任务明细（分组 / 行序同「项目总览」任务表）；
  * - 数据准备（阶段分组 / 计数 / 文本与进度口径）收敛在 `overviewExportShared.ts`；
- * - 产物 = PDF：**不引第三方库**（jsPDF / html2canvas 一律不加），走浏览器打印 —— 本模块生成一份自包含的
- *   A4 横版报告 HTML（紧凑单行版式，见 REPORT_STYLE 注），塞进离屏 iframe 调 print()，用户在系统打印窗口里选「另存为 PDF」；文字矢量输出、
- *   中文字体使用自托管 Noto Sans SC Variable（思源黑体同源，OFL-1.1），客户可检索 / 可缩放，比截图拼 PDF 清晰、体积也小；
+ * - 产物 = PDF：报告 HTML 先经现有预览分页器拆成 A4 横版页，再由 html2canvas 逐页栅格化、pdf-lib 封装，
+ *   生成后由浏览器直接下载（不再唤起系统打印窗口）；分页、版式和语言口径与面板左侧预览同源；
+ *   中文字体仍使用自托管 Noto Sans SC Variable（思源黑体同源，OFL-1.1），页面按 2 倍分辨率输出；
  * - 配色与状态口径和页面同源：五个状态色签取 `components/TaskBoard.tsx` 的 STATUS_TAG_CLASS 同色（100 档底 +
  *   700 / 800 档字）；整体进度算法同同文件的 ProjectSummary（已完成 / 总数，四舍五入）；
  * - 数据只用调用方已取到的页面数据（project / tasks / summary），导出不额外发请求、不写库、不产生审计。
@@ -47,7 +47,6 @@ import { stageNameOf } from "./taskApi";
 import { translateZhTo, type TranslationTarget } from "./translateApi";
 import overviewPreviewPagedCss from "./overviewPreviewPaged.css?inline";
 import overviewPreviewPagedScriptUrl from "./overviewPreviewPaged.js?url";
-import { getLocale, textOf } from "./i18n";
 import { projectManagerText } from "./types";
 import {
   STAGE_NAMES,
@@ -81,8 +80,23 @@ const STATUS_TINT: Record<TaskStatus, StatusTint> = {
   已延期: { text: "#be123c", bg: "#ffe4e6", bar: "#f43f5e" },
 };
 
-/** 打印用离屏 iframe 的 id（再点一次导出先撤掉上一枚，避免多份报告叠着打）。 */
-const PRINT_FRAME_ID = "overview-export-print-frame";
+/** PDF 生成用离屏 iframe 的 id（再点一次导出先撤掉上一枚，避免多份报告叠着生成）。 */
+const PDF_FRAME_ID = "overview-export-pdf-frame";
+/** 渲染分辨率：A4 横版内容区 1122 × 793.7 CSS px，2 倍输出约 192 dpi。 */
+const PDF_RENDER_SCALE = 2;
+/** A4 横版（PDF 点单位；1 pt = 1/72 in）。 */
+const PDF_PAGE_WIDTH_PT = 841.89;
+const PDF_PAGE_HEIGHT_PT = 595.28;
+/** 等预览分页 / 字体 / logo 就绪的上限；超时直接失败，避免一直卡着导出浮层。 */
+const PDF_READY_TIMEOUT_MS = 15_000;
+/** 仅供 PDF 截图时使用的页面样式：去掉预览背景、阴影和页码，页面本身保留原有页边距。 */
+const PDF_CAPTURE_STYLE = `
+  html, body { background: #ffffff !important; }
+  body.preview-document { padding: 0 !important; visibility: visible !important; }
+  .preview-pages { gap: 0 !important; }
+  .preview-page { box-shadow: none !important; }
+  .preview-page__number { display: none !important; }
+`;
 
 /**
  * 四语报告词典（2026-10-23 追订）：中文 / 英文 / 日文 / 韩文主体共用一套固定文案口径。
@@ -699,7 +713,7 @@ export function overviewExportTranslationRequest(
  * 导出项目总览为 PDF：中文 / 英文主体沿用英文译文口径；日文 / 韩文主体额外翻译项目名、任务名与进展描述。
  * 逐阶段折叠：只为未折叠阶段的任务名 / 进展描述发起翻译；默认全部展开时沿用原全量翻译口径。
  * 译文命中会话缓存 / 服务端译文库即取，未预热条目才现场翻；通道不通静默回退中文，不阻断导出。
- * 报告 HTML 送进离屏 iframe 后唤起系统打印窗口（用户选「另存为 PDF」）。
+ * 报告 HTML 走与左侧预览同源的分页器拆成 A4 横版页，再逐页截图并封装 PDF；生成完成后直接下载，不弹系统打印窗口。
  * onTranslateProgress(done, total)：译文进度回调（导出等待浮层显示「报告内容翻译中 + 预计秒数」）。
  */
 export async function exportProjectOverviewPdf(
@@ -710,50 +724,199 @@ export async function exportProjectOverviewPdf(
   const { primary, collapsedStages } = options;
   const { target, texts } = overviewExportTranslationRequest(input, options);
   const translationMap = await translateZhTo(texts, target, onTranslateProgress);
-  printHtmlDocument(buildOverviewReportHtml(input, translationMap, primary, collapsedStages));
+  const html = buildOverviewPreviewHtml(input, translationMap, primary, collapsedStages);
+  await downloadPagedOverviewPdf(html, input, primary);
 }
 
-/** 把报告文档送进离屏 iframe 并唤起打印（iframe 方案不会被弹窗拦截，也不动站内 DOM / 样式）。 */
-function printHtmlDocument(html: string): void {
-  const previous = document.getElementById(PRINT_FRAME_ID);
+type PagedPreview = {
+  document: Document;
+  pages: HTMLElement[];
+};
+
+/** 四语下载文件名后缀（项目名 / 编号仍保留原文，便于客户在下载目录里辨认）。 */
+const PDF_NAME_SUFFIX: Record<OverviewExportLanguage, string> = {
+  zh: "项目进度报告",
+  en: "Project Progress Report",
+  ja: "プロジェクト進捗報告",
+  ko: "프로젝트 진행 보고서",
+};
+
+/**
+ * 在离屏 iframe 内完成分页、截图与 PDF 封装：
+ * ① 等预览分页运行时把报告拆成固定尺寸的 A4 横版页；② 等字体 / logo 就绪；
+ * ③ 去掉预览阴影与页码、把 iframe 拉高到整份报告；④ 逐页渲染为 2 倍 PNG 并写入 A4 横版 PDF；
+ * ⑤ 通过 Blob URL 触发浏览器下载。iframe 始终在视口外，不污染站内 DOM / 样式，也不打开打印窗口。
+ */
+async function downloadPagedOverviewPdf(
+  html: string,
+  input: OverviewExportInput,
+  primary: OverviewExportLanguage,
+): Promise<void> {
+  const previous = document.getElementById(PDF_FRAME_ID);
   if (previous !== null) {
     previous.remove();
   }
+
   const frame = document.createElement("iframe");
-  frame.id = PRINT_FRAME_ID;
-  frame.title = textOf(getLocale(), "exp.frameTitle");
+  frame.id = PDF_FRAME_ID;
+  frame.title = "项目进度报告 PDF";
+  frame.tabIndex = -1;
   frame.setAttribute("aria-hidden", "true");
-  // 离屏但要保持渲染（display:none 的 iframe 在部分浏览器里会打印空白）：挪到视口外、尺寸给足
-  frame.style.cssText = "position: fixed; left: -20000px; top: 0; width: 1280px; height: 900px; border: 0;";
+  // 必须保持真实渲染（display:none / visibility:hidden 会让截图空白）：只挪到视口外。
+  frame.style.cssText = "position: fixed; left: -20000px; top: 0; width: 1280px; height: 900px; border: 0; pointer-events: none;";
   frame.srcdoc = html;
-  frame.addEventListener(
-    "load",
-    () => {
-      const target = frame.contentWindow;
-      if (target === null) {
-        frame.remove();
-        return;
-      }
-      // 打印窗口关闭（含「取消」）即回收 iframe；个别浏览器不派发 afterprint 时由下面这条兜底
-      target.addEventListener("afterprint", () => frame.remove(), { once: true });
-      window.setTimeout(() => frame.remove(), 10 * 60 * 1000);
-      // 自托管思源黑体按 unicode-range 分片加载；等字体就绪再唤起打印预览，最长等 5s 后兜底。
-      const fontReady = target.document.fonts?.ready ?? Promise.resolve();
-      void Promise.race([
-        fontReady.catch(() => undefined),
-        new Promise<void>((resolve) => window.setTimeout(resolve, 5000)),
-      ]).then(() => {
-        window.setTimeout(() => {
-          try {
-            target.focus();
-            target.print();
-          } catch {
-            frame.remove();
-          }
-        }, 120);
-      });
-    },
-    { once: true },
-  );
   document.body.appendChild(frame);
+
+  try {
+    const paged = await waitForPagedPreview(frame);
+    await waitForDocumentAssets(paged.document);
+    await prepareCaptureLayout(frame, paged);
+
+    const [{ default: html2canvas }, { PDFDocument }] = await Promise.all([
+      import("html2canvas"),
+      import("pdf-lib"),
+    ]);
+    const pdf = await PDFDocument.create();
+    pdf.setTitle(input.project.description + " · " + PDF_NAME_SUFFIX[primary]);
+    pdf.setSubject("LibiaoLink project progress report");
+    pdf.setCreator("LibiaoLink");
+    pdf.setProducer("LibiaoLink");
+
+    for (const pageElement of paged.pages) {
+      const bounds = pageElement.getBoundingClientRect();
+      const canvas = await html2canvas(pageElement, {
+        backgroundColor: "#ffffff",
+        scale: PDF_RENDER_SCALE,
+        useCORS: true,
+        logging: false,
+        width: Math.ceil(bounds.width),
+        height: Math.ceil(bounds.height),
+        windowWidth: paged.document.documentElement.clientWidth,
+        windowHeight: paged.document.documentElement.scrollHeight,
+        scrollX: 0,
+        scrollY: 0,
+      });
+      let png: Uint8Array;
+      try {
+        png = await canvasPngBytes(canvas);
+      } finally {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+      const image = await pdf.embedPng(png);
+      const page = pdf.addPage([PDF_PAGE_WIDTH_PT, PDF_PAGE_HEIGHT_PT]);
+      page.drawImage(image, { x: 0, y: 0, width: PDF_PAGE_WIDTH_PT, height: PDF_PAGE_HEIGHT_PT });
+    }
+
+    const bytes = await pdf.save({ useObjectStreams: true });
+    downloadPdfBlob(new Blob([toArrayBuffer(bytes)], { type: "application/pdf" }), overviewPdfFileName(input, primary));
+  } finally {
+    frame.remove();
+  }
+}
+
+/** 轮询等待预览运行时完成首次分页；超时抛错，让导出浮层结束而不是无限等待。 */
+async function waitForPagedPreview(frame: HTMLIFrameElement): Promise<PagedPreview> {
+  const deadline = performance.now() + PDF_READY_TIMEOUT_MS;
+  while (performance.now() < deadline) {
+    const doc = frame.contentDocument;
+    if (doc !== null && doc.body.classList.contains("preview-ready")) {
+      const pages = Array.from(doc.querySelectorAll<HTMLElement>(".preview-page"));
+      if (pages.length > 0) {
+        return { document: doc, pages };
+      }
+    }
+    await delay(50);
+  }
+  throw new Error("Timed out while paginating the project overview PDF");
+}
+
+/** 等报告字体和 logo 就绪；各自最多等 5s，加载失败也继续，避免导出被单个资源永久卡住。 */
+async function waitForDocumentAssets(doc: Document): Promise<void> {
+  const fontReady = doc.fonts.ready;
+  await Promise.race([
+    fontReady.catch(() => undefined),
+    delay(5000),
+  ]);
+  const pendingImages = Array.from(doc.images)
+    .filter((image) => !image.complete)
+    .map((image) => new Promise<void>((resolve) => {
+      image.addEventListener("load", () => resolve(), { once: true });
+      image.addEventListener("error", () => resolve(), { once: true });
+    }));
+  if (pendingImages.length > 0) {
+    await Promise.race([
+      Promise.all(pendingImages).then(() => undefined),
+      delay(5000),
+    ]);
+  }
+}
+
+/** 截图前清掉预览外层装饰，并把 iframe 拉高到全部页面，确保 html2canvas 能稳定取到每一页。 */
+async function prepareCaptureLayout(frame: HTMLIFrameElement, paged: PagedPreview): Promise<void> {
+  const style = paged.document.createElement("style");
+  style.setAttribute("data-overview-pdf-capture", "");
+  style.textContent = PDF_CAPTURE_STYLE;
+  paged.document.head.appendChild(style);
+  frame.style.height = Math.max(900, Math.ceil(paged.document.documentElement.scrollHeight)) + "px";
+  await delay(80);
+}
+
+/** canvas → PNG 字节（不用 data URL，避免长报告的大图产生额外 base64 内存开销）。 */
+function canvasPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    try {
+      canvas.toBlob((blob) => {
+        if (blob === null) {
+          reject(new Error("Could not encode the overview report page as PNG"));
+          return;
+        }
+        blob.arrayBuffer().then((buffer) => resolve(new Uint8Array(buffer)), reject);
+      }, "image/png");
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
+}
+
+/** 复制到独立 ArrayBuffer：Blob 构造与实际字节区间严格对应。 */
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+/** 触发浏览器直接保存 PDF（Blob URL 不会被弹窗拦截；60s 后回收）。 */
+function downloadPdfBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+}
+
+/** 文件名 = 项目编号 + 项目名 + 当前主体语言报告名；去掉 Windows / macOS 非法字符。 */
+function overviewPdfFileName(input: OverviewExportInput, primary: OverviewExportLanguage): string {
+  const base = [input.project.code.trim(), input.project.description.trim(), PDF_NAME_SUFFIX[primary]]
+    .filter((part) => part !== "")
+    .join("_");
+  const safe = base
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_")
+    .replace(/\s+/g, " ")
+    .replace(/[. ]+$/g, "")
+    .slice(0, 160);
+  return (safe === "" ? PDF_NAME_SUFFIX[primary] : safe) + ".pdf";
+}
+
+/** 轻量等待；分页运行时和字体加载都在浏览器主线程发起，这里只做短轮询 / 兜底。 */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }

@@ -364,6 +364,234 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/project-management-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 项目管理记录清单：独立准备记录，按创建时间正序；不读取项目空间数据 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 记录清单（无分页） */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectManagementRecordList"];
+                    };
+                };
+                /** @description 未认证（AUTH_REQUIRED） */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** 新建项目管理记录：所有字段可空，支持首笔输入即保存；项目经理 / 实施工程师由服务端校验账号资格 */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProjectManagementRecordCreateBody"];
+                };
+            };
+            responses: {
+                /** @description 新建的记录 */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectManagementRecord"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 未认证（AUTH_REQUIRED） */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/project-management-records/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 删除项目管理记录：物理删除，不进入项目回收站；If-Match 回传 version */
+        delete: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description 当前 version（乐观锁） */
+                    "If-Match": string;
+                };
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 删除结果 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectManagementRecordDeleteResponse"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 未认证（AUTH_REQUIRED） */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 冲突（VERSION_CONFLICT / 状态不允许当前操作） */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** 更新项目管理记录：局部更新 + 乐观锁 version；与项目空间无联动 */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProjectManagementRecordUpdateBody"];
+                };
+            };
+            responses: {
+                /** @description 更新后的记录 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectManagementRecord"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 未认证（AUTH_REQUIRED） */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 冲突（VERSION_CONFLICT / 状态不允许当前操作） */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/api/v1/project-imports/preview": {
         parameters: {
             query?: never;
@@ -1373,6 +1601,85 @@ export interface paths {
                 };
                 /** @description 业务校验未通过（门禁 / 蓝图校验，含明细） */
                 422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{id}/unarchive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 归档项目恢复为进行中（仅 archived 可恢复；清归档时点 / 操作人并递增 version，保留最近一次归档清单，写审计） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProjectArchiveBody"];
+                };
+            };
+            responses: {
+                /** @description 恢复为进行中后的项目 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Project"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 冲突（VERSION_CONFLICT / 状态不允许当前操作） */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -13687,7 +13994,7 @@ export interface components {
             deletedAt: components["schemas"]["DateTime"] & (string | null);
             deletedBy: components["schemas"]["Uuid"] & (string | null);
         };
-        /** @description 归档请求：version 必带；confirm 仅兼容旧客户端，当前忽略 */
+        /** @description 归档 / 恢复请求：version 必带；confirm 仅兼容旧客户端，当前忽略 */
         ProjectArchiveBody: {
             version: components["schemas"]["Version"] & unknown;
             /**
@@ -13973,6 +14280,156 @@ export interface components {
             page: number;
             limit: number;
             total: number;
+        };
+        /** @description 项目管理页的独立准备记录：记录字段不进入项目空间；编号匹配项目时附项目空间只读派生字段 */
+        ProjectManagementRecord: {
+            id: components["schemas"]["Uuid"];
+            /** @description 项目编号：手填，最长 50 字；允许空串以支持逐格保存 */
+            code: string;
+            /** @description 项目名称：手填，最长 200 字；允许空串以支持逐格保存 */
+            name: string;
+            /** @description 项目经理账号 id 快照；候选复用现有项目经理资格名单，数组顺序 = 展示顺序 */
+            managerIds: components["schemas"]["Uuid"][];
+            /** @description 项目经理姓名：按 managerIds 顺序解析；账号停用 / 删除后仍保留可解析的姓名，取不到为 null */
+            managerNames: (string | null)[];
+            /** @description 实施工程师账号 id 快照（0-50 位）；仅允许启用账号，不建立项目成员关系 */
+            implementationEngineerIds: components["schemas"]["Uuid"][];
+            /** @description 实施工程师姓名：按 implementationEngineerIds 顺序解析；取不到为 null */
+            implementationEngineerNames: (string | null)[];
+            /** @description 实施工程师已移交状态：true = 格子直接显示「已移交」，不再显示工程师姓名；前端与服务端均会清空 implementationEngineerIds，重新选择工程师会自动取消该状态 */
+            implementationHandedOver: boolean;
+            /**
+             * @description 实施方式；未填写 = null
+             * @enum {string|null}
+             */
+            implementationMethod: "onsite_installation_guidance" | "remote_installation_guidance" | "installation_delivery" | "remote_guidance" | "onsite_guidance" | null;
+            /** @description 风险提醒：手填，最长 2000 字；未填写 = null */
+            riskReminder: string | null;
+            /** @description 项目地点字典值；清空时回落为未分类 */
+            region: string;
+            /**
+             * @description 项目当前阶段人工覆盖值；null = 使用只读自动识别值
+             * @enum {string|null}
+             */
+            currentStageOverride: "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | null;
+            /**
+             * Format: date
+             * @description 启动时间人工覆盖值；null = 使用只读自动识别值
+             */
+            startupCompletedAtOverride: string | null;
+            /**
+             * Format: date
+             * @description 到货日期人工覆盖值；null = 使用只读自动识别值
+             */
+            arrivalDateOverride: string | null;
+            /**
+             * Format: date
+             * @description 计划实施开始人工覆盖值；null = 使用只读自动识别值
+             */
+            plannedStartDateOverride: string | null;
+            /**
+             * Format: date
+             * @description 计划实施完成人工覆盖值；null = 使用只读自动识别值
+             */
+            plannedEndDateOverride: string | null;
+            /** @description 实施天数人工覆盖值；null = 按有效计划实施起止日期自动计算 */
+            implementationDaysOverride: number | null;
+            /**
+             * @description 项目当前阶段（只读派生）：按 code 匹配项目空间后，取已动工任务里阶段序最靠后的「最新阶段」；无匹配项目 = null
+             * @enum {string|null}
+             */
+            currentStage: "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | null;
+            /**
+             * Format: date
+             * @description 启动时间（只读派生）：项目空间「项目启动 / Project Startup」任务的实际完成日期；无匹配任务 = null
+             */
+            startupCompletedAt: string | null;
+            /**
+             * Format: date
+             * @description 到货日期（只读派生）：组装发货阶段全部未删除任务中最晚的实际完成日期；无值 = null
+             */
+            arrivalDate: string | null;
+            /**
+             * Format: date
+             * @description 计划实施开始（只读派生）：硬件实施阶段全部未删除任务中最早的计划开始日期；无值 = null
+             */
+            plannedStartDate: string | null;
+            /**
+             * Format: date
+             * @description 计划实施完成（只读派生）：硬件实施阶段全部未删除任务中最晚的预计完成日期；无值 = null
+             */
+            plannedEndDate: string | null;
+            /** @description 实施天数（只读派生）：计划实施开始至计划实施完成含首尾天数；任一日期为空 = null */
+            implementationDays: number | null;
+            /** @description 乐观锁版本：更新 / 删除时原样回传 */
+            version: number;
+            /**
+             * Format: date-time
+             * @description 创建时间（ISO 8601）
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description 最后更新时间（ISO 8601）
+             */
+            updatedAt: string;
+        };
+        /** @description 新建记录：字段按需传入，支持第一笔输入即创建；全空请求返回 400，不生成空白行；项目经理 / 实施工程师由服务端校验账号资格；implementationHandedOver = true 时服务端强制清空实施工程师 */
+        ProjectManagementRecordCreateBody: {
+            code?: string;
+            name?: string;
+            managerIds?: components["schemas"]["Uuid"][];
+            implementationEngineerIds?: components["schemas"]["Uuid"][];
+            implementationHandedOver?: boolean;
+            /** @enum {string|null} */
+            currentStageOverride?: "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | null;
+            /** Format: date */
+            startupCompletedAtOverride?: string | null;
+            /** Format: date */
+            arrivalDateOverride?: string | null;
+            /** Format: date */
+            plannedStartDateOverride?: string | null;
+            /** Format: date */
+            plannedEndDateOverride?: string | null;
+            implementationDaysOverride?: number | null;
+            /** @enum {string|null} */
+            implementationMethod?: "onsite_installation_guidance" | "remote_installation_guidance" | "installation_delivery" | "remote_guidance" | "onsite_guidance" | null;
+            riskReminder?: string | null;
+            region?: string;
+        };
+        /** @description 删除结果：项目管理记录物理删除，不进入项目回收站 */
+        ProjectManagementRecordDeleteResponse: {
+            id: components["schemas"]["Uuid"];
+            /** @enum {boolean} */
+            deleted: true;
+        };
+        /** @description 项目管理记录清单（按创建时间正序，无分页；表格逐格保存后即回显） */
+        ProjectManagementRecordList: {
+            items: components["schemas"]["ProjectManagementRecord"][];
+        };
+        /** @description 局部更新（必须带上 version）；全空结果返回 400，请改用 DELETE；项目经理 / 实施工程师变更时由服务端校验账号资格；已移交优先清空工程师，工程师非空则自动取消已移交 */
+        ProjectManagementRecordUpdateBody: {
+            code?: string;
+            name?: string;
+            managerIds?: components["schemas"]["Uuid"][];
+            implementationEngineerIds?: components["schemas"]["Uuid"][];
+            implementationHandedOver?: boolean;
+            /** @enum {string|null} */
+            currentStageOverride?: "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | null;
+            /** Format: date */
+            startupCompletedAtOverride?: string | null;
+            /** Format: date */
+            arrivalDateOverride?: string | null;
+            /** Format: date */
+            plannedStartDateOverride?: string | null;
+            /** Format: date */
+            plannedEndDateOverride?: string | null;
+            implementationDaysOverride?: number | null;
+            /** @enum {string|null} */
+            implementationMethod?: "onsite_installation_guidance" | "remote_installation_guidance" | "installation_delivery" | "remote_guidance" | "onsite_guidance" | null;
+            riskReminder?: string | null;
+            region?: string;
+            version: number;
         };
         /** @description 项目经理候选（仅启用、未离职；项目部成员与系统管理员取并集并按用户去重） */
         ProjectManagerCandidate: components["schemas"]["UserSummary"] & {

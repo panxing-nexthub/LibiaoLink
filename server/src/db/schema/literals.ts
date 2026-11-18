@@ -102,6 +102,15 @@ export const CALENDAR_SHIFT_DIRECTION_KEYS = ["forward", "backward"] as const;
 /** 公司分类（stakeholders.company_type，A5-02 / C9）：立镖机器人 / 供应商 / 总包单位 / 客户。 */
 export const STAKEHOLDER_COMPANY_TYPE_KEYS = ["libiao", "supplier", "general_contractor", "customer"] as const;
 
+/** 项目管理实施方式（project_management_records.implementation_method）：与契约 PROJECT_MANAGEMENT_METHODS 同序同值。 */
+export const PROJECT_MANAGEMENT_METHOD_KEYS = [
+  "onsite_installation_guidance",
+  "remote_installation_guidance",
+  "installation_delivery",
+  "remote_guidance",
+  "onsite_guidance",
+] as const;
+
 /** 视图范围（project_views.scope，M2-06 · A1-03）：与契约 VIEW_SCOPES 同序同值（parity 测试守护）。 */
 export const VIEW_SCOPE_KEYS = ['personal', 'public'] as const;
 

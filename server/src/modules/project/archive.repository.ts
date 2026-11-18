@@ -150,7 +150,7 @@ export class ArchiveRepository {
     return rows[0] ?? null;
   }
 
-  /** 写入归档清单（一项目一份：唯一约束兜底并发）。 */
+  /** 写入归档清单（一项目一份：重新归档时覆盖原清单，唯一约束兜底并发）。 */
   async insertArchive(
     tx: DbClient,
     input: { projectId: string; archivedAt: Date; archivedBy: string; snapshot: unknown; acknowledgedMissing: unknown },
@@ -164,10 +164,29 @@ export class ArchiveRepository {
         snapshot: input.snapshot,
         acknowledgedMissing: input.acknowledgedMissing,
       })
+      .onConflictDoUpdate({
+        target: projectArchives.projectId,
+        set: {
+          archivedAt: input.archivedAt,
+          archivedBy: input.archivedBy,
+          snapshot: input.snapshot,
+          acknowledgedMissing: input.acknowledgedMissing,
+        },
+      })
       .returning();
     const row = rows[0];
     if (row === undefined) throw new Error("project_archives insert 未返回记录");
     return row;
+  }
+
+  /** 恢复到进行中：清归档时点 / 操作人，status = active + 版本前移；仅 archived 行可恢复。 */
+  async restoreActiveWithVersion(tx: DbClient, projectId: string, at: Date, expectedVersion: number) {
+    const rows = await tx
+      .update(projects)
+      .set({ status: "active", archivedAt: null, archivedBy: null, version: sql`${projects.version} + 1`, updatedAt: at })
+      .where(and(eq(projects.id, projectId), eq(projects.status, "archived"), eq(projects.version, expectedVersion), isNull(projects.deletedAt)))
+      .returning();
+    return rows[0] ?? null;
   }
 
   /** 撤销进行中的上传会话（ADR-027：归档同时中止；对象存储未完成分片由生命周期兜底清理）。 */

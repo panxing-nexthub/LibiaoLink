@@ -217,6 +217,11 @@ export function archiveProject(id: string, version: number, confirm: boolean): P
   return apiSend<ProjectArchiveResult>("/api/v1/projects/" + encodeURIComponent(id) + "/archive", "POST", { version, confirm });
 }
 
+/** 归档项目恢复到进行中：只清归档状态并递增 version，保留最近一次归档清单。 */
+export function restoreArchivedProject(id: string, version: number): Promise<ApiProject> {
+  return apiSend<ApiProject>("/api/v1/projects/" + encodeURIComponent(id) + "/unarchive", "POST", { version });
+}
+
 /**
  * 删除项目（2026-10-19 起 = 移入项目回收站）：DELETE /api/v1/projects/{id} —— 版本走 **If-Match 请求头**（不是正文），
  * 缺头 / 非数字 400 VALIDATION_FAILED；版本不一致 409 VERSION_CONFLICT；归档项目 409 PROJECT_ARCHIVED；不存在 / 不可见 404。

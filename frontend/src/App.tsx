@@ -13,6 +13,7 @@ import Hub from "./Hub";
 import Home from "./Home";
 import PlaceholderPage from "./PlaceholderPage";
 import ProjectDetail from "./ProjectDetail";
+import ProjectManagementPage from "./ProjectManagementPage";
 import WorkspacePage from "./WorkspacePage";
 import { ApiError, apiFetch, redirectToLogin, rememberCsrfToken } from "./api";
 import { applyBackgroundTier, applyCardWatermark, asBackgroundTier, asCardWatermark } from "./backgroundTier";
@@ -40,7 +41,7 @@ import {
 import { directoryMemberOptions, loadDirectory, type DirectoryUser } from "./directory";
 import { memberOptionsWithExisting } from "./data/members";
 import { loadProjectManagerCandidates, type ProjectManagerCandidate } from "./projectManagerCandidates";
-import { archiveProject, createProject, deleteProject, downloadProjectWorkbook, fetchProject, recordProjectVisit, toUiProject, updateProject, type ProjectExportFormat } from "./projectApi";
+import { archiveProject, createProject, deleteProject, downloadProjectWorkbook, fetchProject, recordProjectVisit, restoreArchivedProject, toUiProject, updateProject, type ProjectExportFormat } from "./projectApi";
 import { loadMyPreferences, loadMyPreferencesWithLegacyMigration, saveHomeSavedFilters, saveTaskTableHiddenColumns, saveHubDashProject, saveHubDashView, saveHubView, saveWorkspaceOpenProjects, type WorkspaceOpenProjects } from "./preferencesApi";
 import type { SavedFilter } from "./savedFilters";
 import { asHubDashView, type HubDashView } from "./data/dashboardProgress";
@@ -66,7 +67,7 @@ type ViewState =
 
 /** 仅登录账号的页面级阻断范围；任务模板与项目数据同权，有规则但无项目的 empty 状态保留页面骨架，我的任务始终可进入。 */
 function blocksWhenLoginOnly(route: Route): boolean {
-  return route.kind === "hub" || route.kind === "list" || route.kind === "project" || route.kind === "placeholder" || route.kind === "files";
+  return route.kind === "hub" || route.kind === "list" || route.kind === "project" || route.kind === "project-management" || route.kind === "placeholder" || route.kind === "files";
 }
 
 /** 项目详情直链不可用：403 = 当前账号无权访问；404 = 项目不存在或已删除。 */
@@ -702,6 +703,14 @@ export default function App() {
       remark: draft.note.trim(),
     };
     try {
+      if (project.status === "archived") {
+        if (draft.status !== "active") {
+          return { kind: "error", message: t("modal.err.archived") };
+        }
+        await restoreArchivedProject(project.id, options?.version ?? project.version);
+        setDataVersion((value) => value + 1);
+        return { kind: "ok" };
+      }
       if (draft.status !== "archived") {
         await updateProject(project.id, fields, options?.version ?? project.version, draft.status);
         setDataVersion((value) => value + 1);
@@ -993,6 +1002,20 @@ export default function App() {
           onChangeSub={replaceWorkspaceSub}
           workspaceOpenProjects={workspaceOpenProjects}
           onWorkspaceOpenProjectsChange={handleSaveWorkspaceOpenProjects}
+        />
+        {bottomBars}
+      </>
+    );
+  }
+
+  if (route.kind === "project-management") {
+    return (
+      <>
+        <ProjectManagementPage
+          me={state.me}
+          dicts={dicts}
+          directory={directory}
+          managerCandidates={managerCandidates}
         />
         {bottomBars}
       </>

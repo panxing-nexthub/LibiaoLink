@@ -35,6 +35,8 @@ type RegionSelectProps = {
   triggerClassName?: string;
   /** 是否显示触发器右侧箭头（表格单元格可隐藏，避免挤压单行文本）。 */
   showChevron?: boolean;
+  /** 当前值文本样式覆盖（项目管理表格用于色签胶囊）。 */
+  valueClassName?: string;
 };
 
 /** 小窗分页：已有项目地区（有项目在用）/ 全部地区（标准清单全量）。 */
@@ -51,7 +53,7 @@ const POPOVER_HEIGHT = 400;
 /** usedRegions 缺省时的空计数（稳定引用：useMemo 依赖不抖动）。 */
 const NO_USED_REGIONS: Readonly<Record<string, number>> = {};
 
-export function RegionSelect({ value, valueLabel, items, usedRegions, onChange, onOpenChange, triggerClassName, showChevron = true }: RegionSelectProps) {
+export function RegionSelect({ value, valueLabel, items, usedRegions, onChange, onOpenChange, triggerClassName, showChevron = true, valueClassName }: RegionSelectProps) {
   const locale = useLocale();
   const t = useT();
   const [query, setQuery] = useState("");
@@ -219,7 +221,7 @@ export function RegionSelect({ value, valueLabel, items, usedRegions, onChange, 
         {valueLabel === "" ? (
           <span className="truncate text-zinc-400">{t("region.placeholder")}</span>
         ) : (
-          <span className="truncate font-medium text-zinc-800">{isLocalizedLocale(locale) ? regionNameEn(valueLabel) || valueLabel : valueLabel}</span>
+          <span className={"truncate " + (valueClassName ?? "font-medium text-zinc-800")}>{isLocalizedLocale(locale) ? regionNameEn(valueLabel) || valueLabel : valueLabel}</span>
         )}
         {/* 箭头朝右：与「贴右侧弹出」的落点同向。 */}
         {showChevron ? (

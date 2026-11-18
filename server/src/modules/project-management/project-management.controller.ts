@@ -8,6 +8,7 @@ import {
 import { AppError } from "../../common/errors/app-error.js";
 import { ZodValidationPipe } from "../../common/http/zod-validation.pipe.js";
 import { CsrfGuard, CurrentActorId, SessionGuard } from "../identity/index.js";
+import { ProjectManagementAccessGuard } from "./project-management-access.guard.js";
 import { ProjectManagementService } from "./project-management.service.js";
 
 type ProjectManagementRecordCreateBody = z.infer<typeof ProjectManagementRecordCreateBodySchema>;
@@ -26,11 +27,11 @@ function parseVersionHeader(value: string | undefined): number {
 
 /**
  * 项目管理独立准备记录接口（2026-11-17）。
- * 只要求登录 + CSRF；不挂项目记录级权限，也不读写任何项目空间数据。
+ * 只要求登录 + CSRF，并叠加项目管理首批上线白名单；不读写任何项目空间数据。
  * 数据隔离：project_management_records；账号只用于经理 / 工程师候选与姓名解析。
  */
 @Controller("api/v1/project-management-records")
-@UseGuards(SessionGuard, CsrfGuard)
+@UseGuards(SessionGuard, CsrfGuard, ProjectManagementAccessGuard)
 export class ProjectManagementController {
   constructor(private readonly records: ProjectManagementService) {}
 

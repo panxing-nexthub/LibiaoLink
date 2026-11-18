@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { canUseProjectManagement } from "@libiaolink/contracts";
+import { ProjectManagementAccessGuard } from "../src/modules/project-management/project-management-access.guard.js";
 import type { AppError } from "../src/common/errors/app-error.js";
 import type { ProjectManagementRecordRow } from "../src/db/schema/project-management.js";
 import {
@@ -430,5 +432,26 @@ describe("项目空间只读快照聚合（2026-11-17）", () => {
   it("跨年天数按含首尾计算", () => {
     expect(daysBetweenInclusive("2026-12-31", "2027-01-02")).toBe(3);
     expect(daysBetweenInclusive("2027-01-02", "2026-12-31")).toBe(0);
+  });
+});
+
+describe("项目管理首批访问白名单", () => {
+  it("仅潘兴、李侠伟、杨敏可进入", () => {
+    expect(canUseProjectManagement("panxing@libiaorobot.com")).toBe(true);
+    expect(canUseProjectManagement("lixiawei@libiaorobot.com")).toBe(true);
+    expect(canUseProjectManagement("yangm@libiaorobot.com")).toBe(true);
+    expect(canUseProjectManagement(" PANXING@LIBIAOROBOT.COM ")).toBe(true);
+    expect(canUseProjectManagement("other@libiaorobot.com")).toBe(false);
+    expect(canUseProjectManagement(null)).toBe(false);
+  });
+
+  it("接口守卫对非白名单账号返回 403", () => {
+    const guard = new ProjectManagementAccessGuard();
+    const context = (email: string | null) => ({
+      switchToHttp: () => ({ getRequest: () => ({ user: email === null ? undefined : { email } }) }),
+    }) as never;
+    expect(guard.canActivate(context("panxing@libiaorobot.com"))).toBe(true);
+    expect(() => guard.canActivate(context("other@libiaorobot.com"))).toThrowError(/无权访问项目管理/);
+    expect(() => guard.canActivate(context(null))).toThrowError(/无权访问项目管理/);
   });
 });

@@ -25,7 +25,7 @@ import { ExportProgressOverlay } from "./components/ExportProgressOverlay";
 import { useFocusTrap } from "./components/useFocusTrap";
 import { ProjectModal, type ProjectDraft, type ProjectSubmitResult } from "./components/ProjectModal";
 import type { DictTools } from "./dictTools";
-import { canChangeTaskTemplateVisibility, canEditTaskNodes, canEditTaskTemplate, canEditTaskTemplates, canReviewTaskNodes, hasPermission, loadMyPermissions, useMyPermissions } from "./permissions";
+import { canChangeTaskTemplateVisibility, canEditTaskNodes, canEditTaskTemplate, canEditTaskTemplates, canReviewTaskNodes, canUseProjectManagement, hasPermission, loadMyPermissions, useMyPermissions } from "./permissions";
 import { firstAllowedHref } from "./accessRoutes";
 import {
   createDictItem,
@@ -1009,6 +1009,9 @@ export default function App() {
   }
 
   if (route.kind === "project-management") {
+    if (!canUseProjectManagement(state.me.user.email)) {
+      return <PageAccessDenied me={state.me} backHref={firstAllowedHref(permissions)} />;
+    }
     return (
       <>
         <ProjectManagementPage

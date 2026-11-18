@@ -146,3 +146,19 @@ export type ProjectManagementRecordList = z.infer<typeof ProjectManagementRecord
 export type ProjectManagementRecordCreateBody = z.infer<typeof ProjectManagementRecordCreateBodySchema>;
 export type ProjectManagementRecordUpdateBody = z.infer<typeof ProjectManagementRecordUpdateBodySchema>;
 export type ProjectManagementRecordDeleteResponse = z.infer<typeof ProjectManagementRecordDeleteResponseSchema>;
+
+/**
+ * 项目管理首批上线白名单（2026-11-18）：仅潘兴、李侠伟、杨敏可用。
+ * 服务端在接口入口校验，前端仅据此隐藏入口与拦截直链；账号以企业邮箱稳定识别。
+ */
+export const PROJECT_MANAGEMENT_ALLOWED_EMAILS = [
+  "panxing@libiaorobot.com",
+  "lixiawei@libiaorobot.com",
+  "yangm@libiaorobot.com",
+] as const;
+
+export function canUseProjectManagement(email: string | null | undefined): boolean {
+  if (email === null || email === undefined) return false;
+  const normalized = email.trim().toLowerCase();
+  return (PROJECT_MANAGEMENT_ALLOWED_EMAILS as readonly string[]).includes(normalized);
+}

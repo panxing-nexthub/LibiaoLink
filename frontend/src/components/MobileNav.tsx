@@ -2,9 +2,14 @@ import { useT } from "../i18n";
 import { MainNavIcon } from "./MainNavIcon";
 import { useMainNavItems } from "./mainNav";
 
-export function MobileNav() {
+type MobileNavProps = {
+  /** 项目管理首批白名单：false 时不渲染入口。 */
+  projectManagementAllowed?: boolean;
+};
+
+export function MobileNav({ projectManagementAllowed = false }: MobileNavProps) {
   const t = useT();
-  const items = useMainNavItems();
+  const items = useMainNavItems(projectManagementAllowed);
   return (
     <nav data-mobile-nav="" aria-label={t("nav.aria")} className="mobile-nav">
       <div className="mobile-nav__inner" style={{ gridTemplateColumns: "repeat(" + items.length + ", minmax(0, 1fr))" }}>

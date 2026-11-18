@@ -12,7 +12,7 @@ export type MainNavItem = {
   active: boolean;
 };
 
-export function useMainNavItems(): MainNavItem[] {
+export function useMainNavItems(projectManagementAllowed = false): MainNavItem[] {
   const route = useHashRoute();
   const t = useT();
   const permissions = useMyPermissions();
@@ -41,5 +41,5 @@ export function useMainNavItems(): MainNavItem[] {
       active: route.kind === "project-management",
     },
   ];
-  return allItems.filter((item) => hasPageAccess(permissions, item.page));
+  return allItems.filter((item) => hasPageAccess(permissions, item.page) && (item.key !== "projectManagement" || projectManagementAllowed));
 }

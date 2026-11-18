@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { IdentityModule } from "../identity/index.js";
 import { PermissionModule } from "../permission/index.js";
+import { ProjectManagementAccessGuard } from "./project-management-access.guard.js";
 import { ProjectManagementController } from "./project-management.controller.js";
 import { ProjectManagementRepository } from "./project-management.repository.js";
 import { ProjectManagementService } from "./project-management.service.js";
@@ -15,6 +16,6 @@ import { ProjectManagementSnapshotRepository } from "./project-management-snapsh
 @Module({
   imports: [IdentityModule, PermissionModule],
   controllers: [ProjectManagementController],
-  providers: [ProjectManagementRepository, ProjectManagementSnapshotRepository, ProjectManagementService],
+  providers: [ProjectManagementAccessGuard, ProjectManagementRepository, ProjectManagementSnapshotRepository, ProjectManagementService],
 })
 export class ProjectManagementModule {}

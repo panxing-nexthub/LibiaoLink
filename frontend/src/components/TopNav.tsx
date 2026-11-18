@@ -20,12 +20,14 @@ type TopNavProps = {
    * true = 该账号有「入库审核」待处理事项（判定与取数见 AppHeader / App.tsx）；缺省 false = 不渲染红点。
    */
   templatesPending?: boolean;
+  /** 项目管理首批白名单：false 时不渲染入口。 */
+  projectManagementAllowed?: boolean;
 };
 
-export function TopNav({ templatesPending = false }: TopNavProps) {
+export function TopNav({ templatesPending = false, projectManagementAllowed = false }: TopNavProps) {
   /** 导航项文案走 i18n（Push 296 语言切换）：默认中文；切英文后顶栏导航四项跟着换。 */
   const t = useT();
-  const items = useMainNavItems();
+  const items = useMainNavItems(projectManagementAllowed);
 
   return (
     <nav data-topnav="" aria-label={t("nav.aria")} className="topnav ml-1 hidden min-w-0 items-center lg:flex">

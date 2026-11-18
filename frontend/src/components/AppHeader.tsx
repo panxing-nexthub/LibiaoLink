@@ -4,7 +4,7 @@ import { BG_TIER_TEXT_KEYS, LOCALES, selectLocale, useLocalizedText, useLocale, 
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { clearHomePrefs } from "../homePrefs";
 import { clearLegacyPlanBoard } from "../myPlan";
-import { hasPageAccess, useMyPermissions } from "../permissions";
+import { canUseProjectManagement, hasPageAccess, useMyPermissions } from "../permissions";
 import { useInboxBadge } from "../inbox";
 import { useTaskNodePendingBadge } from "../taskNodePending";
 import { resetWecomBindingStatus, useWecomBindingBound } from "../wecomBindingStatus";
@@ -132,6 +132,7 @@ export function AppHeader({ me, project }: AppHeaderProps) {
     [pageWatermark, viewport.width, viewport.height],
   );
   const contact = user.email ?? user.name ?? "—";
+  const projectManagementAllowed = canUseProjectManagement(user.email);
   const initial = Array.from(displayName)[0] ?? "—";
   const [menuOpen, setMenuOpen] = useState(false);
   const permissions = useMyPermissions();
@@ -320,7 +321,7 @@ export function AppHeader({ me, project }: AppHeaderProps) {
         {/* 顶部导航栏（业务口径 2026-09-30「我要做顶部导航栏 分别是首页 项目空间 任务模版 我的任务」）：
             四个纯文字导航项常驻（同日续口径「去除这个液态效果 只保留文字」）；原来的大页名（项目空间 / 任务模板 / 我的任务）
             由导航的当前项接管，不再重复显示。 */}
-        <TopNav templatesPending={templatesPending} />
+        <TopNav templatesPending={templatesPending} projectManagementAllowed={projectManagementAllowed} />
         {project ? (
           <div className="mx-1 hidden min-w-0 border-l border-zinc-200 pl-4 lg:block">
             <p className="truncate text-xs text-zinc-500">
@@ -658,7 +659,7 @@ export function AppHeader({ me, project }: AppHeaderProps) {
         ))}
       </div>
       {header}
-      <MobileNav />
+      <MobileNav projectManagementAllowed={projectManagementAllowed} />
     </>
   );
 }

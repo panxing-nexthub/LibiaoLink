@@ -32,3 +32,6 @@ server/var/cad/
 server/var/cad-browser-smoke/
 server/cad-engine/.runtime/
 server/cad-engine/**/__pycache__/
+# 本地验收截图与部署包（非源码）
+/output/
+.tmp-*.png

@@ -6,12 +6,12 @@ import { useT } from "../i18n";
  * 导出等待浮层（2026-10-10 · §6.16 ⑳ · 业务口径「导出时间太长了要做加载动画提示用户 大概需要多长时间
  * 项目进展描述翻译中 预计需要XX秒」+「加载动画我想用我设计的svg小车移动 动画要美观」）：
  * 导出期间盖全屏浅色浮层，卡片里是品牌蓝小车（/libiaolink-car-icon.svg）沿流动虚线路面循环前进，
- * 下方给「项目进展描述翻译中…」+「预计需要 XX 秒 · 已完成 X / N 条」与进度条；打印窗口唤起前收起。
+ * 下方给「项目进展描述翻译中…」+「预计需要 XX 秒 · 已完成 X / N 条」与进度条；PDF 下载触发前收起。
  *
  * 剩余秒数 = 实测吞吐外推：先验 1.0s/条（真机 47 条约 27–78s ≈ 0.55–1.65s/条，先验取偏慢值）与实测速率
  * 按 4 条样本权重混合，再加收尾固定项；显示值另加「上调限速」（见 MAX_RISE_PER_TICK）——正常场景只会
  * 一路变小，个别偏慢时最多按真实时间 2 倍速缓慢回调，秒数不跳涨。
- * 翻译完成（done >= total）后进入「正在生成报告…」态（一般一闪而过，随即唤起打印窗口）。
+ * 翻译完成（done >= total）后进入「正在生成报告…」态（随后分页、截图并直接下载 PDF）。
  */
 
 export type ExportTranslateProgress = { done: number; total: number };
@@ -20,7 +20,7 @@ export type ExportTranslateProgress = { done: number; total: number };
 const PRIOR_SECONDS_PER_TEXT = 1.0;
 /** 先验权重（条）：起步阶段把实测速率压稳，避免第 1 条快就报「还剩 3 秒」。 */
 const PRIOR_WEIGHT = 4;
-/** 收尾固定项：拼报告 + 唤起打印 + 兜底余量（秒）。 */
+/** 收尾固定项：拼报告 + 分页截图 / PDF 封装 + 兜底余量（秒）。 */
 const TAIL_SECONDS = 3;
 /** 秒数刷新间隔（毫秒）：250ms 一算，显示按整秒跳。 */
 const TICK_MS = 250;
@@ -70,7 +70,7 @@ export function ExportProgressOverlay({
   }, []);
 
   // 2026-10-10 修复「导出浮层打开时背景仍可滚动」（与变更详情弹窗同一现象）：等待期间锁背景滚动，
-  // 浮层收起（导出结束 / 唤起打印窗口）即还原；同抽屉 / 弹窗口径（body overflow hidden + 滚动条宽度补偿）。
+  // 浮层收起（导出结束 / PDF 下载触发）即还原；同抽屉 / 弹窗口径（body overflow hidden + 滚动条宽度补偿）。
   useEffect(() => lockBodyScroll(), []);
 
   const done = progress === null ? 0 : progress.done;

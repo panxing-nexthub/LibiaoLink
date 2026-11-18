@@ -7,7 +7,7 @@ export function MobileNav() {
   const items = useMainNavItems();
   return (
     <nav data-mobile-nav="" aria-label={t("nav.aria")} className="mobile-nav">
-      <div className="mobile-nav__inner">
+      <div className="mobile-nav__inner" style={{ gridTemplateColumns: "repeat(" + items.length + ", minmax(0, 1fr))" }}>
         {items.map((item) => (
           <a
             key={item.key}

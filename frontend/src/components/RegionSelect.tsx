@@ -31,6 +31,10 @@ type RegionSelectProps = {
   onChange: (value: string) => void;
   /** 开 / 合通知：ProjectModal 用它分派 Esc（小窗开着按 Esc 只关小窗，不关整个项目弹窗）。 */
   onOpenChange?: (open: boolean) => void;
+  /** 触发器样式覆盖（项目管理表格单元格使用；缺省 = 项目弹窗同款白底描边）。 */
+  triggerClassName?: string;
+  /** 是否显示触发器右侧箭头（表格单元格可隐藏，避免挤压单行文本）。 */
+  showChevron?: boolean;
 };
 
 /** 小窗分页：已有项目地区（有项目在用）/ 全部地区（标准清单全量）。 */
@@ -47,7 +51,7 @@ const POPOVER_HEIGHT = 400;
 /** usedRegions 缺省时的空计数（稳定引用：useMemo 依赖不抖动）。 */
 const NO_USED_REGIONS: Readonly<Record<string, number>> = {};
 
-export function RegionSelect({ value, valueLabel, items, usedRegions, onChange, onOpenChange }: RegionSelectProps) {
+export function RegionSelect({ value, valueLabel, items, usedRegions, onChange, onOpenChange, triggerClassName, showChevron = true }: RegionSelectProps) {
   const locale = useLocale();
   const t = useT();
   const [query, setQuery] = useState("");
@@ -210,7 +214,7 @@ export function RegionSelect({ value, valueLabel, items, usedRegions, onChange, 
             setOpen(true);
           }
         }}
-        className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-left text-sm transition hover:border-zinc-300 hover:bg-zinc-50"
+        className={triggerClassName ?? "flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-left text-sm transition hover:border-zinc-300 hover:bg-zinc-50"}
       >
         {valueLabel === "" ? (
           <span className="truncate text-zinc-400">{t("region.placeholder")}</span>
@@ -218,9 +222,11 @@ export function RegionSelect({ value, valueLabel, items, usedRegions, onChange, 
           <span className="truncate font-medium text-zinc-800">{isLocalizedLocale(locale) ? regionNameEn(valueLabel) || valueLabel : valueLabel}</span>
         )}
         {/* 箭头朝右：与「贴右侧弹出」的落点同向。 */}
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="ml-auto h-4 w-4 shrink-0 -rotate-90 text-zinc-400">
-          <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        {showChevron ? (
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="ml-auto h-4 w-4 shrink-0 -rotate-90 text-zinc-400">
+            <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : null}
       </button>
 
       {open && position !== null

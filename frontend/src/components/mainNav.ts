@@ -1,8 +1,8 @@
-import { HUB_HASH, projectsHref, TEMPLATE_BASE_HASH, WORKSPACE_BASE_HASH, useHashRoute } from "../useHashRoute";
+import { HUB_HASH, PROJECT_MANAGEMENT_HASH, projectsHref, TEMPLATE_BASE_HASH, WORKSPACE_BASE_HASH, useHashRoute } from "../useHashRoute";
 import { useT } from "../i18n";
 import { hasPageAccess, useMyPermissions, type GroupAccessPage } from "../permissions";
 
-export type MainNavKey = "hub" | "projects" | "templates" | "workspace";
+export type MainNavKey = "hub" | "projects" | "projectManagement" | "templates" | "workspace";
 
 export type MainNavItem = {
   key: MainNavKey;
@@ -33,6 +33,13 @@ export function useMainNavItems(): MainNavItem[] {
       active: route.kind === "placeholder" && route.page === "templates",
     },
     { key: "workspace", page: "workspace", label: t("nav.workspace"), href: WORKSPACE_BASE_HASH, active: route.kind === "workspace" },
+    {
+      key: "projectManagement",
+      page: "projects",
+      label: t("nav.projectManagement"),
+      href: PROJECT_MANAGEMENT_HASH,
+      active: route.kind === "project-management",
+    },
   ];
   return allItems.filter((item) => hasPageAccess(permissions, item.page));
 }

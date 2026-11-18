@@ -93,7 +93,7 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
   /** 冲突摘要行的标点（中文全角 / 英文半角）。 */
   const colon = isLocalizedLocale(locale) ? ": " : "：";
   const semi = isLocalizedLocale(locale) ? "; " : "；";
-  /** 已归档项目只读（ADR-027）：弹窗只读展示，不给保存（服务端同样 409 PROJECT_ARCHIVED）。 */
+  /** 已归档项目：仅允许选择「进行中」并保存恢复；其余字段 / 状态保持只读。 */
   const archivedLock = isEdit && initial?.status === "archived";
   const [code, setCode] = useState(initial?.code ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
@@ -218,7 +218,7 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
     region !== "" &&
     !pending &&
     archiveMissing === null &&
-    !archivedLock;
+    (!archivedLock || (canArchive && status === "active"));
   const title = isEdit ? t("card.edit") : t("home.create");
   /** 触发器上的展示名：字典条目给字典名（阿联酋 → 阿拉伯联合酋长国）；否则值本身（标准中文国名）。 */
   const regionLabel = dictLabel(dicts, "region", region);
@@ -383,7 +383,7 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
               <div role="radiogroup" aria-label={t("modal.status.aria")} className="flex flex-wrap gap-2">
                 {PROJECT_STATUS_VALUES.map((value) => {
                   const archiveOption = value === "archived";
-                  const disabled = archivedLock || (archiveOption && !canArchive);
+                  const disabled = archivedLock ? !(canArchive && value === "active") : archiveOption && !canArchive;
                   return (
                     <button
                       key={value}
@@ -396,7 +396,9 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
                       title={
                         disabled
                           ? archivedLock
-                            ? t("modal.archive.locked")
+                            ? value === "active"
+                              ? t("modal.archive.needPerm")
+                              : t("modal.archive.locked")
                             : t("modal.archive.needPerm")
                           : undefined
                       }
@@ -420,7 +422,9 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
               </div>
               <span className="mt-1 block text-[11px] text-zinc-400">
                 {archivedLock
-                  ? t("modal.err.archived")
+                  ? status === "active" && canArchive
+                    ? t("modal.restore.note")
+                    : t("modal.err.archived")
                   : status === "archived"
                     ? t("modal.gate.note")
                     : t("modal.save.note")}
@@ -500,7 +504,7 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
             disabled={!canSubmit}
             className="rounded-lg bg-[#feca04] px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm transition hover:brightness-95 active:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {archivedLock ? t("modal.submit.archived") : pending ? t("modal.submit.pending") : isEdit ? t("modal.submit.edit") : t("modal.submit.create")}
+            {archivedLock ? (status === "active" && canArchive ? t("modal.restore.submit") : t("modal.submit.archived")) : pending ? t("modal.submit.pending") : isEdit ? t("modal.submit.edit") : t("modal.submit.create")}
           </button>
         </div>
       </div>

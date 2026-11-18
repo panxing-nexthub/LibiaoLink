@@ -16,8 +16,9 @@ export type PopoverPosition = {
  * - belowOnly = 只向下展开，不因下方空间不足翻到上方（搜索下拉，2026-10-20 追订「我要下拉框」）。
  * - right = 触发器右侧、垂直对齐（宽屏放得下时用，如弹窗里的「项目地区 / 项目类型」「项目经理」——避免长列表压住表单其它字段），
  *   右侧放不下（窄屏 / 靠右面板）自动回落 below，不出现半截浮层。
+ * - rightEdge = 优先贴住右侧相邻列；右侧不足时整体翻到左侧，不夹住当前筛选列（表格列头筛选面板用）。
  */
-export type PopoverPlacement = "below" | "right";
+export type PopoverPlacement = "below" | "right" | "rightEdge";
 
 /**
  * 触发器 + 浮层的定位 / 关闭口径（与分类筛选的日期选择器同一套实现）：
@@ -46,8 +47,18 @@ export function usePopover(
         return;
       }
       const rect = trigger.getBoundingClientRect();
-      const popoverWidth = Math.max(width, rect.width);
       const gap = 6;
+      if (placement === "rightEdge") {
+        const popoverWidth = Math.min(width, Math.max(240, window.innerWidth - 16));
+        const rightLeft = rect.right;
+        const left = rightLeft + popoverWidth <= window.innerWidth - 8
+          ? rightLeft
+          : Math.max(8, rect.left - popoverWidth);
+        const rightTop = Math.min(Math.max(8, rect.top), Math.max(8, window.innerHeight - height - 8));
+        setPosition({ top: rightTop, left, width: popoverWidth, side: "right", arrowLeft: null });
+        return;
+      }
+      const popoverWidth = Math.max(width, rect.width);
       if (placement === "right") {
         // 在弹窗（role="dialog"）里靠右弹出时，从弹窗卡片边缘让开：只按触发器右缘会压住卡片圆角与右侧留白，看着像粘在表单上
         const host = trigger.closest('[role="dialog"]') ?? trigger;

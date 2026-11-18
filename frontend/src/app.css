@@ -4229,3 +4229,20 @@ body {
   width: 100% !important;
   height: 100% !important;
 }
+
+
+/* 项目管理：可编辑格默认单行省略；仅当前聚焦格浮层展开全文。 */
+[data-project-management-grid-editor] [contenteditable] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap !important;
+}
+
+[data-project-management-grid-editor] [contenteditable]:focus {
+  overflow: visible;
+  white-space: pre-wrap !important;
+}
+
+[data-project-management-grid-editor] [contenteditable]:focus[data-project-management-code] {
+  white-space: nowrap !important;
+}

@@ -671,10 +671,10 @@ await waitFor("document.querySelector(" + j(DRAWER) + ")===null", 8000);
 await ev("(function(){var rows=document.querySelectorAll(" + j("[role=button]") + ");for(var i=0;i<rows.length;i++){if(rows[i].textContent.indexOf(" + j(TASK_TITLE) + ")>=0){rows[i].scrollIntoView({block:" + j("center") + ",inline:" + j("start") + "});return true;}}return false;})()");
 await sleep(400);
 const cellBeforeNoteEdit = String(await ev(CELL_TEXT_PROBE));
-const noteCellPoint = await ev("(function(){var rows=document.querySelectorAll(" + j("[role=button]") + ");for(var i=0;i<rows.length;i++){if(rows[i].textContent.indexOf(" + j(TASK_TITLE) + ")>=0){var b=rows[i].querySelector(" + j("button[aria-label=修改项目进展描述]") + ");if(b===null){return null;}var r=b.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};}}return null;})()");
-if (noteCellPoint === null || noteCellPoint === undefined) await bail("任务行里找不到「项目进展描述」行内编辑格（改别的字段用）");
+const noteCellPoint = await ev("(function(){var rows=document.querySelectorAll(" + j("[role=button]") + ");for(var i=0;i<rows.length;i++){if(rows[i].textContent.indexOf(" + j(TASK_TITLE) + ")>=0){var b=rows[i].querySelector(" + j("button[aria-label=修改项目描述]") + ");if(b===null){return null;}var r=b.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};}}return null;})()");
+if (noteCellPoint === null || noteCellPoint === undefined) await bail("任务行里找不到「项目描述」行内编辑格（改别的字段用）");
 await clickAt(noteCellPoint);
-const noteEditorShown = await waitFor("document.querySelector(" + j("textarea[aria-label=修改项目进展描述]") + ")!==null", 6000);
+const noteEditorShown = await waitFor("document.querySelector(" + j("textarea[aria-label=修改项目描述]") + ")!==null", 6000);
 await typeRenameInput("回放改别的字段 " + fixtureCode);
 const noteSaved = await waitForAsync(async () => {
   await clickSelector("[data-inline-save=true]");
@@ -682,7 +682,7 @@ const noteSaved = await waitForAsync(async () => {
   return rows.length === 1 && rows[0].note === "回放改别的字段 " + fixtureCode;
 }, 20000);
 const cellAfterNoteEdit = String(await ev(CELL_TEXT_PROBE));
-check("④p5 行内改别的字段（项目进展描述）落库后「文件」列就地保持（PATCH 只回契约 Task：文件摘要从旧行继承 · 不消失、不用刷新）",
+check("④p5 行内改别的字段（项目描述）落库后「文件」列就地保持（PATCH 只回契约 Task：文件摘要从旧行继承 · 不消失、不用刷新）",
   noteEditorShown === true && noteSaved === true && cellBeforeNoteEdit === cellAfterNoteEdit
   && cellAfterNoteEdit.indexOf(filePdfName) >= 0 && cellAfterNoteEdit.indexOf("+2") >= 0,
   JSON.stringify({ before: cellBeforeNoteEdit, after: cellAfterNoteEdit, editor: noteEditorShown, saved: noteSaved }));

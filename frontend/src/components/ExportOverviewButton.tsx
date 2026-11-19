@@ -1,22 +1,29 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { buildOverviewPreviewHtml, overviewExportTranslationRequest } from "../exportOverviewPdf";
+import {
+  OVERVIEW_PREVIEW_FRAME_WIDTH as PREVIEW_FRAME_WIDTH,
+  buildOverviewPreviewHtml,
+  overviewExportTranslationRequest,
+} from "../exportOverviewPdf";
 import { cachedZhTo, translateZhTo, type TranslationTarget } from "../translateApi";
 import { stageText, useLocale, useT } from "../i18n";
-import type {
-  OverviewExportInput,
-  OverviewExportLanguage,
-  OverviewExportOptions,
-  OverviewExportStageOption,
+import {
+  DEFAULT_OVERVIEW_TASK_COLUMNS,
+  type OverviewExportInput,
+  type OverviewExportLanguage,
+  type OverviewExportOptions,
+  type OverviewExportStageOption,
+  type OverviewTaskColumns,
 } from "../overviewExportShared";
+import { OverviewColumnSelector } from "./OverviewColumnSelector";
 
 type ExportOverviewButtonProps = {
   /** 当前项目总览数据：设置面板左侧实时报告预览与最终导出共用。 */
   input: OverviewExportInput;
   /** 页面已分好组的阶段（含计数），用于逐阶段折叠设置。 */
   stages: readonly OverviewExportStageOption[];
-  /** 在设置面板里确认语言 / 折叠阶段后触发导出（导出实现见 ../exportOverviewPdf.ts）。 */
-  onExport: (options: OverviewExportOptions) => void;
+  /** 确认导出时把最终预览 HTML 一并交给下载端，保证预览与 PDF 同源。 */
+  onExport: (options: OverviewExportOptions, previewHtml: string) => void;
   /** 任务数据还在取 / 重取中：置灰不给点，避免导出半份数据。 */
   disabled?: boolean;
   /** 导出进行中（等项目名 / 任务名 / 进展描述译文，见 §6.16）：按钮转「生成中…」并防重复点击。 */
@@ -24,8 +31,6 @@ type ExportOverviewButtonProps = {
 };
 
 const EMPTY_PREVIEW_TRANSLATIONS: ReadonlyMap<string, string> = new Map();
-const PREVIEW_FRAME_WIDTH = 1190;
-const PREVIEW_FRAME_HEIGHT = 880;
 
 /** 从会话缓存组装当前可用的预览译文；翻译逐条完成时也用它原位刷新。 */
 function cachedTranslationMap(texts: readonly string[], target: TranslationTarget): Map<string, string> {
@@ -55,7 +60,7 @@ const LANGUAGES: readonly {
 
 /**
  * 「导出 PDF」按钮（项目总览工具区 · 业务口径 2026-10-09；2026-10-29 追加逐阶段 DIY 折叠与实时预览）。
- * 点击后打开居中设置面板：左侧预览，右侧主体语言 + 每个大阶段的折叠 / 展开（默认全部展开）；确认后才生成报告。
+ * 点击后打开居中设置面板：左侧预览，右侧主体语言 + 任务明细列显示开关 + 阶段显示开关与折叠 / 展开（默认全部展示、全部展开）；确认后才生成报告。
  * 预览与最终导出共用同一份报告 HTML；点面板外 / 按 Esc 收起。
  */
 export function ExportOverviewButton({ input, stages, onExport, disabled = false, busy = false }: ExportOverviewButtonProps) {
@@ -64,7 +69,8 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
   const [open, setOpen] = useState(false);
   const [primary, setPrimary] = useState<OverviewExportLanguage>("zh");
   const [collapsedStages, setCollapsedStages] = useState<readonly string[]>([]);
-  const [previewScale, setPreviewScale] = useState(0.72);
+  const [hiddenStages, setHiddenStages] = useState<readonly string[]>([]);
+  const [taskColumns, setTaskColumns] = useState<OverviewTaskColumns>({ ...DEFAULT_OVERVIEW_TASK_COLUMNS });
   const [previewBootHtml, setPreviewBootHtml] = useState("");
   const [previewTranslations, setPreviewTranslations] = useState<ReadonlyMap<string, string>>(EMPTY_PREVIEW_TRANSLATIONS);
   const [previewTranslating, setPreviewTranslating] = useState(false);
@@ -75,14 +81,14 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
   const [previewPages, setPreviewPages] = useState({ current: 1, total: 1 });
   const rootRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  const previewViewportRef = useRef<HTMLDivElement | null>(null);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const sentPreviewHtmlRef = useRef("");
   const blocked = disabled || busy;
+  const visibleStageCount = stages.filter((stage) => !hiddenStages.includes(stage.name)).length;
 
   const previewTranslationRequest = useMemo(
-    () => overviewExportTranslationRequest(input, { primary, collapsedStages }),
-    [input.project, input.tasks, input.summary, primary, collapsedStages],
+    () => overviewExportTranslationRequest(input, { primary, collapsedStages, hiddenStages, columns: taskColumns }),
+    [input.project, input.tasks, input.summary, primary, collapsedStages, hiddenStages],
   );
   const previewTranslationKey = useMemo(
     () => previewTranslationRequest.target + "\u0000" + previewTranslationRequest.texts.join("\u0001"),
@@ -92,8 +98,8 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
   const previewBusy = previewTranslating || !previewFrameReady || !previewTranslationReady;
 
   const previewHtml = useMemo(
-    () => (open ? buildOverviewPreviewHtml(input, previewTranslations, primary, collapsedStages) : ""),
-    [open, input.project, input.tasks, input.summary, primary, collapsedStages, previewTranslations],
+    () => (open ? buildOverviewPreviewHtml(input, previewTranslations, primary, collapsedStages, taskColumns, hiddenStages) : ""),
+    [open, input.project, input.tasks, input.summary, primary, collapsedStages, hiddenStages, taskColumns, previewTranslations],
   );
 
   /**
@@ -160,7 +166,7 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
     }
     setPreviewBootReady(false);
     setPreviewPages({ current: 1, total: 1 });
-    setPreviewBootHtml(buildOverviewPreviewHtml(input, EMPTY_PREVIEW_TRANSLATIONS, "zh", []));
+    setPreviewBootHtml(buildOverviewPreviewHtml(input, EMPTY_PREVIEW_TRANSLATIONS, "zh", [], taskColumns));
   }, [open]);
 
   useEffect(() => {
@@ -229,32 +235,6 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
     };
   }, [open]);
 
-  useLayoutEffect(() => {
-    if (!open) {
-      return;
-    }
-    const node = previewViewportRef.current;
-    if (node === null) {
-      return;
-    }
-    const updateScale = () => {
-      const styles = window.getComputedStyle(node);
-      const availableWidth = Math.max(0, node.clientWidth - Number.parseFloat(styles.paddingLeft) - Number.parseFloat(styles.paddingRight));
-      const availableHeight = Math.max(0, node.clientHeight - Number.parseFloat(styles.paddingTop) - Number.parseFloat(styles.paddingBottom));
-      if (availableWidth > 0 && availableHeight > 0) {
-        setPreviewScale(Math.max(0.25, Math.min(1.05, availableWidth / PREVIEW_FRAME_WIDTH, availableHeight / PREVIEW_FRAME_HEIGHT)));
-      }
-    };
-    updateScale();
-    const observer = new ResizeObserver(updateScale);
-    observer.observe(node);
-    window.addEventListener("resize", updateScale);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", updateScale);
-    };
-  }, [open]);
-
   useEffect(() => {
     if (!open) {
       return;
@@ -277,6 +257,8 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
       if (!previous) {
         setPrimary("zh");
         setCollapsedStages([]);
+        setHiddenStages([]);
+        setTaskColumns({ ...DEFAULT_OVERVIEW_TASK_COLUMNS });
       }
       return !previous;
     });
@@ -288,12 +270,22 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
     );
   };
 
+  const toggleStageVisibility = (name: string) => {
+    setHiddenStages((previous) => {
+      if (previous.includes(name)) {
+        return previous.filter((item) => item !== name);
+      }
+      const remaining = stages.filter((stage) => stage.name !== name && !previous.includes(stage.name)).length;
+      return remaining === 0 ? previous : [...previous, name];
+    });
+  };
+
   const submit = () => {
     if (blocked) {
       return;
     }
     setOpen(false);
-    onExport({ primary, collapsedStages });
+    onExport({ primary, collapsedStages, hiddenStages, columns: taskColumns }, previewHtml);
   };
 
   return (
@@ -376,12 +368,9 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
                     </span>
                   </div>
                 </div>
-                <div ref={previewViewportRef} className="min-h-0 flex-1 overflow-hidden p-5 pt-3">
-                  <div className="flex h-full w-full items-center justify-center">
-                    <div
-                      className="relative shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm"
-                      style={{ width: PREVIEW_FRAME_WIDTH * previewScale, height: PREVIEW_FRAME_HEIGHT * previewScale }}
-                    >
+                <div className="min-h-0 flex-1 overflow-auto p-5 pt-3">
+                  <div className="mx-auto h-full shrink-0" style={{ width: PREVIEW_FRAME_WIDTH }}>
+                    <div className="relative h-full w-full overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
                       <iframe
                         ref={previewFrameRef}
                         data-export-preview-frame=""
@@ -389,8 +378,8 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
                         srcDoc={previewBootHtml}
                         tabIndex={-1}
                         referrerPolicy="no-referrer"
-                        className="absolute left-0 top-0 h-[880px] w-[1190px] origin-top-left border-0 bg-white"
-                        style={{ transform: "scale(" + previewScale + ")" }}
+                        className="absolute left-0 top-0 h-full border-0 bg-white"
+                        style={{ width: PREVIEW_FRAME_WIDTH }}
                       />
                       {!previewBootReady ? (
                         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/95">
@@ -432,59 +421,94 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
                   })}
                 </div>
 
+                <OverviewColumnSelector columns={taskColumns} onChange={setTaskColumns} />
+
                 <div className="my-4 h-px bg-zinc-100" />
                 <div className="mb-1 px-0.5 text-xs font-medium text-zinc-500">{t("export.content.title")}</div>
                 <p className="mb-2 px-0.5 text-[11px] leading-4 text-zinc-400">{t("export.content.hint")}</p>
-                <div className="mb-2 flex items-center justify-end gap-1">
+                <div className="mb-2 flex items-center justify-between gap-2">
                   <button
                     type="button"
-                    data-export-expand-all=""
-                    onClick={() => setCollapsedStages([])}
-                    className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
+                    data-export-show-all-stages=""
+                    onClick={() => setHiddenStages([])}
+                    disabled={visibleStageCount === stages.length}
+                    className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
                   >
-                    {t("export.stage.allExpanded")}
+                    {t("export.stage.allShown")}
                   </button>
-                  <span className="text-zinc-300">/</span>
-                  <button
-                    type="button"
-                    data-export-collapse-all=""
-                    onClick={() => setCollapsedStages(stages.map((stage) => stage.name))}
-                    className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
-                  >
-                    {t("export.stage.allCollapsed")}
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-export-expand-all=""
+                      onClick={() => setCollapsedStages([])}
+                      className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
+                    >
+                      {t("export.stage.allExpanded")}
+                    </button>
+                    <span className="text-zinc-300">/</span>
+                    <button
+                      type="button"
+                      data-export-collapse-all=""
+                      onClick={() => setCollapsedStages(stages.map((stage) => stage.name))}
+                      className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
+                    >
+                      {t("export.stage.allCollapsed")}
+                    </button>
+                  </div>
                 </div>
                 <div role="group" aria-label={t("export.content.title")} className="space-y-1 pr-0.5">
                   {stages.map((stage) => {
+                    const visible = !hiddenStages.includes(stage.name);
                     const collapsed = collapsedStages.includes(stage.name);
+                    const lastVisible = visible && visibleStageCount <= 1;
                     const count = stage.total === 0 ? t("export.stage.empty") : stage.done + " / " + stage.total;
                     const label = stageText(locale, stage.name);
                     return (
-                      <button
+                      <div
                         key={stage.name}
-                        type="button"
-                        data-export-stage-toggle={stage.name}
-                        aria-label={t("export.stage.toggle", { stage: label })}
-                        aria-pressed={collapsed}
-                        onClick={() => toggleStage(stage.name)}
+                        data-export-stage-row={stage.name}
                         className={
-                          "flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition " +
-                          (collapsed
-                            ? "border-zinc-900 bg-zinc-50"
-                            : "border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50")
+                          "flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 transition " +
+                          (visible ? "border-zinc-200 bg-white" : "border-dashed border-zinc-200 bg-zinc-50/70")
                         }
                       >
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-800" title={label}>{label}</span>
-                        <span className="shrink-0 text-[11px] tabular-nums text-zinc-400">{count}</span>
-                        <span
+                        <label
+                          className={"flex min-w-0 flex-1 cursor-pointer items-center gap-2 " + (visible ? "text-zinc-800" : "text-zinc-400")}
+                          title={lastVisible ? t("export.stage.lastVisible") : t("export.stage.showToggle", { stage: label })}
+                        >
+                          <input
+                            type="checkbox"
+                            data-export-stage-visible={stage.name}
+                            checked={visible}
+                            disabled={lastVisible}
+                            aria-label={t("export.stage.showToggle", { stage: label })}
+                            onChange={() => toggleStageVisibility(stage.name)}
+                            className="h-3.5 w-3.5 shrink-0 accent-zinc-900 disabled:cursor-not-allowed"
+                          />
+                          <span className="min-w-0 truncate text-sm font-medium" title={label}>{label}</span>
+                        </label>
+                        <span className={"shrink-0 text-[11px] tabular-nums " + (visible ? "text-zinc-400" : "text-zinc-300")}>{count}</span>
+                        <button
+                          type="button"
+                          data-export-stage-toggle={stage.name}
+                          aria-label={t("export.stage.toggle", { stage: label })}
+                          aria-pressed={collapsed}
+                          disabled={!visible}
+                          onClick={() => toggleStage(stage.name)}
                           className={
-                            "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium " +
-                            (collapsed ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-500")
+                            "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium transition " +
+                            (!visible
+                              ? "cursor-default bg-zinc-100 text-zinc-400"
+                              : collapsed
+                                ? "bg-zinc-900 text-white hover:bg-zinc-700"
+                                : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700")
                           }
                         >
-                          {collapsed ? t("export.stage.collapsed") : t("export.stage.expanded")}
-                        </span>
-                      </button>
+                          {!visible
+                            ? t("export.stage.hidden")
+                            : collapsed ? t("export.stage.collapsed") : t("export.stage.expanded")}
+                        </button>
+                      </div>
                     );
                   })}
                 </div>

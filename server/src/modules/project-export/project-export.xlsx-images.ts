@@ -215,17 +215,24 @@ function drawingXml(placements: readonly WorkbookImagePlacement[], relationshipB
     const relationshipId = relationshipByFileId.get(placement.fileId);
     if (relationshipId === undefined) throw new Error("XLSX 图片关系缺失");
     const pictureId = index + 1;
-    return '<xdr:oneCellAnchor editAs="oneCell">' +
-      '<xdr:from><xdr:col>' + String(placement.column - 1) + '</xdr:col>' +
+    const from = '<xdr:from><xdr:col>' + String(placement.column - 1) + '</xdr:col>' +
       '<xdr:colOff>' + String(Math.round(placement.xOffsetPx * EMU_PER_PIXEL)) + '</xdr:colOff>' +
       '<xdr:row>' + String(placement.row - 1) + '</xdr:row>' +
-      '<xdr:rowOff>' + String(Math.round(placement.yOffsetPx * EMU_PER_PIXEL)) + '</xdr:rowOff></xdr:from>' +
-      '<xdr:ext cx="' + String(Math.round(placement.widthPx * EMU_PER_PIXEL)) + '" cy="' + String(Math.round(placement.heightPx * EMU_PER_PIXEL)) + '"/>' +
-      '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="' + String(pictureId) + '" name="Picture ' + String(pictureId) + '"/>' +
+      '<xdr:rowOff>' + String(Math.round(placement.yOffsetPx * EMU_PER_PIXEL)) + '</xdr:rowOff></xdr:from>';
+    const picture = '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="' + String(pictureId) + '" name="Picture ' + String(pictureId) + '"/>' +
       '<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>' +
       '<xdr:blipFill><a:blip r:embed="' + relationshipId + '" cstate="print"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>' +
       '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm>' +
-      '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>' +
+      '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>';
+    if (placement.fitTo !== undefined) {
+      const to = '<xdr:to><xdr:col>' + String(placement.column - 1 + placement.fitTo.columns) + '</xdr:col>' +
+        '<xdr:colOff>0</xdr:colOff><xdr:row>' + String(placement.row - 1 + placement.fitTo.rows) + '</xdr:row>' +
+        '<xdr:rowOff>0</xdr:rowOff></xdr:to>';
+      return '<xdr:twoCellAnchor editAs="twoCell">' + from + to + picture +
+        '<xdr:clientData/></xdr:twoCellAnchor>';
+    }
+    const ext = '<xdr:ext cx="' + String(Math.round(placement.widthPx * EMU_PER_PIXEL)) + '" cy="' + String(Math.round(placement.heightPx * EMU_PER_PIXEL)) + '"/>';
+    return '<xdr:oneCellAnchor editAs="oneCell">' + from + ext + picture +
       '<xdr:clientData/></xdr:oneCellAnchor>';
   }).join("");
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +

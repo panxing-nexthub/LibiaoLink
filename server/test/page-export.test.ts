@@ -203,7 +203,22 @@ async function workbookOf(buffer: Buffer): Promise<ExcelJS.Workbook> {
 }
 
 function headersOf(sheet: ExcelJS.Worksheet): unknown[] {
-  return Array.from({ length: sheet.columnCount }, (_value, index) => sheet.getCell(1, index + 1).value);
+  return Array.from({ length: sheet.columnCount }, (_value, index) => sheet.getCell(2, index + 1).value);
+}
+
+function dataImages(sheet: ExcelJS.Worksheet) {
+  return sheet.getImages().filter((image) => image.range.tl.nativeRow > 0);
+}
+
+function headerImages(sheet: ExcelJS.Worksheet) {
+  return sheet.getImages().filter((image) => image.range.tl.nativeRow === 0);
+}
+
+function expectHeaderFitted(sheet: ExcelJS.Worksheet): void {
+  const images = headerImages(sheet);
+  expect(images).toHaveLength(1);
+  expect(images[0]!.range.br?.nativeCol).toBe(sheet.columnCount);
+  expect(images[0]!.range.br?.nativeRow).toBe(1);
 }
 
 describe("页面级 Excel 导出契约", () => {
@@ -343,19 +358,29 @@ describe("页面级 Excel 导出契约", () => {
     const reports = workbook.getWorksheet("日报记录")!;
     const issues = workbook.getWorksheet("问题追踪")!;
     const stakeholders = workbook.getWorksheet("干系人")!;
+    for (const sheet of [reports, issues, stakeholders]) {
+      expectHeaderFitted(sheet);
+      expect(sheet.getRow(1).height).toBe(60);
+      expect(sheet.views[0]).toMatchObject({ state: "frozen", ySplit: 2, topLeftCell: "A3" });
+      const headerCell = sheet.getCell(2, 1);
+      expect(headerCell.font.name).toBe("Microsoft YaHei");
+      expect(headerCell.border.left).toMatchObject({ style: "thin" });
+      expect(headerCell.border.right).toMatchObject({ style: "thin" });
+      expect(sheet.getCell(3, 1).font.name).toBe("Microsoft YaHei");
+    }
     expect(headersOf(reports)).toEqual(["时间", "关联阶段", "当日完成工作"]);
-    expect(reports.getCell(2, 1).value).toBe("2026年11月5日");
-    expect(reports.getCell(2, 2).value).toBe("硬件实施、软件部署");
-    expect(reports.getCell(2, 3).value).toBe("完成现场勘查");
-    expect(reports.rowCount).toBe(2);
+    expect(reports.getCell(3, 1).value).toBe("2026年11月5日");
+    expect(reports.getCell(3, 2).value).toBe("硬件实施、软件部署");
+    expect(reports.getCell(3, 3).value).toBe("完成现场勘查");
+    expect(reports.rowCount).toBe(3);
     expect(headersOf(issues)).toEqual(["问题描述", "问题归类", "问题是否处理"]);
-    expect(issues.getCell(2, 1).value).toBe("现场渗水");
-    expect(issues.getCell(2, 3).value).toBe("处理中");
-    expect(issues.rowCount).toBe(2);
+    expect(issues.getCell(3, 1).value).toBe("现场渗水");
+    expect(issues.getCell(3, 3).value).toBe("处理中");
+    expect(issues.rowCount).toBe(3);
     expect(headersOf(stakeholders)).toEqual(["干系人姓名", "所属公司"]);
-    expect(stakeholders.getCell(2, 1).value).toBe("Christian Winkler");
-    expect(stakeholders.getCell(2, 2).value).toBe("客户 / Vanilla");
-    expect(stakeholders.rowCount).toBe(2);
+    expect(stakeholders.getCell(3, 1).value).toBe("Christian Winkler");
+    expect(stakeholders.getCell(3, 2).value).toBe("客户 / Vanilla");
+    expect(stakeholders.rowCount).toBe(3);
     expect(audit.record).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       metadata: expect.objectContaining({
         columns: {
@@ -365,6 +390,15 @@ describe("页面级 Excel 导出契约", () => {
         },
       }),
     }));
+  });
+
+  it("多行页面文本按微软雅黑行距预留行高", async () => {
+    const longDescription = "工作站安装及定位弹线Workstation Installation and Positioning Chalk Line and cabinet installation and cable management";
+    const { service, projectAccess } = harness({ reports: [{ ...report, doneWork: longDescription }] });
+    const result = await service.exportPages(PROJECT_ID, USER_ID, "https://pm.example", [{ sheet: "reports", columns: ["doneWork"] }], projectAccess);
+    if (result.kind !== "buffer") throw new Error("预期内存工作簿");
+    const workbook = await workbookOf(result.buffer);
+    expect(workbook.getWorksheet("日报记录")!.getRow(3).height).toBeGreaterThanOrEqual(46.5);
   });
 
   it("未勾选页面不读取业务数据；超过 20,000 条时拒绝导出", async () => {
@@ -390,10 +424,10 @@ describe("页面级 Excel 导出契约", () => {
     const workbook = await workbookOf(result.buffer);
     const sheet = workbook.getWorksheet("日报记录")!;
     expect(headersOf(sheet)).toEqual(["时间", "现场工作附图"]);
-    expect(sheet.getImages()).toHaveLength(1);
-    expect(String(sheet.getCell(2, 2).value)).toContain("附图缺失");
+    expect(dataImages(sheet)).toHaveLength(1);
+    expect(String(sheet.getCell(3, 2).value)).toContain("附图缺失");
     expect(sheet.getColumn(2).width).toBe(58);
-    expect(sheet.getRow(2).height).toBeGreaterThan(24);
+    expect(sheet.getRow(3).height).toBeGreaterThan(24);
     expect(audit.record).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       metadata: expect.objectContaining({ feature: "page_export", mode: "legacy", images: 1, missingImages: 1 }),
     }));
@@ -410,9 +444,12 @@ describe("页面级 Excel 导出契约", () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(result.filePath);
     const sheet = workbook.getWorksheet("日报记录")!;
-    expect(String(sheet.getCell(2, 2).value)).toContain("（附图缺失）缺失.jpg");
-    expect(sheet.getCell(2, 2).value).not.toEqual(expect.objectContaining({ hyperlink: expect.anything() }));
-    expect(sheet.getImages()).toHaveLength(1);
+    expectHeaderFitted(sheet);
+    expect(sheet.getRow(1).height).toBe(60);
+    expect(sheet.views[0]).toMatchObject({ state: "frozen", ySplit: 2, topLeftCell: "A3" });
+    expect(String(sheet.getCell(3, 2).value)).toContain("（附图缺失）缺失.jpg");
+    expect(sheet.getCell(3, 2).value).not.toEqual(expect.objectContaining({ hyperlink: expect.anything() }));
+    expect(dataImages(sheet)).toHaveLength(1);
     expect(result.imageCount).toBe(1);
     expect(result.imageLinkCount).toBe(0);
     expect(result.missingImageCount).toBe(1);

@@ -12,6 +12,8 @@
     "generate": "node scripts/generate.mjs",
     "generate:openapi": "node scripts/generate.mjs --only=openapi",
     "generate:client": "node scripts/generate.mjs --only=client",
+    "generate:case-data": "node scripts/generate-case-data.mjs",
+    "check:case-data": "node scripts/generate-case-data.mjs --check",
     "check": "node scripts/check-drift.mjs && node scripts/check-request-array-bounds.mjs",
     "check:request-array-bounds": "node scripts/check-request-array-bounds.mjs",
     "build": "tsc -p tsconfig.build.json"
@@ -30,6 +32,26 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./case-data": {
+      "types": "./dist/case-data/case-requests.d.ts",
+      "default": "./dist/case-data/case-requests.js"
+    },
+    "./case-data/assets": {
+      "types": "./dist/case-data/asset-requests.d.ts",
+      "default": "./dist/case-data/asset-requests.js"
+    },
+    "./case-data/releases": {
+      "types": "./dist/case-data/release-requests.d.ts",
+      "default": "./dist/case-data/release-requests.js"
+    },
+    "./case-data/project-catalog": {
+      "types": "./dist/case-data/project-catalog.d.ts",
+      "default": "./dist/case-data/project-catalog.js"
+    },
+    "./case-data/project-data": {
+      "types": "./dist/case-data/project-data.d.ts",
+      "default": "./dist/case-data/project-data.js"
     },
     "./generated/*": "./generated/*"
   }

@@ -1,3 +1,15 @@
+> **2026-11-19 22:34–22:37 干系人导出字段对齐（正式机 server-only，prod-20261119-2234-px-stakeholder-export-fields-607ad422）**：正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261119-2234-px-stakeholder-export-fields-607ad422`，previous = `prod-20261119-2219-px-task-drawer-file-buttons-85f6a67c`；staging = `/srv/data/deploy-prod-20261119-2234-px-stakeholder-export-fields-607ad422/staging`，备份 = `/srv/data/backups/before-prod-20261119-2234-px-stakeholder-export-fields-607ad422`。代码来源 PR #928 / main `607ad422`；PR CI [44544357178](https://github.com/panxing-nexthub/LibiaoLink/actions/runs/44544357178) 6 / 6。
+>
+> **改动 / 构建**：项目全量导出的干系人 Sheet 对齐页面 8 列：干系人姓名、电话 / WhatsApp、微信、邮箱 Email、职务 / 责任板块、所属公司、填写者、干系人角色；电话与微信、职务与角色分别拆列，移除提交时间；公司分类显示为「立镖机器人 / 供应商 / 总包单位 / 客户」。项目导入兼容旧版 7 列与新版 8 列表头。`shared npm run build`、server `npm run typecheck` / `npm run build` 通过，导出与导入定向 Vitest 76 / 76。
+>
+> **发布件 / 安装**：`server-stakeholder-export-607ad422.tar.gz` 39,797 B · `f7d11132…`，6 条目 / 6 文件；`changed-files.sha256` 672 B · `33e19708…`。6 个产物全部以 `root:root 644` 原子替换：`project-export.mapping.js` 8,291 B · `6725a30d…`、同名 source map 8,427 B · `dc2562cd…`，`project-export.workbook.js` 42,756 B · `beb82e16…`、同名 source map 46,495 B · `700b88c9…`，`project-import/legacy.js` 46,746 B · `411a80da…`、同名 source map 41,872 B · `4a6b0439…`。安装前后 `server/dist` 均为 753 文件，`project-export` 32、`project-import` 22，无关替换 / 额外删除 / 临时残留均为 0。新 manifest 7,673 B · `620a33a1…`，`root:root 644` 原子安装。
+>
+> **验收 / 运行态**：`/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/access` 401；readyz 四项全 true。web / api / worker / postgres / minio / cad / svg-preview 共 7 个容器全部 running healthy，RestartCount 0、OOM false；api / worker 近 5 分钟 `ERROR|FATAL` 0，仅重启 api / worker。容器内实际调用 `stakeholderExportRow` 并通过 deepEqual，返回键为 `name,phone,wechat,email,title,company,writer,role`，示例公司显示「立镖机器人」。
+>
+> **备份 / 回滚**：备份 46,032 B，`server-stakeholder-export-before.tar.gz` 39,828 B · `e74cbfa0…`、原 manifest 6,003 B · `ed317b90…`、`SHA256SUMS` 201 B · `b74e20fe…`，3 / 3 校验通过。回滚将 before tar 解压回 `/opt/libiaolink/server/dist`、恢复原 manifest，并重启 api / worker。
+>
+> **边界 / 后续**：仅正式机 `10.1.103.44`，测试机 `10.1.104.44` 未触碰；上一版前端 `prod-20261119-2219-px-task-drawer-file-buttons-85f6a67c` 继续为 1,413 个 live 文件且未变。无 frontend / shared 运行时 / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。真实账号导出 Excel 并人工检查字段顺序仍待执行。
+
 > **2026-11-19 22:22 任务抽屉文件预览 / 下载按钮强化（测试机 frontend-only · test-20261119-2219-px-task-drawer-file-buttons-85f6a67c）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261119-2219-px-task-drawer-file-buttons-85f6a67c`，previous = `test-20261119-2039-px-report-single-issue-fe12b622`；staging = `/srv/data/deploy-test-20261119-2219-px-task-drawer-file-buttons-85f6a67c/staging`，备份 = `/srv/data/backups/before-test-20261119-2219-px-task-drawer-file-buttons-85f6a67c`。代码来源 PR #926 / main `85f6a67c`。
 
 > **改动 / 验收**：抽屉「文件」清单的「预览 / 下载」改为常显操作按钮，预览 = 品牌黄实心 + 眼睛图标，下载 = 白底描边 + 下载图标；按钮 32px 高、12px 文案、8px 圆角。文件行、上传、改名、删除和业务逻辑不变。frontend `npm run typecheck` / `npm run build` 通过；PR #926 CI 6 / 6 通过。

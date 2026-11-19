@@ -3504,7 +3504,11 @@ body {
   [data-issue-table] > table > tbody > tr > td[data-issue-delete-cell],
   [data-file-table] > table > tbody > tr > td:last-child,
   [data-project-files-table] > table > tbody > tr > td:last-child {
+    position: static !important;
     margin-top: 0.35rem;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-left: 0 !important;
     padding-top: 0.6rem !important;
     display: flex !important;
     align-items: center;

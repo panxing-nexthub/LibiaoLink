@@ -18,7 +18,7 @@ export interface ProjectArchiveAttachmentSource {
   sourceRow: number;
   sourceRecord: string;
   attachmentType: string;
-  /** 相对「附件」目录的子路径，如「日报及问题汇总/现场工作附图」。 */
+  /** 相对「附件」目录的子路径，如「日报记录/现场工作附图」或「问题汇总/问题附图」。 */
   directory: string;
   fileId: string;
   fileName: string;

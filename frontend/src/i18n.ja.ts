@@ -775,7 +775,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "report.missing.issueTitle": "課題 {n} の説明",
   "report.missing.issueCategory": "課題 {n} のカテゴリ",
   "report.hint.stages": "複数選択可。本日の作業で対象となるプロジェクトステージにタグを付けてください。",
-  "report.hint.issues": "送信後、各課題は個別のレコード（オープン）になります",
+  "report.hint.issues": "課題番号ごとに独立したレコード（オープン）を1件作成します。種類が異なる場合は「+ 課題を追加」してください",
   "report.addIssue": "+ 課題を追加",
   "report.issueNo": "課題 {n}",
   "report.required": "必須",

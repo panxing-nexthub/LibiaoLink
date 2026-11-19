@@ -775,7 +775,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "report.missing.issueTitle": "이슈 {n} 설명",
   "report.missing.issueCategory": "이슈 {n} 카테고리",
   "report.hint.stages": "다중 선택; 오늘 작업이 다루는 프로젝트 단계를 태그하세요",
-  "report.hint.issues": "제출 후 각 이슈는 별도의 기록(열림)이 됩니다",
+  "report.hint.issues": "이슈 번호마다 독립된 기록(열림) 1건이 생성됩니다. 유형이 다른 문제는 「+ 이슈 추가」로 추가하세요",
   "report.addIssue": "+ 이슈 추가",
   "report.issueNo": "이슈 {n}",
   "report.required": "필수",

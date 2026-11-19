@@ -4,7 +4,7 @@
 |---|---|
 | 类型 | 组合模块（仅 worker） |
 | 职责 | S3 查询路由、命令 / 日期解析、发送人身份、`report.view` / `issue.view`、文字回复、限流与回调幂等；S4/S5 单篇复用与合集海报编排 |
-| 主责 | lan（按 `docs/企微智能机器人日报查询实施方案.md` 执行） |
+| 主责 | wmj（按 `docs/企微智能机器人日报查询实施方案.md` 执行） |
 | 对外出口 | `ReportQueryService` / `ReportQueryModule` |
 | 依赖 | permission、project、report-issue、notify（全部走目标模块 `index.ts`） |
 | 不拥有 | 业务表、HTTP API、迁移、审计、outbox、站内信、群播报、海报渲染器与对象存储 |

@@ -4,7 +4,7 @@
 |---|---|
 | 类型 | 横切模块（crosscut；领域与平台都可依赖 —— 登记于 `server/scripts/check-boundaries.mjs` 的 CROSSCUT_MODULES） |
 | 职责 | 工作日历例外维护（D5-01）、顺延规则配置（D5-02）、顺延与 T-1 / T+1 实时求值（D5-03）；管理界面随 u 系列（px 线） |
-| 主责 | wmj（团队分工.md §3：日历口径与组织同步；评审 lan 或 px） |
+| 主责 | wmj（团队分工.md §2；评审 px） |
 | 对外接口 | CalendarService（getYear / getDay / setDay / deleteDay / getSettings / updateSettings / shift / offset）、纯函数（calendar.rules.ts：resolveDay / shiftToWorkday / evaluateOffset / atShanghaiTime / addDays / dayOfWeek / calendarWindow）、ClockService（common/clock：now / today / setSource）；HTTP：GET /api/v1/calendar/days、GET /api/v1/calendar/day、PUT | DELETE /api/v1/calendar/days/{date}、GET | PUT /api/v1/calendar/settings、GET /api/v1/calendar/shift、GET /api/v1/calendar/offset |
 
 ## 已实现（h8）

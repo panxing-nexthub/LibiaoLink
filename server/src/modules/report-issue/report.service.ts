@@ -136,7 +136,7 @@ export function toDailyReportView(row: DailyReportRow, photos: { onsite: FilePho
  *    旧单问题字段口径照旧（并把问题图从日报转挂到问题）；
  * 4) 附图（方案一）：现场图 / 问题图都挂 file_links(report, kind=onsite|issue)，整体替换语义；
  * 5) 删除为成对删除：删日报 = 连它派生的全部问题 + 两侧附图关联（DELETE）；
- * 6) 留痕：审计（对象 daily_report + 连带问题）+ outbox report.submitted / report.deleted；归档项目写保护 409 PROJECT_ARCHIVED。
+ * 6) 留痕：审计（对象 daily_report + 连带问题）+ outbox report.submitted / report.deleted；归档项目仅在有未完成临时任务时可填报。
  * 权限：读 = 项目可见；写 = report.fill，且要求当前项目 accessLevel=edit。
  */
 @Injectable()
@@ -185,7 +185,6 @@ export class ReportService {
 
   /** POST /api/v1/projects/{id}/reports：新报一天（草稿 / 提交）；同日多条可重复新建（Push 215）；提交即触发 A3-09。 */
   async create(projectId: string, body: DailyReportCreateBody, actorId: string): Promise<DailyReport> {
-    await this.loadProjectForWrite(projectId);
     const at = new Date();
     const today = shanghaiToday(at);
     const state = resolveReportState(body.state, body.date, today);
@@ -198,11 +197,10 @@ export class ReportService {
     const issueDrafts = normalizeIssueDrafts(body.issues ?? []);
     const draftPhotoFileIds = issueDrafts.flatMap((draft) => draft.photoFileIds ?? []);
     const fileIdsToCheck = [...photoFileIds, ...issuePhotoFileIds, ...draftPhotoFileIds];
-    if (fileIdsToCheck.length > 0) {
-      await assertPhotoFilesInProject(projectId, fileIdsToCheck, this.database.db);
-    }
     let createdId = "";
     await this.database.db.transaction(async (tx) => {
+      await this.loadProjectForWrite(projectId, tx, true);
+      if (fileIdsToCheck.length > 0) await assertPhotoFilesInProject(projectId, fileIdsToCheck, tx);
       const row = await this.reports.insert(
         {
           projectId,
@@ -247,18 +245,21 @@ export class ReportService {
 
   /** PATCH /api/v1/projects/{id}/reports/{reportId}：乐观锁编辑 / 草稿提交；date 不可改；附图整体替换（Push 215）。 */
   async update(projectId: string, reportId: string, body: DailyReportUpdateBody, actorId: string): Promise<DailyReport> {
-    await this.loadProjectForWrite(projectId);
     const at = new Date();
     const today = shanghaiToday(at);
     const photoFileIds = body.photoFileIds;
     const issuePhotoFileIds = body.issuePhotoFileIds;
     const issueDrafts = body.issues === undefined ? undefined : normalizeIssueDrafts(body.issues);
     const draftPhotoFileIds = (issueDrafts ?? []).flatMap((draft) => draft.photoFileIds ?? []);
-    if (photoFileIds !== undefined || issuePhotoFileIds !== undefined || draftPhotoFileIds.length > 0) {
-      await assertPhotoFilesInProject(projectId, [...(photoFileIds ?? []), ...(issuePhotoFileIds ?? []), ...draftPhotoFileIds], this.database.db);
-    }
     await this.database.db.transaction(async (tx) => {
+      const project = await this.loadProjectForWrite(projectId, tx, true);
       const before = await this.requireReport(projectId, reportId, tx);
+      if (project.status === "archived" && before.state !== "draft") {
+        throw new AppError("PROJECT_ARCHIVED", "项目已归档，已提交的日报只读");
+      }
+      if (photoFileIds !== undefined || issuePhotoFileIds !== undefined || draftPhotoFileIds.length > 0) {
+        await assertPhotoFilesInProject(projectId, [...(photoFileIds ?? []), ...(issuePhotoFileIds ?? []), ...draftPhotoFileIds], tx);
+      }
       assertReportStateWrite(before.state, body.state);
       const foundIssue = body.foundIssue === undefined ? before.foundIssue : body.foundIssue;
       const issueCategories = body.issueCategories === undefined ? before.issueCategories : (body.issueCategories ?? []);
@@ -500,10 +501,10 @@ export class ReportService {
 
   /** DELETE /api/v1/projects/{id}/reports/{reportId}：成对删除（删日报 = 连它派生的全部问题 + 两侧附图关联）。 */
   async remove(projectId: string, reportId: string, actorId: string): Promise<DailyReportDeleteResponse> {
-    await this.loadProjectForWrite(projectId);
     const at = new Date();
     let cascadedIssueIds: string[] = [];
     await this.database.db.transaction(async (tx) => {
+      await this.loadProjectForWrite(projectId, tx);
       const row = await this.requireReport(projectId, reportId, tx);
       cascadedIssueIds = await purgeReportCascade(reportId, tx);
       for (const issueId of cascadedIssueIds) {
@@ -535,11 +536,13 @@ export class ReportService {
     return { id: reportId, deleted: true, cascadedIssueIds };
   }
 
-  /** 日报写入口：归档项目一律 409 PROJECT_ARCHIVED（ADR-027）。 */
-  private async loadProjectForWrite(projectId: string): Promise<{ id: string; status: string; name: string }> {
-    const project = await this.reports.findProject(projectId);
+  /** 与任务创建和完成共用项目行锁，填报资格在写入事务内判定。 */
+  private async loadProjectForWrite(projectId: string, tx?: DbClient, filling = false) {
+    const project = await this.reports.findProject(projectId, tx, tx !== undefined);
     if (project === null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
-    if (project.status === "archived") throw new AppError("PROJECT_ARCHIVED", "项目已归档，禁止填报日报");
+    if (project.status === "archived" && (!filling || !(await this.reports.hasUnfinishedTemporaryTask(projectId, tx)))) {
+      throw new AppError("PROJECT_ARCHIVED", filling ? "归档项目仅在有未完成临时任务时可填报日报" : "项目已归档，禁止此操作");
+    }
     return project;
   }
 }

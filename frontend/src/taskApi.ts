@@ -74,6 +74,7 @@ export type ApiProjectSummary = {
   overdue: number;
   done: number;
   total: number;
+  hasUnfinishedTemporaryTask?: boolean;
 };
 
 /** 九阶段字典（契约 STAGE_KEYS / STAGE_NAMES）：阶段名 ↔ key 的双向映射在前端本地维护。 */
@@ -255,6 +256,7 @@ export type TaskCreateInput = {
   taskNodeId?: string;
   /** 来源任务节点库节点（task_nodes；M3-07 刀 3）—— 描述 / 英文名 / 阶段取节点现值，与 taskNodeId 二选一。 */
   sourceNodeId?: string;
+  managerIds?: string[];
   ownerIds?: string[];
   plannedStart?: string | null;
   plannedEnd?: string | null;

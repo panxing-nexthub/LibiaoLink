@@ -29,9 +29,9 @@ export const FilePhotoRefSchema = z
   })
   .openapi("FilePhotoRef", { description: "图片附件引用（多态关联读面；不做匿名直链，预览经预览接口换短时签名）" });
 
-export const UploadIntentSchema = z.enum(["version", "change"]).openapi("UploadIntent", {
+export const UploadIntentSchema = z.enum(["version", "change", "report_photo"]).openapi("UploadIntent", {
   description:
-    "上传意图：version = 新增/替换版本（仅 draft 文件）；change = 定档后变更（同一事务写 change_requests + 新版本 + 状态 changed）；**目标任务已定档（Task.finalizedAt 非空）时 version 意图一律 409 TASK_FINALIZED**（Push 249：任务定档后不支持任何修改，修改走变更）",
+    "上传意图：version 新建文件或追加草稿版本，change 为定档文件提交变更，report_photo 为日报新建位图附图。目标任务已定档时 version 返回 409 TASK_FINALIZED",
 });
 
 export const UploadSessionStatusSchema = z
@@ -323,6 +323,9 @@ export const UploadCreateBodySchema = z
         description: "变更目标文件（必填，A4-13）：须为已定档（final / changed）状态；非该状态 → 409 FILE_STATE_INVALID；不存在 / 无权 → 404；与 projectId 不一致 → 400；归属（docType / nodeId / taskId）以目标文件现状为准 —— 可省略，填写则须与目标文件一致（不一致 400）；**name = 变更后文件名称（Push 256）**：可与目标文件名不同（不一致不再 400）—— 完成变更时文件更名为该名称，扩展名随之更新，预览 / 下载按新名称；duplicateHint 恒为空",
       }),
       change: ChangeIntentBodySchema,
+    }),
+    UploadCreateBaseSchema.omit({ docType: true, nodeId: true, taskId: true }).strict().extend({
+      intent: z.literal("report_photo").openapi({ description: "新建日报附图，只接受位图且不能替换文件或关联任务、节点" }),
     }),
   ])
   .openapi("UploadCreateBody", { description: "发起上传（分片直传；返回预签名分片 URL 的获取入口）。intent=version：fileId 省略 = 新建文件、给出 = 对既有 draft 文件替换 / 追加版本；intent=change：fileId 必填 = 定档后变更（申请即通过，完成上传时同事务生效；name = 变更后文件名称 —— 完成时文件更名为该名称）" });

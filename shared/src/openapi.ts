@@ -824,6 +824,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     responses: {
       201: { description: "创建成功", ...json(TaskSchema) },
       400: commonErrors[400],
+      403: commonErrors[403],
       404: commonErrors[404],
       409: commonErrors[409],
     },

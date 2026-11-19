@@ -45,6 +45,7 @@ import {
   type ObjectHead,
   planUpload,
   toApiError,
+  type UploadedPart,
 } from "../../storage/index.js";
 import { AuditService } from "../admin/index.js";
 import { PermissionService, canManageTaskFinalization, isProjectEditor } from "../permission/index.js";
@@ -53,12 +54,13 @@ import {
   type FileLinkInsertInput,
   type ChangeRequestRow,
   type DuplicateFileRow,
+  type FileProjectBriefRow,
   type FileRow,
   type FileVersionRow,
   type UploadSessionRow,
 } from "./file.repository.js";
 import { parseFileListFilter, parseFileListSort, type FileListQueryInput } from "./file.query.js";
-import { OCTET_STREAM_MIME, normalizeMime, validateUploadFileType } from "./file-mime.js";
+import { OCTET_STREAM_MIME, kindForExtension, normalizeMime, validateUploadFileType } from "./file-mime.js";
 import { PreviewRepository } from "./preview.repository.js";
 import { buildPreviewJobPayload, PREVIEW_JOB_TOPIC, previewJobDedupeKey } from "./preview.job.js";
 import { previewTargetsFor } from "./preview.targets.js";
@@ -197,19 +199,24 @@ export class FileService {
       ]);
     }
     const isChange = body.intent === "change";
+    const isReportPhoto = body.intent === "report_photo";
     const changePayload = isChange ? normalizeChangePayload(body.change, body.name) : null;
     const effectiveName = target === null || isChange ? body.name : target.name;
-    const effectiveDocType = target === null ? body.docType ?? null : target.docType;
-    const effectiveNodeId = target === null ? body.nodeId : target.nodeId ?? undefined;
-    const effectiveTaskId = target === null ? body.taskId : target.taskId ?? undefined;
+    const scope = target ?? (isReportPhoto ? { docType: null, nodeId: null, taskId: null } : body);
+    const effectiveDocType = scope.docType ?? null;
+    const effectiveNodeId = scope.nodeId ?? undefined;
+    const effectiveTaskId = scope.taskId ?? undefined;
     await this.assertFileWriteAllowed(actorId, access, body.projectId, effectiveTaskId ?? null);
 
-    const project = await this.repository.findProjectBrief(body.projectId);
-    if (project === null) {
-      throw new AppError("NOT_FOUND", "项目不存在或不可见");
-    }
-    if (project.status === "archived") {
-      throw new AppError("PROJECT_ARCHIVED", "项目已归档，禁止新增文件");
+    const attachmentTaskId = body.intent === "version" && target === null && effectiveNodeId === undefined
+      ? effectiveTaskId : undefined;
+    const project = await this.requireUploadProject(body.projectId);
+    await this.assertProjectUploadAllowed(project, isReportPhoto, attachmentTaskId);
+    if (isReportPhoto) {
+      await this.permission.assertCan(actorId, "report.fill", access);
+      if (kindForExtension(effectiveName) !== "raster") {
+        throw new AppError("VALIDATION_FAILED", "归档项目的日报附图仅支持位图文件");
+      }
     }
     const maxBytes = this.config.env.UPLOAD_MAX_SIZE_MB * 1024 * 1024;
     if (body.sizeBytes > maxBytes) {
@@ -253,7 +260,7 @@ export class FileService {
     // 项目内内容秒传（2026-11-03）：目标为新建文件时，同项目已有同内容 / 同大小 / 同扩展名对象，
     // 直接在事务内建新文件与版本引用同一对象，不创建上传会话、不重复传输。事务内锁对象键 + HEAD，
     // 避免与回收站清理并发；对象若在边界消失则回滚草稿文件并继续普通分片上传。
-    if (body.intent === "version" && target === null && body.contentHash !== undefined) {
+    if (project.status !== "archived" && body.intent === "version" && target === null && body.contentHash !== undefined) {
       const reusableBlob = await this.repository.findReusableVersionByHash(
         body.projectId,
         body.contentHash,
@@ -291,6 +298,11 @@ export class FileService {
     const sessionId = randomUUID();
 
     const created = await this.database.db.transaction(async (tx) => {
+      if (isReportPhoto || attachmentTaskId !== undefined) {
+        if (attachmentTaskId !== undefined) await this.repository.lockAttachmentTask(attachmentTaskId, tx);
+        const currentProject = await this.requireUploadProject(body.projectId, tx);
+        await this.assertProjectUploadAllowed(currentProject, isReportPhoto, attachmentTaskId, tx);
+      }
       const file =
         target === null
           ? await this.repository.insertFile(
@@ -380,6 +392,7 @@ export class FileService {
   async signParts(fileId: string, uploadId: string, body: UploadPartsBody, actorId: string): Promise<UploadPartsResponse> {
     const { file, session } = await this.loadUploadContext(fileId, uploadId, actorId, "file.upload");
     const at = this.clock.now();
+    await this.assertUploadSessionProject(file, session);
     if (session.status !== "active") {
       throw new AppError("UPLOAD_SESSION_EXPIRED", "上传会话已结束（" + session.status + "），请重新发起上传");
     }
@@ -419,12 +432,7 @@ export class FileService {
     if (session.status !== "active") {
       throw new AppError("FILE_STATE_INVALID", "上传会话已结束（" + session.status + "），不可续传；请重新发起上传");
     }
-    const uploaded =
-      session.storageUploadId === null
-        ? []
-        : (await this.storage.listParts({ objectKey: session.objectKey, uploadId: session.storageUploadId })).map(
-            (part) => part.partNumber,
-          );
+    const uploaded = session.storageUploadId === null ? [] : (await this.listUploadParts(session.objectKey, session.storageUploadId)).map((part) => part.partNumber);
     const missing = missingPartNumbers(uploaded, session.totalParts);
     return { ...toSessionView(session), uploadedPartNumbers: uploaded, missingPartNumbers: missing };
   }
@@ -433,6 +441,8 @@ export class FileService {
   async completeUpload(fileId: string, uploadId: string, body: UploadCompleteBody, actorId: string): Promise<UploadCompleteResponse> {
     const { file, session } = await this.loadUploadContext(fileId, uploadId, actorId, "file.upload");
     const isChange = session.intent === "change";
+    const isReportPhoto = session.intent === "report_photo";
+    const projectBeforeMerge = await this.assertUploadSessionProject(file, session);
     const at = this.clock.now();
     if (session.status !== "active") {
       throw new AppError("UPLOAD_SESSION_EXPIRED", "上传会话已结束（" + session.status + "），请重新发起上传");
@@ -448,12 +458,7 @@ export class FileService {
     }
 
     const stagingKey = session.objectKey;
-    let uploaded;
-    try {
-      uploaded = await this.storage.listParts({ objectKey: stagingKey, uploadId: session.storageUploadId });
-    } catch (error) {
-      throw toApiError(error);
-    }
+    const uploaded = await this.listUploadParts(stagingKey, session.storageUploadId);
     const missing = missingPartNumbers(
       uploaded.map((part) => part.partNumber),
       session.totalParts,
@@ -508,6 +513,9 @@ export class FileService {
         },
       ]);
     }
+    if (isReportPhoto && type.kind !== "raster") {
+      throw new AppError("VALIDATION_FAILED", "归档项目的日报附图仅支持位图文件");
+    }
     if (inspected.contentHash !== declaredHash) {
       throw new AppError("FILE_HASH_MISMATCH", "实际文件内容 SHA-256 与申报不一致", [
         { code: "hash_mismatch", message: "实际文件内容与 contentHash 不一致", path: "contentHash" },
@@ -520,6 +528,9 @@ export class FileService {
     const objectKey = buildBlobObjectKey({ projectId: file.projectId, contentHash, fileName: effectiveName });
 
     const committed = await this.database.db.transaction(async (tx) => {
+      // 保持项目、会话、文件的锁顺序；使用锁定后的文件判断是否为首个版本。
+      const uploadProject = isReportPhoto || projectBeforeMerge?.status === "archived"
+        ? await this.requireUploadProject(file.projectId, tx) : null;
       const lockedSession = await this.repository.lockSession(tx, session.id);
       if (lockedSession === null || lockedSession.status !== "active") {
         throw new AppError("UPLOAD_SESSION_EXPIRED", "上传会话已结束，请重新发起上传");
@@ -528,6 +539,7 @@ export class FileService {
       if (lockedFile === null) {
         throw new AppError("NOT_FOUND", "文件不存在");
       }
+      if (uploadProject !== null) await this.assertUploadSessionProject(lockedFile, lockedSession, tx, uploadProject);
       // 状态门禁（会话期间文件可能被定档 / 回收）：version 意图目标须 draft；change 意图目标须 final / changed（A4-13；
       // Push 254 续：任务已定档时其 draft 文件同视为「定档后的文件」，与 resolveUploadTarget 同一口径）。
       if (isChange) {
@@ -600,6 +612,11 @@ export class FileService {
           : "完成上传：" + lockedFile.name + " v" + String(lockedFile.version + 1),
       });
       return { ...committed, session: completedSession };
+    }).catch(async (error: unknown) => {
+      if (error instanceof AppError && error.code === "PROJECT_ARCHIVED") {
+        await this.expireSession(file.projectId, session, this.clock.now(), "归档项目上传条件已失效");
+      }
+      throw error;
     });
 
     // 暂存对象已复制到契约键：按版本清理（失败只告警 —— 残留由过期清理兜底，不影响已落库版本）。
@@ -1572,14 +1589,14 @@ export class FileService {
 
   /**
    * 目标文件解析（Push 130 定案；M4-02 放开 version、M4-04 放开 change；Push 254 续放行「任务已定档」）：
-   * `fileId` 省略（仅 version）→ 新建文件（返回 null）；给出：不存在 / 不可见 → 404；与 projectId 不一致 /
+   * 日报附图和未指定 fileId 的 version 都新建文件；给出 fileId 时，不存在 / 不可见 → 404；与 projectId 不一致 /
    * 归属（docType / nodeId / taskId）与现状不符 → 400（change 的 name 例外 —— Push 256：= 变更后文件名称，可不同于目标）；状态：version 意图须 draft、change 意图须
    * final / changed（或 draft 但其挂接任务已定档），否则 409 FILE_STATE_INVALID。生效字段一律以目标文件现状为准。
    */
   private async resolveUploadTarget(body: UploadCreateBody): Promise<FileRow | null> {
+    if (body.intent === "report_photo") return null;
     const fileId = body.fileId;
     if (fileId === undefined) {
-      // 仅 `intent=version` 可能省略（change 的 fileId 由契约必填）；省略 = 新建文件。
       return null;
     }
     const file = await this.repository.findFileById(fileId);
@@ -1631,6 +1648,36 @@ export class FileService {
     return file;
   }
 
+  private async requireUploadProject(projectId: string, tx?: DbClient): Promise<FileProjectBriefRow> {
+    const project = await this.repository.findProjectBrief(projectId, tx, tx !== undefined);
+    if (project === null || project.deletedAt !== null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
+    return project;
+  }
+
+  private async assertProjectUploadAllowed(project: FileProjectBriefRow, reportPhoto: boolean, attachmentTaskId?: string, tx?: DbClient): Promise<void> {
+    if (project.status !== "archived") return;
+    if ((reportPhoto || attachmentTaskId !== undefined) && await this.repository.hasUnfinishedTemporaryTask(project.id, tx, attachmentTaskId)) return;
+    throw new AppError("PROJECT_ARCHIVED", reportPhoto ? "归档项目仅在有未完成临时任务时可上传日报附图" : "归档项目仅可为未完成的临时任务新增文件");
+  }
+
+  private async assertUploadSessionProject(file: FileRow, session: UploadSessionRow, tx?: DbClient, project?: FileProjectBriefRow): Promise<FileProjectBriefRow | undefined> {
+    const reportPhoto = session.intent === "report_photo";
+    if (!reportPhoto && file.taskId === null) return;
+    const attachmentTaskId = session.intent === "version" && file.nodeId === null && file.currentVersionId === null
+      ? file.taskId ?? undefined : undefined;
+    const uploadProject = project ?? await this.requireUploadProject(file.projectId, tx);
+    await this.assertProjectUploadAllowed(uploadProject, reportPhoto, attachmentTaskId, tx);
+    return uploadProject;
+  }
+
+  private async listUploadParts(objectKey: string, uploadId: string): Promise<UploadedPart[]> {
+    try {
+      return await this.storage.listParts({ objectKey, uploadId });
+    } catch (error) {
+      throw toApiError(error);
+    }
+  }
+
   /** 文件 + 会话的公共装载（可见性 → 404；会话不属于该文件 → 404；写路径再判 `file.upload`）。 */
   private async loadUploadContext(
     fileId: string,
@@ -1649,6 +1696,9 @@ export class FileService {
     const session = await this.repository.findSessionById(uploadId);
     if (session === null || session.fileId !== fileId) {
       throw new AppError("NOT_FOUND", "上传会话不存在或不属于该文件");
+    }
+    if (permission !== null && session.intent === "report_photo") {
+      await this.permission.assertCan(actorId, "report.fill", access);
     }
     return { file, session };
   }
@@ -1803,8 +1853,8 @@ export class FileService {
   }
 
   /** 惰性 / 定时过期的公共实现（先清存储、后置状态；重复调用安全）。 */
-  private async expireSession(projectId: string, session: UploadSessionRow, at: Date): Promise<void> {
-    await this.discardStaging(session, "expire");
+  private async expireSession(projectId: string, session: UploadSessionRow, at: Date, reason = "上传会话过期"): Promise<void> {
+    await this.discardStaging(session, reason);
     await this.database.db.transaction(async (tx) => {
       const locked = await this.repository.lockSession(tx, session.id);
       if (locked === null || locked.status !== "active") {
@@ -1817,7 +1867,7 @@ export class FileService {
         objectType: "file",
         objectId: locked.fileId,
         projectId,
-        summary: "上传会话过期清理（未完成分片与暂存对象已清除）",
+        summary: reason + "，清理分片与暂存对象",
         metadata: { uploadId: locked.id, expiresAt: locked.expiresAt.toISOString() },
       });
     });

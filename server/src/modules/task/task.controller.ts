@@ -100,7 +100,7 @@ export class TaskController {
     return this.tasks.detail(id, taskId, actorId);
   }
 
-  /** 创建任务：从任务节点生成（判重 409 TASK_ALREADY_EXISTS）或手工创建（仅管理员）。 */
+  /** 创建任务：可从节点生成，系统管理员和当前项目经理可手工创建临时任务。 */
   @Post(":id/tasks")
   @RequirePermission("task.create")
   async create(

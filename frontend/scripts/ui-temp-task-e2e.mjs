@@ -8,13 +8,13 @@
  *             但是没有模板 点击后直接新建即可填写任务名称」（Push 197）。
  * 本脚本用**真实鼠标 / 真实键盘**（CDP Input，不是合成 click()）在真机浏览器上验九组事：
  *   ① 项目总览的**最后一组**是「临时任务」：与九个施工阶段一样常驻（骨架分组）；组名胶囊是**按钮**（data-temp-task-pill）——
- *      点它**不弹**「任务节点 + 模板」卡片（它不是施工阶段），而是直接出「新建临时任务」表单；再点收起；九个阶段标签照旧 9 枚可点（对照组：设计开发能开能关）；
- *   ② 看板「任务进展 → 待开始」列底「添加 → 临时任务」：填名点「创建」后**详情抽屉自动打开**（不用再点一次卡片），
+ *      点它**不弹**「任务节点 + 模板」卡片（它不是施工阶段），而是直接出「新建临时任务」表单；按 Esc 收起；九个阶段标签照旧 9 枚可点（对照组：设计开发能开能关）；
+ *   ② 看板「任务进展 → 待开始」列底「添加 → 临时任务」：填名称和项目经理后**详情抽屉自动打开**（不用再点一次卡片），
  *      抽屉里能当场确认「开始 / 预计完成」等时间细节；
  *   ③ 抽屉里给临时任务**二次改名**：中文 / 英文失焦即存、英文留空 = 清空（契约 null）、中文留空 = 自动还原不写库；
  *   ④ 节点来源任务（sourceNodeId）的抽屉**没有**改名行；服务端同口径兜底 —— PATCH title / titleEn 均 400 VALIDATION_FAILED；
  *   ⑤ 改完名字项目总览垫底「临时任务」组同步新名字（组头带「已完成 0/1」计数）；
- *   ⑥ 任务表底部「临时任务」分组头常驻入口：点开表单直接新建（没有模板、自己填名称）→ 建完详情抽屉自动打开、落库 stageKey = null；
+ *   ⑥ 任务表底部「临时任务」分组头常驻入口：居中面板填写名称并手选项目经理→ 建完详情抽屉自动打开、落库 stageKey = null；
  *   ⑦ 阶段添加卡片（「XX：任务节点与模板」；总览点阶段标签与看板「添加 → 阶段任务」两条路径同一张卡）里**不再有**
  *      「临时任务」入口（Push 207 · 业务口径「临时任务不应该存在于阶段里面新建」—— Push 197 常驻入口下架）：
  *      卡片内 [data-temp-task-entry] / [data-temp-task-form] 全空、也不出现「没有模板」字样；节点行照常（对照组）；
@@ -282,7 +282,7 @@ check("九个施工阶段的标签按钮照旧（9 枚，可点）", Number(pill
 check("「临时任务」组开局 0 行（骨架分组，还没有临时任务）", Number(await ev(rowsExpr(TEMP_STAGE))) === 0, "rows=" + String(await ev(rowsExpr(TEMP_STAGE))));
 check("夹具任务落在「设计开发」组（同一页 2 行：节点来源任务 + 阶段任务）", Number(await ev(rowsExpr(DESIGN))) === 2, "rows=" + String(await ev(rowsExpr(DESIGN))));
 
-// 点「临时任务」组名按钮（Push 197）：不弹「任务节点 + 模板」卡片，直接出「新建临时任务」表单；再点一下收起
+// 点「临时任务」组名按钮（Push 197）：不弹「任务节点 + 模板」卡片，直接出「新建临时任务」表单；按 Esc 收起
 const tempPill = await rectOf("[data-temp-task-pill]");
 const hitAtPill = tempPill === null ? "—" : String(await ev("(function(){var el=document.elementFromPoint(" + String(tempPill.x) + "," + String(tempPill.y) + ");if(el===null){return " + j("无") + ";}var b=el.closest(" + j("[data-temp-task-pill]") + ");return b===null?" + j("不是按钮") + ":b.getAttribute(" + j("aria-label") + ");})()"));
 check("点前命中测试：组名胶囊确实是按钮（aria-label = 添加任务：临时任务）", tempPill !== null && hitAtPill.indexOf("添加任务：临时任务") >= 0, "hit=" + hitAtPill);
@@ -293,9 +293,9 @@ const cardAtTemp = await ev("document.querySelector(" + j("[aria-label=" + Q + T
 check("点「临时任务」组名：不弹「任务节点 + 模板」卡片（它不是施工阶段、没有节点可挑）", cardAtTemp === false, "card=" + String(cardAtTemp));
 const rowsAfterTempClick = Number(await ev(rowsExpr(TEMP_STAGE)));
 check("点「临时任务」组名：只出表单、分组不折叠（仍 0 行）", rowsAfterTempClick === 0, "rows=" + String(rowsAfterTempClick));
-if (tempPill !== null) { await clickAt(tempPill); }
+await pressKey("Escape", "Escape", 27);
 const tempFormClosed = await waitFor("document.querySelector(" + j("[data-temp-task-form]") + ")===null", 5000);
-check("再点一下组名 → 表单收起（开 / 关同一枚按钮）", tempFormClosed === true, String(tempFormClosed));
+check("按 Esc → 临时任务表单收起", tempFormClosed === true, String(tempFormClosed));
 
 // 对照组：九个施工阶段的标签照旧能开 / 能关卡片
 await clickSelector(headerSelector(DESIGN) + " [data-stage-pill]");
@@ -317,16 +317,37 @@ await waitFor("document.querySelector(" + j("[data-kanban-column=" + Q + COLUMN 
 const menuItems = await ev("(function(){var m=document.querySelector(" + j("[data-kanban-column=" + Q + COLUMN + Q + "] [role=menu]") + ");return m===null?null:m.textContent;})()");
 check("点「添加」→ 菜单弹出（临时任务 / 阶段任务两个入口）", menuItems !== null && menuItems.indexOf("临时任务") >= 0 && menuItems.indexOf("阶段任务") >= 0, String(menuItems).slice(0, 60));
 await clickSelector("[data-kanban-column=" + Q + COLUMN + Q + "] [role=menu] button");
-await waitFor("document.querySelector(" + j("[data-kanban-column=" + Q + COLUMN + Q + "] form input") + ")!==null");
-const formInputs = await ev("(function(){var f=document.querySelector(" + j("[data-kanban-column=" + Q + COLUMN + Q + "] form") + ");return f===null?null:f.querySelectorAll(" + j("input") + ").length;})()");
-check("点「临时任务」→ 建任务表单弹出（中文必填 + 英文可留空两个输入）", Number(formInputs) === 2, "inputs=" + String(formInputs));
+const tempDialog = "[data-temp-task-dialog]";
+const tempForm = tempDialog + " [data-temp-task-form]";
+const tempSubmit = tempForm + " button[type=submit]";
+const managerList = '[role=listbox][aria-label="项目经理（必选）"]';
+
+async function verifyCenteredTempDialog(entry) {
+  const geometry = await ev(`(() => {
+    const box = document.querySelector(${j(tempDialog)})?.getBoundingClientRect();
+    if (!box) return null;
+    return { dx: Math.abs((box.left + box.right - innerWidth) / 2), dy: Math.abs((box.top + box.bottom - innerHeight) / 2) };
+  })()`);
+  check(entry + "临时任务面板在视口居中", geometry !== null && geometry.dx < 2 && geometry.dy < 2, JSON.stringify(geometry));
+}
+
+async function pickTempManager(entry) {
+  check(entry + "填写名称后仍需选择项目经理", (await ev(`document.querySelector(${j(tempSubmit)})?.disabled`)) === true, "");
+  await clickSelector(tempDialog + " [data-temp-task-manager] [aria-haspopup=listbox]");
+  await waitFor(`document.querySelector(${j(managerList)}) !== null`);
+  await typeInto(managerList + " input", userRow.username);
+  await clickSelector(managerList + " [role=option]");
+  check(entry + "选择经理后可以创建", (await ev(`document.querySelector(${j(tempSubmit)})?.disabled`)) === false, "");
+}
+
+await waitFor(`document.querySelector(${j(tempDialog)}) !== null`);
+await verifyCenteredTempDialog("看板");
 const tempName = "回放临时任务·" + stamp;
 const tempNameEn = "Temp board task " + stamp;
-const formCn = "[data-kanban-column=" + Q + COLUMN + Q + "] form input[placeholder=" + Q + "任务名称（必填）" + Q + "]";
-const formEn = "[data-kanban-column=" + Q + COLUMN + Q + "] form input[placeholder=" + Q + "英文名（可留空）" + Q + "]";
-await typeInto(formCn, tempName);
-await typeInto(formEn, tempNameEn);
-await clickSelector("[data-kanban-column=" + Q + COLUMN + Q + "] form button[type=submit]");
+await typeInto(tempForm + ' input[aria-label="临时任务名称（中文）"]', tempName);
+await typeInto(tempForm + ' input[aria-label="临时任务名称（英文）"]', tempNameEn);
+await pickTempManager("看板");
+await clickSelector(tempSubmit);
 const drawerOpened = await waitFor("document.querySelector(" + j("aside[role=dialog]") + ")!==null", 15000);
 check("② 建完「临时任务」→ 详情抽屉**自动打开**（不用再点一次卡片）", drawerOpened === true, String(drawerOpened));
 const drawer0 = await ev(drawerExpr());
@@ -338,7 +359,7 @@ check("抽屉阶段签显示「临时任务」（空阶段任务的展示名）"
 const listAfterCreate = await api("/api/v1/projects/" + projectId + "/tasks?limit=200");
 const createdRow = listAfterCreate.json === null ? undefined : listAfterCreate.json.items.find((item) => item.title === tempName);
 const tempTaskId = createdRow === undefined ? "" : createdRow.id;
-check("服务端：临时任务已落库（stageKey = null → 归垫底「临时任务」组）", createdRow !== undefined && createdRow.stageKey === null, createdRow === undefined ? "not found" : "id=" + tempTaskId);
+check("服务端：临时任务已落库（stageKey = null，经理等于手选名单）", createdRow !== undefined && createdRow.stageKey === null && JSON.stringify(createdRow.managerIds) === JSON.stringify([userRow.id]), createdRow === undefined ? "not found" : "id=" + tempTaskId);
 
 // ---------- ③ 抽屉里二次改名（失焦即存 / 留空还原 / 清空英文） ----------
 const renamedCn = "回放临时任务改名·" + stamp;
@@ -394,20 +415,22 @@ check("项目总览：垫底组仍是最后一组（改名不会改变分组顺�
 // ---------- ⑥ 任务表底部「临时任务」分组头常驻入口：点开表单直接新建 → 建完开详情抽屉 ----------
 await waitFor("document.querySelector(" + j("[data-temp-task-pill]") + ")!==null", 8000);
 await clickSelector("[data-temp-task-pill]");
-const residentDialog = "[role=dialog][aria-label=" + Q + TEMP_STAGE + "：新建" + Q + "]";
+const residentDialog = tempDialog;
 const residentFormOpened = await waitFor("document.querySelector(" + j(residentDialog) + ")!==null", 5000);
 check("⑥ 底部「临时任务」分组头常驻入口：点开直接出「新建临时任务」表单（没有模板、自己填名称）", residentFormOpened === true, String(residentFormOpened));
 const boardTempName = "回放常驻入口·分组头·" + stamp;
 const boardTempNameEn = "Temp resident header " + stamp;
 await typeInto(residentDialog + " [data-temp-task-form] input[aria-label=" + Q + "临时任务名称（中文）" + Q + "]", boardTempName);
 await typeInto(residentDialog + " [data-temp-task-form] input[aria-label=" + Q + "临时任务名称（英文）" + Q + "]", boardTempNameEn);
-await clickSelector(residentDialog + " [data-temp-task-form] button[type=submit]");
+await verifyCenteredTempDialog("总览");
+await pickTempManager("总览");
+await clickSelector(tempSubmit);
 const residentDrawerOpened = await waitFor("(function(){var d=document.querySelector(" + j("aside[role=dialog]") + ");if(d===null){return false;}var h=d.querySelector(" + j("h2") + ");return h!==null && h.textContent.trim()===" + j(boardTempName) + ";})()", 15000);
 check("⑥ 建完 → 详情抽屉**自动打开**、标题 = 刚填的任务名（直接补时间等细节）", residentDrawerOpened === true, String(residentDrawerOpened));
 const listAfterResident = await api("/api/v1/projects/" + projectId + "/tasks?limit=200");
 const residentRow = listAfterResident.json === null ? undefined : listAfterResident.json.items.find((item) => item.title === boardTempName);
 const residentTempId = residentRow === undefined ? "" : residentRow.id;
-check("⑥ 服务端：分组头入口建的临时任务已落库（stageKey = null、英文名同步）", residentRow !== undefined && residentRow.stageKey === null && residentRow.titleEn === boardTempNameEn, residentRow === undefined ? "not found" : "id=" + residentTempId);
+check("⑥ 服务端：分组头入口建的临时任务已落库（stageKey = null、英文名与手选经理同步）", residentRow !== undefined && residentRow.stageKey === null && residentRow.titleEn === boardTempNameEn && JSON.stringify(residentRow.managerIds) === JSON.stringify([userRow.id]), residentRow === undefined ? "not found" : "id=" + residentTempId);
 await clickSelector("aside[role=dialog] [aria-label=" + Q + "关闭任务详情" + Q + "]");
 await waitFor("document.querySelector(" + j("aside[role=dialog]") + ")===null");
 

@@ -16,11 +16,12 @@ import { TableScrollbar } from "./components/TableScrollbar";
 import { DEFAULT_VISIBLE_COLUMNS, ProjectSummary, TaskBoard, hiddenColumnsOf, taskPatchBody, visibleColumnsFromHidden, type ColumnKey, type TaskPatch, type VisibleColumns } from "./components/TaskBoard";
 import type { TaskEditSubmit } from "./components/TaskDrawer";
 import { TaskKanban, type KanbanAddContext } from "./components/TaskKanban";
+import type { TempTaskCreateValues } from "./components/TempTaskCreateForm";
 import type { StagePlacement } from "./components/StageAddCard";
 import { PROJECT_STAGES } from "./data/projects";
 import { memberNameOf, type Member } from "./data/members";
 import { lockBodyScroll } from "./scrollLock";
-import { TEMP_TASK_STAGE, hasOutputDeliverables, isTaskDone, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "./data/tasks";
+import { TEMP_TASK_STAGE, VIEW_ONLY_TASK_CAPABILITIES, hasOutputDeliverables, isTaskDone, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "./data/tasks";
 import type { TemplatePresetNode } from "./data/templatePresets";
 import { fetchTaskFiles, recycleFile, renameFile, uploadFiles, type TaskFileRef } from "./fileApi";
 import { exportProjectOverviewPdf } from "./exportOverviewPdf";
@@ -123,13 +124,15 @@ type ProjectDetailProps = {
   onTaskHiddenColumnsChange?: (keys: string[]) => Promise<string | null>;
   /** 干系人写入口（Push 221 · A27）：= stakeholder.manage（画像未到时乐观放行，服务端逐请求仍是最终裁决）。 */
   canManageStakeholders: boolean;
+  /** 系统管理员或当前项目名单内的项目经理可手工创建临时任务。 */
+  canCreateTemporaryTask: boolean;
   /** 验收完成后设为已完成的写入口（无 project.update 权限时父层不传）；false = 写失败，父层已提示。 */
   onSetProjectDone?: (projectId: string) => Promise<boolean>;
   /** 应急全页只读开关；项目级只读由 project.accessLevel 判定，不能用它关闭任务负责人的本人任务编辑。 */
   readOnly?: boolean;
 };
 
-export default function ProjectDetail({ me, project, view, dailySub, dailyDate, focus, onClearFocus, onClearDailyDate, customDeliverableTypes = [], onCreateDeliverableType, members, managerMembers, onTaskEdited, taskHiddenColumns, onTaskHiddenColumnsChange, canManageStakeholders, onSetProjectDone, readOnly = false }: ProjectDetailProps) {
+export default function ProjectDetail({ me, project, view, dailySub, dailyDate, focus, onClearFocus, onClearDailyDate, customDeliverableTypes = [], onCreateDeliverableType, members, managerMembers, onTaskEdited, taskHiddenColumns, onTaskHiddenColumnsChange, canManageStakeholders, canCreateTemporaryTask, onSetProjectDone, readOnly = false }: ProjectDetailProps) {
   /** 顶部视图（Push 82 / 121）：阶段标签收进「项目总览」，另两块是看板视图，最后一块是「日报及问题」；Push 154 起当前标签由地址 `?view=` 派生。 */
   const locale = useLocale();
   const t = useT();
@@ -139,6 +142,9 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   const projectManagerSignature = project?.managerIds.join("\u0000") ?? "";
   /** 项目级写入口只看最终项目权限；所管项目经理为 edit，项目成员 / 任务负责人关系只保证浏览。 */
   const projectEditable = !readOnly && project?.accessLevel === "edit";
+  const projectArchived = project?.status === "archived";
+  const projectWritable = projectEditable && !projectArchived;
+  const canAddTemporaryTask = projectEditable && canCreateTemporaryTask;
   /** 任务级写入口即使项目只读也要下传，由每条任务的 capabilities 再逐项裁决。 */
   const taskWritable = !readOnly;
   /** 自定义成果类型是项目级写操作：项目编辑者可新增，服务端仍做最终裁决。 */
@@ -391,8 +397,16 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
    * 与服务端默认读序（阶段序 → sort_index → id）同一口径；三块视图共用这一份顺序。
    */
   const tasks = useMemo(
-    () => preserveTaskOrder ? rawTasks : [...rawTasks].sort((left, right) => stageRankOf(left.stage) - stageRankOf(right.stage) || left.sortIndex - right.sortIndex),
-    [rawTasks, preserveTaskOrder],
+    () => {
+      const visible = projectArchived ? rawTasks.map((task) => ({
+        ...task,
+        capabilities: task.stageKey === null && task.nodeId === null && task.sourceNodeId === null && !isTaskDone(task)
+          ? { ...taskCapabilitiesOf(task), canDelete: false, canFinalize: false }
+          : VIEW_ONLY_TASK_CAPABILITIES,
+      })) : rawTasks;
+      return preserveTaskOrder ? visible : [...visible].sort((left, right) => stageRankOf(left.stage) - stageRankOf(right.stage) || left.sortIndex - right.sortIndex);
+    },
+    [rawTasks, preserveTaskOrder, projectArchived],
   );
 
   /**
@@ -825,16 +839,21 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
     if (projectId === null) {
       return null;
     }
+    let created: ApiTask;
     try {
-      const created = await createTask(projectId, body);
-      if (status !== "待开始") {
-        await updateTask(projectId, created.id, { status: statusWriteValue(status), version: created.version });
-      }
-      return created;
+      created = await createTask(projectId, body);
     } catch (error) {
       reportWriteError(error);
       return null;
     }
+    if (status !== "待开始") {
+      try {
+        await updateTask(projectId, created.id, { status: statusWriteValue(status), version: created.version });
+      } catch (error) {
+        reportWriteError(error);
+      }
+    }
+    return created;
   };
 
   /** 建完的收尾：整表重取（拿新行的姓名 / 文件摘要与重排后的位次）+ 刷新项目时间。 */
@@ -846,12 +865,12 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   };
 
   /**
-   * 看板「添加 → 临时任务」（Push 86）：标题由用户自己填，挂到该列（负责人 / 状态按列给，阶段留空 = 垫底「临时任务」组）。
+   * 手工填写名称、选择项目经理。看板入口的负责人和状态取自所在列，阶段留空。
    * 返回新任务 id（Push 196）—— 看板拿到后直接打开它的详情抽屉（确认时间等细节）；失败 = null。
    */
-  const handleQuickAdd = async (context: KanbanAddContext, values: { title: string; titleEn: string }): Promise<string | null> => {
+  const handleQuickAdd = async (context: KanbanAddContext, values: TempTaskCreateValues): Promise<string | null> => {
     const created = await createOne(
-      { stageKey: null, title: values.title, titleEn: values.titleEn === "" ? null : values.titleEn, ownerIds: context.ownerIds, priority: "中" },
+      { stageKey: null, title: values.title, titleEn: values.titleEn === "" ? null : values.titleEn, managerIds: values.managerIds, ownerIds: context.ownerIds, priority: "中" },
       context.status,
     );
     if (created === null) {
@@ -1233,7 +1252,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             <>
               {/* 汇总卡（M3-07 刀 1 后半）：最慢 / 最新阶段由服务端按任务聚合（GET /projects/{id}/summary） */}
               <ProjectSummary summary={summary} />
-              <TaskBoard tasks={tasks} members={members} managerMembers={managerMembers} customDeliverableTypes={customDeliverableTypes} onCreateDeliverableType={createDeliverableType} skeletonStages={BOARD_STAGES} onSetProgress={taskWritable ? handleSetProgress : undefined} onSetStatus={taskWritable ? handleSetStatus : undefined} onSetActualEnd={taskWritable ? handleSetActualEnd : undefined} visibleColumns={visibleColumns} scrollRef={tableScrollRef} collapsed={collapsedStages} onToggleStage={toggleStage} onToggleAllStages={toggleAllStages} onAddNode={projectEditable ? handleAddNode : undefined} onAddNodes={projectEditable ? handleAddNodes : undefined} onCreateTempTask={projectEditable ? (values) => handleQuickAdd({ ownerIds: [], status: "待开始" }, values) : undefined} viewStage="项目总览" canFinalizeTask={canFinalizeTask} onSubmitTaskEdit={taskWritable ? handleSubmitTaskEdit : undefined} onRenameTask={taskWritable ? handleRenameTask : undefined} onPatchTask={taskWritable ? handlePatchTask : undefined} onChangeManagers={projectEditable ? handleBoardManagerChange : undefined} canEditManagers={projectEditable} onDeleteTask={projectEditable ? requestDeleteTask : undefined} onUploadFiles={taskWritable ? handleUploadTaskFiles : undefined} onDeleteFile={taskWritable ? handleDeleteTaskFile : undefined} onRenameFile={taskWritable ? handleRenameTaskFile : undefined} onFinalize={taskWritable ? handleFinalizeTask : undefined} onUnfinalize={taskWritable ? handleUnfinalizeTask : undefined} onChanged={reloadAll} actorName={me.user.displayName ?? ""} filesByTask={taskFiles} projectId={project.id} tierTint={tintRows} focusTaskId={focus?.kind === "task" ? focus.id : null} onFocusClosed={onClearFocus} openTaskId={changesTaskRequestId} onOpenTaskOpened={() => { setChangesTaskRequestId(null); }} />
+              <TaskBoard tasks={tasks} members={members} managerMembers={managerMembers} customDeliverableTypes={customDeliverableTypes} onCreateDeliverableType={createDeliverableType} skeletonStages={BOARD_STAGES} onSetProgress={taskWritable ? handleSetProgress : undefined} onSetStatus={taskWritable ? handleSetStatus : undefined} onSetActualEnd={taskWritable ? handleSetActualEnd : undefined} visibleColumns={visibleColumns} scrollRef={tableScrollRef} collapsed={collapsedStages} onToggleStage={toggleStage} onToggleAllStages={toggleAllStages} onAddNode={projectWritable ? handleAddNode : undefined} onAddNodes={projectWritable ? handleAddNodes : undefined} onCreateTempTask={canAddTemporaryTask ? (values) => handleQuickAdd({ ownerIds: [], status: "待开始" }, values) : undefined} viewStage="项目总览" canFinalizeTask={canFinalizeTask} onSubmitTaskEdit={taskWritable ? handleSubmitTaskEdit : undefined} onRenameTask={taskWritable ? handleRenameTask : undefined} onPatchTask={taskWritable ? handlePatchTask : undefined} onChangeManagers={projectEditable ? handleBoardManagerChange : undefined} canEditManagers={projectEditable} onDeleteTask={projectWritable ? requestDeleteTask : undefined} onUploadFiles={taskWritable ? handleUploadTaskFiles : undefined} onDeleteFile={taskWritable && !projectArchived ? handleDeleteTaskFile : undefined} onRenameFile={taskWritable && !projectArchived ? handleRenameTaskFile : undefined} allowFileChanges={!projectArchived} onFinalize={taskWritable ? handleFinalizeTask : undefined} onUnfinalize={taskWritable ? handleUnfinalizeTask : undefined} onChanged={reloadAll} actorName={me.user.displayName ?? ""} filesByTask={taskFiles} projectId={project.id} tierTint={tintRows} focusTaskId={focus?.kind === "task" ? focus.id : null} onFocusClosed={onClearFocus} openTaskId={changesTaskRequestId} onOpenTaskOpened={() => { setChangesTaskRequestId(null); }} />
             </>
           ) : activeView === "甘特图" ? (
             // 甘特图（Push 142）：与项目总览同一份任务数据（服务端任务接口）；拖动改期 / 改进度走同一套写入口径
@@ -1241,36 +1260,37 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
           ) : activeView === "日报及问题" ? (
             // key = 项目 id：换项目时把日报 / 问题与填写草稿一起复位（原型内存态，见 ReportIssuePanel.tsx）
             // Push 290：背景档位「适中」透传给「问题追踪」做表格呈现（原醒目模式挂点，随功能下架改吃档位）；失败提示沿用同一条 toolError
-            <ReportIssuePanel key={project.id} project={project} me={me} members={members} tierTint={tintRows} sub={dailySub} dateFilter={dailyDate} focusReportId={focus?.kind === "report" ? focus.id : null} focusIssueId={focus?.kind === "issue" ? focus.id : null} onFocusClosed={onClearFocus} onClearDateFilter={onClearDailyDate} readOnly={!projectEditable} onChangeSub={(next) => { replaceProjectSubView(project.id, next); }} />
+            <ReportIssuePanel key={project.id} project={project} me={me} members={members} tierTint={tintRows} sub={dailySub} dateFilter={dailyDate} focusReportId={focus?.kind === "report" ? focus.id : null} focusIssueId={focus?.kind === "issue" ? focus.id : null} onFocusClosed={onClearFocus} onClearDateFilter={onClearDailyDate} readOnly={!projectWritable} canFill={projectEditable && (!projectArchived || (summary?.projectId === project.id && summary.hasUnfinishedTemporaryTask === true))} onChangeSub={(next) => { replaceProjectSubView(project.id, next); }} />
           ) : activeView === "干系人" ? (
             // 干系人（Push 221 · A27 前端接线）：表格形态与「项目总览」同一套（表头固定 + CSS grid 行 + 共用底部滑块）
-            <StakeholderPanel projectId={project.id} projectCode={project.code} projectName={project.description} canManage={canManageStakeholders && projectEditable} scrollRef={tableScrollRef} />
+            <StakeholderPanel projectId={project.id} projectCode={project.code} projectName={project.description} canManage={canManageStakeholders && projectWritable} scrollRef={tableScrollRef} />
           ) : activeView === "项目文件" ? (
             // 项目文件（2026-10-29）：阶段任务文件 + 变更记录关联文件的并集；日报 / 问题附图不进入。
-            <ProjectFilesPanel projectId={project.id} tasks={tasks} canEdit={projectEditable} />
+            <ProjectFilesPanel projectId={project.id} tasks={tasks} canEdit={projectWritable} />
           ) : (
             <TaskKanban
               mode={activeView === "人员任务分配" ? "owner" : "status"}
               tasks={tasks}
               canFinalizeTask={canFinalizeTask}
               canEditManagers={projectEditable}
-              canDragTasks={projectEditable}
+              canDragTasks={projectWritable}
               customDeliverableTypes={customDeliverableTypes}
               onCreateDeliverableType={createDeliverableType}
               members={members}
               managerMembers={managerMembers}
-              onAddTask={projectEditable ? handleQuickAdd : undefined}
-              onAddStageTask={projectEditable ? handleKanbanAddNode : undefined}
+              onAddTask={canAddTemporaryTask ? handleQuickAdd : undefined}
+              onAddStageTask={projectWritable ? handleKanbanAddNode : undefined}
               onSubmitTaskEdit={taskWritable ? handleSubmitTaskEdit : undefined}
               onRenameTask={taskWritable ? handleRenameTask : undefined}
               onPatchTask={taskWritable ? handlePatchTask : undefined}
               onSetStatus={taskWritable ? handleSetStatus : undefined}
               onSetActualEnd={taskWritable ? handleSetActualEnd : undefined}
-              onReorderTask={projectEditable ? handleReorderTask : undefined}
+              onReorderTask={projectWritable ? handleReorderTask : undefined}
               onSetProgress={taskWritable ? handleSetProgress : undefined}
               onUploadFiles={taskWritable ? handleUploadTaskFiles : undefined}
-              onDeleteFile={taskWritable ? handleDeleteTaskFile : undefined}
-              onRenameFile={taskWritable ? handleRenameTaskFile : undefined}
+              onDeleteFile={taskWritable && !projectArchived ? handleDeleteTaskFile : undefined}
+              onRenameFile={taskWritable && !projectArchived ? handleRenameTaskFile : undefined}
+              allowFileChanges={!projectArchived}
               onFinalize={taskWritable ? handleFinalizeTask : undefined}
               onUnfinalize={taskWritable ? handleUnfinalizeTask : undefined}
               onChanged={reloadAll}

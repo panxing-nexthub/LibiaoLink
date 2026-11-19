@@ -18,8 +18,7 @@ import { RowDeleteButton } from "./RowDeleteButton";
 import { DeliverableCell, docTypeCapsule } from "./DeliverablePicker";
 import { StageAddCard } from "./StageAddCard";
 import type { StagePlacement } from "./StageAddCard";
-import { TempTaskCreateForm } from "./TempTaskCreateForm";
-import { useFocusTrap } from "./useFocusTrap";
+import { TempTaskCreateForm, type TempTaskCreateValues } from "./TempTaskCreateForm";
 import type { TemplatePresetNode } from "../data/templatePresets";
 
 const STAGE_ORDER: readonly string[] = PROJECT_STAGES.filter((stage) => stage !== "项目总览");
@@ -348,7 +347,7 @@ type TaskBoardProps = {
    * 底部「临时任务」分组头的常驻新建入口（Push 197）：点分组头直接填名称新建（没有模板可挑），
    * 返回新任务 id（失败 = null）—— 拿到后直接打开它的详情抽屉补时间等细节；不传 = 分组头点不动。
    */
-  onCreateTempTask?: (values: { title: string; titleEn: string }) => Promise<string | null>;
+  onCreateTempTask?: (values: TempTaskCreateValues) => Promise<string | null>;
   /** 表格行内编辑：只改任务字段（负责人 / 日期（含联动天数）/ 施工人数 / 紧急重要度 / 进展描述）。 */
   onPatchTask?: (taskId: string, patch: TaskPatch) => void;
   /** 任务表行内删除（Push 141：行悬停的删除按钮，不传 = 不显示该按钮）。 */
@@ -395,6 +394,7 @@ type TaskBoardProps = {
   onChanged?: () => void;
   /** 当前登录人姓名（Push 254 · 抽屉「变更申请」页「变更申请人」只读展示）；不传 = 显示「当前登录人」。 */
   actorName?: string;
+  allowFileChanges?: boolean;
   /** 任务 → 文件引用（Push 246 · fileApi.fetchTaskFiles）：「文件」列胶囊显示文件名 / 「+N」、
    *  下拉里点名字预览 + 删除；不传 / 取不到 = 退回「N 份」计数（老数据 / 请求失败）。 */
   filesByTask?: ReadonlyMap<string, TaskFileRef[]>;
@@ -924,7 +924,7 @@ export function ProjectSummary({ summary }: { summary: ApiProjectSummary | null 
   );
 }
 
-export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes = [], onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, onAddNode, onAddNodes, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, filesByTask, projectId, tierTint }: TaskBoardProps) {
+export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes = [], onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, onAddNode, onAddNodes, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, filesByTask, projectId, tierTint }: TaskBoardProps) {
   const t = useT();
   const locale = useLocale();
   /**
@@ -963,10 +963,6 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
   const [cardStage, setCardStage] = useState<string | null>(null);
   /** 底部「临时任务」分组头的新建表单开着没有（Push 197；与阶段卡片互斥）。 */
   const [tempFormOpen, setTempFormOpen] = useState(false);
-  /** 键盘焦点陷阱（Push 264 追订）：临时任务新建浮层开着时焦点进浮层、Tab 在浮层内循环。 */
-  const tempFormTrapRef = useFocusTrap<HTMLDivElement>(tempFormOpen && onCreateTempTask !== undefined);
-  /** 临时任务表单仍相对表格定位；阶段添加卡片在视口内居中打开。 */
-  const [cardBox, setCardBox] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const boardWrapRef = useRef<HTMLDivElement | null>(null);
   const boardCardRef = useRef<HTMLDivElement | null>(null);
   const headerRowRef = useRef<HTMLDivElement | null>(null);
@@ -997,35 +993,6 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
     setTempFormOpen(false);
   }, [viewStage]);
 
-  /** 测量临时任务表单在表格中的落点。 */
-  const measureCardBox = (stage: string) => {
-    const wrap = boardWrapRef.current;
-    const board = boardCardRef.current;
-    const header = headerRowRef.current;
-    if (wrap === null || board === null || header === null) {
-      return null;
-    }
-    const wrapRect = wrap.getBoundingClientRect();
-    const boardRect = board.getBoundingClientRect();
-    const headerRect = header.getBoundingClientRect();
-    const stageHeader = board.querySelector('[data-stage-header="' + stage + '"]');
-    // 分组头找不到（异常情况）时回落到表头下沿
-    const topRect = stageHeader === null ? null : stageHeader.getBoundingClientRect();
-    const cardWidth = Math.min(400, wrapRect.width - 48);
-    const managerCell = header.querySelector('[data-column="manager"]');
-    const managerRect = managerCell === null ? null : managerCell.getBoundingClientRect();
-    // 回落到右边（项目经理列被列显隐关掉时），并保证卡片不出表格
-    const naturalLeft = managerRect === null ? boardRect.right - 24 - cardWidth : managerRect.left;
-    const minLeft = boardRect.left + 16;
-    const maxLeft = boardRect.right - 24 - cardWidth;
-    const top = topRect === null ? headerRect.bottom + 10 : topRect.top;
-    return {
-      top: Math.round(top - wrapRect.top),
-      left: Math.round(Math.max(minLeft, Math.min(maxLeft, naturalLeft)) - wrapRect.left),
-      maxHeight: Math.round(Math.max(320, Math.min(window.innerHeight * 0.72, boardRect.bottom - top - 16))),
-    };
-  };
-
   /** 点阶段标签：再点同一个 = 关掉；新卡片在视口内居中打开。 */
   const toggleCard = (stage: string) => {
     if (cardStage === stage) {
@@ -1036,42 +1003,10 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
     setCardStage(stage);
   };
 
-  /** 点底部「临时任务」分组头（Push 197）：再点 = 关掉；开的时候先量好落点（与阶段卡片同一套测量、同一落点）。 */
   const toggleTempForm = () => {
-    if (tempFormOpen) {
-      setTempFormOpen(false);
-      return;
-    }
     setCardStage(null);
-    setCardBox(measureCardBox(TEMP_TASK_STAGE));
-    setTempFormOpen(true);
+    setTempFormOpen((open) => !open);
   };
-
-  /** 临时任务表单继续随表格测量；阶段添加卡片打开后独立停在视口内。 */
-  const measureStage = tempFormOpen ? TEMP_TASK_STAGE : null;
-  // 表格尺寸变化（列显隐 / 阶段折叠 / 换项目）与窗口缩放时重新量落点
-  useEffect(() => {
-    if (measureStage === null) {
-      return;
-    }
-    const update = () => {
-      setCardBox(measureStage === null ? null : measureCardBox(measureStage));
-    };
-    update();
-    window.addEventListener("resize", update);
-    // 表格横向滚动时「项目经理」列会跟着动，卡片跟着列走
-    const scroller = scrollRef?.current ?? null;
-    scroller?.addEventListener("scroll", update);
-    const observer = new ResizeObserver(update);
-    if (boardCardRef.current !== null) {
-      observer.observe(boardCardRef.current);
-    }
-    return () => {
-      window.removeEventListener("resize", update);
-      scroller?.removeEventListener("scroll", update);
-      observer.disconnect();
-    };
-  }, [measureStage, scrollRef]);
 
   /**
    * 列头固定（Push 141 业务反馈「这个标题栏要固定 鼠标移动可以依旧显示」）：表头已移出横向滚动容器、自身 sticky 在主标签栏（Push 201 起吸顶）之下，
@@ -1369,25 +1304,15 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
         </span>
       ))}
       {tempFormOpen && onCreateTempTask !== undefined ? (
-        <div
-          ref={tempFormTrapRef}
-          role="dialog"
-          aria-label={t("board.stage.newAria")}
-          style={cardBox === null ? { top: 10, left: 24 } : cardBox}
-          className="absolute z-40 w-[280px] max-w-[calc(100vw-3rem)] rounded-2xl border border-white/80 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.98),rgba(255,255,255,0.94))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_12px_40px_rgba(15,23,42,0.22)] backdrop-blur-2xl backdrop-saturate-150"
-        >
-          <TempTaskCreateForm
-            onCreate={async (values) => {
-              const createdId = await onCreateTempTask(values);
-              if (createdId !== null) {
-                setTempFormOpen(false);
-                setSelectedTaskId(createdId);
-              }
-              return createdId;
-            }}
-            onCancel={() => { setTempFormOpen(false); }}
-          />
-        </div>
+        <TempTaskCreateForm
+          managerOptions={managerMembers}
+          onCreate={async (values) => {
+            const createdId = await onCreateTempTask(values);
+            if (createdId !== null) setSelectedTaskId(createdId);
+            return createdId;
+          }}
+          onClose={() => { setTempFormOpen(false); }}
+        />
       ) : null}
       {cardStage !== null && (onAddNode !== undefined || onAddNodes !== undefined) ? (
         <StageAddCard
@@ -1425,6 +1350,7 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
         onUnfinalize={onUnfinalize}
         onChanged={onChanged}
         actorName={actorName}
+        allowFileChanges={allowFileChanges}
         projectId={projectId}
         onClose={closeDrawer}
       />

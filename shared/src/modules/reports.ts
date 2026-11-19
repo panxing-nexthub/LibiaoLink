@@ -96,7 +96,7 @@ function legacyIssueInputUsed(value: {
 /** 新报一天的日报（A3-01 / A3-02 · Push 215：同人同项目同日可多条 —— 原「一人一天一条」唯一约束与 409 已删除，同日多条按创建时间区分）。 */
 export const DailyReportCreateBodySchema = z
   .object({
-    date: DateOnlySchema.openapi({ description: "填报日期（当天或过去日期 = 补填；未来日期 400）" }),
+    date: DateOnlySchema.openapi({ description: "填报日期（任意合法日期；过去日期首次提交由服务端推导为补填，未来日期允许）" }),
     state: DailyReportWriteStateSchema.default("submitted").openapi({ description: "draft 暂存 / submitted 提交（缺省 submitted）" }),
     headcount: z.number().int().min(0).max(100000).optional().openapi({ description: "今日施工人数（缺省为空）" }),
     doneWork: z.string().min(1).max(2000).openapi({ description: "当日完成工作（A3-04 必填）" }),
@@ -197,7 +197,7 @@ export const DailyReportGroupSyncResponseSchema = z
   })
   .openapi("DailyReportGroupSyncResponse", { description: "日报同步项目群受理结果（机器人文字 + 海报由 worker 异步发送）" });
 
-/** 日报当日查询（A7-01 汇总 / A7-05 应填未填共用）：日期缺省 = 今天（Asia/Shanghai）；未来日期 400（与 A3-04 同口径）。 */
+/** 日报当日查询（A7-01 汇总 / A7-05 应填未填共用）：日期缺省 = 今天（Asia/Shanghai）；未来日期 400（仅当日读视图；日报填写提交不限未来日期）。 */
 export const DailyReportDayQuerySchema = z
   .object({
     date: DateOnlySchema.optional().openapi({ description: "业务日期 YYYY-MM-DD；缺省 = 今天（Asia/Shanghai）；未来日期 400" }),

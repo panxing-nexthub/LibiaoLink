@@ -707,6 +707,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "board.change.chip": "변경",
   "board.change.projectOpen": "프로젝트 전체 변경 기록 보기",
   "board.change.projectButton": "변경 이력",
+  "board.change.projectToolbar": "변경 기록",
   "board.change.projectTitle": "프로젝트 변경 이력",
   "board.change.projectSummary": "{tasks}개 작업 · {changes}건 변경",
   "board.change.projectHintShort": "작업을 연 뒤 변경을 눌러 상세 보기",

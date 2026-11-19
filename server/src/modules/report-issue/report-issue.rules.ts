@@ -35,13 +35,13 @@ export function departmentOfCategories(categories: readonly string[]): string | 
   return null;
 }
 
-/** 写入状态 + 日期 → 落库状态（A3-02）：草稿恒 draft；提交当天 = submitted；提交过去日期 = supplement（补填）。 */
+/** 写入状态 + 日期 → 落库状态（A3-02）：草稿恒 draft；提交过去日期 = supplement（补填）；当天或未来日期 = submitted。 */
 export function resolveReportState(writeState: DailyReportWriteState, reportDate: string, today: string): DailyReportState {
   if (writeState === "draft") return "draft";
   return reportDate < today ? "supplement" : "submitted";
 }
 
-/** A3-04 时间口径：只允许填报当天或补填过去日期，未来日期 400。 */
+/** 未来日期判断：仅用于日报当日读视图；日报填写提交不限未来日期。 */
 export function isFutureDate(reportDate: string, today: string): boolean {
   return reportDate > today;
 }

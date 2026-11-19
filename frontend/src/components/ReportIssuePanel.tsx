@@ -558,6 +558,11 @@ function renumberLines(text: string): string {
   return lines.map((line, index) => String(index + 1) + ": " + line).join("\n");
 }
 
+/** 问题描述是否含有效内容：旧版自动序号草稿里的「1: 」占位仍视为空；用户填写的实际文本原样保留。 */
+function issueTitleHasContent(text: string): boolean {
+  return renumberLines(text) !== "";
+}
+
 /** 光标前**内容行**数（剥掉行首序号、忽略空行）—— 回车「自动序号」的续号基准（Push 242）：
  *  序号按内容行数编、不按物理换行数 —— 删掉旧序号 / 把框删空后再回车仍从「1: 」起（原按 `before.split("\n").length`
  *  算，空串也算一行 → 删空后回车跳成「2: 」—— 业务反馈「用户删除了再回车就生成2：了 用户觉得这个是bug」）。 */
@@ -581,7 +586,7 @@ const BTN_SECONDARY =
  *  每条 = 问题描述 / 问题归类 / 问题处理人 / 该问题附图 / 解决方案或建议 —— 提交时逐条生成独立问题记录；
  *  原单问题四件套（foundIssue / issueCategories / suggestion / issuePhotos）整体下线（旧数据照旧在列表 / 抽屉只读展示）。 */
 type ReportIssueDraftUi = {
-  /** 问题描述（自动序号文本；提交前统一重排） */
+  /** 问题描述（一块只填一条问题；旧版行首序号在内容判定时兼容为空） */
   title: string;
   /** 问题归类（C9 字典十项；可多选，≥1 项） */
   categories: string[];
@@ -2526,8 +2531,9 @@ function StageChecklist({
   );
 }
 /** 「日报填写」表单（字段按 A3-01；校验口径 A3-04：日期 + 当日完成工作 + 明日计划必填）；
- *  自动序号（Push 206 续 / Push 242 修）：「当日完成工作 / 明日计划 / 问题描述 / 解决方案或建议」四个多行框 ——
- *  空框聚焦预置 1: 、回车按光标前**内容行数**续下一行序号、失焦 / 提交前重排；四个多行框均自动下扩。
+ *  自动序号（Push 206 续 / Push 242 修）：「当日完成工作 / 明日计划 / 解决方案或建议」三个多行框 ——
+ *  空框聚焦预置 1: 、回车按光标前**内容行数**续下一行序号、失焦 / 提交前重排；问题描述不自动编号，
+ *  每个「问题 N」块只对应一条问题记录，不同类型的问题通过「+ 添加问题」另起一块填写。
  *  Push 217（业务口径 2026-09-29「现场工作附图放在明日计划填写下面」）：块序调整 —— 「现场工作附图」移到
  *  「明日计划」正下方。
  *  Push 243（业务口径 2026-10-08）：原「现场发现问题 + 问题归类 + 当前问题附图 + 解决方案或建议」单问题四件套
@@ -2587,14 +2593,14 @@ function ReportFillForm({
     missing.push(t("report.missing.plan"));
   }
   // 问题块校验（Push 243）：动过的问题块（描述 / 归类 / 处理人 / 附图 / 解决方案任一有内容）必须齐「描述 + 归类」；
-  // 全空块 = 没填，提交时忽略（不拦提交）。内容判定先剥行首序号（只剩「1: 」不算填）—— 与自动序号同一口径。
+  // 全空块 = 没填，提交时忽略（不拦提交）。内容按去首尾空白后的文本判定（纯空白块不算填）。
   draft.issues.forEach((item, index) => {
-    const title = renumberLines(item.title);
-    const touched = title !== "" || item.categories.length > 0 || item.ownerId !== "" || item.suggestion.trim() !== "" || item.photos.length > 0;
+    const hasTitle = issueTitleHasContent(item.title);
+    const touched = hasTitle || item.categories.length > 0 || item.ownerId !== "" || item.suggestion.trim() !== "" || item.photos.length > 0;
     if (!touched) {
       return;
     }
-    if (title === "") {
+    if (!hasTitle) {
       missing.push(t("report.missing.issueTitle", { n: index + 1 }));
     } else if (item.categories.length === 0) {
       missing.push(t("report.missing.issueCategory", { n: index + 1 }));
@@ -2641,7 +2647,8 @@ function ReportFillForm({
     requestAnimationFrame(() => target.setSelectionRange(nextCaret, nextCaret));
   };
 
-  /** 问题块里的多行框（Push 243）：与「当日完成工作 / 明日计划」同一套自动序号（空框聚焦预置 1: · 回车续号 · 失焦重排）+ 自动下扩。 */
+  /** 问题块里的解决方案多行框（Push 243）：与「当日完成工作 / 明日计划」同一套自动序号（空框聚焦预置 1: · 回车续号 · 失焦重排）+ 自动下扩。
+   *  问题描述不走这套 —— 一块对应一条问题，避免再出现「1: / 2:」把多条问题塞进同一条记录。 */
   const numberedTextarea = (value: string, applyValue: (next: string) => void, dataField: string, rows: number, placeholder?: string) => (
     <GrowingTextarea
       data-field={dataField}
@@ -2844,7 +2851,14 @@ function ReportFillForm({
               <span className={FORM_LABEL}>
                 {fieldText(locale, "问题描述")}<span className="ml-1 text-rose-500">*</span>
               </span>
-              {numberedTextarea(item.title, (next) => { onPatchIssue(index, { title: next }); }, "issueTitle", 2, t("report.placeholder.issueTitle"))}
+              <GrowingTextarea
+                data-field="issueTitle"
+                value={item.title}
+                onChange={(event) => { onPatchIssue(index, { title: event.target.value }); }}
+                rows={2}
+                placeholder={t("report.placeholder.issueTitle")}
+                className={FORM_INPUT + " mt-1 resize-y"}
+              />
             </label>
             <div className="mt-3 grid gap-4 md:grid-cols-3">
               <label className="block">
@@ -3849,14 +3863,14 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
     const headcount = Number.parseInt(draft.headcount, 10);
     const plan = renumberLines(draft.plan);
     const issues = draft.issues
+      .filter((item) => issueTitleHasContent(item.title))
       .map((item) => ({
-        title: renumberLines(item.title),
+        title: item.title.trim(),
         categories: item.categories,
         ownerId: item.ownerId === "" ? null : item.ownerId,
         solution: renumberLines(item.suggestion),
         photoFileIds: readyFileIds(item.photos),
       }))
-      .filter((item) => item.title !== "")
       .map((item) => {
         const next: ReportIssueWriteDraft = { title: item.title, categories: item.categories, ownerId: item.ownerId };
         if (item.solution !== "") {

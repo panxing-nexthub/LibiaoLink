@@ -440,9 +440,9 @@ const DONE_EXPECT = "1: 回放·完成工作-A1" + LF + "2: 回放·完成工作
 const PLAN_TEXT = "回放·明日计划-A1";
 const PLAN_EXPECT = "1: 回放·明日计划-A1";
 const ISSUE_TEXT = "回放·现场问题-钢结构偏差";
-const ISSUE_EXPECT = "1: 回放·现场问题-钢结构偏差";
+const ISSUE_EXPECT = "回放·现场问题-钢结构偏差";
 const ISSUE2_TEXT = "回放·现场问题-采购缺件";
-const ISSUE2_EXPECT = "1: 回放·现场问题-采购缺件";
+const ISSUE2_EXPECT = "回放·现场问题-采购缺件";
 await typeInto("[data-field=headcount]", "12");
 await clickStageLabel("硬件实施");
 await clickStageLabel("试运行");

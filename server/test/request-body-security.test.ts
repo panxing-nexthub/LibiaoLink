@@ -90,10 +90,22 @@ describe("请求体解析安全（GHSA-27r3-jxmh-p828）", () => {
     expect(httpsEnd).toBeGreaterThan(httpsStart);
     const httpsBlock = config.slice(httpsStart, httpsEnd);
 
-    // API 入口 5 个：/api/v1、导入 preview 专用 location、/auth、/healthz、/readyz。
-    expect(httpsBlock.match(/proxy_pass http:\/\/api_backend;/g)).toHaveLength(5);
-    expect(httpsBlock.match(/\$http_content_encoding !~\* "\^\(identity\)\?\$"/g)).toHaveLength(5);
-    expect(httpsBlock.match(/return 415;/g)).toHaveLength(5);
+    // API 入口 6 个：/api/v1、导入 preview 专用 location、/internal/users/* 白名单口、/auth、/healthz、/readyz。
+    expect(httpsBlock.match(/proxy_pass http:\/\/api_backend;/g)).toHaveLength(6);
+    expect(httpsBlock.match(/\$http_content_encoding !~\* "\^\(identity\)\?\$"/g)).toHaveLength(6);
+    expect(httpsBlock.match(/return 415;/g)).toHaveLength(6);
     expect(httpsBlock).not.toContain("proxy_set_header Content-Encoding");
+    expect(httpsBlock).not.toContain("/internal/org-sync");
+    expect(httpsBlock).not.toContain("location /internal");
+
+    const internalUsersStart = httpsBlock.indexOf("location ~ ^/internal/users/(disable|enable|delete)");
+    expect(internalUsersStart).toBeGreaterThan(-1);
+    const internalUsersEnd = httpsBlock.indexOf("location /auth {", internalUsersStart);
+    expect(internalUsersEnd).toBeGreaterThan(internalUsersStart);
+    const internalUsersBlock = httpsBlock.slice(internalUsersStart, internalUsersEnd);
+    expect(internalUsersBlock).toContain("allow 10.1.100.3;");
+    expect(internalUsersBlock).toContain("deny all;");
+    expect(internalUsersBlock).toContain("limit_except POST { deny all; }");
+    expect(internalUsersBlock).toContain("proxy_pass http://api_backend;");
   });
 });

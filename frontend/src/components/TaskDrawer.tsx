@@ -1428,9 +1428,13 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
                         data-file-preview-open="true"
                         onClick={() => { void openPreview(file.id, file.name); }}
                         disabled={previewing}
-                        className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 disabled:cursor-not-allowed disabled:text-zinc-300"
+                        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[#E9BE00] bg-[#FECA04] px-3 text-xs font-medium text-zinc-900 shadow-[0_2px_6px_rgba(202,154,0,0.18)] transition hover:bg-[#F2BE00] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#FECA04]"
                       >
-                        {previewing ? t("drawer.file.previewing") : t("drawer.file.preview")}
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-3.5 w-3.5 shrink-0">
+                          <path d="M2.5 12S6 6 12 6s9.5 6 9.5 6S18 18 12 18 2.5 12 2.5 12Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                          <circle cx="12" cy="12" r="2.6" stroke="currentColor" strokeWidth="1.8" />
+                        </svg>
+                        <span>{previewing ? t("drawer.file.previewing") : t("drawer.file.preview")}</span>
                       </button>
                     ) : null}
                     <button
@@ -1439,9 +1443,12 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
                       onClick={() => { void downloadFile(file.id); }}
                       disabled={downloadBusy === file.id}
                       title={t("drawer.file.downloadTitle")}
-                      className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 disabled:cursor-not-allowed disabled:text-zinc-300"
+                      className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-zinc-300 disabled:hover:bg-white disabled:hover:text-zinc-700"
                     >
-                      {downloadBusy === file.id ? t("drawer.file.downloading") : t("drawer.file.download")}
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-3.5 w-3.5 shrink-0">
+                        <path d="M12 3v12M7 10l5 5 5-5M4 21h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span>{downloadBusy === file.id ? t("drawer.file.downloading") : t("drawer.file.download")}</span>
                     </button>
                     {!fileDirectEditable || onDeleteFile === undefined ? null : confirming ? (
                       <span data-file-delete-confirm="true" className="flex shrink-0 items-center gap-1">

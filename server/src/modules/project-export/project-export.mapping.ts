@@ -13,11 +13,11 @@ import {
   formatReportDate,
   formatReportTime,
   formatTaskDate,
-  numbered,
   versionNameOf,
   type ExportFileLink,
   type ProjectExportChangeRow,
-  type ProjectExportReportRow,
+  type ProjectExportDailyReportRow,
+  type ProjectExportIssueRow,
   type ProjectExportStakeholderRow,
   type ProjectExportTaskRow,
 } from "./project-export.workbook.js";
@@ -154,45 +154,53 @@ export function registerTaskChangeLinks(task: TaskExportItem, relatedByChange: M
 
 export function reportExportRow(
   report: DailyReport,
-  issues: readonly Issue[],
   users: ReadonlyMap<string, ProjectExportUserLabel>,
-): ProjectExportReportRow {
-  const descriptions = issues.length > 0 ? issues.map((issue) => issue.title) : [report.foundIssue ?? ""];
-  const categories = issues.length > 0 ? issues.map((issue) => issueCategoryText(issue.categories)) : [issueCategoryText(report.issueCategories)];
-  const solutions = issues.length > 0 ? issues.map((issue) => issue.solution ?? "") : [report.suggestion ?? ""];
-  const states = issues.map((issue) => issueStateName(issue.state));
-  const issuePhotos = issues.length > 0 ? issues.flatMap((issue) => photoRefs(issue.photos)) : photoRefs(report.issuePhotos);
+): ProjectExportDailyReportRow {
   return {
     date: formatReportDate(report.date, report.state),
     author: personLabel(report.authorId, report.authorName, users),
     doneWork: report.doneWork,
     plan: report.plan ?? "",
     onsitePhotos: photoRefs(report.photos),
-    issueDescription: numbered(descriptions),
-    issueCategory: categories.filter((value) => value !== "").join("\n"),
-    issueSolution: numbered(solutions),
-    issueState: states.length <= 1 ? (states[0] ?? "") : numbered(states),
-    issuePhotos,
     headcount: report.headcount,
   };
 }
 
-export function orphanIssueReportRow(
+/** 提交后自动生成的问题已是独立记录；草稿中的旧单问题字段仍需作为一条问题导出行保留。 */
+export function reportHasEmbeddedIssue(report: DailyReport): boolean {
+  return (report.foundIssue ?? "").trim() !== "" ||
+    report.issueCategories.length > 0 ||
+    (report.suggestion ?? "").trim() !== "" ||
+    report.issuePhotos.length > 0;
+}
+
+export function reportFallbackIssueRow(
+  report: DailyReport,
+  users: ReadonlyMap<string, ProjectExportUserLabel>,
+): ProjectExportIssueRow {
+  return {
+    date: formatReportDate(report.date, report.state),
+    reporter: personLabel(report.authorId, report.authorName, users),
+    description: report.foundIssue ?? "",
+    category: issueCategoryText(report.issueCategories),
+    solution: report.suggestion ?? "",
+    photos: photoRefs(report.issuePhotos),
+    state: "",
+  };
+}
+
+export function issueExportRow(
   issue: Issue,
   users: ReadonlyMap<string, ProjectExportUserLabel>,
-): ProjectExportReportRow {
+): ProjectExportIssueRow {
   return {
     date: formatReportDate(issue.raisedAt, "submitted"),
-    author: personLabel(issue.reporterId, issue.reporterName, users),
-    doneWork: "",
-    plan: "",
-    onsitePhotos: [],
-    issueDescription: numbered([issue.title]),
-    issueCategory: issueCategoryText(issue.categories),
-    issueSolution: numbered([issue.solution ?? ""]),
-    issueState: issueStateName(issue.state),
-    issuePhotos: photoRefs(issue.photos),
-    headcount: null,
+    reporter: personLabel(issue.reporterId, issue.reporterName, users),
+    description: issue.title,
+    category: issueCategoryText(issue.categories),
+    solution: issue.solution ?? "",
+    photos: photoRefs(issue.photos),
+    state: issueStateName(issue.state),
   };
 }
 

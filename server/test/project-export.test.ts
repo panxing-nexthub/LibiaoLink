@@ -76,12 +76,18 @@ function payload(): ProjectExportPayload {
           { fileId: "image-1", name: "现场.png" },
           { fileId: "missing-1", name: "缺失现场.jpg" },
         ],
-        issueDescription: "1 现场渗水",
-        issueCategory: "客户原因",
-        issueSolution: "1 增加排水装置",
-        issueState: "处理中",
-        issuePhotos: [],
         headcount: 2,
+      },
+    ],
+    issues: [
+      {
+        date: "2026年9月1日",
+        reporter: "贾海洋(haiyang)",
+        description: "1 现场渗水",
+        category: "客户原因",
+        solution: "1 增加排水装置",
+        photos: [],
+        state: "处理中",
       },
     ],
     changes: [
@@ -213,11 +219,13 @@ async function* rowsOf<T>(values: readonly T[]): AsyncGenerator<T> {
 }
 
 describe("项目数据导出工作簿", () => {
-  it("四张表的名称、列顺序与关键字段对齐企微智能表格样例", async () => {
+  it("五张表的名称、列顺序与关键字段对齐企微智能表格样例", async () => {
     const result = await buildProjectExportWorkbook(payload());
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(result.buffer as unknown as ArrayBuffer);
-    expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual(["英国项目", "日报及问题汇总", "变更管理", "干系人"]);
+    expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual([
+      "英国项目", "日报记录", "问题汇总", "变更管理", "干系人",
+    ]);
 
     const task = workbook.getWorksheet("英国项目")!;
     expect(headersOf(task)).toEqual([
@@ -229,14 +237,22 @@ describe("项目数据导出工作簿", () => {
     expect(task.getCell(3, 5).value).toBe(1);
     expect(task.getCell(3, 16).value).toBe("2026/8/11");
 
-    const report = workbook.getWorksheet("日报及问题汇总")!;
-    expect(headersOf(report)).toEqual([
-      "日期", "填写者", "当日完成工作", "明日计划", "现场工作附图", "问题描述", "问题归类",
-      "解决方案或建议", "问题附图", "问题是否处理", "施工人数",
-    ]);
+    const report = workbook.getWorksheet("日报记录")!;
+    expect(headersOf(report)).toEqual(["日期", "填写者", "当日完成工作", "明日计划", "现场工作附图", "施工人数"]);
+    expect(report.columnCount).toBe(6);
     expect(report.getCell(3, 1).value).toBe("2026年9月1日（草稿）");
     expect(report.getCell(3, 5).value).toContain("（附图缺失）缺失现场.jpg");
     expect(dataImages(report)).toHaveLength(1);
+
+    const issue = workbook.getWorksheet("问题汇总")!;
+    expect(headersOf(issue)).toEqual([
+      "提出日期", "提出人", "问题描述", "问题归类", "解决方案或建议", "问题附图", "问题是否处理",
+    ]);
+    expect(issue.columnCount).toBe(7);
+    expect(issue.getCell(3, 1).value).toBe("2026年9月1日");
+    expect(issue.getCell(3, 2).value).toBe("贾海洋(haiyang)");
+    expect(issue.getCell(3, 3).value).toBe("1 现场渗水");
+    expect(issue.getCell(3, 7).value).toBe("处理中");
 
     const change = workbook.getWorksheet("变更管理")!;
     expect(headersOf(change)).toEqual([
@@ -248,15 +264,20 @@ describe("项目数据导出工作簿", () => {
     expect(dataImages(change)).toHaveLength(1);
 
     const stakeholder = workbook.getWorksheet("干系人")!;
-    for (const sheet of [task, report, change, stakeholder]) {
+    for (const sheet of [task, report, issue, change, stakeholder]) {
       expectHeaderFitted(sheet);
       expect(sheet.getRow(1).height).toBe(60);
       expect(sheet.views[0]).toMatchObject({ state: "frozen", ySplit: 2, topLeftCell: "A3" });
+      expect(sheet.getRow(2).height).toBeGreaterThanOrEqual(31.5);
       const headerCell = sheet.getCell(2, 1);
       expect(headerCell.font.name).toBe("Microsoft YaHei");
+      expect(headerCell.alignment).toMatchObject({ horizontal: "center", vertical: "middle", wrapText: true });
       expect(headerCell.border.left).toMatchObject({ style: "thin" });
       expect(headerCell.border.right).toMatchObject({ style: "thin" });
-      expect(sheet.getCell(3, 1).font.name).toBe("Microsoft YaHei");
+      const bodyCell = sheet.getCell(3, 1);
+      expect(bodyCell.font.name).toBe("Microsoft YaHei");
+      expect(bodyCell.alignment).toMatchObject({ horizontal: "center", vertical: "middle", wrapText: true });
+      expect(sheet.getRow(3).height).toBeGreaterThanOrEqual(28.5);
     }
     expect(headersOf(stakeholder)).toEqual([
       "干系人姓名/name", "电话或whats app或微信号", "邮箱Email", "职务Position/责任板块",
@@ -285,7 +306,10 @@ describe("项目数据导出工作簿", () => {
     const result = await buildProjectExportWorkbook(sample);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(result.buffer as unknown as ArrayBuffer);
-    expect(workbook.getWorksheet("英国项目")!.getRow(3).height).toBeGreaterThanOrEqual(46.5);
+    const sheet = workbook.getWorksheet("英国项目")!;
+    expect(sheet.getRow(3).height).toBeGreaterThanOrEqual(43.5);
+    expect(sheet.getColumn(1).width).toBeGreaterThan(43);
+    expect(sheet.getCell(3, 1).alignment).toMatchObject({ horizontal: "center", vertical: "middle", wrapText: true });
   });
 
   it("同一单元格的多个附图按网格排布，图片不重叠", async () => {
@@ -293,7 +317,7 @@ describe("项目数据导出工作簿", () => {
     const photos = Array.from({ length: 6 }, (_value, index) => ({ fileId: "multi-" + (index + 1), name: "多图" + (index + 1) + ".png" }));
     for (const photo of photos) sample.images.set(photo.fileId, { bytes: PNG, extension: "png" });
     sample.reports[0]!.onsitePhotos = photos.slice(0, 3);
-    sample.reports[0]!.issuePhotos = photos.slice(3);
+    sample.issues[0]!.photos = photos.slice(3);
     sample.changes[0]!.beforePhotos = photos.slice(0, 3);
     sample.changes[0]!.afterPhotos = photos.slice(3);
 
@@ -301,9 +325,9 @@ describe("项目数据导出工作簿", () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(result.buffer as unknown as ArrayBuffer);
     const emuPerPx = 9525;
-    const assertNoOverlap = (sheet: ExcelJS.Worksheet): void => {
+    const assertNoOverlap = (sheet: ExcelJS.Worksheet, expectedCount = 6): void => {
       const images = dataImages(sheet);
-      expect(images).toHaveLength(6);
+      expect(images).toHaveLength(expectedCount);
       const boxes = images.map((image) => {
         const ext = (image.range as unknown as { ext?: { width: number; height: number } }).ext;
         const left = image.range.tl.nativeColOff / emuPerPx;
@@ -327,8 +351,9 @@ describe("项目数据导出工作簿", () => {
         }
       }
     };
-    assertNoOverlap(workbook.getWorksheet("日报及问题汇总")!);
-    assertNoOverlap(workbook.getWorksheet("变更管理")!);
+    assertNoOverlap(workbook.getWorksheet("日报记录")!, 3);
+    assertNoOverlap(workbook.getWorksheet("问题汇总")!, 3);
+    assertNoOverlap(workbook.getWorksheet("变更管理")!, 6);
   });
 
   it("流式工作簿逐 Sheet 落盘；大项目附图仍内嵌缩略图且不生成图片链接", async () => {
@@ -339,11 +364,12 @@ describe("项目数据导出工作簿", () => {
       const writer = new ProjectExportWorkbookWriter(filePath, sample.project, sample.origin, loaderFor(sample.images));
       await writer.writeTasks(rowsOf(sample.tasks));
       await writer.writeReports(rowsOf(sample.reports));
+      await writer.writeIssues(rowsOf(sample.issues));
       await writer.writeChanges(rowsOf(sample.changes));
       await writer.writeStakeholders(rowsOf(sample.stakeholders));
       const result = await writer.commit();
       await injectWorkbookImages(result.filePath, result.imagePlacements, result.images);
-      expect(result.sheetNames).toEqual(["英国项目", "日报及问题汇总", "变更管理", "干系人"]);
+      expect(result.sheetNames).toEqual(["英国项目", "日报记录", "问题汇总", "变更管理", "干系人"]);
       expect((await stat(result.filePath)).size).toBeGreaterThan(0);
 
       const workbook = new ExcelJS.Workbook();
@@ -358,10 +384,14 @@ describe("项目数据导出工作簿", () => {
       expect(headersOf(workbook.getWorksheet("英国项目")!)).toHaveLength(18);
       expect(workbook.getWorksheet("英国项目")!.getCell(3, 5).value).toBe(1);
 
-      const report = workbook.getWorksheet("日报及问题汇总")!;
+      const report = workbook.getWorksheet("日报记录")!;
       expect(String(report.getCell(3, 5).value)).toBe("（附图缺失）缺失现场.jpg");
       expect(report.getCell(3, 5).value).not.toEqual(expect.objectContaining({ hyperlink: expect.anything() }));
       expect(dataImages(report)).toHaveLength(1);
+
+      const issue = workbook.getWorksheet("问题汇总")!;
+      expect(issue.getCell(3, 3).value).toBe("1 现场渗水");
+      expect(dataImages(issue)).toHaveLength(0);
 
       const change = workbook.getWorksheet("变更管理")!;
       expect(change.getCell(3, 5).value).toBe("旧电源");
@@ -396,6 +426,7 @@ describe("项目数据导出工作簿", () => {
       const writer = new ProjectExportWorkbookWriter(filePath, sample.project, sample.origin, loaderFor(sample.images));
       await writer.writeTasks(rowsOf(sample.tasks));
       await writer.writeReports(rowsOf(sample.reports));
+      await writer.writeIssues(rowsOf(sample.issues));
       await writer.writeChanges(rowsOf(sample.changes));
       await writer.writeStakeholders(rowsOf(sample.stakeholders));
       const result = await writer.commit();
@@ -435,13 +466,14 @@ describe("项目数据导出工作簿", () => {
       }));
       for (const photo of photos) sample.images.set(photo.fileId, { bytes: PNG, extension: "png" });
       sample.reports[0]!.onsitePhotos = photos.slice(0, 3);
-      sample.reports[0]!.issuePhotos = photos.slice(3);
+      sample.issues[0]!.photos = photos.slice(3);
       sample.changes[0]!.beforePhotos = photos.slice(0, 3);
       sample.changes[0]!.afterPhotos = photos.slice(3);
 
       const writer = new ProjectExportWorkbookWriter(filePath, sample.project, sample.origin, loaderFor(sample.images));
       await writer.writeTasks(rowsOf(sample.tasks));
       await writer.writeReports(rowsOf(sample.reports));
+      await writer.writeIssues(rowsOf(sample.issues));
       await writer.writeChanges(rowsOf(sample.changes));
       await writer.writeStakeholders(rowsOf(sample.stakeholders));
       const result = await writer.commit();
@@ -449,9 +481,11 @@ describe("项目数据导出工作簿", () => {
 
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.readFile(result.filePath);
-      const report = workbook.getWorksheet("日报及问题汇总")!;
+      const report = workbook.getWorksheet("日报记录")!;
+      const issue = workbook.getWorksheet("问题汇总")!;
       const change = workbook.getWorksheet("变更管理")!;
-      expect(dataImages(report)).toHaveLength(6);
+      expect(dataImages(report)).toHaveLength(3);
+      expect(dataImages(issue)).toHaveLength(3);
       expect(dataImages(change)).toHaveLength(6);
 
       const taskFile = workbook.getWorksheet("英国项目")!.getCell(3, 17).value as { hyperlink?: string };
@@ -486,10 +520,11 @@ describe("项目数据导出工作簿", () => {
         }
       };
       assertNoOverlap(report);
+      assertNoOverlap(issue);
       assertNoOverlap(change);
 
       const entries = readZipEntries(await readFile(result.filePath));
-      expect([...entries.keys()].filter((name) => /^xl\/media\/image\d+\.png$/.test(name))).toHaveLength(10);
+      expect([...entries.keys()].filter((name) => /^xl\/media\/image\d+\.png$/.test(name))).toHaveLength(11);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -540,9 +575,9 @@ describe("项目 Excel + 附件 ZIP", () => {
 
   it("附件规划按目录去重、重名追加序号，并为 Excel 生成编码后的相对链接", () => {
     const sources: ProjectArchiveAttachmentSource[] = [
-      { key: "a", sourcePage: "日报及问题汇总", sourceRow: 2, sourceRecord: "9月1日", attachmentType: "现场工作附图", directory: "日报及问题汇总/现场工作附图", fileId: "file-1", fileName: "现场 1.png" },
-      { key: "b", sourcePage: "日报及问题汇总", sourceRow: 3, sourceRecord: "9月2日", attachmentType: "现场工作附图", directory: "日报及问题汇总/现场工作附图", fileId: "file-1", fileName: "现场 1.png" },
-      { key: "c", sourcePage: "日报及问题汇总", sourceRow: 4, sourceRecord: "9月3日", attachmentType: "现场工作附图", directory: "日报及问题汇总/现场工作附图", fileId: "file-2", fileName: "现场 1.png" },
+      { key: "a", sourcePage: "日报记录", sourceRow: 2, sourceRecord: "9月1日", attachmentType: "现场工作附图", directory: "日报记录/现场工作附图", fileId: "file-1", fileName: "现场 1.png" },
+      { key: "b", sourcePage: "日报记录", sourceRow: 3, sourceRecord: "9月2日", attachmentType: "现场工作附图", directory: "日报记录/现场工作附图", fileId: "file-1", fileName: "现场 1.png" },
+      { key: "c", sourcePage: "日报记录", sourceRow: 4, sourceRecord: "9月3日", attachmentType: "现场工作附图", directory: "日报记录/现场工作附图", fileId: "file-2", fileName: "现场 1.png" },
       { key: "d", sourcePage: "变更管理", sourceRow: 2, sourceRecord: "变更", attachmentType: "变更后文件", directory: "变更管理/变更后文件", fileId: "missing", fileName: "缺失.pdf" },
     ];
     const plan = planProjectArchiveAttachments(sources, new Map([
@@ -550,12 +585,12 @@ describe("项目 Excel + 附件 ZIP", () => {
       ["file-2", { id: "file-2", name: "现场 1.png", mime: "image/png", sizeBytes: 20, objectKey: "objects/2" }],
     ]));
     expect(plan.files).toHaveLength(3);
-    expect(plan.references[0]?.file.relativePath).toBe("附件/日报及问题汇总/现场工作附图/现场 1.png");
-    expect(plan.references[1]?.file.relativePath).toBe("附件/日报及问题汇总/现场工作附图/现场 1.png");
-    expect(plan.references[2]?.file.relativePath).toBe("附件/日报及问题汇总/现场工作附图/现场 1_2.png");
+    expect(plan.references[0]?.file.relativePath).toBe("附件/日报记录/现场工作附图/现场 1.png");
+    expect(plan.references[1]?.file.relativePath).toBe("附件/日报记录/现场工作附图/现场 1.png");
+    expect(plan.references[2]?.file.relativePath).toBe("附件/日报记录/现场工作附图/现场 1_2.png");
     expect(plan.references[3]?.file.status).toBe("missing");
-    expect(projectArchiveHref("附件/日报及问题汇总/现场工作附图/现场 1.png")).toContain("%E7%8E%B0%E5%9C%BA%201.png");
-    expect(projectArchiveLinks(plan).get("a")).toBe(projectArchiveHref("附件/日报及问题汇总/现场工作附图/现场 1.png"));
+    expect(projectArchiveHref("附件/日报记录/现场工作附图/现场 1.png")).toContain("%E7%8E%B0%E5%9C%BA%201.png");
+    expect(projectArchiveLinks(plan).get("a")).toBe(projectArchiveHref("附件/日报记录/现场工作附图/现场 1.png"));
     expect(projectArchiveLinks(plan).has("d")).toBe(false);
   });
 
@@ -564,17 +599,22 @@ describe("项目 Excel + 附件 ZIP", () => {
     const photos = Array.from({ length: 6 }, (_value, index) => ({
       fileId: "archive-photo-" + String(index + 1),
       name: "附件图" + String(index + 1) + ".png",
-      href: "./附件/日报及问题汇总/现场工作附图/附件图" + String(index + 1) + ".png",
+      href: "./附件/日报记录/现场工作附图/附件图" + String(index + 1) + ".png",
     }));
     for (const photo of photos) sample.images.set(photo.fileId, { bytes: PNG, extension: "png" });
     sample.reports[0]!.onsitePhotos = photos;
+    sample.issues[0]!.photos = [{
+      fileId: "archive-issue-photo",
+      name: "问题图.png",
+      href: "./附件/问题汇总/问题附图/问题图.png",
+    }];
     sample.attachmentSheet = [{
-      sourcePage: "日报及问题汇总",
+      sourcePage: "日报记录",
       sourceRow: 2,
       sourceRecord: "2026年9月1日",
       attachmentType: "现场工作附图",
       fileName: "附件图1.png",
-      relativePath: "附件/日报及问题汇总/现场工作附图/附件图1.png",
+      relativePath: "附件/日报记录/现场工作附图/附件图1.png",
       sizeBytes: PNG.byteLength,
       status: "已包含",
     }];
@@ -582,15 +622,18 @@ describe("项目 Excel + 附件 ZIP", () => {
     const result = await buildProjectExportWorkbook(sample);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(result.buffer as unknown as ArrayBuffer);
-    expect(result.sheetNames).toEqual(["英国项目", "日报及问题汇总", "变更管理", "干系人", "附件清单"]);
+    expect(result.sheetNames).toEqual(["英国项目", "日报记录", "问题汇总", "变更管理", "干系人", "附件清单"]);
     expect(headersOf(workbook.getWorksheet("附件清单")!)).toEqual([
       "来源页面", "来源行", "来源记录", "附件类型", "文件名", "相对路径", "文件大小", "状态",
     ]);
-    const report = workbook.getWorksheet("日报及问题汇总")!;
+    const report = workbook.getWorksheet("日报记录")!;
     const onsite = report.getCell(3, 5).value as { text?: string; hyperlink?: string };
     expect(onsite.text).toBe("6 张现场附图");
-    expect(onsite.hyperlink).toBe("./附件/日报及问题汇总/现场工作附图/附件图1.png");
+    expect(onsite.hyperlink).toBe("./附件/日报记录/现场工作附图/附件图1.png");
     expect(dataImages(report)).toHaveLength(4);
+    const issuePhoto = workbook.getWorksheet("问题汇总")!.getCell(3, 6).value as { text?: string; hyperlink?: string };
+    expect(issuePhoto.text).toBe("1 张问题附图");
+    expect(issuePhoto.hyperlink).toBe("./附件/问题汇总/问题附图/问题图.png");
   });
 
   it("服务层生成可解压 ZIP：xlsx、原附件与 manifest 同包，默认 xlsx 兼容", async () => {
@@ -665,11 +708,11 @@ describe("项目 Excel + 附件 ZIP", () => {
     if (result.kind !== "file") throw new Error("预期 ZIP 文件结果");
     try {
       expect(result.fileName).toBe("[LBGW-1] 英国项目.zip");
-      expect(result.sheetNames).toEqual(["英国项目", "日报及问题汇总", "变更管理", "干系人", "附件清单"]);
+      expect(result.sheetNames).toEqual(["英国项目", "日报记录", "问题汇总", "变更管理", "干系人", "附件清单"]);
       const entries = readZipEntries(await readFile(result.filePath));
       const root = "[LBGW-1] 英国项目";
       expect(entries.has(root + "/" + root + ".xlsx")).toBe(true);
-      expect(entries.get(root + "/附件/日报及问题汇总/现场工作附图/现场.png")).toEqual(PNG);
+      expect(entries.get(root + "/附件/日报记录/现场工作附图/现场.png")).toEqual(PNG);
       const manifest = JSON.parse(entries.get(root + "/manifest.json")!.toString("utf8")) as {
         workbook: string;
         summary: { attachmentCount: number; includedFileCount: number; attachmentBytes: number };
@@ -678,15 +721,15 @@ describe("项目 Excel + 附件 ZIP", () => {
       expect(manifest.workbook).toBe(root + ".xlsx");
       expect(manifest.summary).toMatchObject({ attachmentCount: 1, includedFileCount: 1, attachmentBytes: PNG.byteLength });
       expect(manifest.attachments[0]).toMatchObject({
-        relativePath: "附件/日报及问题汇总/现场工作附图/现场.png",
+        relativePath: "附件/日报记录/现场工作附图/现场.png",
         status: "included",
       });
       expect(manifest.attachments[0]?.sha256).toMatch(/^[0-9a-f]{64}$/);
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(entries.get(root + "/" + root + ".xlsx")!.buffer as unknown as ArrayBuffer);
-      const onsite = workbook.getWorksheet("日报及问题汇总")!.getCell(3, 5).value as { hyperlink?: string };
-      expect(decodeURIComponent(onsite.hyperlink ?? "")).toBe("./附件/日报及问题汇总/现场工作附图/现场.png");
-      expect(dataImages(workbook.getWorksheet("日报及问题汇总")!)).toHaveLength(1);
+      const onsite = workbook.getWorksheet("日报记录")!.getCell(3, 5).value as { hyperlink?: string };
+      expect(decodeURIComponent(onsite.hyperlink ?? "")).toBe("./附件/日报记录/现场工作附图/现场.png");
+      expect(dataImages(workbook.getWorksheet("日报记录")!)).toHaveLength(1);
       expect(storage.getObject).not.toHaveBeenCalled();
       expect(audit.record).toHaveBeenCalledOnce();
       const metricLine = logSpy.mock.calls
@@ -813,13 +856,13 @@ describe("项目导出的命名与请求边界", () => {
       expect((await stat(dirname(result.filePath))).mode & 0o777).toBe(0o700);
     }
     expect(result.mode).toBe("stream");
-    expect(result.sheetNames).toEqual(["英国项目", "日报及问题汇总", "变更管理", "干系人"]);
+    expect(result.sheetNames).toEqual(["英国项目", "日报记录", "问题汇总", "变更管理", "干系人"]);
     expect(audit.record).toHaveBeenCalledOnce();
     await result.cleanup();
     await expect(access(result.filePath)).rejects.toBeTruthy();
   });
 
-  it("stream 模式日报只按总数读取一次，并保持问题归属与孤立问题顺序", async () => {
+  it("stream 模式日报按总数读取一次；日报与问题分 Sheet 且草稿内嵌问题保留", async () => {
     const logSpy = vi.spyOn(Logger.prototype, "log").mockImplementation(() => undefined);
     onTestFinished(() => logSpy.mockRestore());
     const reportA = "22222222-2222-4222-8222-222222222221";
@@ -871,7 +914,11 @@ describe("项目导出的命名与请求边界", () => {
       version: 1,
     });
     const reports = [
-      report(reportB, "2026-11-02", "submitted", "B 日进度", "2026-11-02T01:00:00.000Z"),
+      {
+        ...report(reportB, "2026-11-02", "submitted", "B 日进度", "2026-11-02T01:00:00.000Z"),
+        foundIssue: "B 草稿内嵌问题",
+        suggestion: "B 建议",
+      },
       report(reportA, "2026-11-01", "draft", "A 日进度", "2026-11-01T01:00:00.000Z"),
     ];
     const issues = [
@@ -960,33 +1007,29 @@ describe("项目导出的命名与请求边界", () => {
       expect(streamMocks.reportListForExport).toHaveBeenCalledWith(PROJECT_ID, { page: 1, limit: 1_000 });
       expect(streamMocks.issueListForExport).toHaveBeenCalledOnce();
       expect(stream.reportCount).toBe(legacy.reportCount);
-      expect(stream.reportCount).toBe(4);
+      expect(stream.reportCount).toBe(2);
+      expect(stream.issueCount).toBe(5);
 
       const legacyWorkbook = new ExcelJS.Workbook();
       await legacyWorkbook.xlsx.load(arrayBufferOf(legacy.buffer));
       const streamWorkbook = new ExcelJS.Workbook();
       await streamWorkbook.xlsx.load(arrayBufferOf(await readFile(stream.filePath)));
-      const rowsOf = (workbook: ExcelJS.Workbook) => {
-        const sheet = workbook.getWorksheet("日报及问题汇总")!;
+      const rowsOf = (workbook: ExcelJS.Workbook, sheetName: string, columnCount: number) => {
+        const sheet = workbook.getWorksheet(sheetName)!;
         return Array.from({ length: sheet.rowCount - 2 }, (_value, index) => (
-          Array.from({ length: 11 }, (_cell, column) => sheet.getCell(index + 3, column + 1).value ?? "")
+          Array.from({ length: columnCount }, (_cell, column) => sheet.getCell(index + 3, column + 1).value ?? "")
         ));
       };
-      const legacyRows = rowsOf(legacyWorkbook);
-      const streamRows = rowsOf(streamWorkbook);
-      expect(streamRows).toEqual(legacyRows);
-      expect(streamRows.map((row) => row[0])).toEqual([
-        "2026年11月1日（草稿）",
-        "2026年11月2日",
-        "2026年10月30日",
-        "2026年10月31日",
+      expect(rowsOf(streamWorkbook, "日报记录", 6)).toEqual(rowsOf(legacyWorkbook, "日报记录", 6));
+      expect(rowsOf(streamWorkbook, "问题汇总", 7)).toEqual(rowsOf(legacyWorkbook, "问题汇总", 7));
+      const reportRows = rowsOf(streamWorkbook, "日报记录", 6);
+      expect(reportRows.map((row) => row[0])).toEqual(["2026年11月1日（草稿）", "2026年11月2日"]);
+      expect(reportRows.map((row) => row[2])).toEqual(["A 日进度", "B 日进度"]);
+      const issueRows = rowsOf(streamWorkbook, "问题汇总", 7);
+      expect(issueRows.map((row) => row[2])).toEqual([
+        "A-第二", "A-第一", "来源缺失", "手工孤立", "B 草稿内嵌问题",
       ]);
-      expect(streamRows.map((row) => row[5])).toEqual([
-        "1 A-第二\n2 A-第一",
-        "",
-        "1 手工孤立",
-        "1 来源缺失",
-      ]);
+      expect(issueRows[4]?.[4]).toBe("B 建议");
     } finally {
       await stream.cleanup();
     }

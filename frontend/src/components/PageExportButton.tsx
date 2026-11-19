@@ -106,6 +106,25 @@ function previewCellText(value: string | number | null | undefined): string {
   return value.trim() === "" ? "—" : value;
 }
 
+function previewDisplayWidth(value: string): number {
+  let width = 0;
+  for (const char of value) width += /[\u0000-\u00ff]/.test(char) ? 1 : 2;
+  return width;
+}
+
+/** 与 Excel 的“只扩不缩、最多 +18 字符”保持同一尺度，避免预览列宽跳变。 */
+function previewColumnWidth(sheet: PageExportSheetKey, column: PageExportCatalogColumn, rows: readonly PageExportPreviewRow[]): number {
+  const base = previewWidth(sheet, column.key);
+  let longest = previewDisplayWidth(column.label);
+  for (const row of rows) {
+    const value = row[column.key];
+    if (isPhotoCell(value)) continue;
+    const text = previewCellText(value);
+    for (const line of text.split("\n")) longest = Math.max(longest, previewDisplayWidth(line));
+  }
+  return Math.round(Math.min(base + 126, Math.max(base, longest * 7 + 28)));
+}
+
 function isPhotoCell(value: PageExportPreviewCell | undefined): value is PageExportPreviewPhotoCell {
   return typeof value === "object" && value !== null && value.kind === "photos";
 }
@@ -166,7 +185,7 @@ function PreviewPhotos({ cell }: { cell: PageExportPreviewPhotoCell }) {
   const items = cell.items.slice(0, PAGE_EXPORT_PREVIEW_PHOTO_LIMIT);
   const remaining = Math.max(0, cell.total - items.length);
   return (
-    <span className="flex flex-col items-start gap-1">
+    <span className="flex flex-col items-center gap-1">
       <span className="grid grid-cols-2 gap-1">
         {items.map((photo, index) => (
           <PreviewPhotoThumb key={photo.fileId + "#" + String(index)} photo={photo} />
@@ -187,7 +206,7 @@ function PreviewPhotos({ cell }: { cell: PageExportPreviewPhotoCell }) {
 function PreviewCell({ value }: { value: PageExportPreviewCell | undefined }) {
   if (isPhotoCell(value)) return <PreviewPhotos cell={value} />;
   const text = previewCellText(value);
-  return <span className="line-clamp-3 whitespace-pre-wrap break-words" title={text}>{text}</span>;
+  return <span className="block whitespace-pre-wrap break-words text-center" title={text}>{text}</span>;
 }
 
 function PreviewBrandHeader({
@@ -232,21 +251,22 @@ function ExportPreview({
   projectName: string;
   t: ReturnType<typeof useT>;
 }) {
-  const totalWidth = Math.max(600, columns.reduce((sum, column) => sum + previewWidth(sheet.key, column.key), 0));
+  const widths = columns.map((column) => previewColumnWidth(sheet.key, column, rows));
+  const totalWidth = Math.max(600, widths.reduce((sum, width) => sum + width, 0));
   return (
     <div data-page-export-preview="" className="flex min-h-0 flex-1 items-stretch justify-center overflow-hidden rounded-2xl bg-zinc-200/80 p-3 shadow-inner sm:p-4">
       <div className="flex min-h-0 w-full flex-col overflow-hidden rounded-xl bg-white shadow-[0_12px_40px_rgba(15,23,42,0.14)] ring-1 ring-black/5" style={{ fontFamily: "Microsoft YaHei, 微软雅黑, sans-serif" }}>
         <PreviewBrandHeader projectCode={projectCode} projectName={projectName} sheetLabel={sheet.label} />
 
         <div className="min-h-0 flex-1 overflow-auto bg-white">
-          <table className="border-collapse text-left" style={{ width: "100%", minWidth: totalWidth, tableLayout: "fixed" }}>
+          <table className="border-collapse text-center" style={{ width: "100%", minWidth: totalWidth, tableLayout: "fixed" }}>
             <colgroup>
-              {columns.map((column) => <col key={column.key} style={{ width: previewWidth(sheet.key, column.key) }} />)}
+              {columns.map((column, index) => <col key={column.key} style={{ width: widths[index] }} />)}
             </colgroup>
             <thead className="sticky top-0 z-[1] bg-[#F4F6F8]">
               <tr className="text-[#111827]">
                 {columns.map((column) => (
-                  <th key={column.key} scope="col" className="border-t border-b border-r border-[#D9DEE5] px-3 py-2.5 text-left text-[11px] font-bold last:border-r-0">
+                  <th key={column.key} scope="col" className="border-t border-b border-r border-[#D9DEE5] px-3 py-3 align-middle text-center text-[11px] font-bold last:border-r-0">
                     {column.label}
                   </th>
                 ))}
@@ -260,7 +280,7 @@ function ExportPreview({
               ) : rows.map((row, index) => (
                 <tr key={index} className={index % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                   {columns.map((column) => (
-                    <td key={column.key} className="border-b border-r border-zinc-200 px-3 py-2.5 align-top text-xs leading-5 text-zinc-700 last:border-r-0">
+                    <td key={column.key} className="border-b border-r border-zinc-200 px-3 py-3 align-middle text-center text-xs leading-5 text-zinc-700 last:border-r-0">
                       <PreviewCell value={row[column.key]} />
                     </td>
                   ))}

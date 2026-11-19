@@ -28,10 +28,12 @@ import { StakeholderService } from "../stakeholder/index.js";
 import { TaskService } from "../task/index.js";
 import {
   changeExportRow,
-  orphanIssueReportRow,
+  issueExportRow,
   personLabel,
   registerTaskChangeLinks,
   reportExportRow,
+  reportFallbackIssueRow,
+  reportHasEmbeddedIssue,
   stakeholderExportRow,
   taskExportRow,
   type ProjectExportUserLabel,
@@ -50,8 +52,9 @@ import {
   type ExportPhotoLoader,
   type ExportPhotoRef,
   type ProjectExportChangeRow,
+  type ProjectExportDailyReportRow,
+  type ProjectExportIssueRow,
   type ProjectExportPayload,
-  type ProjectExportReportRow,
   type ProjectExportStakeholderRow,
   type ProjectExportTaskRow,
 } from "./project-export.workbook.js";
@@ -142,6 +145,7 @@ interface ProjectExportMetrics {
   sheetNames: string[];
   taskCount: number;
   reportCount: number;
+  issueCount: number;
   changeCount: number;
   stakeholderCount: number;
   imageCount: number;
@@ -205,6 +209,7 @@ interface ExportProject {
 interface StreamingCounts {
   tasks: number;
   reports: number;
+  issues: number;
   changes: number;
   stakeholders: number;
   imageIds: Set<string>;
@@ -237,7 +242,8 @@ interface CollectedProjectExport {
   taskFilesById: Map<string, ExportFileLink[]>;
   fileRefs: Map<string, ProjectExportFileRef>;
   taskRows: ProjectExportTaskRow[];
-  reportRows: ProjectExportReportRow[];
+  reportRows: ProjectExportDailyReportRow[];
+  issueRows: ProjectExportIssueRow[];
   changeRows: ProjectExportChangeRow[];
   stakeholderRows: ProjectExportStakeholderRow[];
 }
@@ -336,9 +342,12 @@ function addPhotoIds(target: Set<string>, refs: readonly { fileId: string }[]): 
   for (const ref of refs) target.add(ref.fileId);
 }
 
-function addReportPhotoIds(target: Set<string>, row: ProjectExportReportRow): void {
+function addReportPhotoIds(target: Set<string>, row: ProjectExportDailyReportRow): void {
   addPhotoIds(target, row.onsitePhotos);
-  addPhotoIds(target, row.issuePhotos);
+}
+
+function addIssuePhotoIds(target: Set<string>, row: ProjectExportIssueRow): void {
+  addPhotoIds(target, row.photos);
 }
 
 function addChangePhotoIds(target: Set<string>, row: ProjectExportChangeRow): void {
@@ -924,7 +933,7 @@ export class ProjectExportService implements OnModuleInit {
       }
       telemetry.recordResult({
         mode: result.mode,
-        rows: result.taskCount + result.reportCount + result.changeCount + result.stakeholderCount,
+        rows: result.taskCount + result.reportCount + result.issueCount + result.changeCount + result.stakeholderCount,
         images: result.imageCount,
         imageLinks: result.imageLinkCount,
         missingImages: result.missingImageCount,
@@ -991,6 +1000,7 @@ export class ProjectExportService implements OnModuleInit {
     );
     const imageIds = new Set<string>();
     for (const row of data.reportRows) addReportPhotoIds(imageIds, row);
+    for (const row of data.issueRows) addIssuePhotoIds(imageIds, row);
     for (const row of data.changeRows) addChangePhotoIds(imageIds, row);
     telemetry.setRequestedImages(imageIds.size);
     const images = await this.loadImages(imageIds, data.fileRefs, false, undefined, telemetry);
@@ -1003,6 +1013,7 @@ export class ProjectExportService implements OnModuleInit {
       origin: normalizeHttpOrigin(requestOrigin),
       tasks: data.taskRows,
       reports: data.reportRows,
+      issues: data.issueRows,
       changes: data.changeRows,
       stakeholders: data.stakeholderRows,
       images,
@@ -1022,6 +1033,7 @@ export class ProjectExportService implements OnModuleInit {
         sheets: workbook.sheetNames,
         tasks: data.taskRows.length,
         reports: data.reportRows.length,
+        issues: data.issueRows.length,
         changes: data.changeRows.length,
         stakeholders: data.stakeholderRows.length,
         images: images.size,
@@ -1036,6 +1048,7 @@ export class ProjectExportService implements OnModuleInit {
       sheetNames: workbook.sheetNames,
       taskCount: data.taskRows.length,
       reportCount: data.reportRows.length,
+      issueCount: data.issueRows.length,
       changeCount: data.changeRows.length,
       stakeholderCount: data.stakeholderRows.length,
       imageCount: images.size,
@@ -1139,12 +1152,13 @@ export class ProjectExportService implements OnModuleInit {
       current.push(issue);
       issueByReport.set(issue.sourceReportId, current);
     }
-    const reportRows: ProjectExportReportRow[] = reportItems.map((report) => reportExportRow(report, issueByReport.get(report.id) ?? [], users));
-    const reportIds = new Set(reportItems.map((report) => report.id));
-    const orphanIssues = issueItems
-      .filter((issue) => issue.sourceReportId === null || !reportIds.has(issue.sourceReportId))
-      .sort((left, right) => left.raisedAt.localeCompare(right.raisedAt) || left.createdAt.localeCompare(right.createdAt));
-    for (const issue of orphanIssues) reportRows.push(orphanIssueReportRow(issue, users));
+    const reportRows: ProjectExportDailyReportRow[] = reportItems.map((report) => reportExportRow(report, users));
+    const issueRows: ProjectExportIssueRow[] = issueItems.map((issue) => issueExportRow(issue, users));
+    for (const report of reportItems) {
+      if ((issueByReport.get(report.id)?.length ?? 0) === 0 && reportHasEmbeddedIssue(report)) {
+        issueRows.push(reportFallbackIssueRow(report, users));
+      }
+    }
 
     const changeRows = changeItems.map((change) => changeExportRow(change, fileRefs, users, relatedByChange));
     const stakeholderRows = stakeholderItems.map((item) => stakeholderExportRow(item, users));
@@ -1159,6 +1173,7 @@ export class ProjectExportService implements OnModuleInit {
       fileRefs,
       taskRows,
       reportRows,
+      issueRows,
       changeRows,
       stakeholderRows,
     };
@@ -1181,7 +1196,7 @@ export class ProjectExportService implements OnModuleInit {
       const sources = this.projectArchiveSources(project, data);
       const plan = planProjectArchiveAttachments(sources, data.fileRefs);
       telemetry.recordAttachmentPlan(plan.files.map((file) => file.fileId));
-      const imageIds = this.projectArchiveImageIds(data.reportRows, data.changeRows);
+      const imageIds = this.projectArchiveImageIds(data.reportRows, data.issueRows, data.changeRows);
       telemetry.setRequestedImages(imageIds.size);
       const captureIds = this.projectArchiveThumbnailIds(imageIds, plan, data.fileRefs);
       const workbookName = projectExportArchiveWorkbookName(project);
@@ -1214,6 +1229,7 @@ export class ProjectExportService implements OnModuleInit {
         origin: null,
         tasks: data.taskRows,
         reports: data.reportRows,
+        issues: data.issueRows,
         changes: data.changeRows,
         stakeholders: data.stakeholderRows,
         images,
@@ -1241,7 +1257,9 @@ export class ProjectExportService implements OnModuleInit {
       let imageLinkCount = 0;
       for (const row of data.reportRows) {
         imageLinkCount += row.onsitePhotos.filter((ref) => ref.href !== undefined).length;
-        imageLinkCount += row.issuePhotos.filter((ref) => ref.href !== undefined).length;
+      }
+      for (const row of data.issueRows) {
+        imageLinkCount += row.photos.filter((ref) => ref.href !== undefined).length;
       }
       for (const row of data.changeRows) {
         imageLinkCount += row.beforePhotos.filter((ref) => ref.href !== undefined).length;
@@ -1260,6 +1278,7 @@ export class ProjectExportService implements OnModuleInit {
           sheets: workbook.sheetNames,
           tasks: data.taskRows.length,
           reports: data.reportRows.length,
+          issues: data.issueRows.length,
           changes: data.changeRows.length,
           stakeholders: data.stakeholderRows.length,
           attachments: manifest.summary.attachmentCount,
@@ -1281,6 +1300,7 @@ export class ProjectExportService implements OnModuleInit {
         sheetNames: workbook.sheetNames,
         taskCount: data.taskRows.length,
         reportCount: data.reportRows.length,
+        issueCount: data.issueRows.length,
         changeCount: data.changeRows.length,
         stakeholderCount: data.stakeholderRows.length,
         imageCount: images.size,
@@ -1329,23 +1349,29 @@ export class ProjectExportService implements OnModuleInit {
       for (const photo of row.onsitePhotos) {
         push({
           key: "report:" + String(index) + ":onsite:" + photo.fileId,
-          sourcePage: "日报及问题汇总",
+          sourcePage: "日报记录",
           sourceRow: index + 2,
           sourceRecord,
           attachmentType: "现场工作附图",
-          directory: "日报及问题汇总/现场工作附图",
+          directory: "日报记录/现场工作附图",
           fileId: photo.fileId,
           fileName: photo.name,
         });
       }
-      for (const photo of row.issuePhotos) {
+    }
+
+    for (let index = 0; index < data.issueRows.length; index += 1) {
+      const row = data.issueRows[index];
+      if (row === undefined) continue;
+      const sourceRecord = [row.date, row.reporter].filter((value) => value !== "").join(" / ") || row.description;
+      for (const photo of row.photos) {
         push({
-          key: "report:" + String(index) + ":issue:" + photo.fileId,
-          sourcePage: "日报及问题汇总",
+          key: "issue:" + String(index) + ":photo:" + photo.fileId,
+          sourcePage: "问题汇总",
           sourceRow: index + 2,
           sourceRecord,
           attachmentType: "问题附图",
-          directory: "日报及问题汇总/问题附图",
+          directory: "问题汇总/问题附图",
           fileId: photo.fileId,
           fileName: photo.name,
         });
@@ -1412,7 +1438,11 @@ export class ProjectExportService implements OnModuleInit {
       const row = data.reportRows[index];
       if (row === undefined) continue;
       row.onsitePhotos = row.onsitePhotos.map((photo) => withHref(photo, "report:" + String(index) + ":onsite:" + photo.fileId));
-      row.issuePhotos = row.issuePhotos.map((photo) => withHref(photo, "report:" + String(index) + ":issue:" + photo.fileId));
+    }
+    for (let index = 0; index < data.issueRows.length; index += 1) {
+      const row = data.issueRows[index];
+      if (row === undefined) continue;
+      row.photos = row.photos.map((photo) => withHref(photo, "issue:" + String(index) + ":photo:" + photo.fileId));
     }
     for (let index = 0; index < data.changeRows.length; index += 1) {
       const row = data.changeRows[index];
@@ -1425,7 +1455,8 @@ export class ProjectExportService implements OnModuleInit {
   }
 
   private projectArchiveImageIds(
-    reports: readonly ProjectExportReportRow[],
+    reports: readonly ProjectExportDailyReportRow[],
+    issues: readonly ProjectExportIssueRow[],
     changes: readonly ProjectExportChangeRow[],
   ): Set<string> {
     const ids = new Set<string>();
@@ -1440,10 +1471,8 @@ export class ProjectExportService implements OnModuleInit {
         if (count >= 4) break;
       }
     };
-    for (const row of reports) {
-      add(row.onsitePhotos);
-      add(row.issuePhotos);
-    }
+    for (const row of reports) add(row.onsitePhotos);
+    for (const row of issues) add(row.photos);
     for (const row of changes) {
       add(row.beforePhotos);
       add(row.afterPhotos);
@@ -1663,9 +1692,10 @@ export class ProjectExportService implements OnModuleInit {
         taskFilesById,
         relatedByChange,
       } = setup;
-      const counts: StreamingCounts = { tasks: 0, reports: 0, changes: 0, stakeholders: 0, imageIds: new Set() };
+      const counts: StreamingCounts = { tasks: 0, reports: 0, issues: 0, changes: 0, stakeholders: 0, imageIds: new Set() };
 
       const photoLoader = this.createStreamingPhotoLoader(project.id, signal, telemetry);
+      const fallbackIssues: ProjectExportIssueRow[] = [];
       writer = new ProjectExportWorkbookWriter(filePath, project, normalizeHttpOrigin(requestOrigin), photoLoader.load);
       const activeWriter = writer;
       const workbook = await telemetry.measure("workbook", async () => {
@@ -1681,8 +1711,13 @@ export class ProjectExportService implements OnModuleInit {
           telemetry,
         ));
         await activeWriter.writeReports(prefetchPhotoRows(
-          this.streamReportRows(project.id, reportTotal, users, groupedIssues, counts, signal, telemetry),
-          (row) => [...row.onsitePhotos, ...row.issuePhotos],
+          this.streamReportRows(project.id, reportTotal, users, groupedIssues, fallbackIssues, counts, signal, telemetry),
+          (row) => row.onsitePhotos,
+          photoLoader.load,
+        ));
+        await activeWriter.writeIssues(prefetchPhotoRows(
+          this.streamIssueRows(groupedIssues, fallbackIssues, users, counts, signal),
+          (row) => row.photos,
           photoLoader.load,
         ));
         await activeWriter.writeChanges(prefetchPhotoRows(
@@ -1722,6 +1757,7 @@ export class ProjectExportService implements OnModuleInit {
           sheets: workbook.sheetNames,
           tasks: counts.tasks,
           reports: counts.reports,
+          issues: counts.issues,
           changes: counts.changes,
           stakeholders: counts.stakeholders,
           images: imageCount,
@@ -1738,6 +1774,7 @@ export class ProjectExportService implements OnModuleInit {
         sheetNames: workbook.sheetNames,
         taskCount: counts.tasks,
         reportCount: counts.reports,
+        issueCount: counts.issues,
         changeCount: counts.changes,
         stakeholderCount: counts.stakeholders,
         imageCount,
@@ -1756,9 +1793,10 @@ export class ProjectExportService implements OnModuleInit {
     projectId: string,
     total: number,
     signal: AbortSignal | undefined,
-  ): Promise<{ byReport: Map<string, Issue[]>; orphans: Issue[] }> {
+  ): Promise<{ byReport: Map<string, Issue[]>; orphans: Issue[]; all: Issue[] }> {
     const byReport = new Map<string, Issue[]>();
     const orphans: Issue[] = [];
+    const all: Issue[] = [];
     for await (const items of readExportBatches(
       (page, limit) => this.issues.listForExport(projectId, { page, limit }),
       total,
@@ -1766,6 +1804,7 @@ export class ProjectExportService implements OnModuleInit {
       signal,
     )) {
       for (const issue of items) {
+        all.push(issue);
         const sourceReportId = issue.sourceReportId;
         if (sourceReportId === null) {
           orphans.push(issue);
@@ -1777,7 +1816,7 @@ export class ProjectExportService implements OnModuleInit {
       }
     }
     orphans.sort((left, right) => left.raisedAt.localeCompare(right.raisedAt) || left.createdAt.localeCompare(right.createdAt));
-    return { byReport, orphans };
+    return { byReport, orphans, all };
   }
 
   private async *streamTaskRows(
@@ -1810,11 +1849,12 @@ export class ProjectExportService implements OnModuleInit {
     projectId: string,
     reportTotal: number,
     users: ReadonlyMap<string, ProjectExportUserLabel>,
-    groupedIssues: { byReport: Map<string, Issue[]>; orphans: Issue[] },
+    groupedIssues: { byReport: Map<string, Issue[]>; orphans: Issue[]; all: Issue[] },
+    fallbackIssues: ProjectExportIssueRow[],
     counts: StreamingCounts,
     signal: AbortSignal | undefined,
     telemetry: ProjectExportTelemetry,
-  ): AsyncGenerator<ProjectExportReportRow> {
+  ): AsyncGenerator<ProjectExportDailyReportRow> {
     for await (const items of readExportBatchesAscendingFromTotal(
       (page, limit) => telemetry.measure("dataLoad", () => this.reports.listForExport(projectId, { page, limit })),
       reportTotal,
@@ -1823,21 +1863,35 @@ export class ProjectExportService implements OnModuleInit {
       for (const report of items) {
         throwIfAborted(signal);
         const issues = groupedIssues.byReport.get(report.id) ?? [];
-        groupedIssues.byReport.delete(report.id);
-        const row = reportExportRow(report, issues, users);
+        if (issues.length === 0 && reportHasEmbeddedIssue(report)) {
+          fallbackIssues.push(reportFallbackIssueRow(report, users));
+        }
+        const row = reportExportRow(report, users);
         addReportPhotoIds(counts.imageIds, row);
         counts.reports += 1;
         yield row;
       }
     }
-    const remaining = [...groupedIssues.byReport.values()].flat();
-    const orphanIssues = [...groupedIssues.orphans, ...remaining]
-      .sort((left, right) => left.raisedAt.localeCompare(right.raisedAt) || left.createdAt.localeCompare(right.createdAt));
-    for (const issue of orphanIssues) {
+  }
+
+  private async *streamIssueRows(
+    groupedIssues: { byReport: Map<string, Issue[]>; orphans: Issue[]; all: Issue[] },
+    fallbackIssues: readonly ProjectExportIssueRow[],
+    users: ReadonlyMap<string, ProjectExportUserLabel>,
+    counts: StreamingCounts,
+    signal: AbortSignal | undefined,
+  ): AsyncGenerator<ProjectExportIssueRow> {
+    for (const issue of groupedIssues.all) {
       throwIfAborted(signal);
-      const row = orphanIssueReportRow(issue, users);
-      addReportPhotoIds(counts.imageIds, row);
-      counts.reports += 1;
+      const row = issueExportRow(issue, users);
+      addIssuePhotoIds(counts.imageIds, row);
+      counts.issues += 1;
+      yield row;
+    }
+    for (const row of fallbackIssues) {
+      throwIfAborted(signal);
+      addIssuePhotoIds(counts.imageIds, row);
+      counts.issues += 1;
       yield row;
     }
   }

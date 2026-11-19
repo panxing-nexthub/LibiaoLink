@@ -110,12 +110,13 @@ export interface ProjectExportChangeRow {
 
 export interface ProjectExportStakeholderRow {
   name: string;
-  contact: string;
+  phone: string;
+  wechat: string;
   email: string;
-  position: string;
+  title: string;
   company: string;
   writer: string;
-  submittedAt: string;
+  role: string;
 }
 
 export interface ProjectExportAttachmentRow {
@@ -213,20 +214,21 @@ const CHANGE_HEADERS = [
 ];
 
 const STAKEHOLDER_HEADERS = [
-  "干系人姓名/name",
-  "电话或whats app或微信号",
-  "邮箱Email",
-  "职务Position/责任板块",
-  "所属公司company",
+  "干系人姓名",
+  "电话 / WhatsApp",
+  "微信",
+  "邮箱 Email",
+  "职务 / 责任板块",
+  "所属公司",
   "填写者",
-  "提交时间",
+  "干系人角色",
 ];
 
 const TASK_WIDTHS: Record<number, number> = { 1: 43, 2: 16.4, 3: 18.9, 4: 13.8, 5: 10, 6: 12, 7: 14, 8: 23.2, 9: 19.8, 10: 15.5, 11: 11.2, 12: 13.8, 13: 14, 14: 17.2, 15: 13.8, 16: 16.4, 17: 21.5, 18: 16 };
 const REPORT_WIDTHS: Record<number, number> = { 1: 14, 2: 20, 3: 42, 4: 36, 5: 58, 6: 12 };
 const ISSUE_WIDTHS: Record<number, number> = { 1: 14, 2: 18, 3: 42, 4: 22, 5: 38, 6: 42, 7: 14 };
 const CHANGE_WIDTHS: Record<number, number> = { 1: 21.5, 2: 13.8, 3: 18.9, 4: 23.2, 5: 30, 6: 30, 7: 23.2, 8: 16.4, 9: 16.4, 10: 23.2, 11: 21.5, 12: 13.8, 13: 21.5 };
-const STAKEHOLDER_WIDTHS: Record<number, number> = { 1: 22, 2: 25, 3: 30, 4: 30, 5: 24, 6: 18, 7: 22 };
+const STAKEHOLDER_WIDTHS: Record<number, number> = { 1: 22, 2: 22, 3: 16, 4: 30, 5: 28, 6: 24, 7: 18, 8: 22 };
 
 const ATTACHMENT_HEADERS = ["来源页面", "来源行", "来源记录", "附件类型", "文件名", "相对路径", "文件大小", "状态"];
 const ATTACHMENT_WIDTHS: Record<number, number> = { 1: 16, 2: 9, 3: 30, 4: 18, 5: 42, 6: 62, 7: 14, 8: 10 };
@@ -766,7 +768,7 @@ async function addStakeholderSheet(workbook: ExcelJS.Workbook, payload: ProjectE
   await addExportHeader(workbook, sheet, payload.project, "干系人", sheetWidthsPx(STAKEHOLDER_WIDTHS, STAKEHOLDER_HEADERS.length), STAKEHOLDER_HEADERS.length);
   styleHeader(sheet, STAKEHOLDER_HEADERS, STAKEHOLDER_WIDTHS);
   for (const item of payload.stakeholders) {
-    const row = sheet.addRow([item.name, item.contact, item.email, item.position, item.company, item.writer, item.submittedAt]);
+    const row = sheet.addRow([item.name, item.phone, item.wechat, item.email, item.title, item.company, item.writer, item.role]);
     styleBodyRow(sheet, row.number, STAKEHOLDER_HEADERS.length);
     const texts: string[] = [];
     for (let col = 1; col <= STAKEHOLDER_HEADERS.length; col += 1) texts.push(plainText(row.getCell(col)));
@@ -1026,7 +1028,7 @@ export class ProjectExportWorkbookWriter {
   async writeStakeholders(rows: AsyncIterable<ProjectExportStakeholderRow>): Promise<void> {
     const sheet = await this.createSheet(this.sheetNames[4] ?? "干系人", STAKEHOLDER_WIDTHS, STAKEHOLDER_HEADERS, "干系人");
     for await (const item of rows) {
-      const row = sheet.addRow([item.name, item.contact, item.email, item.position, item.company, item.writer, item.submittedAt]);
+      const row = sheet.addRow([item.name, item.phone, item.wechat, item.email, item.title, item.company, item.writer, item.role]);
       styleBodyRow(sheet, row.number, STAKEHOLDER_HEADERS.length);
       const texts: string[] = [];
       for (let col = 1; col <= STAKEHOLDER_HEADERS.length; col += 1) texts.push(plainText(row.getCell(col)));

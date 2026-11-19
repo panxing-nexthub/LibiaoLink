@@ -11,7 +11,6 @@ import {
 import {
   formatCalendarDate,
   formatReportDate,
-  formatReportTime,
   formatTaskDate,
   versionNameOf,
   type ExportFileLink,
@@ -33,9 +32,9 @@ type StakeholderExportItem = z.infer<typeof StakeholderSchema>;
 
 const COMPANY_LABELS: Record<string, string> = {
   libiao: "立镖机器人",
-  supplier: "供应商supplier",
+  supplier: "供应商",
   general_contractor: "总包单位",
-  customer: "客户customer",
+  customer: "客户",
 };
 
 export function personLabel(
@@ -247,14 +246,15 @@ export function stakeholderExportRow(
   users: ReadonlyMap<string, ProjectExportUserLabel>,
 ): ProjectExportStakeholderRow {
   const companyType = COMPANY_LABELS[item.companyType] ?? item.companyType;
-  const positions = [item.title ?? "", item.role ?? ""].filter((value, index, values) => value !== "" && values.indexOf(value) === index);
+  const companyName = item.company ?? "";
   return {
     name: item.name,
-    contact: [item.phone ?? "", item.wechat ?? ""].filter((value) => value !== "").join(" / "),
+    phone: item.phone ?? "",
+    wechat: item.wechat ?? "",
     email: item.email ?? "",
-    position: positions.join(" / "),
-    company: item.company === null || item.company === undefined || item.company === "" ? companyType : companyType + " / " + item.company,
+    title: item.title ?? "",
+    company: companyName === "" ? companyType : companyType + " / " + companyName,
     writer: personLabel(item.createdBy, item.createdByName, users),
-    submittedAt: formatReportTime(item.createdAt),
+    role: item.role ?? "",
   };
 }

@@ -653,6 +653,27 @@ function stakeholderSheet(): SheetInput {
   };
 }
 
+const STAKEHOLDER_EXPORT_HEADER = [
+  "干系人姓名",
+  "电话 / WhatsApp",
+  "微信",
+  "邮箱 Email",
+  "职务 / 责任板块",
+  "所属公司",
+  "填写者",
+  "干系人角色",
+];
+
+function exportedStakeholderWorkbook(): Buffer {
+  return buildWorkbook([...sampleSheets(), {
+    name: "干系人",
+    rows: [
+      STAKEHOLDER_EXPORT_HEADER,
+      ["潘兴", "123456", "crabajn", "panxing@libiaorobot.com", "系统研发", "立镖机器人", "潘兴", "研发实习生"],
+    ],
+  }]);
+}
+
 /** 主文件带「干系人」表（正常「一张表格」导出的形态）。 */
 function sampleWorkbookWithStakeholders(): Buffer {
   return buildWorkbook([...sampleSheets(), stakeholderSheet()]);
@@ -1112,6 +1133,40 @@ describe("ProjectImportService.preview（导入表解析预览）", () => {
     expect(codes).toContain("STAKEHOLDER_COMPANY_UNMATCHED");
     expect(codes).toContain("STAKEHOLDER_FILLER_MISSING");
     expect(codes).not.toContain("STAKEHOLDER_SHEET_MISSING");
+  });
+
+  it("干系人（2026-11-19）：新导出 8 列 → 电话与微信分别导入", async () => {
+    const h = createHarness();
+    h.nodes.library = [];
+    const preview = await h.service.preview({
+      bytes: exportedStakeholderWorkbook(),
+      fileName: "[LBGW-20260331-1459] UK-VANILLA-AIRROB.xlsx",
+      actorId: ACTOR_ID,
+      locale: "zh",
+    });
+    expect(preview.counts.stakeholders).toBe(1);
+    const parse = previewPayload(h).parse as {
+      stakeholders: Array<{
+        name: string;
+        companyType: string;
+        phone: string | null;
+        wechat: string | null;
+        email: string | null;
+        title: string | null;
+        role: string | null;
+        filler: string | null;
+      }>;
+    };
+    expect(parse.stakeholders[0]).toMatchObject({
+      name: "潘兴",
+      companyType: "libiao",
+      phone: "123456",
+      wechat: "crabajn",
+      email: "panxing@libiaorobot.com",
+      title: "系统研发",
+      role: "研发实习生",
+      filler: "潘兴",
+    });
   });
 
   it("干系人（Push 324）：导入表没有该表 → info 提醒，不导入干系人", async () => {

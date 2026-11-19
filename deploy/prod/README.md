@@ -1,3 +1,15 @@
+> **2026-11-19 18:00 任务描述中英文分行（测试机 server-only，test-20261119-1800-px-task-title-lines-68e26642）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261119-1800-px-task-title-lines-68e26642`，previous = `test-20261119-1740-px-export-layout-split-95b69efe`；staging = `/srv/data/deploy-test-test-20261119-1800-px-task-title-lines-68e26642/staging`，备份 = `/srv/data/backups/before-test-test-20261119-1800-px-task-title-lines-68e26642`。代码来源 PR #920 / main `68e26642`。
+
+> **改动 / 验收**：项目全量导出任务描述固定中文第一行、英文第二行；无英文时不保留空行。列宽取两行中较长者，行高按两行预留，保持水平、垂直居中且不与相邻行重叠。页面级导出不含任务 Sheet，本次不受影响。仅覆盖 `project-export.mapping.js` 与 source map 两个编译产物；容器内直接调用已部署的 `taskExportRow`，输出 `"布局定档\nLayout scheduling"`。server typecheck / build、frontend typecheck / build、shared typecheck 与契约漂移检查、导出定向 Vitest 39 / 39 通过。
+
+> **发布件 / 安装**：`project-export.mapping.js` 8,543 B · `c91bdbd8…`；`project-export.mapping.js.map` 8,773 B · `17ef4a55…`；`build-info.json` 671 B · `c88239bd…`；`changed-files.sha256` 188 B · `d25695b4…`。staging 与目标文件 SHA-256 一致，`root:root 644` 原子替换；`project-export` 目录仍为 32 个文件。
+
+> **运行态**：`/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/access` 401；readyz 四项全 true；web / api / worker / postgres 均 running healthy，RestartCount 0、OOM false，近 5 分钟 api / worker 错误匹配 0。
+
+> **备份 / 回滚**：备份 23,674 B；`project-export.mapping.js.before` 8,221 B · `10b8cf63…`、`project-export.mapping.js.map.before` 8,479 B · `d7010679…`、`RELEASE_MANIFEST.json.before` 6,677 B · `31077e26…`、`SHA256SUMS` 297 B · `7593475e…`，4 / 4 备份文件校验通过。恢复两个 before 文件与 manifest，并重启 api / worker 即可回滚。
+
+> **边界 / 后续**：仅测试机，正式机 `10.1.103.44` 未触碰。无前端 / shared 运行时 / 数据库 / DDL / 迁移 / Compose / env / Secret / MinIO / CAD / Nginx 变更。真实账号浏览器导出并人工打开 Excel 的视觉验收仍待执行，重点检查两行间距与整体行高。
+
 > **2026-11-19 17:45 导出排版统一 / 日报与问题汇总拆分（测试机 frontend + server，test-20261119-1740-px-export-layout-split-95b69efe）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261119-1740-px-export-layout-split-95b69efe`，previous = `test-20261119-1738-codex-overview-date-glyph-e95ec674`；staging = `/srv/data/deploy-test-test-20261119-1740-px-export-layout-split-95b69efe/staging`，备份 = `/srv/data/backups/before-test-test-20261119-1740-px-export-layout-split-95b69efe`。基于 `9273c199`（PR #918 / main `95b69efe` squash 等价）隔离构建，并保留测试机 17:38 未入库的总览字体与日期字形修正。
 >
 > **改动 / 验收**：项目全量导出的日报与问题拆成独立 `日报记录`、`问题汇总` Sheet，项目数据全部保留；ZIP 增加 `附件清单`，现场工作附图与问题附图分目录。表头与正文水平、垂直居中，英文自动换行，统一调用本机微软雅黑；列宽按内容扩展，行高按换行与图片动态估算，正文保留上下留白，图片横向居中并保留底部间距。页面级导出预览同步品牌表头、居中、动态列宽与图片留白。frontend typecheck / build、server typecheck / build 通过，导出定向 Vitest 38 / 38。

@@ -2,13 +2,19 @@ html {
   background: #52525b;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body.preview-document {
+  width: max-content;
+  min-width: 100%;
   margin: 0;
   padding: 18px;
   background: #ffffff;
   visibility: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body.preview-document.preview-ready {

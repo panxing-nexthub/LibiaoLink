@@ -16,6 +16,12 @@ import {
   exportHeaderWidthPx,
   renderProjectExportHeader,
 } from "./project-export.header.js";
+import {
+  bodyRowHeightPx,
+  EXPORT_PX_PER_POINT,
+  fittedColumnWidth,
+  headerRowHeightPx,
+} from "./export-layout.js";
 import type { PageExportCellValue } from "./page-export.mapping.js";
 
 export interface PageExportWorkbookColumn {
@@ -48,9 +54,10 @@ export interface PageExportWorkbookPayload {
 const IMAGE_WIDTH_PX = 88;
 const IMAGE_HEIGHT_PX = 64;
 const IMAGE_GAP_PX = 4;
-const PX_PER_POINT = 4 / 3;
 const EMU_PER_PIXEL = 9525;
-const IMAGE_PADDING_PX = 2;
+const IMAGE_TOP_GAP_PX = 8;
+const IMAGE_BOTTOM_GAP_PX = 10;
+const IMAGE_PADDING_PX = 4;
 
 function uniquePhotos(refs: readonly ExportPhotoRef[]): ExportPhotoRef[] {
   const seen = new Set<string>();
@@ -68,8 +75,17 @@ function appendMissing(base: string, refs: readonly ExportPhotoRef[], images: Re
   return base === "" ? note : base + "\n" + note;
 }
 
+function columnWidthPx(widthChars: number): number {
+  return Math.max(IMAGE_WIDTH_PX, widthChars * 7 + 5);
+}
+
 function imageCapacity(widthChars: number): number {
-  return Math.max(1, Math.floor((widthChars * 7 + 5 + 0) / (IMAGE_WIDTH_PX + IMAGE_GAP_PX)));
+  return Math.max(1, Math.floor(columnWidthPx(widthChars) / (IMAGE_WIDTH_PX + IMAGE_GAP_PX)));
+}
+
+function imageBlockHeightPx(lines: number): number {
+  if (lines <= 0) return 0;
+  return IMAGE_TOP_GAP_PX + lines * IMAGE_HEIGHT_PX + (lines - 1) * IMAGE_GAP_PX + IMAGE_BOTTOM_GAP_PX;
 }
 
 function placeImages(
@@ -83,6 +99,7 @@ function placeImages(
   baseHeightPx: number,
 ): number {
   const available = uniquePhotos(refs).filter((ref) => images.has(ref.fileId));
+  const widthPx = columnWidthPx(sheet.getColumn(column).width ?? 8.43);
   for (let index = 0; index < available.length; index += 1) {
     const ref = available[index];
     if (ref === undefined) continue;
@@ -90,8 +107,10 @@ function placeImages(
     if (image === undefined) continue;
     const slot = index % capacity;
     const line = Math.floor(index / capacity);
-    const xOffsetPx = IMAGE_PADDING_PX + slot * (IMAGE_WIDTH_PX + IMAGE_GAP_PX);
-    const yOffsetPx = baseHeightPx + IMAGE_PADDING_PX + line * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX);
+    const itemsOnLine = Math.min(capacity, available.length - line * capacity);
+    const lineWidthPx = itemsOnLine * IMAGE_WIDTH_PX + Math.max(0, itemsOnLine - 1) * IMAGE_GAP_PX;
+    const xOffsetPx = Math.max(IMAGE_PADDING_PX, (widthPx - lineWidthPx) / 2 + slot * (IMAGE_WIDTH_PX + IMAGE_GAP_PX));
+    const yOffsetPx = baseHeightPx + IMAGE_TOP_GAP_PX + line * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX);
     const imageId = workbook.addImage({
       buffer: Uint8Array.from(image.bytes).buffer as ArrayBuffer,
       extension: image.extension,
@@ -119,14 +138,50 @@ function setWidths(sheet: ExcelJS.Worksheet, columns: readonly PageExportWorkboo
   }
 }
 
+function fitColumnWidths(
+  sheet: ExcelJS.Worksheet,
+  columns: readonly PageExportWorkbookColumn[],
+  values: readonly string[],
+): void {
+  for (let index = 0; index < columns.length; index += 1) {
+    const baseWidth = columns[index]?.width ?? 8.43;
+    const nextWidth = fittedColumnWidth(values[index] ?? "", baseWidth);
+    if (nextWidth > (sheet.getColumn(index + 1).width ?? baseWidth)) {
+      sheet.getColumn(index + 1).width = nextWidth;
+    }
+  }
+}
+
+function widthsOf(sheet: ExcelJS.Worksheet, count: number): number[] {
+  return Array.from({ length: count }, (_value, index) => sheet.getColumn(index + 1).width ?? 8.43);
+}
+
+function cellText(value: PageExportCellValue | undefined): string {
+  if (value === null || value === undefined) return "";
+  return typeof value === "number" ? String(value) : value;
+}
+
+function fitSheetWidths(sheet: ExcelJS.Worksheet, definition: PageExportWorkbookSheet): void {
+  fitColumnWidths(sheet, definition.columns, definition.columns.map((column) => column.label));
+  for (const row of definition.rows) {
+    fitColumnWidths(
+      sheet,
+      definition.columns,
+      definition.columns.map((column) => column.photo ? "" : cellText(row.values[column.key])),
+    );
+  }
+}
+
 function styleHeader(sheet: ExcelJS.Worksheet, columns: readonly PageExportWorkbookColumn[]): ExcelJS.Row {
-  const row = sheet.addRow(columns.map((column) => column.label));
-  row.height = 30;
+  const labels = columns.map((column) => column.label);
+  fitColumnWidths(sheet, columns, labels);
+  const row = sheet.addRow(labels);
+  row.height = headerRowHeightPx(labels, widthsOf(sheet, columns.length)) / EXPORT_PX_PER_POINT;
   for (let index = 1; index <= columns.length; index += 1) {
     const cell = row.getCell(index);
     cell.font = { name: EXPORT_FONT_NAME, size: 10, bold: true, color: { argb: "FF111827" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4F6F8" } };
-    cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
     cell.border = {
       top: { style: "thin", color: { argb: "FFE4E7EC" } },
       bottom: { style: "thin", color: { argb: "FFC9D0D8" } },
@@ -148,31 +203,20 @@ function styleBodyRow(sheet: ExcelJS.Worksheet, rowNumber: number, count: number
   for (let index = 1; index <= count; index += 1) {
     const cell = sheet.getCell(rowNumber, index);
     cell.font = { name: EXPORT_FONT_NAME, size: 10 };
-    cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
     applyLinkFont(cell);
   }
 }
 
-function textWidth(value: string): number {
-  let width = 0;
-  for (const char of value) width += /[\u0000-\u00ff]/.test(char) ? 1 : 2;
-  return width;
+function alignPhotoCell(sheet: ExcelJS.Worksheet, rowNumber: number, column: number, hasImages: boolean): void {
+  if (!hasImages) return;
+  const cell = sheet.getCell(rowNumber, column);
+  cell.alignment = { vertical: "top", horizontal: "center", wrapText: true };
+  applyLinkFont(cell);
 }
 
-function estimatedLines(value: string, widthChars: number): number {
-  if (value === "") return 1;
-  let total = 0;
-  for (const line of value.split("\n")) total += Math.max(1, Math.ceil(textWidth(line) / Math.max(4, widthChars)));
-  return total;
-}
-
-function estimatedTextHeight(sheet: ExcelJS.Worksheet, values: readonly string[], columns: readonly number[]): number {
-  let lines = 1;
-  for (let index = 0; index < values.length; index += 1) {
-    const column = columns[index] ?? 1;
-    lines = Math.max(lines, estimatedLines(values[index] ?? "", sheet.getColumn(column).width ?? 8.43));
-  }
-  return Math.max(24, Math.min(540, lines * 18 + 8));
+function estimatedTextHeight(sheet: ExcelJS.Worksheet, values: readonly string[], count: number): number {
+  return bodyRowHeightPx(values, widthsOf(sheet, count));
 }
 
 function plainText(cell: ExcelJS.Cell): string {
@@ -227,10 +271,15 @@ async function addExportHeader(
   }
 }
 
-async function addPageSheet(workbook: ExcelJS.Workbook, payload: PageExportWorkbookPayload, sheetDefinition: PageExportWorkbookSheet): Promise<ExcelJS.Worksheet> {
+async function addPageSheet(
+  workbook: ExcelJS.Workbook,
+  payload: PageExportWorkbookPayload,
+  sheetDefinition: PageExportWorkbookSheet,
+): Promise<ExcelJS.Worksheet> {
   const sheet = workbook.addWorksheet(sheetNameOf(sheetDefinition.name));
   setWidths(sheet, sheetDefinition.columns);
-  const widthPx = exportHeaderWidthPx(sheetDefinition.columns.map((column) => column.width));
+  fitSheetWidths(sheet, sheetDefinition);
+  const widthPx = exportHeaderWidthPx(widthsOf(sheet, sheetDefinition.columns.length));
   await addExportHeader(workbook, sheet, payload.project, sheetDefinition.name, widthPx, sheetDefinition.columns.length);
   styleHeader(sheet, sheetDefinition.columns);
   for (const definition of sheetDefinition.rows) {
@@ -241,20 +290,24 @@ async function addPageSheet(workbook: ExcelJS.Workbook, payload: PageExportWorkb
       if (column === undefined || !column.photo) continue;
       const refs = uniquePhotos(definition.photos[column.key] ?? []);
       row.getCell(index + 1).value = appendMissing("", refs, payload.images) || null;
-      photoColumns.push({ column: index + 1, refs, capacity: imageCapacity(column.width) });
+      photoColumns.push({
+        column: index + 1,
+        refs,
+        capacity: imageCapacity(sheet.getColumn(index + 1).width ?? column.width),
+      });
     }
     styleBodyRow(sheet, row.number, sheetDefinition.columns.length);
     const texts = sheetDefinition.columns.map((_column, index) => plainText(row.getCell(index + 1)));
-    const basePx = estimatedTextHeight(sheet, texts, sheetDefinition.columns.map((_column, index) => index + 1));
+    const basePx = estimatedTextHeight(sheet, texts, sheetDefinition.columns.length);
     let imageLines = 0;
-    let availableImageCount = 0;
     for (const photo of photoColumns) {
       const available = uniquePhotos(photo.refs).filter((ref) => payload.images.has(ref.fileId)).length;
-      availableImageCount += available;
-      imageLines = Math.max(imageLines, Math.ceil(available / photo.capacity));
+      imageLines = Math.max(imageLines, available === 0 ? 0 : Math.ceil(available / photo.capacity));
     }
-    row.height = (basePx + imageLines * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX) + (availableImageCount > 0 ? 4 : 0)) / PX_PER_POINT;
+    row.height = (basePx + imageBlockHeightPx(imageLines)) / EXPORT_PX_PER_POINT;
     for (const photo of photoColumns) {
+      const available = uniquePhotos(photo.refs).filter((ref) => payload.images.has(ref.fileId)).length;
+      alignPhotoCell(sheet, row.number, photo.column, available > 0);
       placeImages(workbook, sheet, photo.refs, payload.images, photo.column, row.number, photo.capacity, basePx);
     }
   }
@@ -298,9 +351,57 @@ export class PageExportWorkbookWriter {
     });
     this.sheetNames.push(name);
     setWidths(sheet, sheetDefinition.columns);
-    const widthPx = exportHeaderWidthPx(sheetDefinition.columns.map((column) => column.width));
+    fitColumnWidths(sheet, sheetDefinition.columns, sheetDefinition.columns.map((column) => column.label));
     const headerRow = sheet.addRow([]);
     headerRow.height = EXPORT_HEADER_ROW_HEIGHT;
+    const brandCell = headerRow.getCell(1);
+    brandCell.value = "[" + this.project.code + "]  " + this.project.name + "   ·   " + sheetDefinition.name;
+    brandCell.font = { name: EXPORT_FONT_NAME, size: 14, bold: true, color: { argb: "FF111827" } };
+    brandCell.alignment = { vertical: "middle", horizontal: "center" };
+    brandCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
+    headerRow.commit();
+    styleHeader(sheet, sheetDefinition.columns).commit();
+
+    for await (const definition of rows) {
+      const row = sheet.addRow(rowValues(sheetDefinition, definition));
+      const photoColumns: Array<{
+        column: number;
+        refs: readonly ExportPhotoRef[];
+        images: ReadonlyMap<string, ExportImage>;
+        capacity: number;
+      }> = [];
+      for (let index = 0; index < sheetDefinition.columns.length; index += 1) {
+        const column = sheetDefinition.columns[index];
+        if (column === undefined || !column.photo) continue;
+        const refs = uniquePhotos(definition.photos[column.key] ?? []);
+        const images = await this.photoLoader(refs);
+        row.getCell(index + 1).value = appendMissing("", refs, images) || null;
+        photoColumns.push({
+          column: index + 1,
+          refs,
+          images,
+          capacity: imageCapacity(sheet.getColumn(index + 1).width ?? column.width),
+        });
+      }
+      styleBodyRow(sheet, row.number, sheetDefinition.columns.length);
+      const texts = sheetDefinition.columns.map((_column, index) => plainText(row.getCell(index + 1)));
+      fitColumnWidths(sheet, sheetDefinition.columns, texts);
+      const basePx = estimatedTextHeight(sheet, texts, sheetDefinition.columns.length);
+      let imageLines = 0;
+      for (const photo of photoColumns) {
+        const available = uniquePhotos(photo.refs).filter((ref) => photo.images.has(ref.fileId)).length;
+        imageLines = Math.max(imageLines, available === 0 ? 0 : Math.ceil(available / photo.capacity));
+      }
+      row.height = (basePx + imageBlockHeightPx(imageLines)) / EXPORT_PX_PER_POINT;
+      for (const photo of photoColumns) {
+        const available = uniquePhotos(photo.refs).filter((ref) => photo.images.has(ref.fileId)).length;
+        alignPhotoCell(sheet, row.number, photo.column, available > 0);
+        this.placeThumbnails(sheet, photo.refs, photo.images, photo.column, row.number, photo.capacity, basePx);
+      }
+      row.commit();
+    }
+
+    const widthPx = exportHeaderWidthPx(widthsOf(sheet, sheetDefinition.columns.length));
     try {
       const header = await renderProjectExportHeader(this.project, sheetDefinition.name, widthPx);
       const fileId = "export-header-" + String(sheet.id);
@@ -317,45 +418,7 @@ export class PageExportWorkbookWriter {
         fitTo: { columns: sheetDefinition.columns.length, rows: 1 },
       });
     } catch {
-      const cell = headerRow.getCell(1);
-      cell.value = "[" + this.project.code + "]  " + this.project.name + "   ·   " + sheetDefinition.name;
-      cell.font = { name: EXPORT_FONT_NAME, size: 14, bold: true, color: { argb: "FF111827" } };
-      cell.alignment = { vertical: "middle", horizontal: "left" };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
-    }
-    headerRow.commit();
-    styleHeader(sheet, sheetDefinition.columns).commit();
-    for await (const definition of rows) {
-      const row = sheet.addRow(rowValues(sheetDefinition, definition));
-      const photoColumns: Array<{
-        column: number;
-        refs: readonly ExportPhotoRef[];
-        images: ReadonlyMap<string, ExportImage>;
-        capacity: number;
-      }> = [];
-      for (let index = 0; index < sheetDefinition.columns.length; index += 1) {
-        const column = sheetDefinition.columns[index];
-        if (column === undefined || !column.photo) continue;
-        const refs = uniquePhotos(definition.photos[column.key] ?? []);
-        const images = await this.photoLoader(refs);
-        row.getCell(index + 1).value = appendMissing("", refs, images) || null;
-        photoColumns.push({ column: index + 1, refs, images, capacity: imageCapacity(column.width) });
-      }
-      styleBodyRow(sheet, row.number, sheetDefinition.columns.length);
-      const texts = sheetDefinition.columns.map((_column, index) => plainText(row.getCell(index + 1)));
-      const basePx = estimatedTextHeight(sheet, texts, sheetDefinition.columns.map((_column, index) => index + 1));
-      let imageLines = 0;
-      let availableImageCount = 0;
-      for (const photo of photoColumns) {
-        const available = uniquePhotos(photo.refs).filter((ref) => photo.images.has(ref.fileId)).length;
-        availableImageCount += available;
-        imageLines = Math.max(imageLines, Math.ceil(available / photo.capacity));
-      }
-      row.height = (basePx + imageLines * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX) + (availableImageCount > 0 ? 4 : 0)) / PX_PER_POINT;
-      for (const photo of photoColumns) {
-        this.placeThumbnails(sheet, photo.refs, photo.images, photo.column, row.number, photo.capacity, basePx);
-      }
-      row.commit();
+      // 品牌图渲染失败时保留已写入的居中文字抬头。
     }
     sheet.commit();
   }
@@ -388,19 +451,24 @@ export class PageExportWorkbookWriter {
     baseHeightPx: number,
   ): void {
     const available = uniquePhotos(refs).filter((ref) => images.has(ref.fileId));
+    const widthPx = columnWidthPx(sheet.getColumn(column).width ?? 8.43);
     for (let index = 0; index < available.length; index += 1) {
       const ref = available[index];
       if (ref === undefined) continue;
       const image = images.get(ref.fileId);
       if (image === undefined) continue;
+      const slot = index % capacity;
+      const line = Math.floor(index / capacity);
+      const itemsOnLine = Math.min(capacity, available.length - line * capacity);
+      const lineWidthPx = itemsOnLine * IMAGE_WIDTH_PX + Math.max(0, itemsOnLine - 1) * IMAGE_GAP_PX;
       this.images.set(ref.fileId, image);
       this.imagePlacements.push({
         sheetId: sheet.id,
         row: rowNumber,
         column,
         fileId: ref.fileId,
-        xOffsetPx: IMAGE_PADDING_PX + (index % capacity) * (IMAGE_WIDTH_PX + IMAGE_GAP_PX),
-        yOffsetPx: baseHeightPx + IMAGE_PADDING_PX + Math.floor(index / capacity) * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX),
+        xOffsetPx: Math.max(IMAGE_PADDING_PX, (widthPx - lineWidthPx) / 2 + slot * (IMAGE_WIDTH_PX + IMAGE_GAP_PX)),
+        yOffsetPx: baseHeightPx + IMAGE_TOP_GAP_PX + line * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX),
         widthPx: IMAGE_WIDTH_PX,
         heightPx: IMAGE_HEIGHT_PX,
       });

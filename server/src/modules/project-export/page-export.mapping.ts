@@ -38,7 +38,7 @@ export function pageReportRow(report: DailyReport, users: ReadonlyMap<string, Pr
   };
 }
 
-/** 问题追踪：一条问题一行；不挂到来源日报行，避免与旧「日报及问题汇总」的合并口径混用。 */
+/** 问题追踪：一条问题一行；不挂到来源日报行，与项目全量导出的「问题汇总」保持独立记录口径。 */
 export function pageIssueRow(issue: Issue, users: ReadonlyMap<string, ProjectExportUserLabel>): PageExportMappedRow {
   return {
     values: {

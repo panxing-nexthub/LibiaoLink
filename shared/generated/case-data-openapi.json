@@ -1,0 +1,5658 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "LibiaoLink 案例数据网关本地联调",
+    "version": "1.6.0"
+  },
+  "components": {
+    "securitySchemes": {
+      "serviceToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "CaseProjectCatalogPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaseProjectCatalogItem"
+            },
+            "maxItems": 200
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^([A-Za-z0-9_-]{1,2048})\\.([A-Za-z0-9_-]{43})$"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "CaseProjectCatalogItem": {
+        "type": "object",
+        "properties": {
+          "externalProjectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectCode": {
+            "type": "string"
+          },
+          "projectName": {
+            "type": "string"
+          },
+          "customerText": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "region": {
+            "type": "string"
+          },
+          "projectType": {
+            "type": "string"
+          },
+          "managerIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "managerNames": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "done",
+              "archived"
+            ]
+          },
+          "sourceVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "archivedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "deletedAt": {
+            "type": "null"
+          },
+          "syncedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "externalProjectId",
+          "projectCode",
+          "projectName",
+          "customerText",
+          "region",
+          "projectType",
+          "managerIds",
+          "managerNames",
+          "status",
+          "sourceVersion",
+          "updatedAt",
+          "archivedAt",
+          "deletedAt",
+          "syncedAt"
+        ],
+        "additionalProperties": false
+      },
+      "CaseDataGatewayError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "path"
+              ]
+            }
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "traceId",
+          "details"
+        ],
+        "additionalProperties": false
+      },
+      "CaseProjectProfileView": {
+        "type": "object",
+        "properties": {
+          "externalProjectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "rowVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "subjects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "subjectId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "subjectType": {
+                  "type": "string",
+                  "enum": [
+                    "customer",
+                    "partner",
+                    "three_pl"
+                  ]
+                },
+                "isPrimary": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "subjectId",
+                "subjectType"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "operatorUserKey": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "roleCode": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "default": null
+                },
+                "isPrimary": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "leftAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time",
+                  "default": null
+                }
+              },
+              "required": [
+                "operatorUserKey",
+                "roleCode"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "externalProjectId",
+          "sourceVersion",
+          "rowVersion",
+          "updatedAt",
+          "attributes",
+          "subjects",
+          "members"
+        ],
+        "additionalProperties": false
+      },
+      "SaveCaseProjectProfileBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "sourceVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "attributes": {
+            "type": "object",
+            "properties": {
+              "regions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "maxItems": 50
+              },
+              "country": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "industry": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "businessScenario": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "solutionTypes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "airrob",
+                    "airrob_pro",
+                    "airrob_plus",
+                    "t_sort",
+                    "t_carry",
+                    "3d",
+                    "grabot"
+                  ]
+                },
+                "maxItems": 7
+              },
+              "canVisit": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "subjects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "subjectId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "subjectType": {
+                  "type": "string",
+                  "enum": [
+                    "customer",
+                    "partner",
+                    "three_pl"
+                  ]
+                },
+                "isPrimary": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "subjectId",
+                "subjectType"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "operatorUserKey": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "roleCode": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "default": null
+                },
+                "isPrimary": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "leftAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time",
+                  "default": null
+                }
+              },
+              "required": [
+                "operatorUserKey",
+                "roleCode"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey",
+          "expectedVersion",
+          "sourceVersion",
+          "attributes",
+          "subjects",
+          "members"
+        ],
+        "additionalProperties": false
+      },
+      "CaseSubjectView": {
+        "type": "object",
+        "properties": {
+          "subjectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subjectType": {
+            "type": "string",
+            "enum": [
+              "customer",
+              "partner",
+              "three_pl"
+            ]
+          },
+          "stableKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive"
+            ],
+            "default": "active"
+          },
+          "sourceSystem": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "default": "case_library"
+          },
+          "sourceRef": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 256,
+            "default": null
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "alias": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "locale": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 20,
+                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+                  "default": "zh-CN"
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "default": null
+                }
+              },
+              "required": [
+                "alias"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 100
+          },
+          "rowVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "subjectId",
+          "subjectType",
+          "stableKey",
+          "displayName",
+          "aliases",
+          "rowVersion",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "SaveCaseSubjectBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "subjectType": {
+            "type": "string",
+            "enum": [
+              "customer",
+              "partner",
+              "three_pl"
+            ]
+          },
+          "stableKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive"
+            ],
+            "default": "active"
+          },
+          "sourceSystem": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "default": "case_library"
+          },
+          "sourceRef": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 256,
+            "default": null
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "alias": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "locale": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 20,
+                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+                  "default": "zh-CN"
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "default": null
+                }
+              },
+              "required": [
+                "alias"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 100
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey",
+          "expectedVersion",
+          "subjectType",
+          "stableKey",
+          "displayName",
+          "aliases"
+        ],
+        "additionalProperties": false
+      },
+      "CaseAuthoringView": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceProjectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "changeSummary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "content": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "solutionParameters": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "outcomes": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "confidentiality": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rowVersion": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "caseId",
+          "sourceProjectId",
+          "locale",
+          "title",
+          "summary",
+          "changeSummary",
+          "content",
+          "solutionParameters",
+          "outcomes",
+          "confidentiality",
+          "createdBy",
+          "createdAt",
+          "updatedAt",
+          "rowVersion"
+        ],
+        "additionalProperties": false
+      },
+      "CaseCreateBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalProjectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "locale": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 5000
+          },
+          "changeSummary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "content": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "fields": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "classification": {
+                          "type": "string",
+                          "enum": [
+                            "L1",
+                            "L2",
+                            "L3"
+                          ],
+                          "default": "L1"
+                        },
+                        "customerShareAllowed": {
+                          "type": "boolean"
+                        },
+                        "customerPresentationAllowed": {
+                          "type": "boolean"
+                        },
+                        "aiAllowed": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "sortOrder": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100000
+                        },
+                        "key": {
+                          "type": "string",
+                          "enum": [
+                            "pain_points",
+                            "automation_reason",
+                            "background",
+                            "before_process",
+                            "after_process",
+                            "timeline",
+                            "solution_description_zh",
+                            "solution_description_en"
+                          ]
+                        },
+                        "fieldType": {
+                          "type": "string",
+                          "enum": [
+                            "text"
+                          ]
+                        },
+                        "valueText": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000
+                        }
+                      },
+                      "required": [
+                        "customerShareAllowed",
+                        "customerPresentationAllowed",
+                        "aiAllowed",
+                        "sortOrder",
+                        "key",
+                        "fieldType",
+                        "valueText"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "classification": {
+                          "type": "string",
+                          "enum": [
+                            "L1",
+                            "L2",
+                            "L3"
+                          ],
+                          "default": "L1"
+                        },
+                        "customerShareAllowed": {
+                          "type": "boolean"
+                        },
+                        "customerPresentationAllowed": {
+                          "type": "boolean"
+                        },
+                        "aiAllowed": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "sortOrder": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100000
+                        },
+                        "key": {
+                          "type": "string",
+                          "enum": [
+                            "highlights"
+                          ]
+                        },
+                        "fieldType": {
+                          "type": "string",
+                          "enum": [
+                            "highlights"
+                          ]
+                        },
+                        "highlights": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          },
+                          "minItems": 1,
+                          "maxItems": 100
+                        }
+                      },
+                      "required": [
+                        "customerShareAllowed",
+                        "customerPresentationAllowed",
+                        "aiAllowed",
+                        "sortOrder",
+                        "key",
+                        "fieldType",
+                        "highlights"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "maxItems": 200
+              }
+            },
+            "default": {
+              "schemaVersion": 1,
+              "fields": []
+            },
+            "required": [
+              "schemaVersion",
+              "fields"
+            ],
+            "additionalProperties": false
+          },
+          "solutionParameters": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "solutionType": {
+                      "type": "string",
+                      "enum": [
+                        "airrob",
+                        "airrob_pro",
+                        "airrob_plus",
+                        "t_sort",
+                        "t_carry",
+                        "3d",
+                        "grabot"
+                      ]
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 1000
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "solutionType",
+                    "parameters"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 20
+              }
+            },
+            "default": {
+              "schemaVersion": 1,
+              "groups": []
+            },
+            "required": [
+              "schemaVersion",
+              "groups"
+            ],
+            "additionalProperties": false,
+            "description": "方案组按 solutionType 去重。每组参数名须在对应方案字典内，非空方案组须属于该案例来源项目。"
+          },
+          "outcomes": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "metrics": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "unit": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 40
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 100
+              }
+            },
+            "default": {
+              "schemaVersion": 1,
+              "metrics": []
+            },
+            "required": [
+              "schemaVersion",
+              "metrics"
+            ],
+            "additionalProperties": false
+          },
+          "confidentiality": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "public",
+                  "partial",
+                  "private"
+                ]
+              },
+              "customerIdentity": {
+                "type": "string",
+                "enum": [
+                  "secret",
+                  "internal",
+                  "public"
+                ]
+              },
+              "contentVisibility": {
+                "type": "string",
+                "enum": [
+                  "secret",
+                  "internal",
+                  "public"
+                ]
+              },
+              "mediaPermission": {
+                "type": "string",
+                "enum": [
+                  "secret",
+                  "internal",
+                  "public"
+                ]
+              },
+              "internalScope": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "mode",
+              "customerIdentity",
+              "contentVisibility",
+              "mediaPermission"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey",
+          "externalProjectId",
+          "sourceVersion",
+          "locale",
+          "title",
+          "confidentiality"
+        ],
+        "additionalProperties": false
+      },
+      "CasePatchBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 5000
+          },
+          "changeSummary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "content": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "fields": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "classification": {
+                          "type": "string",
+                          "enum": [
+                            "L1",
+                            "L2",
+                            "L3"
+                          ],
+                          "default": "L1"
+                        },
+                        "customerShareAllowed": {
+                          "type": "boolean"
+                        },
+                        "customerPresentationAllowed": {
+                          "type": "boolean"
+                        },
+                        "aiAllowed": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "sortOrder": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100000
+                        },
+                        "key": {
+                          "type": "string",
+                          "enum": [
+                            "pain_points",
+                            "automation_reason",
+                            "background",
+                            "before_process",
+                            "after_process",
+                            "timeline",
+                            "solution_description_zh",
+                            "solution_description_en"
+                          ]
+                        },
+                        "fieldType": {
+                          "type": "string",
+                          "enum": [
+                            "text"
+                          ]
+                        },
+                        "valueText": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000
+                        }
+                      },
+                      "required": [
+                        "customerShareAllowed",
+                        "customerPresentationAllowed",
+                        "aiAllowed",
+                        "sortOrder",
+                        "key",
+                        "fieldType",
+                        "valueText"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "classification": {
+                          "type": "string",
+                          "enum": [
+                            "L1",
+                            "L2",
+                            "L3"
+                          ],
+                          "default": "L1"
+                        },
+                        "customerShareAllowed": {
+                          "type": "boolean"
+                        },
+                        "customerPresentationAllowed": {
+                          "type": "boolean"
+                        },
+                        "aiAllowed": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "sortOrder": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100000
+                        },
+                        "key": {
+                          "type": "string",
+                          "enum": [
+                            "highlights"
+                          ]
+                        },
+                        "fieldType": {
+                          "type": "string",
+                          "enum": [
+                            "highlights"
+                          ]
+                        },
+                        "highlights": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          },
+                          "minItems": 1,
+                          "maxItems": 100
+                        }
+                      },
+                      "required": [
+                        "customerShareAllowed",
+                        "customerPresentationAllowed",
+                        "aiAllowed",
+                        "sortOrder",
+                        "key",
+                        "fieldType",
+                        "highlights"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "maxItems": 200
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "fields"
+            ],
+            "additionalProperties": false
+          },
+          "solutionParameters": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "solutionType": {
+                      "type": "string",
+                      "enum": [
+                        "airrob",
+                        "airrob_pro",
+                        "airrob_plus",
+                        "t_sort",
+                        "t_carry",
+                        "3d",
+                        "grabot"
+                      ]
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 1000
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "solutionType",
+                    "parameters"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 20
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "groups"
+            ],
+            "additionalProperties": false,
+            "description": "方案组按 solutionType 去重。每组参数名须在对应方案字典内，非空方案组须属于该案例来源项目。"
+          },
+          "outcomes": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "metrics": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "unit": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 40
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 100
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "metrics"
+            ],
+            "additionalProperties": false
+          },
+          "confidentiality": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "public",
+                  "partial",
+                  "private"
+                ]
+              },
+              "customerIdentity": {
+                "type": "string",
+                "enum": [
+                  "secret",
+                  "internal",
+                  "public"
+                ]
+              },
+              "contentVisibility": {
+                "type": "string",
+                "enum": [
+                  "secret",
+                  "internal",
+                  "public"
+                ]
+              },
+              "mediaPermission": {
+                "type": "string",
+                "enum": [
+                  "secret",
+                  "internal",
+                  "public"
+                ]
+              },
+              "internalScope": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "mode",
+              "customerIdentity",
+              "contentVisibility",
+              "mediaPermission"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey",
+          "expectedVersion"
+        ],
+        "additionalProperties": false
+      },
+      "CaseOperationResult": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "statusCode": {
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 599
+          },
+          "response": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "resourceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "operationId",
+          "statusCode",
+          "response",
+          "resourceId",
+          "createdAt",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "CaseUploadSession": {
+        "type": "object",
+        "properties": {
+          "uploadId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "assetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "assetVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "multipart": {
+            "type": "object",
+            "properties": {
+              "partSize": {
+                "type": "number",
+                "enum": [
+                  8388608
+                ]
+              },
+              "partCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 32
+              }
+            },
+            "required": [
+              "partSize",
+              "partCount"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "uploadId",
+          "assetId",
+          "assetVersionId",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "CaseCreateUploadBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "assetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "mimeType": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp",
+              "video/mp4",
+              "application/pdf"
+            ]
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 268435456
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey",
+          "fileName",
+          "mimeType",
+          "sizeBytes",
+          "sha256"
+        ],
+        "additionalProperties": false
+      },
+      "CaseUploadTarget": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "PUT"
+            ]
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "url",
+          "expiresAt",
+          "method",
+          "headers"
+        ],
+        "additionalProperties": false
+      },
+      "CaseUploadedParts": {
+        "type": "object",
+        "properties": {
+          "partSize": {
+            "type": "number",
+            "enum": [
+              8388608
+            ]
+          },
+          "partCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32
+          },
+          "uploadedParts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "partNumber": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 32
+                },
+                "sizeBytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8388608
+                }
+              },
+              "required": [
+                "partNumber",
+                "sizeBytes"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 32
+          },
+          "merged": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "partSize",
+          "partCount",
+          "uploadedParts",
+          "merged"
+        ],
+        "additionalProperties": false
+      },
+      "CaseAssetVersion": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "assetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "assetVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "objectVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "mimeType": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp",
+              "video/mp4",
+              "application/pdf"
+            ]
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 268435456
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "scanStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "passed",
+              "failed"
+            ]
+          },
+          "transcodeStatus": {
+            "type": "string",
+            "enum": [
+              "not_required",
+              "pending",
+              "ready",
+              "failed"
+            ]
+          }
+        },
+        "required": [
+          "caseId",
+          "assetId",
+          "assetVersionId",
+          "objectVersionId",
+          "fileName",
+          "mimeType",
+          "sizeBytes",
+          "sha256",
+          "scanStatus",
+          "transcodeStatus"
+        ],
+        "additionalProperties": false
+      },
+      "CaseCompleteUploadBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "objectVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey"
+        ],
+        "additionalProperties": false
+      },
+      "CaseAssetDownloadTicket": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "objectVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "method",
+          "url",
+          "expiresAt",
+          "objectVersionId"
+        ],
+        "additionalProperties": false
+      },
+      "CaseAssetMediaState": {
+        "type": "object",
+        "properties": {
+          "assetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "assetVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "objectVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "mediaVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "scanStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "passed",
+              "failed"
+            ]
+          },
+          "transcodeStatus": {
+            "type": "string",
+            "enum": [
+              "not_required",
+              "pending",
+              "ready",
+              "failed"
+            ]
+          },
+          "previewStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "failed"
+            ]
+          },
+          "dimensions": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              }
+            },
+            "required": [
+              "width",
+              "height"
+            ],
+            "additionalProperties": false
+          },
+          "durationMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "assetId",
+          "assetVersionId",
+          "objectVersionId",
+          "sha256",
+          "mediaVersion",
+          "scanStatus",
+          "transcodeStatus",
+          "previewStatus",
+          "dimensions",
+          "durationMs"
+        ],
+        "additionalProperties": false
+      },
+      "CaseSaveAssetMediaBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "objectVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "scanStatus": {
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "failed"
+                ]
+              },
+              "transcodeStatus": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  "failed"
+                ]
+              },
+              "previewStatus": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  "failed"
+                ]
+              },
+              "dimensions": {
+                "type": "object",
+                "properties": {
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "width",
+                  "height"
+                ],
+                "additionalProperties": false
+              },
+              "durationMs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey",
+          "expectedVersion",
+          "objectVersionId",
+          "sha256",
+          "result"
+        ],
+        "additionalProperties": false
+      },
+      "CaseReleaseReceipt": {
+        "type": "object",
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionNo": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "staged",
+              "active",
+              "superseded",
+              "withdrawn"
+            ]
+          },
+          "sourceVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "caseContentHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "projectSnapshotHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "releaseHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "stagedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "activatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "supersededAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "withdrawnAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "releaseId",
+          "caseId",
+          "versionNo",
+          "status",
+          "sourceVersion",
+          "caseContentHash",
+          "projectSnapshotHash",
+          "releaseHash",
+          "stagedAt",
+          "activatedAt",
+          "supersededAt",
+          "withdrawnAt"
+        ],
+        "additionalProperties": false
+      },
+      "StageCaseReleaseBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "externalProjectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "caseSnapshot": {
+            "$ref": "#/components/schemas/PublishedCaseSnapshot"
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "assetId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "assetVersionId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "objectVersionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                }
+              },
+              "required": [
+                "assetId",
+                "assetVersionId",
+                "objectVersionId"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 12
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey",
+          "externalProjectId",
+          "sourceVersion",
+          "caseSnapshot",
+          "assets"
+        ],
+        "additionalProperties": false
+      },
+      "PublishedCaseSnapshot": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "enum": [
+              1
+            ]
+          },
+          "locale": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 5000,
+            "default": null
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "heading": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20000
+                }
+              },
+              "required": [
+                "heading",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 20,
+            "default": []
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "locale",
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "ActivateCaseReleaseBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedActiveReleaseId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "approvalRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[!-~]+$"
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey",
+          "expectedActiveReleaseId",
+          "approvalRef"
+        ],
+        "additionalProperties": false
+      },
+      "DeactivateCaseReleaseBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedActiveReleaseId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey",
+          "expectedActiveReleaseId"
+        ],
+        "additionalProperties": false
+      },
+      "CaseReleaseHistory": {
+        "type": "object",
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionNo": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "staged",
+              "active",
+              "superseded",
+              "withdrawn"
+            ]
+          },
+          "sourceVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "caseContentHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "projectSnapshotHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "releaseHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "stagedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "activatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "supersededAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "withdrawnAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "approvalRef": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[!-~]+$"
+          },
+          "caseSnapshot": {
+            "$ref": "#/components/schemas/PublishedCaseSnapshot"
+          },
+          "projectSnapshot": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "assetId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "assetVersionId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "objectVersionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                }
+              },
+              "required": [
+                "assetId",
+                "assetVersionId",
+                "objectVersionId"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "releaseId",
+          "caseId",
+          "versionNo",
+          "status",
+          "sourceVersion",
+          "caseContentHash",
+          "projectSnapshotHash",
+          "releaseHash",
+          "stagedAt",
+          "activatedAt",
+          "supersededAt",
+          "withdrawnAt",
+          "approvalRef",
+          "caseSnapshot",
+          "projectSnapshot",
+          "assets"
+        ],
+        "additionalProperties": false
+      },
+      "PublishedCaseRelease": {
+        "type": "object",
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionNo": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caseSnapshot": {
+            "$ref": "#/components/schemas/PublishedCaseSnapshot"
+          },
+          "activatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "assetId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "assetVersionId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "mimeType": {
+                  "type": "string"
+                },
+                "sizeBytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 268435456
+                }
+              },
+              "required": [
+                "assetId",
+                "assetVersionId",
+                "mimeType",
+                "sizeBytes"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "releaseId",
+          "caseId",
+          "versionNo",
+          "caseSnapshot",
+          "activatedAt",
+          "assets"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/api/v1/projects": {
+      "get": {
+        "operationId": "listCaseProjects",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "查询可选项目目录",
+        "description": "本地 Scope 为 case-data:projects:read。包含归档项目，分页游标只能与原筛选条件一起使用。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([A-Za-z0-9_-]{1,2048})\\.([A-Za-z0-9_-]{43})$"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "paused",
+                "done",
+                "archived"
+              ]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": false,
+            "name": "region",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": false,
+            "name": "projectType",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "只读项目摘要分页",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseProjectCatalogPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "查询参数或游标无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/profile": {
+      "get": {
+        "operationId": "getCaseProjectProfile",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "读取案例侧项目资料",
+        "description": "本地 Scope 为 case-data:project-data:read。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "案例侧项目补充信息、主体关系和项目成员",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseProjectProfileView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或可选项目不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveCaseProjectProfile",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "保存案例侧项目资料",
+        "description": "本地 Scope 为 case-data:project-data:write。核对来源项目版本和案例侧资料版本，按完整清单替换。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveCaseProjectProfileBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "案例侧项目补充信息、主体关系和项目成员",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseProjectProfileView"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "案例侧项目补充信息、主体关系和项目成员",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseProjectProfileView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或可选项目不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作标识、项目版本或案例版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/subjects": {
+      "post": {
+        "operationId": "saveCaseSubject",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "按类型和稳定键保存案例主体",
+        "description": "本地 Scope 为 case-data:project-data:write。新建传 expectedVersion=0，别名按完整清单替换。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveCaseSubjectBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "主体及其别名",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseSubjectView"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "主体及其别名",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseSubjectView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或可选项目不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作标识、项目版本或案例版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/subjects/{subjectId}": {
+      "get": {
+        "operationId": "getCaseSubject",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "按主体 ID 读取案例主体",
+        "description": "本地 Scope 为 case-data:project-data:read。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "subjectId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "主体及其别名",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseSubjectView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或可选项目不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/cases": {
+      "post": {
+        "operationId": "createCase",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "创建案例",
+        "description": "本地 Scope 为 case-data:cases:write。业务 operationId 通过请求体传递。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseCreateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "案例作者视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAuthoringView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或可选项目不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作标识、项目版本或案例版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{caseId}": {
+      "get": {
+        "operationId": "getCase",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "读取案例",
+        "description": "本地 Scope 为 case-data:cases:read。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "caseId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "案例作者视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAuthoringView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或可选项目不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchCase",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "更新案例",
+        "description": "本地 Scope 为 case-data:cases:write。JSON 对象整列替换。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "caseId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CasePatchBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "案例作者视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAuthoringView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或可选项目不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作标识、项目版本或案例版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/operations/{operationId}": {
+      "get": {
+        "operationId": "getOperationResult",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "查询已提交的操作结果",
+        "description": "本地 Scope 为 case-data:operations:read。只返回当前服务身份的记录。原写入 HTTP 状态放在 statusCode。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "operationId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已提交的原写入结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseOperationResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前调用方没有已提交的操作结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "操作 ID 或查询参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{caseId}/uploads": {
+      "post": {
+        "operationId": "createCaseUpload",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "创建素材上传会话",
+        "description": "本地 Scope 为 case-data:assets:write。提供 assetId 时创建同一素材的新版本。大于 32 MiB 自动进入分片模式。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "caseId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseCreateUploadBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "新建的上传会话，后续单独签发上传目标",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseUploadSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前调用方没有此资源或对象版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作冲突、上传尚未就绪或会话已完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "上传会话已过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或对象存储暂不可用，或素材处理受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{uploadId}/target": {
+      "get": {
+        "operationId": "getCaseUploadTarget",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "签发素材上传目标",
+        "description": "本地 Scope 为 case-data:assets:write。单次 PUT 模式按签名请求头上传并保存 x-amz-version-id。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "uploadId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "最长 120 秒的上传目标",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseUploadTarget"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前调用方没有此资源或对象版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作冲突、上传尚未就绪或会话已完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "上传会话已过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或对象存储暂不可用，或素材处理受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{uploadId}/parts": {
+      "get": {
+        "operationId": "listCaseUploadedParts",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "查询可续传分片",
+        "description": "本地 Scope 为 case-data:assets:write。由对象存储返回已成功上传的分片。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "uploadId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分片计划与当前上传进度",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseUploadedParts"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前调用方没有此资源或对象版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作冲突、上传尚未就绪或会话已完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "上传会话已过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或对象存储暂不可用，或素材处理受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{uploadId}/parts/{partNumber}/target": {
+      "get": {
+        "operationId": "getCaseUploadPartTarget",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "签发指定分片上传目标",
+        "description": "本地 Scope 为 case-data:assets:write。分片大小固定，尾片按总大小计算，签名最长 120 秒。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "uploadId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32
+            },
+            "required": true,
+            "name": "partNumber",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "指定分片的上传地址和请求头",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseUploadTarget"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前调用方没有此资源或对象版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作冲突、上传尚未就绪或会话已完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "上传会话已过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或对象存储暂不可用，或素材处理受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{uploadId}/complete": {
+      "post": {
+        "operationId": "completeCaseUpload",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "校验实际对象版本并完成上传",
+        "description": "本地 Scope 为 case-data:assets:write。单次 PUT 可提交对象版本 ID，丢失 PUT 回执时可省略，由网关按会话键查验唯一版本。分片模式省略该字段，由网关检查与合并分片。两种模式均校验精确版本的大小、MIME 和 SHA-256。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "uploadId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseCompleteUploadBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已持久化的素材版本，扫描状态初始为 pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAssetVersion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前调用方没有此资源或对象版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作冲突、上传尚未就绪或会话已完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "上传会话已过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或对象存储暂不可用，或素材处理受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{assetId}/versions/{assetVersionId}/download-ticket": {
+      "get": {
+        "operationId": "getCaseAssetDownloadTicket",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "签发作者素材下载票据",
+        "description": "本地 Scope 为 case-data:assets:read。票据绑定已登记的对象版本，供当前服务调用方下载。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "assetId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "assetVersionId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "最长 60 秒的私有版本下载票据",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAssetDownloadTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前调用方没有此资源或对象版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作冲突、上传尚未就绪或会话已完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "上传会话已过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或对象存储暂不可用，或素材处理受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{assetId}/versions/{assetVersionId}/media-input": {
+      "get": {
+        "operationId": "getCaseMediaInput",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "签发媒体处理输入票据",
+        "description": "仅受信媒体服务的 case-data:assets:process Scope 可调用。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "assetId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "assetVersionId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "固定对象版本的短时票据",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAssetDownloadTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前调用方没有此资源或对象版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作冲突、上传尚未就绪或会话已完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "上传会话已过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或对象存储暂不可用，或素材处理受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{assetId}/versions/{assetVersionId}/media-state": {
+      "get": {
+        "operationId": "getCaseMediaState",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "读取媒体处理状态",
+        "description": "仅受信媒体服务的 case-data:assets:process Scope 可调用。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "assetId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "assetVersionId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "绑定精确对象版本的媒体处理状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAssetMediaState"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前调用方没有此资源或对象版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作冲突、上传尚未就绪或会话已完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "上传会话已过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或对象存储暂不可用，或素材处理受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveCaseMediaResult",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "回传媒体处理结果",
+        "description": "仅受信媒体服务的 case-data:assets:process Scope 可调用。校验媒体版本、对象版本与 SHA-256。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "assetId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "assetVersionId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseSaveAssetMediaBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "绑定精确对象版本的媒体处理状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAssetMediaState"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前调用方没有此资源或对象版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "操作冲突、上传尚未就绪或会话已完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "上传会话已过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或对象存储暂不可用，或素材处理受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{caseId}/releases": {
+      "post": {
+        "operationId": "stageRelease",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "固化待发布版本",
+        "description": "本地 Scope 为 case-data:releases:write。提交已准备好的对外快照与精确素材版本。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "caseId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StageCaseReleaseBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "发布版本的技术状态和快照哈希",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseReleaseReceipt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或发布版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "项目版本、当前发布、状态、素材完整性或操作标识冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、公开读面或对象存储暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{caseId}/releases/{releaseId}/activate": {
+      "post": {
+        "operationId": "activateRelease",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "激活待发布版本",
+        "description": "本地 Scope 为 case-data:releases:write。显式提交 expectedActiveReleaseId 和 approvalRef。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "caseId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "releaseId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivateCaseReleaseBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "发布版本的技术状态和快照哈希",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseReleaseReceipt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或发布版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "项目版本、当前发布、状态、素材完整性或操作标识冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、公开读面或对象存储暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{caseId}/releases/{releaseId}/deactivate": {
+      "post": {
+        "operationId": "deactivateRelease",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "撤回当前 active 版本",
+        "description": "本地 Scope 为 case-data:releases:write。撤回后历史快照和素材引用继续保留。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "caseId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "releaseId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeactivateCaseReleaseBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "发布版本的技术状态和快照哈希",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseReleaseReceipt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或发布版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "项目版本、当前发布、状态、素材完整性或操作标识冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、公开读面或对象存储暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{caseId}/releases/{releaseId}": {
+      "get": {
+        "operationId": "getCaseReleaseHistory",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "读取作者发布历史",
+        "description": "本地 Scope 为 case-data:releases:history:read。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "caseId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "releaseId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "冻结快照和原始素材引用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseReleaseHistory"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或发布版本不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、公开读面或对象存储暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/cases/{caseId}/releases/{releaseId}": {
+      "get": {
+        "operationId": "getPublishedCaseRelease",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "读取 active 发布快照",
+        "description": "本地 Scope 为 case-data:releases:read。按案例和发布 ID 精确查找。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "caseId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "releaseId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "active 快照和已锁定素材版本",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedCaseRelease"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前没有对应的 active 版本或素材",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、公开读面或对象存储暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/cases/{caseId}/releases/{releaseId}/assets/{assetVersionId}/content": {
+      "get": {
+        "operationId": "getPublishedCaseAsset",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "读取 active 发布的锁定素材",
+        "description": "本地 Scope 为 case-data:releases:read。每次请求重新核对发布状态。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "caseId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "releaseId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "assetVersionId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "精确对象版本的文件流",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "当前没有对应的 active 版本或素材",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、公开读面或对象存储暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {}
+}

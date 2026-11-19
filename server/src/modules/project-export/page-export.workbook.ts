@@ -9,6 +9,13 @@ import type {
   WorkbookImagePlacement,
 } from "./project-export.workbook.js";
 import { sanitizeFileName } from "./project-export.workbook.js";
+import {
+  EXPORT_FONT_NAME,
+  EXPORT_HEADER_HEIGHT_PX,
+  EXPORT_HEADER_ROW_HEIGHT,
+  exportHeaderWidthPx,
+  renderProjectExportHeader,
+} from "./project-export.header.js";
 import type { PageExportCellValue } from "./page-export.mapping.js";
 
 export interface PageExportWorkbookColumn {
@@ -32,6 +39,7 @@ export interface PageExportWorkbookSheet {
 
 export interface PageExportWorkbookPayload {
   projectId: string;
+  project: { code: string; name: string };
   origin: string | null;
   sheets: readonly PageExportWorkbookSheet[];
   images: ReadonlyMap<string, ExportImage>;
@@ -113,12 +121,18 @@ function setWidths(sheet: ExcelJS.Worksheet, columns: readonly PageExportWorkboo
 
 function styleHeader(sheet: ExcelJS.Worksheet, columns: readonly PageExportWorkbookColumn[]): ExcelJS.Row {
   const row = sheet.addRow(columns.map((column) => column.label));
-  row.height = 24;
+  row.height = 30;
   for (let index = 1; index <= columns.length; index += 1) {
     const cell = row.getCell(index);
-    cell.font = { name: "Arial", size: 10 };
+    cell.font = { name: EXPORT_FONT_NAME, size: 10, bold: true, color: { argb: "FF111827" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4F6F8" } };
     cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
-    cell.border = { bottom: { style: "thin", color: { argb: "FFE4E4E7" } } };
+    cell.border = {
+      top: { style: "thin", color: { argb: "FFE4E7EC" } },
+      bottom: { style: "thin", color: { argb: "FFC9D0D8" } },
+      left: { style: "thin", color: { argb: "FFD9DEE5" } },
+      right: { style: "thin", color: { argb: "FFD9DEE5" } },
+    };
   }
   return row;
 }
@@ -126,14 +140,14 @@ function styleHeader(sheet: ExcelJS.Worksheet, columns: readonly PageExportWorkb
 function applyLinkFont(cell: ExcelJS.Cell): void {
   const value = cell.value;
   if (value !== null && typeof value === "object" && "hyperlink" in value) {
-    cell.font = { name: "Arial", size: 10, color: { argb: "FF0563C1" }, underline: true };
+    cell.font = { name: EXPORT_FONT_NAME, size: 10, color: { argb: "FF0563C1" }, underline: true };
   }
 }
 
 function styleBodyRow(sheet: ExcelJS.Worksheet, rowNumber: number, count: number): void {
   for (let index = 1; index <= count; index += 1) {
     const cell = sheet.getCell(rowNumber, index);
-    cell.font = { name: "Arial", size: 10 };
+    cell.font = { name: EXPORT_FONT_NAME, size: 10 };
     cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
     applyLinkFont(cell);
   }
@@ -158,7 +172,7 @@ function estimatedTextHeight(sheet: ExcelJS.Worksheet, values: readonly string[]
     const column = columns[index] ?? 1;
     lines = Math.max(lines, estimatedLines(values[index] ?? "", sheet.getColumn(column).width ?? 8.43));
   }
-  return Math.max(24, Math.min(220, lines * 14 + 6));
+  return Math.max(24, Math.min(540, lines * 18 + 8));
 }
 
 function plainText(cell: ExcelJS.Cell): string {
@@ -180,9 +194,44 @@ function rowValues(sheet: PageExportWorkbookSheet, row: PageExportWorkbookRow): 
   return sheet.columns.map((column) => (column.photo ? null : row.values[column.key] ?? null));
 }
 
-function addPageSheet(workbook: ExcelJS.Workbook, payload: PageExportWorkbookPayload, sheetDefinition: PageExportWorkbookSheet): ExcelJS.Worksheet {
-  const sheet = workbook.addWorksheet(sheetNameOf(sheetDefinition.name), { views: [{ state: "frozen", ySplit: 1 }] });
+async function addExportHeader(
+  workbook: ExcelJS.Workbook,
+  sheet: ExcelJS.Worksheet,
+  project: { code: string; name: string },
+  sheetLabel: string,
+  widthPx: number,
+  columnCount: number,
+): Promise<void> {
+  const width = Math.max(240, widthPx);
+  sheet.mergeCells(1, 1, 1, columnCount);
+  const brandCell = sheet.getCell(1, 1);
+  brandCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
+  sheet.getRow(1).height = EXPORT_HEADER_ROW_HEIGHT;
+  sheet.views = [{ state: "frozen", ySplit: 2, topLeftCell: "A3" }];
+  try {
+    const header = await renderProjectExportHeader(project, sheetLabel, width);
+    const imageId = workbook.addImage({
+      buffer: Uint8Array.from(header.bytes).buffer as ArrayBuffer,
+      extension: header.extension,
+    });
+    sheet.addImage(imageId, {
+      tl: { col: 0, row: 0 },
+      br: { nativeCol: columnCount, nativeColOff: 0, nativeRow: 1, nativeRowOff: 0 },
+      editAs: "twoCell",
+    } as unknown as ExcelJS.ImageRange);
+  } catch {
+    brandCell.value = "[" + project.code + "]  " + project.name + "   ·   " + sheetLabel;
+    brandCell.font = { name: EXPORT_FONT_NAME, size: 16, bold: true, color: { argb: "FF111827" } };
+    brandCell.alignment = { vertical: "middle", horizontal: "center", wrapText: false };
+    brandCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+  }
+}
+
+async function addPageSheet(workbook: ExcelJS.Workbook, payload: PageExportWorkbookPayload, sheetDefinition: PageExportWorkbookSheet): Promise<ExcelJS.Worksheet> {
+  const sheet = workbook.addWorksheet(sheetNameOf(sheetDefinition.name));
   setWidths(sheet, sheetDefinition.columns);
+  const widthPx = exportHeaderWidthPx(sheetDefinition.columns.map((column) => column.width));
+  await addExportHeader(workbook, sheet, payload.project, sheetDefinition.name, widthPx, sheetDefinition.columns.length);
   styleHeader(sheet, sheetDefinition.columns);
   for (const definition of sheetDefinition.rows) {
     const row = sheet.addRow(rowValues(sheetDefinition, definition));
@@ -216,7 +265,7 @@ export async function buildPageExportWorkbook(payload: PageExportWorkbookPayload
   const workbook = new ExcelJS.Workbook();
   const sheetNames: string[] = [];
   for (const definition of payload.sheets) {
-    sheetNames.push(addPageSheet(workbook, payload, definition).name);
+    sheetNames.push((await addPageSheet(workbook, payload, definition)).name);
   }
   const buffer = await workbook.xlsx.writeBuffer();
   return { buffer: Buffer.from(buffer), sheetNames };
@@ -236,6 +285,7 @@ export class PageExportWorkbookWriter {
 
   constructor(
     private readonly filePath: string,
+    private readonly project: { code: string; name: string },
     private readonly photoLoader: ExportPhotoLoader,
   ) {
     this.workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ filename: filePath, useStyles: true, useSharedStrings: true });
@@ -243,9 +293,37 @@ export class PageExportWorkbookWriter {
 
   async writeSheet(sheetDefinition: PageExportWorkbookSheet, rows: AsyncIterable<PageExportWorkbookRow>): Promise<void> {
     const name = sheetNameOf(sheetDefinition.name);
-    const sheet = this.workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 1 }] });
+    const sheet = this.workbook.addWorksheet(name, {
+      views: [{ state: "frozen", ySplit: 2, topLeftCell: "A3" }],
+    });
     this.sheetNames.push(name);
     setWidths(sheet, sheetDefinition.columns);
+    const widthPx = exportHeaderWidthPx(sheetDefinition.columns.map((column) => column.width));
+    const headerRow = sheet.addRow([]);
+    headerRow.height = EXPORT_HEADER_ROW_HEIGHT;
+    try {
+      const header = await renderProjectExportHeader(this.project, sheetDefinition.name, widthPx);
+      const fileId = "export-header-" + String(sheet.id);
+      this.images.set(fileId, header);
+      this.imagePlacements.push({
+        sheetId: sheet.id,
+        row: 1,
+        column: 1,
+        fileId,
+        xOffsetPx: 0,
+        yOffsetPx: 0,
+        widthPx,
+        heightPx: EXPORT_HEADER_HEIGHT_PX,
+        fitTo: { columns: sheetDefinition.columns.length, rows: 1 },
+      });
+    } catch {
+      const cell = headerRow.getCell(1);
+      cell.value = "[" + this.project.code + "]  " + this.project.name + "   ·   " + sheetDefinition.name;
+      cell.font = { name: EXPORT_FONT_NAME, size: 14, bold: true, color: { argb: "FF111827" } };
+      cell.alignment = { vertical: "middle", horizontal: "left" };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+    }
+    headerRow.commit();
     styleHeader(sheet, sheetDefinition.columns).commit();
     for await (const definition of rows) {
       const row = sheet.addRow(rowValues(sheetDefinition, definition));

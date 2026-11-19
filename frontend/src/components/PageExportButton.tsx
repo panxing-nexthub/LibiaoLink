@@ -27,6 +27,9 @@ import { ExportProgressOverlay } from "./ExportProgressOverlay";
 
 type PageExportButtonProps = {
   projectId: string;
+  /** 与正式导出同源的项目编号与项目名称，仅用于预览品牌抬头。 */
+  projectCode: string;
+  projectName: string;
   /** 当前页面所在的 Sheet：打开时默认勾选，其余页面仍可加入同一个工作簿。 */
   initialSheet: PageExportSheetKey;
 };
@@ -187,49 +190,63 @@ function PreviewCell({ value }: { value: PageExportPreviewCell | undefined }) {
   return <span className="line-clamp-3 whitespace-pre-wrap break-words" title={text}>{text}</span>;
 }
 
+function PreviewBrandHeader({
+  projectCode,
+  projectName,
+  sheetLabel,
+}: {
+  projectCode: string;
+  projectName: string;
+  sheetLabel: string;
+}) {
+  const title = "[" + projectCode + "]  " + projectName + "   ·   " + sheetLabel;
+  return (
+    <div
+      data-page-export-preview-brand=""
+      className="flex h-20 shrink-0 items-center border-b border-[#D8DEE6] pl-[22px] pr-[22px]"
+      style={{ background: "linear-gradient(180deg, #FFFFFF 0%, #F6F6F6 52%, #DBDBDB 100%)" }}
+    >
+      <img src="/libiao-logo.svg" alt="Libiao" className="h-[47px] w-auto shrink-0" />
+      <h4 className="min-w-0 flex-1 truncate px-4 text-center text-[18px] font-semibold leading-none text-[#111111]" title={title}>
+        {title}
+      </h4>
+      <span aria-hidden="true" className="h-[47px] w-[133px] shrink-0" />
+    </div>
+  );
+}
+
 function ExportPreview({
   sheet,
   columns,
   rows,
   limited,
+  projectCode,
+  projectName,
   t,
 }: {
   sheet: PageExportCatalogSheet;
   columns: readonly PageExportCatalogColumn[];
   rows: readonly PageExportPreviewRow[];
   limited: boolean;
+  projectCode: string;
+  projectName: string;
   t: ReturnType<typeof useT>;
 }) {
   const totalWidth = Math.max(600, columns.reduce((sum, column) => sum + previewWidth(sheet.key, column.key), 0));
   return (
     <div data-page-export-preview="" className="flex min-h-0 flex-1 items-stretch justify-center overflow-hidden rounded-2xl bg-zinc-200/80 p-3 shadow-inner sm:p-4">
-      <div className="flex min-h-0 w-full flex-col overflow-hidden rounded-xl bg-white shadow-[0_12px_40px_rgba(15,23,42,0.14)] ring-1 ring-black/5">
-        <div className="h-1 shrink-0 bg-[#217346]" />
-        <div className="flex shrink-0 items-start gap-3 border-b border-zinc-200 px-4 py-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-            <svg viewBox="0 0 24 24" fill="none" className="h-4.5 w-4.5" aria-hidden="true">
-              <path d="M7 3.75h7.5L19 8.25v12H7a1.5 1.5 0 0 1-1.5-1.5V5.25A1.5 1.5 0 0 1 7 3.75Z" stroke="currentColor" strokeWidth="1.6" />
-              <path d="M14.5 3.75v4.5H19M8.5 12h6m-6 3h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-700">LIBIAOLINK · EXCEL</p>
-            <h4 className="mt-0.5 truncate text-sm font-semibold text-zinc-900">{sheet.label}</h4>
-          </div>
-          <div className="shrink-0 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] tabular-nums text-zinc-500">
-            {t("pageExport.rowCount", { n: sheet.rowCount })}
-          </div>
-        </div>
+      <div className="flex min-h-0 w-full flex-col overflow-hidden rounded-xl bg-white shadow-[0_12px_40px_rgba(15,23,42,0.14)] ring-1 ring-black/5" style={{ fontFamily: "Microsoft YaHei, 微软雅黑, sans-serif" }}>
+        <PreviewBrandHeader projectCode={projectCode} projectName={projectName} sheetLabel={sheet.label} />
 
         <div className="min-h-0 flex-1 overflow-auto bg-white">
           <table className="border-collapse text-left" style={{ width: "100%", minWidth: totalWidth, tableLayout: "fixed" }}>
             <colgroup>
               {columns.map((column) => <col key={column.key} style={{ width: previewWidth(sheet.key, column.key) }} />)}
             </colgroup>
-            <thead className="sticky top-0 z-[1]">
-              <tr className="bg-[#217346] text-white">
+            <thead className="sticky top-0 z-[1] bg-[#F4F6F8]">
+              <tr className="text-[#111827]">
                 {columns.map((column) => (
-                  <th key={column.key} scope="col" className="border-r border-white/15 px-3 py-2.5 text-left text-[11px] font-semibold last:border-r-0">
+                  <th key={column.key} scope="col" className="border-t border-b border-r border-[#D9DEE5] px-3 py-2.5 text-left text-[11px] font-bold last:border-r-0">
                     {column.label}
                   </th>
                 ))}
@@ -256,7 +273,9 @@ function ExportPreview({
         <div className="flex shrink-0 items-center gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-2 text-[11px] text-zinc-500">
           <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
           <span>{t("pageExport.preview.live")}</span>
-          {limited ? <span className="ml-auto tabular-nums">{t("pageExport.preview.limited", { n: rows.length, rows: sheet.rowCount })}</span> : null}
+          <span className="ml-auto tabular-nums">
+            {limited ? t("pageExport.preview.limited", { n: rows.length, rows: sheet.rowCount }) : t("pageExport.rowCount", { n: sheet.rowCount })}
+          </span>
         </div>
       </div>
     </div>
@@ -268,7 +287,7 @@ function ExportPreview({
  * 左侧按服务端目录中的中文预览行实时展示，右侧选择 Sheet 与列。
  * 列顺序固定为目录顺序；方案只保存页面和列集合，旧方案中的自定义顺序在应用时归一化。
  */
-export function PageExportButton({ projectId, initialSheet }: PageExportButtonProps) {
+export function PageExportButton({ projectId, projectCode, projectName, initialSheet }: PageExportButtonProps) {
   const t = useT();
   const locale = useLocale();
   const permissions = useMyPermissions();
@@ -671,8 +690,8 @@ export function PageExportButton({ projectId, initialSheet }: PageExportButtonPr
                   <div className="mt-3 flex min-h-[360px] flex-1 flex-col lg:min-h-0">
                     {previewDefinition === null || previewColumns.length === 0 ? (
                       <div className="flex min-h-[360px] flex-1 items-center justify-center rounded-2xl bg-zinc-200/80 p-4 shadow-inner">
-                        <div className="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] ring-1 ring-black/5">
-                          <div className="h-1 bg-[#217346]" />
+                        <div className="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] ring-1 ring-black/5" style={{ fontFamily: "Microsoft YaHei, 微软雅黑, sans-serif" }}>
+                          <PreviewBrandHeader projectCode={projectCode} projectName={projectName} sheetLabel={previewDefinition?.label ?? t("pageExport.preview.title")} />
                           <div className="grid grid-cols-4 gap-px bg-zinc-100 p-3">
                             {Array.from({ length: 12 }).map((_, index) => <div key={index} className="h-5 rounded-sm bg-zinc-50" />)}
                           </div>
@@ -690,6 +709,8 @@ export function PageExportButton({ projectId, initialSheet }: PageExportButtonPr
                         columns={previewColumns}
                         rows={previewRows}
                         limited={previewRows.length < previewDefinition.rowCount}
+                        projectCode={projectCode}
+                        projectName={projectName}
                         t={t}
                       />
                     )}

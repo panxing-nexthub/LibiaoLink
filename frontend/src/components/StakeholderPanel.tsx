@@ -446,13 +446,16 @@ function StakeholderRow({
 type StakeholderPanelProps = {
   /** 当前项目 id（列表按 filter[projectId] 反查本项目联系人，A5-03）。 */
   projectId: string;
+  /** 与正式导出同源的项目编号 / 名称，用于页面导出预览的品牌抬头。 */
+  projectCode: string;
+  projectName: string;
   /** 写入口（新建 / 编辑 / 删除）= stakeholder.manage；画像未到时乐观放行，服务端逐请求仍是最终裁决。 */
   canManage: boolean;
   /** 横向滚动容器 ref：与「项目总览」共用同一枚底部 TableScrollbar（见 ProjectDetail.tsx）。 */
   scrollRef: RefObject<HTMLDivElement | null>;
 };
 
-export function StakeholderPanel({ projectId, canManage, scrollRef }: StakeholderPanelProps) {
+export function StakeholderPanel({ projectId, projectCode, projectName, canManage, scrollRef }: StakeholderPanelProps) {
   const t = useT();
   const locale = useLocale();
   const [items, setItems] = useState<Stakeholder[]>([]);
@@ -593,7 +596,7 @@ export function StakeholderPanel({ projectId, canManage, scrollRef }: Stakeholde
           </span>
         ) : null}
         <div className="ml-auto flex items-center gap-2">
-          <PageExportButton projectId={projectId} initialSheet="stakeholders" />
+          <PageExportButton projectId={projectId} projectCode={projectCode} projectName={projectName} initialSheet="stakeholders" />
           {canManage ? (
             <button
               type="button"

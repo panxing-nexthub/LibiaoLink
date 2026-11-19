@@ -1,3 +1,25 @@
+> **2026-11-19 13:20–13:25 导出品牌表头 / 项目编号名称 / 页面级预览正式发布（prod-20261119-1322-px-export-brand-header-01668f46）**：正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261119-1322-px-export-brand-header-01668f46`，previous = `prod-20261119-1130-px-report-future-change-records-01668f46`；staging = `/srv/data/deploy-prod-20261119-1322-px-export-brand-header-01668f46`，备份 = `/srv/data/backups/before-prod-20261119-1322-px-export-brand-header-01668f46`。基于 `01668f46` 隔离工作区构建最小增量包，仅覆盖本次导出品牌化与页面预览所需文件。
+>
+> **改动 / 验收**：项目全量导出的项目任务、日报及问题汇总、变更管理、干系人、附件清单五个 Sheet，以及日报记录 / 问题追踪 / 干系人页面级导出，统一增加 80px 灰白纵向渐变品牌抬头、彩色 Libiao Logo 和 `[项目编号] 项目名称 · Sheet 名称`；任务「结束时间」口径为最近关联变更生效日期，并保留最近变更日期列。页面级导出预览同步使用同一抬头、浅灰列头与本机微软雅黑，不再显示旧绿色 Excel 图标抬头；项目弹窗为 `StakeholderPanel` 补齐项目编号 / 名称传递。多行任务、进展、日报 / 问题与变更文字按 18px/行估算，行高上限 540px，修复压字。
+>
+> **门禁 / 发布件**：服务端 typecheck / build 通过，依赖边界 395 文件 / 1769 条依赖 / 0 违规；导出定向测试 38 / 38 通过，全量 Vitest 134 个文件通过 / 7 个跳过，1988 通过 / 61 跳过；前端 typecheck / build 通过。`frontend-changed-files.tar.gz` 948,989 B · `de5defed…` · 5 文件；`server-project-export.tar.gz` 77,821 B · `221e8c41…` · 30 文件；`build-info.json` 8,152 B · `00bad108…`；`release-files.sha256` 467 B · `554ebb1f…`。新 manifest 11,413 B · `67010656…`，`root:root 644` 原子替换。
+>
+> **安装 / 运行态**：前端 5 / 5、服务端 30 / 30 文件 SHA-256 通过；前端文件 1,395 → 1,399，旧哈希资源全部保留。公网 `index.html` 522 B · `5a67cd18…`、主包 `assets/index-C27y_Cl1.js` 2,462,340 B · `1f5680b5…`、CSS `assets/index-Cmh0duJY.css` 230,956 B · `f9ecf679…`、彩色 Logo 3,172 B · `ac7a08dd…` 均 200；旧主包 / 旧 CSS、`/healthz`、`/readyz` 均 200，`readyz` 四项全 true；未登录项目导出与页面导出目录均 401。api / worker 已重启并 healthy，web 未重启，三者 RestartCount 0、OOM false，近 5 分钟 api / worker 错误匹配 0。容器内表头模块导入为 function，1200px 冒烟渲染输出 PNG 43,743 B。
+>
+> **备份 / 回滚**：备份 `frontend-dist-before.tar.gz` 75,222,675 B · `1403c8a3…`、`server-project-export-before.tar.gz` 70,636 B · `bcc9714d…`、原 manifest 9,519 B · `21a1a257…`、`frontend-before.sha256` 219,032 B · `db5ef1d6…`、`SHA256SUMS` 380 B · `5a2e8a40…`，4 / 4 SHA-256 通过。回滚恢复前端备份到 `/opt/libiaolink/frontend`、恢复 project-export 目录到 `/opt/libiaolink/server/dist/modules`、恢复原 manifest，并重启 api / worker；无数据库回滚。
+>
+> **边界**：仅正式机 `10.1.103.44` 的 5 个前端变更文件、project-export 30 个产物与发布清单；shared / 数据库 / DDL / 迁移 / Compose / env / Secret / MinIO / CAD 及访问白名单均未改，测试机本轮未触碰。发布时基于 `01668f46` 隔离工作区；随后按本 PR 流程入库。
+
+> **2026-11-19 13:12–13:18 页面级导出预览品牌抬头与正式导出一致（测试机前端-only，test-20261119-1312-codex-page-export-preview-brand-01668f46）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261119-1312-codex-page-export-preview-brand-01668f46`，previous = `test-20261119-1255-codex-export-row-height-overlap-01668f46`；staging = `/srv/data/deploy-test-test-20261119-1312-codex-page-export-preview-brand-01668f46`，备份 = `/srv/data/backups/before-test-test-20261119-1312-codex-page-export-preview-brand-01668f46`。
+>
+> **改动 / 验收**：日报记录、问题追踪与项目弹窗左侧的页面级导出预览统一改为与正式导出相同的品牌抬头：80px 灰白纵向渐变、1px `#D8DEE6` 细边框、彩色 `libiao-logo.svg`，标题格式为 `[项目编号] 项目名称 · Sheet 名称`；预览字体显式使用本机 `Microsoft YaHei` / `微软雅黑`，不加载外部字体；列头改为正式导出的 `#F4F6F8` 浅灰底、深色粗体与浅灰竖线，底部始终显示行数。项目名称取自界面 `project.description`。本地同源样式稿目检通过，`npm run typecheck` 与 `npm run build` 通过。
+>
+> **发布件 / 运行态**：`frontend-dist.tar.gz` 22,565,425 B · `eeff3e65…`；`build-info.json` 1,445 B · `0476368d…`；`frontend-files.sha256` 91,073 B · `99886736…`；`release-files.sha256` 257 B · `fadb0c2e…`。安装后前端 678 / 678 文件 SHA-256 通过。公网 `index.html` 522 B · `5a67cd18…`、主包 `assets/index-C27y_Cl1.js` 2,462,340 B · `1f5680b5…`、CSS `assets/index-Cmh0duJY.css` 230,956 B · `f9ecf679…`、彩色 Logo 3,172 B 均 200，`/healthz`、`/readyz` 均 200；web / api / worker healthy、RestartCount 0、OOM false。本轮仅替换静态资源与发布清单，未重启容器。
+>
+> **备份 / 清单 / 回滚**：备份 `frontend-dist-before.tar.gz` 83,251,179 B · `b1c1d28b…`、原 manifest 6,644 B · `d55c6cb0…`、`SHA256SUMS` 189 B · `5a51ffd4…`，2 / 2 SHA-256 通过。新 manifest 6,048 B · `4e8456ca…`，`root:root 644` 原子替换。回滚恢复 `frontend-dist-before.tar.gz` 到 `/opt/libiaolink/frontend/dist`，并恢复 `RELEASE_MANIFEST.json.before`；静态资源回滚无需重启 web。上一轮服务端导出行高修复不在本次备份范围内，保持现状。
+>
+> **边界**：仅测试机 `10.1.104.44` 的前端静态资源与发布清单；正式机 `10.1.103.44` 未触碰。服务端产物沿用上一版行高修复，未改动；shared / 数据库 / DDL / 迁移 / Compose / env / Secret / MinIO / CAD 均未改。代码未提交 / 未推送。
+
 > **2026-11-19 11:30–11:34 日报未来日期 + 项目总览变更记录正式发布（prod-20261119-1130-px-report-future-change-records-01668f46）**：正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261119-1130-px-report-future-change-records-01668f46`，previous = `prod-20261119-1041-px-project-management-responsive-link-16e64d5d`；source = `main@01668f46`（PR #912 项目管理 + PR #913 日报未来日期 / 变更记录）。staging = `/srv/data/deploy-prod-20261119-1130-px-report-future-change-records-01668f46`，备份 = `/srv/data/backups/before-prod-20261119-1130-px-report-future-change-records-01668f46`。
 >
 > **改动 / 验收**：日报填写与暂存不再拒绝未来日期；过去日期仍为 `supplement`，当天 / 未来提交为 `submitted`；summary / missing / 机器人查询未来日期 400 保持不变。项目总览「导出 PDF」旁已上线「变更记录」，复用变更关联列头的项目级气泡、筛选、详情、文件预览下载与任务抽屉。前端主包与测试机已验收构建逐字节一致：`index.html` 522 B · `13e51c16…`、`assets/index-BERnvXqd.js` 2,462,327 B · `fc449989…`、CSS 231,014 B · `19b67381…`；bundle 命中 `board.change.projectToolbar`。

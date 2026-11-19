@@ -98,6 +98,15 @@ const ARCHIVE_THUMBNAIL_SIZE = { maxWidth: 360, maxHeight: 270 };
 const TEMP_EXPORT_PREFIX = "libiaolink-project-export-";
 const STALE_TEMP_EXPORT_MS = 60 * 60 * 1000;
 const PAGE_EXPORT_PREVIEW_TEXT_MAX = 240;
+const EXPORT_HEADER_FILE_PREFIX = "export-header-";
+
+function countBusinessExportImages(images: ReadonlyMap<string, ExportImage>): number {
+  let count = 0;
+  for (const fileId of images.keys()) {
+    if (!fileId.startsWith(EXPORT_HEADER_FILE_PREFIX)) count += 1;
+  }
+  return count;
+}
 
 interface ImageThumbnailSize {
   maxWidth: number;
@@ -678,6 +687,7 @@ export class ProjectExportService implements OnModuleInit {
     const workbookSheets = selections.map((selection) => this.pageExportWorkbookSheet(selection, rows[selection.sheet]));
     const workbook = await buildPageExportWorkbook({
       projectId: project.id,
+      project: { code: project.code, name: project.name },
       origin: normalizeHttpOrigin(requestOrigin),
       sheets: workbookSheets,
       images,
@@ -728,7 +738,7 @@ export class ProjectExportService implements OnModuleInit {
       const users = this.userLabels(userItems);
       const counts: PageExportStreamingCounts = { ...zeroPageCounts(), imageIds: new Set<string>() };
       const photoLoader = this.createStreamingPhotoLoader(project.id, signal);
-      writer = new PageExportWorkbookWriter(filePath, photoLoader.load);
+      writer = new PageExportWorkbookWriter(filePath, { code: project.code, name: project.name }, photoLoader.load);
       for (const selection of selections) {
         const sheet = this.pageExportWorkbookSheet(selection, []);
         const wantsPhotos = this.pageExportHasPhotoColumn(selection);
@@ -747,7 +757,7 @@ export class ProjectExportService implements OnModuleInit {
       await chmod(filePath, 0o600);
       const info = await stat(filePath);
       const fileName = pageExportFileName(project, selections.map((selection) => ({ name: pageExportSheetDefinition(selection.sheet).label })));
-      const imageCount = workbook.images.size;
+      const imageCount = countBusinessExportImages(workbook.images);
       const missingImageCount = [...counts.imageIds].filter((id) => !workbook.images.has(id)).length;
       await this.auditPageExport(project, actorId, workbook.sheetNames, selections, rowCounts, {
         mode: "stream",
@@ -1697,7 +1707,7 @@ export class ProjectExportService implements OnModuleInit {
       await chmod(filePath, 0o600);
       const info = await stat(filePath);
       const fileName = projectExportFileName(project);
-      const imageCount = workbook.images.size;
+      const imageCount = countBusinessExportImages(workbook.images);
       const missingImageCount = [...counts.imageIds].filter((id) => !workbook.images.has(id)).length;
       await telemetry.measure("audit", () => this.audit.record(this.database.db, {
         actorId,

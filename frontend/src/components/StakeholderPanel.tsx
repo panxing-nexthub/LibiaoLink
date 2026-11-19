@@ -27,7 +27,7 @@ import { fieldText as fieldLabel, textOf as pickText, useLocale, useT, type Loca
 /**
  * 项目详情「干系人」面板（A27 · M6-06 前端接线；标签排在最右侧）：表格形态与「项目总览」同一套 ——
  * 白卡片 + 表头固定在主标签栏之下（sticky top-[122px]，横向滚动时用 translateX 跟随 scrollLeft）+
- * 每行 CSS grid + minWidth 横向滚动，底部共用 TableScrollbar 滑块（见 ProjectDetail.tsx）。
+ * 每行 CSS grid + minWidth 横向滚动；行尾操作列在桌面窄窗吸右，表体只保留自身原生横向滑块。
  * 列 = 用户口径字段：姓名 / 电话（含 WhatsApp）/ 微信 / 邮箱 / 职务（责任板块）/ 所属公司（分类色签；具体公司名为存量只读展示）/ 填写者 / 干系人角色 / 行尾动作；
  * Push 222（业务 2026-09-29：「这个不需要 然后编辑是点编辑按钮才是编辑 点击表格不能编辑」）：① 新建 / 编辑弹窗不再录入「具体公司名称」（写入面不带 company；存量数据照常展示）；② 编辑只走行尾「编辑」按钮 —— 点击行体不再进编辑。
  * Push 225（代 wmj 线扩契约，请 wmj 复核）：`stakeholders.role`（迁移 0042）+ 契约 `Stakeholder.role` 落地 ——「干系人角色」列随本刀补上（自由文本；未登记字段级策略 = 恒可见）。
@@ -367,11 +367,13 @@ function StakeholderModal({
 function StakeholderRow({
   row,
   canManage,
+  actionsPinned,
   onEdit,
   onDelete,
 }: {
   row: Stakeholder;
   canManage: boolean;
+  actionsPinned: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -427,14 +429,21 @@ function StakeholderRow({
           {role === "" ? "—" : role}
         </span>
       </div>
-      <div data-stakeholder-cell="actions" className="flex items-center justify-end gap-1.5">
+      <div
+        data-stakeholder-cell="actions"
+        data-stakeholder-actions-cell={actionsPinned ? "" : undefined}
+        className={
+          "flex items-center justify-end gap-1.5 transition-colors " +
+          (actionsPinned ? "sticky right-0 z-10 border-l border-zinc-100 bg-white pr-5 shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)] group-hover:bg-zinc-50" : "")
+        }
+      >
         {canManage ? (
           <>
             <span data-stakeholder-edit-slot="">
-              <RowEditButton label={t("row.edit.stakeholder")} onEdit={onEdit} />
+              <RowEditButton label={t("row.edit.stakeholder")} persistent onEdit={onEdit} />
             </span>
             <span data-stakeholder-delete-slot="">
-              <RowDeleteButton label={t("row.delete.stakeholder")} onDelete={onDelete} />
+              <RowDeleteButton label={t("row.delete.stakeholder")} persistent onDelete={onDelete} />
             </span>
           </>
         ) : null}
@@ -451,7 +460,7 @@ type StakeholderPanelProps = {
   projectName: string;
   /** 写入口（新建 / 编辑 / 删除）= stakeholder.manage；画像未到时乐观放行，服务端逐请求仍是最终裁决。 */
   canManage: boolean;
-  /** 横向滚动容器 ref：与「项目总览」共用同一枚底部 TableScrollbar（见 ProjectDetail.tsx）。 */
+  /** 横向滚动容器 ref：用于表头同步与操作列吸右测量。 */
   scrollRef: RefObject<HTMLDivElement | null>;
 };
 
@@ -474,6 +483,8 @@ export function StakeholderPanel({ projectId, projectCode, projectName, canManag
   /** 写失败提示（删除）；加载失败走上面的 error 块。 */
   const [actionError, setActionError] = useState<string | null>(null);
   const headerRowRef = useRef<HTMLDivElement | null>(null);
+  /** 表体出现横向溢出时，表头尾部补一块与行内吸右操作列等宽的遮罩。 */
+  const [actionsPinned, setActionsPinned] = useState(false);
 
   useLiveRefresh(["stakeholders", "permissions"], async () => {
     let result;
@@ -516,7 +527,7 @@ export function StakeholderPanel({ projectId, projectCode, projectName, canManag
     };
   }, [projectId, dataVersion]);
 
-  /** 表头固定（与 TaskBoard 同一套）：横向滚动（含底部滑块）时用 translateX 跟随 scrollLeft，表头与各列始终对齐。 */
+  /** 表头固定（与 TaskBoard 同一套）：横向滚动时用 translateX 跟随 scrollLeft，表头与各列始终对齐。 */
   useEffect(() => {
     const scroller = scrollRef.current;
     if (scroller === null) {
@@ -527,11 +538,19 @@ export function StakeholderPanel({ projectId, projectCode, projectName, canManag
       if (header !== null) {
         header.style.transform = "translateX(" + String(-scroller.scrollLeft) + "px)";
       }
+      const nextPinned = scroller.scrollWidth > scroller.clientWidth + 1;
+      setActionsPinned((previous) => (previous === nextPinned ? previous : nextPinned));
     };
+    const observer = new ResizeObserver(sync);
+    observer.observe(scroller);
+    if (scroller.firstElementChild !== null) {
+      observer.observe(scroller.firstElementChild);
+    }
     sync();
     scroller.addEventListener("scroll", sync);
     window.addEventListener("resize", sync);
     return () => {
+      observer.disconnect();
       scroller.removeEventListener("scroll", sync);
       window.removeEventListener("resize", sync);
     };
@@ -653,6 +672,13 @@ export function StakeholderPanel({ projectId, projectCode, projectName, canManag
               </span>
             ))}
           </div>
+          {canManage && actionsPinned ? (
+            <span
+              aria-hidden="true"
+              data-stakeholder-actions-head=""
+              className="pointer-events-none absolute inset-y-0 right-0 z-20 w-24 border-l border-zinc-200 bg-zinc-50 shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]"
+            />
+          ) : null}
         </div>
         <div id="stakeholder-board-scroll" ref={scrollRef} className="overflow-x-auto rounded-b-xl">
           <div style={{ minWidth: MIN_WIDTH }}>
@@ -670,6 +696,7 @@ export function StakeholderPanel({ projectId, projectCode, projectName, canManag
                   key={row.id}
                   row={row}
                   canManage={canManage}
+                  actionsPinned={canManage && actionsPinned}
                   onEdit={() => {
                     setModal({ mode: "edit", row });
                   }}

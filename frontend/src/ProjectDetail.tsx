@@ -1259,7 +1259,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             // Push 290：背景档位「适中」透传给「问题追踪」做表格呈现（原醒目模式挂点，随功能下架改吃档位）；失败提示沿用同一条 toolError
             <ReportIssuePanel key={project.id} project={project} me={me} members={members} tierTint={tintRows} sub={dailySub} dateFilter={dailyDate} focusReportId={focus?.kind === "report" ? focus.id : null} focusIssueId={focus?.kind === "issue" ? focus.id : null} onFocusClosed={onClearFocus} onClearDateFilter={onClearDailyDate} readOnly={!projectWritable} canFill={projectEditable && (!projectArchived || (summary?.projectId === project.id && summary.hasUnfinishedTemporaryTask === true))} onChangeSub={(next) => { replaceProjectSubView(project.id, next); }} />
           ) : activeView === "干系人" ? (
-            // 干系人（Push 221 · A27 前端接线）：表格形态与「项目总览」同一套（表头固定 + CSS grid 行 + 共用底部滑块）
+            // 干系人（Push 221 · A27 前端接线）：表格形态与「项目总览」同一套（表头固定 + CSS grid 行 + 表格自身横向滚动）
             <StakeholderPanel projectId={project.id} projectCode={project.code} projectName={project.description} canManage={canManageStakeholders && projectWritable} scrollRef={tableScrollRef} />
           ) : activeView === "项目文件" ? (
             // 项目文件（2026-10-29）：阶段任务文件 + 变更记录关联文件的并集；日报 / 问题附图不进入。
@@ -1299,12 +1299,8 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
           )}
         </div>
 
-        {/* 底部滑块（Push 221 起）：项目总览与干系人两个表格共用同一枚 —— 两视图互斥，scrollRef / 溢出态复用；
-            滚动容器 id 由 controlsId 按当前视图切换（task-board-scroll / stakeholder-board-scroll）。
-            2026-10-10 修「浮动滑块盖住末行 / 遮挡行内按钮点击」（业务反馈）：吸附条不再铺白底分隔、整条
-            pointer-events-none —— 吸附在视口底时不再遮字、点击穿透到行内按钮；可交互面只剩滑块本体
-            （pointer-events-auto，见 TableScrollbar 组件注释）。 */}
-        {activeView === "项目总览" || activeView === "干系人" ? (
+        {/* 底部滑块（Push 221）：仅项目总览使用；干系人保留表格自身下方的原生横向滚动条，不再额外渲染页面底部滑块。 */}
+        {activeView === "项目总览" ? (
         <div
           id="table-scrollbar-bar"
           className={
@@ -1312,7 +1308,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             (tableOverflow ? "mt-4 py-2.5" : "h-0 overflow-hidden")
           }
         >
-          <TableScrollbar scrollRef={tableScrollRef} onOverflowChange={setTableOverflow} controlsId={activeView === "干系人" ? "stakeholder-board-scroll" : "task-board-scroll"} />
+          <TableScrollbar scrollRef={tableScrollRef} onOverflowChange={setTableOverflow} />
         </div>
         ) : null}
       </main>

@@ -23,7 +23,7 @@ export function RowDeleteButton({
   text?: string;
   /** 加宽展开态（四个汉字 / 英文长文案）。 */
   wide?: boolean;
-  /** 日报记录 / 问题追踪的行操作常驻强调：静止显示红色实心圆，悬停展开效果不变。 */
+  /** 日报记录 / 问题追踪 / 干系人的行操作常驻显示：沿用原版浅灰图标，悬停展开效果不变。 */
   persistent?: boolean;
   /**
    * 显示作用域（Push 181 业务口径「为什么我鼠标放上去全显示了 我不要这样的」）：
@@ -50,7 +50,7 @@ export function RowDeleteButton({
       onKeyDown={(event) => event.stopPropagation()}
       className={
         "group/del relative flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full transition-[width,background-color,color,opacity] duration-300 ease-out hover:bg-red-500 hover:text-white focus-visible:bg-red-500 focus-visible:text-white focus-visible:opacity-100 focus-visible:outline-none " +
-        (persistent ? "bg-red-500 text-white opacity-100 " : "bg-transparent text-zinc-300 opacity-0 ") +
+        (persistent ? "bg-transparent text-zinc-300 opacity-100 " : "bg-transparent text-zinc-300 opacity-0 ") +
         (wide ? "hover:w-20 focus-visible:w-20 " : "hover:w-12 focus-visible:w-12 ") +
         (scope === "panel" ? "group-hover/panel:opacity-100" : "group-hover:opacity-100")
       }

@@ -177,7 +177,7 @@ function FinalizeHoverTip({ ready, title, body }: { ready: boolean; title: strin
 }
 
 /**
- * 「项目描述」整格一个框（业务口径 2026-10-13：「抽屉里面加英文的翻译」→ 追订「加在框里面好吗」）：
+ * 「任务描述」整格一个框（业务口径 2026-10-13：「抽屉里面加英文的翻译」→ 追订「加在框里面好吗」）：
  * 中文编辑区 + 英文译文同框显示；焦点样式从内部 textarea 移到框上（focus-within），观感与 FIELD_CLASS 一致。
  */
 const NOTE_BOX_CLASS =
@@ -420,14 +420,14 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
   const [changeDetailTick, setChangeDetailTick] = useState(0);
 
   /**
-   * 「项目描述」英译（业务口径 2026-10-13「抽屉里面加英文的翻译」）：{ text, en } 成对存 ——
+   * 「任务描述」英译（业务口径 2026-10-13「抽屉里面加英文的翻译」）：{ text, en } 成对存 ——
    * text 与当前原文一致才显示，改了输入就自动隐藏到新译文回来（防旧译文配新中文）。
    */
   const [noteEn, setNoteEn] = useState<{ text: string; en: string; target: string } | null>(null);
   /**
    * 语言切换（Push 296 追订 · 业务口径「因为页面有些内容是手打的 我建议是提前后台机翻」）：
    * 英文界面下抽屉标题按「titleEn 优先 → 机翻 → 原文」显示、副行给中文原名对照；
-   * 只读态「项目描述」显示机翻译文（悬停看原文）；编辑态仍编辑中文原文（下方英译小字保留）。
+   * 只读态「任务描述」显示机翻译文（悬停看原文）；编辑态仍编辑中文原文（下方英译小字保留）。
    */
   const locale = useLocale();
   const t = useT();
@@ -443,7 +443,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
     : isLocalizedLocale(locale)
       ? (drawerTitleText === task.title ? "" : task.title)
       : task.titleEn;
-  /** 「项目描述」输入框（随内容自适应高度，见下面的 resize effect）。 */
+  /** 「任务描述」输入框（随内容自适应高度，见下面的 resize effect）。 */
   const noteFieldRef = useRef<HTMLTextAreaElement | null>(null);
   /** 预取循环读的最新快照（避免闭包拿到旧值重复取）。 */
   const changeEntriesRef = useRef(changeEntries);
@@ -608,12 +608,12 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, changeIdsKey, changeDetailTick]);
 
-  /** 「项目描述」英译原文：编辑态取草稿、只读态取任务现值（与保存口径一致，首尾空白不参与翻译）。 */
+  /** 「任务描述」英译原文：编辑态取草稿、只读态取任务现值（与保存口径一致，首尾空白不参与翻译）。 */
   const noteText = task === null ? "" : (onSubmit === undefined ? task.note : draft.note).trim();
   const noteTarget = translationTargetOf(locale);
 
   /**
-   * 取「项目描述」英译（业务口径 2026-10-13「抽屉里面加英文的翻译」）：会话缓存命中立即显示；
+   * 取「任务描述」英译（业务口径 2026-10-13「抽屉里面加英文的翻译」）：会话缓存命中立即显示；
    * 未命中则等输入停顿 600ms 再经译文通道取（与导出报告同一缓存，见 src/translateApi.ts）——失败 / 空文本不显示小字。
    */
   useEffect(() => {
@@ -640,7 +640,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
     };
   }, [noteText, noteTarget]);
 
-  // 「项目描述」框随内容长（业务口径 2026-10-13 追订「正下方不要空这么多」）：一行就只占一行高、
+  // 「任务描述」框随内容长（业务口径 2026-10-13 追订「正下方不要空这么多」）：一行就只占一行高、
   // 多行随文字长高（超过 max-h 才出内部滚动）—— 英文小字紧跟中文，不再顶着固定 3 行高度的空白。
   useEffect(() => {
     const element = noteFieldRef.current;
@@ -651,7 +651,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
     element.style.height = element.scrollHeight + "px";
   }, [draft.note]);
 
-  /** 「项目描述」译文小字（与中文同框；只读态在原文下方）：与导出报告同款灰色小字，取不到就不显示。 */
+  /** 「任务描述」译文小字（与中文同框；只读态在原文下方）：与导出报告同款灰色小字，取不到就不显示。 */
   const noteEnLine =
     noteEn !== null && noteEn.text === noteText && noteEn.target === noteTarget ? (
       <p data-note-en="true" lang={noteEn.target} className="mt-1 text-[11px] leading-4 text-zinc-400">
@@ -1466,7 +1466,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
       ),
     },
     {
-      label: "项目描述",
+      label: "任务描述",
       value: editable ? (
         <div className={NOTE_BOX_CLASS}>
           <textarea

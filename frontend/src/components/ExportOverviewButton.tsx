@@ -9,6 +9,8 @@ import { cachedZhTo, translateZhTo, type TranslationTarget } from "../translateA
 import { stageText, useLocale, useT } from "../i18n";
 import {
   DEFAULT_OVERVIEW_TASK_COLUMNS,
+  defaultOverviewExportName,
+  resolvedOverviewExportName,
   type OverviewExportInput,
   type OverviewExportLanguage,
   type OverviewExportOptions,
@@ -71,6 +73,11 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
   const [collapsedStages, setCollapsedStages] = useState<readonly string[]>([]);
   const [hiddenStages, setHiddenStages] = useState<readonly string[]>([]);
   const [taskColumns, setTaskColumns] = useState<OverviewTaskColumns>({ ...DEFAULT_OVERVIEW_TASK_COLUMNS });
+  const defaultExportName = useMemo(
+    () => defaultOverviewExportName(input.project),
+    [input.project.code, input.project.description],
+  );
+  const [exportName, setExportName] = useState(defaultExportName);
   const [previewBootHtml, setPreviewBootHtml] = useState("");
   const [previewTranslations, setPreviewTranslations] = useState<ReadonlyMap<string, string>>(EMPTY_PREVIEW_TRANSLATIONS);
   const [previewTranslating, setPreviewTranslating] = useState(false);
@@ -259,6 +266,7 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
         setCollapsedStages([]);
         setHiddenStages([]);
         setTaskColumns({ ...DEFAULT_OVERVIEW_TASK_COLUMNS });
+        setExportName(defaultExportName);
       }
       return !previous;
     });
@@ -285,7 +293,13 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
       return;
     }
     setOpen(false);
-    onExport({ primary, collapsedStages, hiddenStages, columns: taskColumns }, previewHtml);
+    onExport({
+      primary,
+      collapsedStages,
+      hiddenStages,
+      columns: taskColumns,
+      exportName: resolvedOverviewExportName(input.project, exportName),
+    }, previewHtml);
   };
 
   return (
@@ -395,6 +409,22 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
               </section>
 
               <section className="min-h-0 overflow-y-auto border-t border-zinc-200 p-4 lg:border-l lg:border-t-0">
+                <div className="mb-4">
+                  <label htmlFor="overview-export-name" className="mb-1.5 block px-0.5 text-xs font-medium text-zinc-500">{t("export.name.title")}</label>
+                  <input
+                    id="overview-export-name"
+                    data-export-name=""
+                    type="text"
+                    value={exportName}
+                    maxLength={160}
+                    autoComplete="off"
+                    spellCheck={false}
+                    onChange={(event) => setExportName(event.target.value)}
+                    aria-label={t("export.name.title")}
+                    className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200"
+                  />
+                  <p className="mt-1.5 px-0.5 text-[11px] leading-4 text-zinc-400">{t("export.name.hint")}</p>
+                </div>
                 <div className="mb-1.5 px-0.5 text-xs font-medium text-zinc-500">{t("export.primary.title")}</div>
                 <div role="radiogroup" aria-label={t("export.primary.title")} className="grid grid-cols-2 gap-1.5">
                   {LANGUAGES.map((language) => {

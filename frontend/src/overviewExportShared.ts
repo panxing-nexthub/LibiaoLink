@@ -24,7 +24,7 @@ export type OverviewExportStageOption = {
 /** 任务明细可显示列；width = 全部列显示时的基准宽度，部分列显示时按比例归一化。 */
 export const OVERVIEW_TASK_COLUMNS = [
   { key: "title", label: "任务名称", width: 18 },
-  { key: "note", label: "项目描述", width: 15.5 },
+  { key: "note", label: "任务描述", width: 15.5 },
   { key: "managers", label: "项目经理", width: 8 },
   { key: "owners", label: "任务负责人", width: 8.5 },
   { key: "status", label: "任务状态", width: 8 },
@@ -64,13 +64,28 @@ export type OverviewExportOptions = {
   hiddenStages: readonly string[];
   /** 任务明细显示哪些列；项目经理与任务负责人默认关闭。 */
   columns: OverviewTaskColumns;
+  /** 导出名称：默认 = 项目编号 + 项目名称 + 计划表；用于 PDF 标题与下载文件名。 */
+  exportName: string;
 };
+
+/** 导出名称默认值 = 项目编号 + 项目名称 + 计划表；空项自动跳过。 */
+export function defaultOverviewExportName(project: Pick<Project, "code" | "description">): string {
+  return [project.code.trim(), project.description.trim(), "计划表"].filter((part) => part !== "").join("_");
+}
+
+/** 导出名称：去首尾空白与末尾 .pdf；空值回退默认名称。 */
+export function resolvedOverviewExportName(project: Pick<Project, "code" | "description">, exportName: string): string {
+  const trimmed = exportName.trim();
+  const custom = trimmed.toLowerCase().endsWith(".pdf") ? trimmed.slice(0, -4).trim() : trimmed;
+  return custom === "" ? defaultOverviewExportName(project) : custom;
+}
 
 export const DEFAULT_OVERVIEW_EXPORT_OPTIONS: OverviewExportOptions = {
   primary: "zh",
   collapsedStages: [],
   hiddenStages: [],
   columns: DEFAULT_OVERVIEW_TASK_COLUMNS,
+  exportName: "",
 };
 
 export type OverviewExportInput = {

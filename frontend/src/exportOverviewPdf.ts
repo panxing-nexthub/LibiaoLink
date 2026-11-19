@@ -6,7 +6,8 @@
  * - 数据准备（阶段分组 / 计数 / 文本与进度口径）收敛在 `overviewExportShared.ts`；
  * - 产物 = PDF：报告 HTML 先经现有预览分页器拆成 A4 横版页，再由 html2canvas-pro 逐页栅格化、pdf-lib 封装，
  *   生成后由浏览器直接下载（不再唤起系统打印窗口）；分页、版式和语言口径与面板左侧预览同源；
- *   中文字体仍使用自托管 Noto Sans SC Variable（思源黑体同源，OFL-1.1），页面按 2 倍分辨率输出；
+ *   中文字体优先引用本机 Microsoft YaHei UI / Microsoft YaHei，未安装时回退自托管 Noto Sans SC Variable；页面按 2 倍分辨率输出；
+ *   日期单元格沿用自托管 Noto Sans SC 数字字形并关闭等宽数字，避免 ISO 连字符在雅黑下显得松散；
  * - 配色与状态口径和页面同源：五个状态色签取 `components/TaskBoard.tsx` 的 STATUS_TAG_CLASS 同色（100 档底 +
  *   700 / 800 档字）；整体进度算法同同文件的 ProjectSummary（已完成 / 总数，四舍五入）；
  * - 数据只用调用方已取到的页面数据（project / tasks / summary），导出不额外发请求、不写库、不产生审计。
@@ -24,7 +25,7 @@
  *   ⑨ 标题置顶（业务 2026-10-10 追加「中文标题放在最上方」）：hero 信息块内「项目名 · 进度报告」大标题提到最上，项目编号行下移到标题之下（名称 margin 0、编号行补 2px 上距）。
  *   ⑩ 明细不截断（业务 2026-10-10 追加「这种英文不应该省略 表格宽度可以加宽 不强制在一页展示」）：描述列副行（英文名 + 进展）撤字符截断（原 40 / 56 字）与单行 ellipsis、改自然换行；描述列 29% → 31%（经理 / 负责人列各让 1%）；不再一页优先，页数随内容。
  *   ⑪ 英文小字不重复阿拉伯数字（业务 2026-10-10 追加「然后导出的阿拉伯数字是不需要翻译的」）：分组头英文收成 completed、任务明细 note 英文去掉条数、整体进度英文去掉（已完成 X / Y）、页脚英文去掉生成时间、超量截断提示英文去掉条数 —— 数字属数据、语言无关，只保留在中文主文案一处。
- *   ⑫ 进展描述单列（业务 2026-10-10 追加「项目进展描述单例一列吧 然后需要翻译」）：任务名称副行只留英文名；「项目描述 Project Description」独立成列（第 3 列），列数 9 → 10、列宽重排（2026-11-19 平衡为 3 / 18 / 15.5 / 8 / 8.5 / 8 / 8 / 7.5 / 12 / 11.5 %）、分组头 colspan 同步；列内中文原文 + 英文小字译文（⑬ 追订接线）。
+ *   ⑫ 进展描述单列（业务 2026-10-10 追加「项目进展描述单例一列吧 然后需要翻译」）：任务名称副行只留英文名；「任务描述 Task Description」独立成列（第 3 列），列数 9 → 10、列宽重排（2026-11-19 平衡为 3 / 18 / 15.5 / 8 / 8.5 / 8 / 8 / 7.5 / 12 / 11.5 %）、分组头 colspan 同步；列内中文原文 + 英文小字译文（⑬ 追订接线）。
  *   ⑬ 进展描述译文接线（业务 2026-10-10「现在导出没有接入翻译」）：导出前把该列去重非空文本经 translateApi.ts
  *      （POST /api/v1/translate，契约对齐翻译服务 /translate）翻成英文、补在中文原文下方小字；通道不通静默降级为只出中文
  *      （导出照常、不报错）；开发环境代理见 vite.config.ts（TRANSLATE_ORIGIN），生产由后端按同契约实现 —— 见 §6.16 ⑯。
@@ -66,6 +67,7 @@ import {
   progressPct,
   DEFAULT_OVERVIEW_EXPORT_OPTIONS,
   DEFAULT_OVERVIEW_TASK_COLUMNS,
+  resolvedOverviewExportName,
   visibleOverviewTaskColumns,
   type OverviewExportInput,
   type OverviewExportLanguage,
@@ -186,7 +188,7 @@ const FIXED_TEXT: Record<string, LanguageStrings> = {
   施工阶段统计完成情况: { en: "Completion of the nine construction stages", ja: "9つの施工段階の完了状況", ko: "9개 시공 단계 완료 현황" },
   任务明细: { en: "Task Details", ja: "タスク詳細", ko: "작업 상세" },
   任务名称: { en: "Task Name", ja: "タスク名", ko: "작업 이름" },
-  项目描述: { en: "Project Description", ja: "プロジェクト説明", ko: "프로젝트 설명" },
+  任务描述: { en: "Task Description", ja: "タスク説明", ko: "작업 설명" },
   任务负责人: { en: "Task Owners", ja: "タスク担当者", ko: "작업 담당자" },
   任务状态: { en: "Status", ja: "ステータス", ko: "상태" },
   开始日期: { en: "Start Date", ja: "開始日", ko: "시작일" },
@@ -381,8 +383,8 @@ function taskRowHtml(
     managers: `<td class="managers"><span class="one-line">${escapeHtml(managerText)}</span></td>`,
     owners: `<td class="owners"><span class="one-line">${ownersHtml}</span></td>`,
     status: `<td><span class="chip" style="color: ${tint.text}">${fixedText(task.status, primary)}</span></td>`,
-    startDate: `<td class="num">${dateText(task.startDate)}</td>`,
-    dueDate: `<td class="num">${dateText(task.dueDate)}</td>`,
+    startDate: `<td class="num date">${dateText(task.startDate)}</td>`,
+    dueDate: `<td class="num date">${dateText(task.dueDate)}</td>`,
     headcount: `<td class="num">${headcountText(task, primary)}</td>`,
     progress: `<td class="progress">${barHtml(progressPct(task.progress), tint.bar, "bar--row")}<span class="progress__label">${fixedText(progressZh, primary)}</span></td>`,
   };
@@ -431,8 +433,8 @@ function groupSectionHtml(
       managers: '<td class="managers"><span class="one-line">' + escapeHtml(managerText) + '</span></td>',
       owners: '<td class="owners"></td>',
       status: '<td class="grp__status"><span class="chip" style="color: ' + tint.text + '">' + fixedText(status ?? "暂无任务", primary) + '</span></td>',
-      startDate: '<td class="num">' + dateText(dateRange.start) + '</td>',
-      dueDate: '<td class="num">' + dateText(dateRange.due) + '</td>',
+      startDate: '<td class="num date">' + dateText(dateRange.start) + '</td>',
+      dueDate: '<td class="num date">' + dateText(dateRange.due) + '</td>',
       headcount: '<td class="num"></td>',
       progress: '<td class="grp__progress-cell"><span class="grp__progress">' + barHtml(pct, fill, "bar--grp") + '<span>' + (group.total === 0 ? "—" : String(pct) + "%") + '</span></span></td>',
     };
@@ -541,6 +543,7 @@ const REPORT_STYLE = `
   .chip { position: relative; display: block; box-sizing: border-box; width: 100%; padding: 0 0 0 8px; font-size: 9px; font-weight: 600; line-height: 1.3; white-space: nowrap; text-align: left; }
   .chip::before { content: ""; position: absolute; left: 0; top: 4px; width: 4px; height: 4px; border-radius: 999px; background: currentColor; }
   .num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .date { font-family: "Noto Sans SC Variable", "Source Han Sans SC", "Noto Sans SC", sans-serif; font-variant-numeric: normal; }
   .center { text-align: center; }
   .dim { color: #a1a1aa; }
   .progress { white-space: nowrap; }
@@ -753,7 +756,7 @@ export function buildOverviewPreviewHtml(
  */
 export function overviewExportTranslationRequest(
   input: OverviewExportInput,
-  options: OverviewExportOptions,
+  options: Pick<OverviewExportOptions, "primary" | "collapsedStages" | "hiddenStages" | "columns">,
 ): { target: TranslationTarget; texts: string[] } {
   const { primary, collapsedStages, hiddenStages } = options;
   const target: TranslationTarget = primary === "ja" ? "ja" : primary === "ko" ? "ko" : "en";
@@ -781,11 +784,11 @@ export async function exportProjectOverviewPdf(
   options: OverviewExportOptions = DEFAULT_OVERVIEW_EXPORT_OPTIONS,
   onTranslateProgress?: (done: number, total: number) => void,
 ): Promise<void> {
-  const { primary, collapsedStages, columns, hiddenStages } = options;
+  const { primary, collapsedStages, columns, hiddenStages, exportName } = options;
   const { target, texts } = overviewExportTranslationRequest(input, options);
   const translationMap = await translateZhTo(texts, target, onTranslateProgress);
   const html = buildOverviewPreviewHtml(input, translationMap, primary, collapsedStages, columns, hiddenStages);
-  await exportProjectOverviewPdfHtml(html, input, primary);
+  await exportProjectOverviewPdfHtml(html, input, exportName);
 }
 
 /**
@@ -795,22 +798,14 @@ export async function exportProjectOverviewPdf(
 export async function exportProjectOverviewPdfHtml(
   html: string,
   input: OverviewExportInput,
-  primary: OverviewExportLanguage,
+  exportName: string,
 ): Promise<void> {
-  await downloadPagedOverviewPdf(html, input, primary);
+  await downloadPagedOverviewPdf(html, input, exportName);
 }
 
 type PagedPreview = {
   document: Document;
   pages: HTMLElement[];
-};
-
-/** 四语下载文件名后缀（项目名 / 编号仍保留原文，便于客户在下载目录里辨认）。 */
-const PDF_NAME_SUFFIX: Record<OverviewExportLanguage, string> = {
-  zh: "项目进度报告",
-  en: "Project Progress Report",
-  ja: "プロジェクト進捗報告",
-  ko: "프로젝트 진행 보고서",
 };
 
 /**
@@ -822,7 +817,7 @@ const PDF_NAME_SUFFIX: Record<OverviewExportLanguage, string> = {
 async function downloadPagedOverviewPdf(
   html: string,
   input: OverviewExportInput,
-  primary: OverviewExportLanguage,
+  exportName: string,
 ): Promise<void> {
   const previous = document.getElementById(PDF_FRAME_ID);
   if (previous !== null) {
@@ -850,7 +845,7 @@ async function downloadPagedOverviewPdf(
       import("pdf-lib"),
     ]);
     const pdf = await PDFDocument.create();
-    pdf.setTitle(input.project.description + " · " + PDF_NAME_SUFFIX[primary]);
+    pdf.setTitle(resolvedOverviewExportName(input.project, exportName));
     pdf.setSubject("LibiaoLink project progress report");
     pdf.setCreator("LibiaoLink");
     pdf.setProducer("LibiaoLink");
@@ -892,7 +887,7 @@ async function downloadPagedOverviewPdf(
     }
 
     const bytes = await pdf.save({ useObjectStreams: true });
-    downloadPdfBlob(new Blob([toArrayBuffer(bytes)], { type: "application/pdf" }), overviewPdfFileName(input, primary));
+    downloadPdfBlob(new Blob([toArrayBuffer(bytes)], { type: "application/pdf" }), overviewPdfFileName(input, exportName));
   } finally {
     frame.remove();
   }
@@ -1036,17 +1031,15 @@ function downloadPdfBlob(blob: Blob, fileName: string): void {
   }
 }
 
-/** 文件名 = 项目编号 + 项目名 + 当前主体语言报告名；去掉 Windows / macOS 非法字符。 */
-function overviewPdfFileName(input: OverviewExportInput, primary: OverviewExportLanguage): string {
-  const base = [input.project.code.trim(), input.project.description.trim(), PDF_NAME_SUFFIX[primary]]
-    .filter((part) => part !== "")
-    .join("_");
+/** 文件名 = 导出面板填写的名称（默认项目编号 + 项目名称 + 计划表）；去掉 Windows / macOS 非法字符。 */
+function overviewPdfFileName(input: OverviewExportInput, exportName: string): string {
+  const base = resolvedOverviewExportName(input.project, exportName);
   const safe = base
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_")
     .replace(/\s+/g, " ")
     .replace(/[. ]+$/g, "")
     .slice(0, 160);
-  return (safe === "" ? PDF_NAME_SUFFIX[primary] : safe) + ".pdf";
+  return (safe === "" ? "计划表" : safe) + ".pdf";
 }
 
 /** 轻量等待；分页运行时和字体加载都在浏览器主线程发起，这里只做短轮询 / 兜底。 */

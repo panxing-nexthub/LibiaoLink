@@ -44,7 +44,7 @@ function hasFoundIssue(row: DailyReportRow): boolean {
 /**
  * 日报当日视图用例（M6-01 收口 · A7-01 汇总 / A7-05 应填未填）。
  * 口径：名册是「应填范围」；工作日 × 全员 − 当日已提交 = 应填未填（草稿未提交仍算未填）；非工作日整列为空（不催报，D5-03 共用手柄）。
- * 未来日期 400（与 A3-04 填报口径一致）；缺省日期 = 今天（Asia/Shanghai）。汇总只算已提交条目，未填人数按 0 计。
+ * 未来日期 400（仅当日读视图；日报填写提交不限未来日期）；缺省日期 = 今天（Asia/Shanghai）。汇总只算已提交条目，未填人数按 0 计。
  * 数据面：前端日报中心（A7-01 汇总区 / A7-05 漏填名单）、A01 提醒与 A02 每日 19:00 群推送共用同一读出口。
  */
 @Injectable()
@@ -129,12 +129,12 @@ export class ReportSummaryService {
     };
   }
 
-  /** 当日口径：date 缺省 = 今天（Asia/Shanghai）；未来日期 400（A3-04 同口径）；工作日判定走日历横切出口（D5-03）。 */
+  /** 当日口径：date 缺省 = 今天（Asia/Shanghai）；未来日期 400（仅当日读视图限制）；工作日判定走日历横切出口（D5-03）。 */
   private async resolveDay(date: string | undefined): Promise<CalendarDayView> {
     const today = shanghaiToday(new Date());
     const target = date ?? today;
     if (isFutureDate(target, today)) {
-      throw new AppError("VALIDATION_FAILED", "不能查询未来日期的日报视图（A3-04 同口径）", [
+      throw new AppError("VALIDATION_FAILED", "不能查询未来日期的日报视图（当日读视图限制）", [
         { code: "future_date", message: "业务日期不得晚于今天（" + today + "）", path: "date" },
       ]);
     }

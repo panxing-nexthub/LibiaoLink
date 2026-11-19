@@ -2933,7 +2933,7 @@
                 "$ref": "#/components/schemas/DateOnly"
               },
               {
-                "description": "填报日期（当天或过去日期 = 补填；未来日期 400）"
+                "description": "填报日期（任意合法日期；过去日期首次提交由服务端推导为补填，未来日期允许）"
               }
             ]
           },

@@ -262,7 +262,7 @@ services:
     networks: [prod, preview-internal]
 
   # web：Nginx 唯一对外入口（80 → 301；443 = 应用；9443 = MinIO https 回环排障门面 → minio:9000）。
-  # SPA 静态（frontend build 产物 → /srv/www）+ 反代 /api/v1 /auth /healthz /readyz → api:3000；/internal/** 不对外。
+  # SPA 静态（frontend build 产物 → /srv/www）+ 反代 /api/v1 /auth /healthz /readyz → api:3000；/internal/users/{disable,enable,delete} 仅 10.1.100.3 白名单；其余 /internal/** 不对外。
   # 证书：ALLinSSL（*.libiaorobot.com）下发到宿主 /etc/ssl/，单文件只读挂载（原地覆盖写入，容器可见）。
   web:
     image: ${NGINX_IMAGE:-nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94}  # 双锁（2026-10-13 回填）

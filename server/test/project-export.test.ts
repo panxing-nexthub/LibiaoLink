@@ -15,7 +15,7 @@ import {
   type ProjectArchiveAttachmentSource,
 } from "../src/modules/project-export/project-export.archive.js";
 import { ProjectExportService, resolveProjectExportMode, splitChangeReason } from "../src/modules/project-export/project-export.service.js";
-import { taskExportRow } from "../src/modules/project-export/project-export.mapping.js";
+import { stakeholderExportRow, taskExportRow } from "../src/modules/project-export/project-export.mapping.js";
 import {
   ProjectExportWorkbookWriter,
   buildProjectExportWorkbook,
@@ -113,12 +113,13 @@ function payload(): ProjectExportPayload {
     stakeholders: [
       {
         name: "Christian Winkler",
-        contact: "+49 123 / wx-1",
+        phone: "+49 123",
+        wechat: "wx-1",
         email: "christian@example.com",
-        position: "项目经理 / 客户接口",
-        company: "客户customer / Vanilla",
+        title: "项目经理",
+        company: "客户 / Vanilla",
         writer: "倪里特(Ni Lite)",
-        submittedAt: "2026年9月15日 17:40",
+        role: "客户接口",
       },
     ],
     images: new Map([["image-1", { bytes: PNG, extension: "png" }]]),
@@ -282,10 +283,50 @@ describe("项目数据导出工作簿", () => {
       expect(sheet.getRow(3).height).toBeGreaterThanOrEqual(28.5);
     }
     expect(headersOf(stakeholder)).toEqual([
-      "干系人姓名/name", "电话或whats app或微信号", "邮箱Email", "职务Position/责任板块",
-      "所属公司company", "填写者", "提交时间",
+      "干系人姓名", "电话 / WhatsApp", "微信", "邮箱 Email",
+      "职务 / 责任板块", "所属公司", "填写者", "干系人角色",
     ]);
-    expect(stakeholder.getCell(3, 5).value).toBe("客户customer / Vanilla");
+    expect(stakeholder.getCell(3, 1).value).toBe("Christian Winkler");
+    expect(stakeholder.getCell(3, 2).value).toBe("+49 123");
+    expect(stakeholder.getCell(3, 3).value).toBe("wx-1");
+    expect(stakeholder.getCell(3, 4).value).toBe("christian@example.com");
+    expect(stakeholder.getCell(3, 5).value).toBe("项目经理");
+    expect(stakeholder.getCell(3, 6).value).toBe("客户 / Vanilla");
+    expect(stakeholder.getCell(3, 7).value).toBe("倪里特(Ni Lite)");
+    expect(stakeholder.getCell(3, 8).value).toBe("客户接口");
+  });
+
+  it("干系人导出独立保留电话、微信与角色", () => {
+    const row = stakeholderExportRow(
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        name: "潘兴",
+        companyType: "libiao",
+        company: null,
+        title: "系统研发",
+        phone: "123456",
+        wechat: "crabajn",
+        email: "panxing@libiaorobot.com",
+        remark: null,
+        role: "研发实习生",
+        createdBy: null,
+        createdByName: "潘兴",
+        projects: [],
+        createdAt: "2026-11-19T10:00:00.000Z",
+        updatedAt: "2026-11-19T10:00:00.000Z",
+      },
+      new Map(),
+    );
+    expect(row).toEqual({
+      name: "潘兴",
+      phone: "123456",
+      wechat: "crabajn",
+      email: "panxing@libiaorobot.com",
+      title: "系统研发",
+      company: "立镖机器人",
+      writer: "潘兴",
+      role: "研发实习生",
+    });
   });
 
   it("文件列只写文件名 / 项目文件链接；多文件逐行展示，链接指向项目文件视图", async () => {

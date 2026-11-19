@@ -373,6 +373,8 @@ function cellAt(sheet: SheetGrid, row: number, index: Map<string, number>, key: 
 const STAKEHOLDER_COLUMN_CANDIDATES = {
   name: ["干系人姓名/name", "干系人姓名"],
   contact: ["电话或whatsapp或微信号", "电话或whats app或微信号", "联系方式"],
+  phone: ["电话 / WhatsApp", "电话/WhatsApp", "电话"],
+  wechat: ["微信"],
   email: ["邮箱Email", "邮箱"],
   title: ["职务Position/责任板块", "职务", "责任板块"],
   company: ["所属公司company", "所属公司"],
@@ -397,6 +399,14 @@ function findHeaderColumn(index: Map<string, number>, candidates: readonly strin
   return null;
 }
 
+function findExactHeaderColumn(index: Map<string, number>, candidates: readonly string[]): number | null {
+  for (const candidate of candidates) {
+    const hit = index.get(candidate);
+    if (hit !== undefined) return hit;
+  }
+  return null;
+}
+
 function pickStakeholderSheet(
   sheets: SheetGrid[],
 ): { sheet: SheetGrid; columns: Record<StakeholderColumnKey, number | null> } | null {
@@ -410,6 +420,8 @@ function pickStakeholderSheet(
       columns: {
         name,
         contact: findHeaderColumn(index, STAKEHOLDER_COLUMN_CANDIDATES.contact),
+        phone: findExactHeaderColumn(index, STAKEHOLDER_COLUMN_CANDIDATES.phone),
+        wechat: findExactHeaderColumn(index, STAKEHOLDER_COLUMN_CANDIDATES.wechat),
         email: findHeaderColumn(index, STAKEHOLDER_COLUMN_CANDIDATES.email),
         title: findHeaderColumn(index, STAKEHOLDER_COLUMN_CANDIDATES.title),
         company: findHeaderColumn(index, STAKEHOLDER_COLUMN_CANDIDATES.company),
@@ -460,8 +472,8 @@ function splitContact(raw: string): { phone: string | null; wechat: string | nul
 
 /**
  * 「干系人」表 → 标准干系人模型（Push 324 口径，与字段对照清单.md §1 对齐）：姓名必填（空行跳过）；
- * 公司分类按自由写法映射四值，识别不出 = 按「客户」兜底 + 逐行提醒；联系方式整段落 phone（含微信字样落 wechat）；
- * 填写者 / 提交时间原样带出（提交时「填写者」匹配库内账号 → created_by；「提交时间」→ created_at）。
+ * 公司分类按自由写法映射四值，识别不出 = 按「客户」兜底 + 逐行提醒；新导出电话 / 微信分列直读，
+ * 旧表单列联系方式继续拆分（含微信字样落 wechat）；填写者 / 提交时间原样带出（提交时匹配库内账号与日期）。
  */
 export function convertStakeholders(
   sheets: SheetGrid[],
@@ -495,15 +507,17 @@ export function convertStakeholders(
         ),
       );
     }
-    const contact = splitContact(cellOf(row, columns.contact));
+    const legacyContact = splitContact(cellOf(row, columns.contact));
+    const phone = cellOf(row, columns.phone);
+    const wechat = cellOf(row, columns.wechat);
     stakeholders.push({
       row: row + 1,
       name,
       companyType: parsed.companyType ?? "customer",
       company: parsed.company,
       title: cellOf(row, columns.title) === "" ? null : cellOf(row, columns.title),
-      phone: contact.phone,
-      wechat: contact.wechat,
+      phone: phone === "" ? legacyContact.phone : phone,
+      wechat: wechat === "" ? legacyContact.wechat : wechat,
       email: cellOf(row, columns.email) === "" ? null : cellOf(row, columns.email),
       role: cellOf(row, columns.role) === "" ? null : cellOf(row, columns.role),
       filler: cellOf(row, columns.filler) === "" ? null : cellOf(row, columns.filler),

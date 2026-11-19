@@ -21,14 +21,57 @@ export type OverviewExportStageOption = {
   done: number;
 };
 
+/** 任务明细可显示列；width = 全部列显示时的基准宽度，部分列显示时按比例归一化。 */
+export const OVERVIEW_TASK_COLUMNS = [
+  { key: "title", label: "任务名称", width: 18 },
+  { key: "note", label: "项目描述", width: 15.5 },
+  { key: "managers", label: "项目经理", width: 8 },
+  { key: "owners", label: "任务负责人", width: 8.5 },
+  { key: "status", label: "任务状态", width: 8 },
+  { key: "startDate", label: "开始日期", width: 8 },
+  { key: "dueDate", label: "预计完成", width: 7.5 },
+  { key: "headcount", label: "预计所需施工人数", width: 12 },
+  { key: "progress", label: "进度", width: 11.5 },
+] as const;
+
+export type OverviewTaskColumnKey = (typeof OVERVIEW_TASK_COLUMNS)[number]["key"];
+export type OverviewTaskColumns = Record<OverviewTaskColumnKey, boolean>;
+
+/** 默认显示除「项目经理」「任务负责人」外的全部任务明细列。 */
+export const DEFAULT_OVERVIEW_TASK_COLUMNS: OverviewTaskColumns = {
+  title: true,
+  note: true,
+  managers: false,
+  owners: false,
+  status: true,
+  startDate: true,
+  dueDate: true,
+  headcount: true,
+  progress: true,
+};
+
+/** 按报告表头顺序返回当前显示的列。 */
+export function visibleOverviewTaskColumns(columns: OverviewTaskColumns) {
+  return OVERVIEW_TASK_COLUMNS.filter((column) => columns[column.key]);
+}
+
 /** 一次导出前在面板里选定的选项（只作用于当次导出，不写偏好）。 */
 export type OverviewExportOptions = {
   primary: OverviewExportLanguage;
   /** 需要折叠任务明细的阶段名；空数组 = 全部展开（默认）。 */
   collapsedStages: readonly string[];
+  /** 不在报告中展示的阶段名；空数组 = 全部展示（默认）。 */
+  hiddenStages: readonly string[];
+  /** 任务明细显示哪些列；项目经理与任务负责人默认关闭。 */
+  columns: OverviewTaskColumns;
 };
 
-export const DEFAULT_OVERVIEW_EXPORT_OPTIONS: OverviewExportOptions = { primary: "zh", collapsedStages: [] };
+export const DEFAULT_OVERVIEW_EXPORT_OPTIONS: OverviewExportOptions = {
+  primary: "zh",
+  collapsedStages: [],
+  hiddenStages: [],
+  columns: DEFAULT_OVERVIEW_TASK_COLUMNS,
+};
 
 export type OverviewExportInput = {
   project: Project;

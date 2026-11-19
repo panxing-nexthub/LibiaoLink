@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { FixedHorizontalScrollbar } from "./FixedHorizontalScrollbar";
 
 type ScrollAreaProps = {
   children: ReactNode;
@@ -10,6 +11,8 @@ type ScrollAreaProps = {
   thumbAlwaysVisible?: boolean;
   /** 滚动方向：默认纵向（分类筛选侧栏 / 任务抽屉 / 看板列内卡片）；看板横向列排布用 horizontal。 */
   axis?: "vertical" | "horizontal";
+  /** 横向滚动条固定到视口底部（原生代理条）；开启后不再渲染自绘滑块。 */
+  fixedHorizontalScrollbar?: boolean;
 };
 
 type ThumbMetrics = {
@@ -25,7 +28,15 @@ const MIN_THUMB_SIZE = 28;
 // 因此隐藏原生滚动条，改由本组件自绘悬浮滑块（默认透明，滚动 / 悬停滑块时浮现）。
 // Push 108（业务反馈「我不想要自动滚动，想要鼠标控制」）：Push 107 的「拖到边缘自动滚动」已撤回 —— 看板卡片改成指针拖动（见 TaskKanban），
 // 拖动中直接用滚轮翻列 / 翻卡片；`data-scroll-area` 标记保留（自动化走查按它定位横向 / 纵向滚动容器）。
-export function ScrollArea({ children, className = "", viewportClassName = "", ariaLabel, thumbAlwaysVisible = false, axis = "vertical" }: ScrollAreaProps) {
+export function ScrollArea({
+  children,
+  className = "",
+  viewportClassName = "",
+  ariaLabel,
+  thumbAlwaysVisible = false,
+  axis = "vertical",
+  fixedHorizontalScrollbar = false,
+}: ScrollAreaProps) {
   const horizontal = axis === "horizontal";
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const hideTimerRef = useRef(0);
@@ -129,7 +140,7 @@ export function ScrollArea({ children, className = "", viewportClassName = "", a
       >
         {children}
       </div>
-      {thumb === null ? null : (
+      {thumb === null || fixedHorizontalScrollbar ? null : (
         <div
           className={
             "pointer-events-none absolute " +
@@ -153,6 +164,9 @@ export function ScrollArea({ children, className = "", viewportClassName = "", a
           />
         </div>
       )}
+      {fixedHorizontalScrollbar ? (
+        <FixedHorizontalScrollbar scrollRef={scrollRef} active ariaLabel={ariaLabel} />
+      ) : null}
     </div>
   );
 }

@@ -23,7 +23,7 @@ import { lockBodyScroll } from "./scrollLock";
 import { TEMP_TASK_STAGE, hasOutputDeliverables, isTaskDone, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "./data/tasks";
 import type { TemplatePresetNode } from "./data/templatePresets";
 import { fetchTaskFiles, recycleFile, renameFile, uploadFiles, type TaskFileRef } from "./fileApi";
-import { exportProjectOverviewPdf } from "./exportOverviewPdf";
+import { exportProjectOverviewPdfHtml } from "./exportOverviewPdf";
 import { groupedByStage, type OverviewExportOptions, type OverviewExportStageOption } from "./overviewExportShared";
 import { prefetchLocalizedText, useLocale, useT, viewTabText } from "./i18n";
 import { prefetchOverviewExportTranslations } from "./translateApi";
@@ -1043,25 +1043,22 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   );
 
   /**
-   * 导出项目总览（PDF · 业务口径 2026-10-09 · §6.16）：把页面当前的 project / tasks / summary 交给报告模块
-   * （exportOverviewPdf.ts）拼 A4 横版报告并直接生成、下载 PDF；
-   * 2026-10-10 起导出前经翻译通道补「项目进展描述」列译文；2026-10-23 日 / 韩主体再补项目名与任务名（translateApi.ts；通道不通静默降级）；导出不改数据。
+   * 导出项目总览（PDF · 业务口径 2026-10-09 · §6.16）：直接使用导出面板中已完成翻译与分页的最终预览 HTML，
+   * 交给 exportOverviewPdf.ts 逐页截图并生成、下载 PDF；预览与下载不再分别重建报告，页数 / 表头 / 译文完全同源。
    * 2026-10-13 起译文已在「写进展描述」时后台预热（§6.16 ㉑）—— 命中缓存即取，只有未预热条目才现场翻。
    */
-  const exportOverview = async (options: OverviewExportOptions): Promise<void> => {
+  const exportOverview = async (options: OverviewExportOptions, previewHtml: string): Promise<void> => {
     if (project === null || exportingOverview) {
       return;
     }
     setExportingOverview(true);
     setExportTranslateProgress(null);
-    // 译文全命中缓存时导出近乎瞬时（§6.16 ㉑）：浮层迟 250ms 出现，避免「没有等待」的导出闪一层小车动画
+    // 预览翻译已完成后再允许点导出；只有 PDF 截图耗时超过 250ms 时才显示进度浮层。
     const overlayTimer = window.setTimeout(() => {
       setExportOverlayVisible(true);
     }, 250);
     try {
-      await exportProjectOverviewPdf({ project, tasks, summary }, options, (done, total) => {
-        setExportTranslateProgress({ done, total });
-      });
+      await exportProjectOverviewPdfHtml(previewHtml, { project, tasks, summary }, options.primary);
     } catch {
       setToolError(t("export.error"));
     } finally {
@@ -1160,10 +1157,10 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             {activeView === "项目总览" ? (
               <div data-project-tools="" className="flex shrink-0 items-center gap-4">
                 {/* 导出 PDF（业务口径 2026-10-09 · §6.16）：数据 = 页面已取到的 project / tasks / summary，
-                    生成 A4 横版报告后在系统打印窗口里另存为 PDF；
+                    设置面板完成后直接复用最终预览 HTML 生成并下载 PDF；
                     任务数据加载中 / 加载失败时置灰 —— 导出的报告必须和页面数据一致，宁可不给点。 */}
                 {projectEditable ? (
-                  <ExportOverviewButton input={{ project, tasks, summary }} stages={exportStageOptions} disabled={dataLoading || dataError !== null} busy={exportingOverview} onExport={(options) => { void exportOverview(options); }} />
+                  <ExportOverviewButton input={{ project, tasks, summary }} stages={exportStageOptions} disabled={dataLoading || dataError !== null} busy={exportingOverview} onExport={(options, previewHtml) => { void exportOverview(options, previewHtml); }} />
                 ) : null}
                 <ProjectChangesPopover
                   variant="toolbar"

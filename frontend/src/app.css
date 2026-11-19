@@ -3759,8 +3759,8 @@ body {
     background-color: rgba(255, 255, 255, 0.76);
   }
 
-  [data-row-edit],
-  [data-row-delete] {
+  [data-row-edit]:not([data-row-action-persistent]),
+  [data-row-delete]:not([data-row-action-persistent]) {
     color: #71717a !important;
   }
 

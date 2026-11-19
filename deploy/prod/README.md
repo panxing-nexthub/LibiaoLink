@@ -1,3 +1,15 @@
+> **2026-11-19 17:45 导出排版统一 / 日报与问题汇总拆分（测试机 frontend + server，test-20261119-1740-px-export-layout-split-95b69efe）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261119-1740-px-export-layout-split-95b69efe`，previous = `test-20261119-1738-codex-overview-date-glyph-e95ec674`；staging = `/srv/data/deploy-test-test-20261119-1740-px-export-layout-split-95b69efe/staging`，备份 = `/srv/data/backups/before-test-test-20261119-1740-px-export-layout-split-95b69efe`。基于 `9273c199`（PR #918 / main `95b69efe` squash 等价）隔离构建，并保留测试机 17:38 未入库的总览字体与日期字形修正。
+>
+> **改动 / 验收**：项目全量导出的日报与问题拆成独立 `日报记录`、`问题汇总` Sheet，项目数据全部保留；ZIP 增加 `附件清单`，现场工作附图与问题附图分目录。表头与正文水平、垂直居中，英文自动换行，统一调用本机微软雅黑；列宽按内容扩展，行高按换行与图片动态估算，正文保留上下留白，图片横向居中并保留底部间距。页面级导出预览同步品牌表头、居中、动态列宽与图片留白。frontend typecheck / build、server typecheck / build 通过，导出定向 Vitest 38 / 38。
+>
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,587,836 B · `1a87079e…` · 678 文件；`server-project-export.tar.gz` 81,299 B · `7d97c5d6…` · 32 文件；`build-info.json` 1,621 B · `511a736b…`；`frontend-files.sha256` 91,081 B；`server-files.sha256` 2,960 B；`release-files.sha256` 438 B · `137e6130…`；新 manifest 6,677 B · `31077e26…`，`root:root 644` 原子替换。前端仅覆盖 `index.html`、`assets/index-D7s21ZyK.js`、`assets/index-CRPDPbOn.css`、`assets/es-BkL-jl1h.js` 4 个文件，线上 911 → 914 文件；服务端 `project-export` 更新 12 个产物，30 → 32 文件。前端 678 / 678、服务端 32 / 32 文件 SHA-256 通过。
+>
+> **运行态**：公网 `index.html` 522 B · `327e6f66…`、主包 `assets/index-D7s21ZyK.js` 2,471,579 B · `9d025238…`、CSS `assets/index-CRPDPbOn.css` 231,097 B · `6a43d2e2…`、`assets/es-BkL-jl1h.js` 428,098 B 均 200；上一版主包 `index-5co9V7VJ.js` 与 CSS `index-BwwHYGYO.css` 仍 200；`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true，未登录 `/api/v1/access` 401。api / worker 已重启且与 web 均为 healthy，RestartCount 0、OOM false，近 5 分钟 api / worker 错误匹配 0。
+>
+> **备份 / 回滚**：`frontend-dist-before.tar.gz` 100,444,739 B · `57c7251c…`、`server-project-export-before.tar.gz` 77,034 B · `8c3ed8a4…`、原 manifest 5,215 B · `df1c32c1…`、前端文件数 911、`SHA256SUMS` 380 B · `e5c50b4f…`，4 / 4 业务备份文件 SHA-256 通过。回滚恢复前端备份到 `/opt/libiaolink/frontend`、恢复 `project-export` 到 `/opt/libiaolink/server/dist/modules`、恢复原 manifest，并重启 api / worker；无数据库回滚。
+>
+> **边界 / 后续**：仅测试机 `10.1.104.44`；正式机 `10.1.103.44` 未触碰。无 shared / 数据库 / DDL / 迁移 / Compose / env / Secret / MinIO / CAD / Nginx 变更。真实账号浏览器导出并人工打开 Excel 的视觉验收尚未执行，需重点检查中英文换行、行高、图片底部留白与五张 Sheet。
+
 > **2026-11-19 13:20–13:25 导出品牌表头 / 项目编号名称 / 页面级预览正式发布（prod-20261119-1322-px-export-brand-header-01668f46）**：正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261119-1322-px-export-brand-header-01668f46`，previous = `prod-20261119-1130-px-report-future-change-records-01668f46`；staging = `/srv/data/deploy-prod-20261119-1322-px-export-brand-header-01668f46`，备份 = `/srv/data/backups/before-prod-20261119-1322-px-export-brand-header-01668f46`。基于 `01668f46` 隔离工作区构建最小增量包，仅覆盖本次导出品牌化与页面预览所需文件。
 >
 > **改动 / 验收**：项目全量导出的项目任务、日报及问题汇总、变更管理、干系人、附件清单五个 Sheet，以及日报记录 / 问题追踪 / 干系人页面级导出，统一增加 80px 灰白纵向渐变品牌抬头、彩色 Libiao Logo 和 `[项目编号] 项目名称 · Sheet 名称`；任务「结束时间」口径为最近关联变更生效日期，并保留最近变更日期列。页面级导出预览同步使用同一抬头、浅灰列头与本机微软雅黑，不再显示旧绿色 Excel 图标抬头；项目弹窗为 `StakeholderPanel` 补齐项目编号 / 名称传递。多行任务、进展、日报 / 问题与变更文字按 18px/行估算，行高上限 540px，修复压字。

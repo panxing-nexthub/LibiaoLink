@@ -15,6 +15,7 @@ import {
   type ProjectArchiveAttachmentSource,
 } from "../src/modules/project-export/project-export.archive.js";
 import { ProjectExportService, resolveProjectExportMode, splitChangeReason } from "../src/modules/project-export/project-export.service.js";
+import { taskExportRow } from "../src/modules/project-export/project-export.mapping.js";
 import {
   ProjectExportWorkbookWriter,
   buildProjectExportWorkbook,
@@ -43,7 +44,7 @@ function payload(): ProjectExportPayload {
     origin: normalizeHttpOrigin("https://test-pm.libiaorobot.com"),
     tasks: [
       {
-        description: "布局定档Layout scheduling",
+        description: "布局定档\nLayout scheduling",
         managers: "贾海洋(haiyang)",
         owners: "朱成荣(Eli)",
         status: "已完成",
@@ -233,7 +234,8 @@ describe("项目数据导出工作簿", () => {
       "开始日期", "预计完成日期", "预计所需施工人数", "预计所需天数", "实际完成日期", "阶段性里程", "紧急重要度",
       "最近变更日期", "文件", "变更关联",
     ]);
-    expect(task.getCell(3, 1).value).toBe("布局定档Layout scheduling");
+    expect(task.getCell(3, 1).value).toBe("布局定档\nLayout scheduling");
+    expect(task.getRow(3).height).toBeGreaterThanOrEqual(43.5);
     expect(task.getCell(3, 5).value).toBe(1);
     expect(task.getCell(3, 16).value).toBe("2026/8/11");
 
@@ -302,14 +304,40 @@ describe("项目数据导出工作簿", () => {
 
   it("多行任务描述按微软雅黑行距预留行高，避免相邻行重叠", async () => {
     const sample = payload();
-    sample.tasks[0]!.description = "工作站安装及定位弹线Workstation Installation and Positioning Chalk Line and cabinet installation and cable management";
+    sample.tasks[0]!.description = "工作站安装及定位弹线\nWorkstation Installation and Positioning Chalk Line and cabinet installation and cable management";
     const result = await buildProjectExportWorkbook(sample);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(result.buffer as unknown as ArrayBuffer);
     const sheet = workbook.getWorksheet("英国项目")!;
-    expect(sheet.getRow(3).height).toBeGreaterThanOrEqual(43.5);
+    expect(sheet.getCell(3, 1).value).toBe(sample.tasks[0]!.description);
+    expect(sheet.getRow(3).height).toBeGreaterThanOrEqual(57.5);
     expect(sheet.getColumn(1).width).toBeGreaterThan(43);
     expect(sheet.getCell(3, 1).alignment).toMatchObject({ horizontal: "center", vertical: "middle", wrapText: true });
+  });
+
+  it("任务描述中文与英文分行，英文为空时不保留空行", () => {
+    const task = {
+      title: " 布局定档 ",
+      titleEn: " Layout scheduling ",
+      ownerIds: [],
+      ownerNames: [],
+      displayStatus: "active",
+      progress: 0,
+      onTime: null,
+      deliverableTypes: [],
+      note: null,
+      plannedStart: null,
+      plannedEnd: null,
+      headcount: null,
+      estimatedDays: null,
+      actualEnd: null,
+      stageKey: null,
+      priority: null,
+      changeLinks: [],
+    };
+    expect(taskExportRow(task as never, [], new Map(), []).description).toBe("布局定档\nLayout scheduling");
+    expect(taskExportRow({ ...task, titleEn: null } as never, [], new Map(), []).description).toBe("布局定档");
+    expect(taskExportRow({ ...task, titleEn: "   " } as never, [], new Map(), []).description).toBe("布局定档");
   });
 
   it("同一单元格的多个附图按网格排布，图片不重叠", async () => {

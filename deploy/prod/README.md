@@ -1,3 +1,15 @@
+> **2026-11-19 18:58 任务描述中英文分行（正式机 server-only，prod-20261119-1855-px-task-title-lines-68e26642）**：正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261119-1855-px-task-title-lines-68e26642`，previous = `prod-20261119-1845-codex-overview-export-name-9273c199`；staging = `/srv/data/deploy-prod-20261119-1855-px-task-title-lines-68e26642/staging`，备份 = `/srv/data/backups/before-prod-20261119-1855-px-task-title-lines-68e26642`。代码来源 PR #920 / main `68e26642`。
+
+> **改动 / 验收**：项目全量导出任务描述固定中文第一行、英文第二行；无英文时不保留空行。列宽取两行中较长者，行高按两行预留，保持水平、垂直居中且不与相邻行重叠。页面级导出不含任务 Sheet，本次不受影响。仅替换 `project-export.mapping.js` 与 source map 两个编译产物；容器内直接调用已部署的 `taskExportRow`，输出 `布局定档` 与 `Layout scheduling` 两行。server typecheck / build、frontend typecheck / build、shared typecheck 与契约漂移检查、导出定向 Vitest 39 / 39 通过。
+
+> **发布件 / 安装**：`project-export.mapping.js` 8,543 B · `c91bdbd8…`；`project-export.mapping.js.map` 8,773 B · `17ef4a55…`；`changed-files.sha256` 188 B · `d25695b4…`。staging 与目标文件 SHA-256 一致，`root:root 644` 原子替换；`project-export` 目录仍为 32 个文件，无关文件替换与额外文件删除均为 0。新发布清单 9,115 B · `e361836a…`，`root:root 644` 原子安装；release、source commit 与映射哈希已复核。
+
+> **运行态**：`/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/access` 401；readyz 四项全 true；web / api / worker / postgres 均 running healthy，RestartCount 0、OOM false，近 5 分钟 api / worker 错误匹配 0。仅重启 api / worker，web 未重启。
+
+> **备份 / 回滚**：备份 27,899 B；`project-export.mapping.js.before` 8,221 B · `10b8cf63…`、`project-export.mapping.js.map.before` 8,479 B · `d7010679…`、`RELEASE_MANIFEST.json.before` 10,902 B · `46e995da…`、`SHA256SUMS` 297 B · `2ac588e0…`，4 / 4 备份文件校验通过。恢复两个 before 文件与 manifest，并重启 api / worker 即可回滚。
+
+> **边界 / 后续**：仅正式机 `10.1.103.44`，测试机 `10.1.104.44` 未触碰。无前端 / shared 运行时 / 数据库 / DDL / 迁移 / Compose / env / Secret / MinIO / CAD / Nginx / 生产访问白名单变更。真实账号浏览器导出并人工打开 Excel 的视觉验收仍待执行，重点检查两行间距与整体行高。
+
 > **2026-11-19 18:00 任务描述中英文分行（测试机 server-only，test-20261119-1800-px-task-title-lines-68e26642）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261119-1800-px-task-title-lines-68e26642`，previous = `test-20261119-1740-px-export-layout-split-95b69efe`；staging = `/srv/data/deploy-test-test-20261119-1800-px-task-title-lines-68e26642/staging`，备份 = `/srv/data/backups/before-test-test-20261119-1800-px-task-title-lines-68e26642`。代码来源 PR #920 / main `68e26642`。
 
 > **改动 / 验收**：项目全量导出任务描述固定中文第一行、英文第二行；无英文时不保留空行。列宽取两行中较长者，行高按两行预留，保持水平、垂直居中且不与相邻行重叠。页面级导出不含任务 Sheet，本次不受影响。仅覆盖 `project-export.mapping.js` 与 source map 两个编译产物；容器内直接调用已部署的 `taskExportRow`，输出 `"布局定档\nLayout scheduling"`。server typecheck / build、frontend typecheck / build、shared typecheck 与契约漂移检查、导出定向 Vitest 39 / 39 通过。

@@ -177,7 +177,7 @@ function FinalizeHoverTip({ ready, title, body }: { ready: boolean; title: strin
 }
 
 /**
- * 「项目进展描述」整格一个框（业务口径 2026-10-13：「抽屉里面加英文的翻译」→ 追订「加在框里面好吗」）：
+ * 「项目描述」整格一个框（业务口径 2026-10-13：「抽屉里面加英文的翻译」→ 追订「加在框里面好吗」）：
  * 中文编辑区 + 英文译文同框显示；焦点样式从内部 textarea 移到框上（focus-within），观感与 FIELD_CLASS 一致。
  */
 const NOTE_BOX_CLASS =
@@ -206,7 +206,7 @@ export type TaskEditSubmit = {
 
 /** 抽屉里的表单草稿（「所见即所存」：抽屉打开期间不随父级刷新重置）。 */
 type Draft = {
-  /** 任务描述（Push 196：临时任务可改，中文必填 / 英文可留空）。 */
+  /** 任务名称（Push 196：临时任务可改，中文必填 / 英文可留空）。 */
   title: string;
   titleEn: string;
   managerIds: string[];
@@ -248,7 +248,7 @@ type TaskDrawerProps = {
   /** 抽屉内直接改字段后的即时保存；不传 = 抽屉只读（不渲染可编辑控件）。 */
   onSubmit?: (values: TaskEditSubmit) => Promise<number | null>;
   /**
-   * 任务描述改名（Push 196 / Push 197 收窄）：只对**未归入阶段的「临时任务」**开放（阶段任务与节点 / 模板生成的任务按 A1-17 锁定，抽屉内只读）；
+   * 任务名称改名（Push 196 / Push 197 收窄）：只对**未归入阶段的「临时任务」**开放（阶段任务与节点 / 模板生成的任务按 A1-17 锁定，抽屉内只读）；
    * 失焦即存；不传 = 该行不渲染。
    */
   onRename?: (taskId: string, title: string, titleEn: string) => void;
@@ -320,7 +320,7 @@ type TaskDrawerProps = {
  * 图片文件点**缩略图**看大图预览（懒取短时签名 —— 点开才请求）；**点文件名改名**（Push 226 续二 · 只改主名、后缀保留）；
  * 每份文件可「下载」（Push 226 续四 · 原文件 attachment 签名 —— 与预览转换件区分；预览浮层 caption 也挂了「下载原文件」）；「未定档 / 已定档」不做文件级展示（定档是整个项目的安排，功能后续单独开发），
  * 版本 / 定档 / 回收站管理等文件库操作仍走站内文件库（后续切片）。
- * 任务描述（中文 / 英文）自 Push 196 起对「临时任务」开放（**Push 197 收窄：仅未归入阶段的临时任务** —— 业务口径 2026-09-28「这个不是临时任务 不能修改」；失焦即存，中文名必填），
+ * 任务名称（中文 / 英文）自 Push 196 起对「临时任务」开放（**Push 197 收窄：仅未归入阶段的临时任务** —— 业务口径 2026-09-28「这个不是临时任务 不能修改」；失焦即存，中文名必填），
  * 阶段任务与节点 / 模板生成的任务仍锁定（抽屉里不出这一行，服务端同口径 400 兜底）。
  */
 export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEditManagers = false, allowFileChanges = true, members, managerMembers, customDeliverableTypes = [], onCreateDeliverableType, onSubmit, onRename, onProgress, onSetStatus, onSetActualEnd, onFinalize, onUnfinalize, onChanged, actorName, onUploadFiles, onDeleteFile, onRenameFile, projectId, onClose }: TaskDrawerProps) {
@@ -420,14 +420,14 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
   const [changeDetailTick, setChangeDetailTick] = useState(0);
 
   /**
-   * 「项目进展描述」英译（业务口径 2026-10-13「抽屉里面加英文的翻译」）：{ text, en } 成对存 ——
+   * 「项目描述」英译（业务口径 2026-10-13「抽屉里面加英文的翻译」）：{ text, en } 成对存 ——
    * text 与当前原文一致才显示，改了输入就自动隐藏到新译文回来（防旧译文配新中文）。
    */
   const [noteEn, setNoteEn] = useState<{ text: string; en: string; target: string } | null>(null);
   /**
    * 语言切换（Push 296 追订 · 业务口径「因为页面有些内容是手打的 我建议是提前后台机翻」）：
    * 英文界面下抽屉标题按「titleEn 优先 → 机翻 → 原文」显示、副行给中文原名对照；
-   * 只读态「项目进展描述」显示机翻译文（悬停看原文）；编辑态仍编辑中文原文（下方英译小字保留）。
+   * 只读态「项目描述」显示机翻译文（悬停看原文）；编辑态仍编辑中文原文（下方英译小字保留）。
    */
   const locale = useLocale();
   const t = useT();
@@ -443,7 +443,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
     : isLocalizedLocale(locale)
       ? (drawerTitleText === task.title ? "" : task.title)
       : task.titleEn;
-  /** 「项目进展描述」输入框（随内容自适应高度，见下面的 resize effect）。 */
+  /** 「项目描述」输入框（随内容自适应高度，见下面的 resize effect）。 */
   const noteFieldRef = useRef<HTMLTextAreaElement | null>(null);
   /** 预取循环读的最新快照（避免闭包拿到旧值重复取）。 */
   const changeEntriesRef = useRef(changeEntries);
@@ -608,12 +608,12 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, changeIdsKey, changeDetailTick]);
 
-  /** 「项目进展描述」英译原文：编辑态取草稿、只读态取任务现值（与保存口径一致，首尾空白不参与翻译）。 */
+  /** 「项目描述」英译原文：编辑态取草稿、只读态取任务现值（与保存口径一致，首尾空白不参与翻译）。 */
   const noteText = task === null ? "" : (onSubmit === undefined ? task.note : draft.note).trim();
   const noteTarget = translationTargetOf(locale);
 
   /**
-   * 取「项目进展描述」英译（业务口径 2026-10-13「抽屉里面加英文的翻译」）：会话缓存命中立即显示；
+   * 取「项目描述」英译（业务口径 2026-10-13「抽屉里面加英文的翻译」）：会话缓存命中立即显示；
    * 未命中则等输入停顿 600ms 再经译文通道取（与导出报告同一缓存，见 src/translateApi.ts）——失败 / 空文本不显示小字。
    */
   useEffect(() => {
@@ -640,7 +640,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
     };
   }, [noteText, noteTarget]);
 
-  // 「项目进展描述」框随内容长（业务口径 2026-10-13 追订「正下方不要空这么多」）：一行就只占一行高、
+  // 「项目描述」框随内容长（业务口径 2026-10-13 追订「正下方不要空这么多」）：一行就只占一行高、
   // 多行随文字长高（超过 max-h 才出内部滚动）—— 英文小字紧跟中文，不再顶着固定 3 行高度的空白。
   useEffect(() => {
     const element = noteFieldRef.current;
@@ -651,7 +651,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
     element.style.height = element.scrollHeight + "px";
   }, [draft.note]);
 
-  /** 「项目进展描述」译文小字（与中文同框；只读态在原文下方）：与导出报告同款灰色小字，取不到就不显示。 */
+  /** 「项目描述」译文小字（与中文同框；只读态在原文下方）：与导出报告同款灰色小字，取不到就不显示。 */
   const noteEnLine =
     noteEn !== null && noteEn.text === noteText && noteEn.target === noteTarget ? (
       <p data-note-en="true" lang={noteEn.target} className="mt-1 text-[11px] leading-4 text-zinc-400">
@@ -760,7 +760,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
   const historyChanges: TaskChange[] = Array.from(
     new Map([...task.changes, ...submittedChanges].map((change) => [change.id, change] as const)).values(),
   );
-  /** 任务描述改名（Push 196 / Push 197 收窄）：只有**未归入阶段**的「临时任务」能改 —— 归入阶段的任务即便没有来源节点也锁定（A1-17；服务端同口径 400 兜底）。 */
+  /** 任务名称改名（Push 196 / Push 197 收窄）：只有**未归入阶段**的「临时任务」能改 —— 归入阶段的任务即便没有来源节点也锁定（A1-17；服务端同口径 400 兜底）。 */
   const titleEditable = editable && onRename !== undefined && task.stage === "" && task.nodeId === null && task.sourceNodeId === null;
   const canEditStatus = onSetStatus !== undefined && capabilities.canEditFields && !taskFinalized && !unavailable;
   const canEditActualEnd = onSetActualEnd !== undefined && capabilities.canComplete && !taskFinalized && !unavailable;
@@ -813,7 +813,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
   const headcountText = draft.headcount.trim();
   const headcountValue = headcountText === "" ? 0 : Number(headcountText);
   const headcountInvalid = headcountText !== "" && (Number.isNaN(headcountValue) || headcountValue < 0);
-  /** 任务描述校验（Push 196）：中文名必填 —— 输入过程中为空只标红提示，失焦时还原成原值、不写库。 */
+  /** 任务名称校验（Push 196）：中文名必填 —— 输入过程中为空只标红提示，失焦时还原成原值、不写库。 */
   const titleInvalid = titleEditable && draft.title.trim() === "";
   /** 「变更申请」页只读展示：变更时间（提交当天 = 系统记录口径）与变更申请人（当前登录人）。 */
   const changeToday = dateOnlyText(new Date().toISOString());
@@ -964,7 +964,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
   };
 
   /**
-   * 任务描述改名（Push 196）：失焦即存（与施工人数 / 进展描述同一套「值没变不写」）；
+   * 任务名称改名（Push 196）：失焦即存（与施工人数 / 进展描述同一套「值没变不写」）；
    * 中文名必填 —— 清空失焦时还原成原值、不写库。
    */
   const commitTitle = () => {
@@ -1140,11 +1140,11 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
   };
 
   const rows: Array<{ label: string; value: ReactNode }> = [
-    // 任务描述（Push 196 / Push 197 收窄）：只有未归入阶段的「临时任务」出这一行；阶段任务与节点 / 模板生成的任务保持锁定（不渲染可编辑控件）
+    // 任务名称（Push 196 / Push 197 收窄）：只有未归入阶段的「临时任务」出这一行；阶段任务与节点 / 模板生成的任务保持锁定（不渲染可编辑控件）
     ...(titleEditable
       ? [
           {
-            label: "任务描述",
+            label: "任务名称",
             value: (
               <>
                 <input
@@ -1466,7 +1466,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
       ),
     },
     {
-      label: "项目进展描述",
+      label: "项目描述",
       value: editable ? (
         <div className={NOTE_BOX_CLASS}>
           <textarea

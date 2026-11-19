@@ -266,7 +266,7 @@ function arrowExpr(stage) {
 }
 /** 抽屉探针：标题 / 两个改名输入的当前值 / 阶段签 / 「开始 / 预计完成」行。 */
 function drawerExpr() {
-  return "(function(){var d=document.querySelector(" + j("aside[role=dialog]") + ");if(d===null){return null;}var h=d.querySelector(" + j("h2") + ");var cn=d.querySelector(" + j('input[aria-label="任务描述（中文）"]') + ");var en=d.querySelector(" + j('input[aria-label="任务描述（英文）"]') + ");var text=d.textContent||" + j("") + ";return {title:h===null?" + j("") + ":h.textContent.trim(),cn:cn===null?null:cn.value,en:en===null?null:en.value,temp:text.indexOf(" + j(TEMP_STAGE) + ")>=0,time:text.indexOf(" + j(CONFIRM) + ")>=0};})()";
+  return "(function(){var d=document.querySelector(" + j("aside[role=dialog]") + ");if(d===null){return null;}var h=d.querySelector(" + j("h2") + ");var cn=d.querySelector(" + j('input[aria-label="任务名称（中文）"]') + ");var en=d.querySelector(" + j('input[aria-label="任务名称（英文）"]') + ");var text=d.textContent||" + j("") + ";return {title:h===null?" + j("") + ":h.textContent.trim(),cn:cn===null?null:cn.value,en:en===null?null:en.value,temp:text.indexOf(" + j(TEMP_STAGE) + ")>=0,time:text.indexOf(" + j(CONFIRM) + ")>=0};})()";
 }
 
 // ---------- ① 项目总览：垫底「临时任务」分组 ----------
@@ -352,7 +352,7 @@ const drawerOpened = await waitFor("document.querySelector(" + j("aside[role=dia
 check("② 建完「临时任务」→ 详情抽屉**自动打开**（不用再点一次卡片）", drawerOpened === true, String(drawerOpened));
 const drawer0 = await ev(drawerExpr());
 check("抽屉标题 = 刚填的任务名（所见即所建）", drawer0 !== null && drawer0.title === tempName, drawer0 === null ? "no drawer" : String(drawer0.title));
-check("抽屉里有「任务描述」两个改名输入（中文 / 英文）", drawer0 !== null && drawer0.cn === tempName && drawer0.en === tempNameEn, drawer0 === null ? "no drawer" : "cn=" + String(drawer0.cn) + " en=" + String(drawer0.en));
+check("抽屉里有「任务名称」两个改名输入（中文 / 英文）", drawer0 !== null && drawer0.cn === tempName && drawer0.en === tempNameEn, drawer0 === null ? "no drawer" : "cn=" + String(drawer0.cn) + " en=" + String(drawer0.en));
 check("抽屉里能当场确认时间等细节（「" + CONFIRM + "」行在）", drawer0 !== null && drawer0.time === true, drawer0 === null ? "no drawer" : "time=" + String(drawer0.time));
 check("抽屉阶段签显示「临时任务」（空阶段任务的展示名）", drawer0 !== null && drawer0.temp === true, drawer0 === null ? "no drawer" : "temp=" + String(drawer0.temp));
 
@@ -363,7 +363,7 @@ check("服务端：临时任务已落库（stageKey = null，经理等于手选�
 
 // ---------- ③ 抽屉里二次改名（失焦即存 / 留空还原 / 清空英文） ----------
 const renamedCn = "回放临时任务改名·" + stamp;
-await typeInto("aside[role=dialog] input[aria-label=" + Q + "任务描述（中文）" + Q + "]", renamedCn);
+await typeInto("aside[role=dialog] input[aria-label=" + Q + "任务名称（中文）" + Q + "]", renamedCn);
 await blurDrawer();
 const afterCn = await api("/api/v1/projects/" + projectId + "/tasks/" + tempTaskId);
 check("改名（中文）失焦即存：服务端 title = 新名字", afterCn.status === 200 && afterCn.json !== null && afterCn.json.title === renamedCn, afterCn.status + " title=" + (afterCn.json === null ? "-" : String(afterCn.json.title)));
@@ -371,17 +371,17 @@ const drawerAfterCn = await ev(drawerExpr());
 check("改名（中文）后抽屉标题同步（列表已刷新）", drawerAfterCn !== null && drawerAfterCn.title === renamedCn, drawerAfterCn === null ? "no drawer" : String(drawerAfterCn.title));
 
 const renamedEn = "Temp renamed " + stamp;
-await typeInto("aside[role=dialog] input[aria-label=" + Q + "任务描述（英文）" + Q + "]", renamedEn);
+await typeInto("aside[role=dialog] input[aria-label=" + Q + "任务名称（英文）" + Q + "]", renamedEn);
 await blurDrawer();
 const afterEn = await api("/api/v1/projects/" + projectId + "/tasks/" + tempTaskId);
 check("改名（英文）失焦即存：服务端 titleEn = 新英文名", afterEn.status === 200 && afterEn.json !== null && afterEn.json.titleEn === renamedEn, afterEn.status + " titleEn=" + (afterEn.json === null ? "-" : String(afterEn.json.titleEn)));
 
-await clearByKeyboard("aside[role=dialog] input[aria-label=" + Q + "任务描述（英文）" + Q + "]");
+await clearByKeyboard("aside[role=dialog] input[aria-label=" + Q + "任务名称（英文）" + Q + "]");
 await blurDrawer();
 const afterClearEn = await api("/api/v1/projects/" + projectId + "/tasks/" + tempTaskId);
 check("英文名留空失焦：服务端 titleEn = null（清空）", afterClearEn.status === 200 && afterClearEn.json !== null && afterClearEn.json.titleEn === null, afterClearEn.status + " titleEn=" + (afterClearEn.json === null ? "-" : String(afterClearEn.json.titleEn)));
 
-await clearByKeyboard("aside[role=dialog] input[aria-label=" + Q + "任务描述（中文）" + Q + "]");
+await clearByKeyboard("aside[role=dialog] input[aria-label=" + Q + "任务名称（中文）" + Q + "]");
 await blurDrawer();
 const afterClearCn = await api("/api/v1/projects/" + projectId + "/tasks/" + tempTaskId);
 check("中文名留空失焦：不写库（服务端 title 仍是上一次改的名字）", afterClearCn.status === 200 && afterClearCn.json !== null && afterClearCn.json.title === renamedCn, afterClearCn.status + " title=" + (afterClearCn.json === null ? "-" : String(afterClearCn.json.title)));

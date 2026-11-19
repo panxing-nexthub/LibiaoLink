@@ -4,7 +4,7 @@
  * 口径（详见 `前端功能需求.md` §6.16）：
  * - 导出内容 = 当前项目的项目总览：项目信息 + 汇总统计 + 九阶段进度 + 任务明细（分组 / 行序同「项目总览」任务表）；
  * - 数据准备（阶段分组 / 计数 / 文本与进度口径）收敛在 `overviewExportShared.ts`；
- * - 产物 = PDF：报告 HTML 先经现有预览分页器拆成 A4 横版页，再由 html2canvas 逐页栅格化、pdf-lib 封装，
+ * - 产物 = PDF：报告 HTML 先经现有预览分页器拆成 A4 横版页，再由 html2canvas-pro 逐页栅格化、pdf-lib 封装，
  *   生成后由浏览器直接下载（不再唤起系统打印窗口）；分页、版式和语言口径与面板左侧预览同源；
  *   中文字体仍使用自托管 Noto Sans SC Variable（思源黑体同源，OFL-1.1），页面按 2 倍分辨率输出；
  * - 配色与状态口径和页面同源：五个状态色签取 `components/TaskBoard.tsx` 的 STATUS_TAG_CLASS 同色（100 档底 +
@@ -24,7 +24,7 @@
  *   ⑨ 标题置顶（业务 2026-10-10 追加「中文标题放在最上方」）：hero 信息块内「项目名 · 进度报告」大标题提到最上，项目编号行下移到标题之下（名称 margin 0、编号行补 2px 上距）。
  *   ⑩ 明细不截断（业务 2026-10-10 追加「这种英文不应该省略 表格宽度可以加宽 不强制在一页展示」）：描述列副行（英文名 + 进展）撤字符截断（原 40 / 56 字）与单行 ellipsis、改自然换行；描述列 29% → 31%（经理 / 负责人列各让 1%）；不再一页优先，页数随内容。
  *   ⑪ 英文小字不重复阿拉伯数字（业务 2026-10-10 追加「然后导出的阿拉伯数字是不需要翻译的」）：分组头英文收成 completed、任务明细 note 英文去掉条数、整体进度英文去掉（已完成 X / Y）、页脚英文去掉生成时间、超量截断提示英文去掉条数 —— 数字属数据、语言无关，只保留在中文主文案一处。
- *   ⑫ 进展描述单列（业务 2026-10-10 追加「项目进展描述单例一列吧 然后需要翻译」）：任务描述副行只留英文名；「项目进展描述 Progress Description」独立成列（第 3 列），列数 9 → 10、列宽重排（3 / 20 / 17 / 8 / 8 / 8.5 / 7.5 / 7.5 / 8 / 12.5 %）、分组头 colspan 同步；列内中文原文 + 英文小字译文（⑬ 追订接线）。
+ *   ⑫ 进展描述单列（业务 2026-10-10 追加「项目进展描述单例一列吧 然后需要翻译」）：任务名称副行只留英文名；「项目描述 Project Description」独立成列（第 3 列），列数 9 → 10、列宽重排（2026-11-19 平衡为 3 / 18 / 15.5 / 8 / 8.5 / 8 / 8 / 7.5 / 12 / 11.5 %）、分组头 colspan 同步；列内中文原文 + 英文小字译文（⑬ 追订接线）。
  *   ⑬ 进展描述译文接线（业务 2026-10-10「现在导出没有接入翻译」）：导出前把该列去重非空文本经 translateApi.ts
  *      （POST /api/v1/translate，契约对齐翻译服务 /translate）翻成英文、补在中文原文下方小字；通道不通静默降级为只出中文
  *      （导出照常、不报错）；开发环境代理见 vite.config.ts（TRANSLATE_ORIGIN），生产由后端按同契约实现 —— 见 §6.16 ⑯。
@@ -38,6 +38,13 @@
  *   2026-10-23 追订（业务口径「这边导入加入 日文和韩文 也要翻译」）：主体语言扩为 zh / en / ja / ko；
  *   固定文案走四语词典，日 / 韩主体的项目名、任务名、进展描述按 target=ja|ko 走翻译通道，中文降为小字；
  *   报告内联 Noto Sans JP / KR，中文小字仍用 Noto Sans SC。
+ *   2026-11-19 跨尺寸排版锁定（业务反馈「不同尺寸电脑打开预览效果不一样 / 下载也不一样」）：
+ *   预览与 PDF 复用同一份最终预览 HTML；报告画布固定 1122 × 793.7008 CSS px，预览与离屏导出 iframe 固定 1190 × 880，
+ *   html2canvas-pro 固定按 1122 px 窗口和报告页尺寸截图，均不再读取宿主窗口 / iframe 当前宽度；表头主次文案各占一行并禁止换行。
+ *   2026-11-19 导出视觉与预览对齐（业务反馈「效果还是不行 和预览有差距」）：
+ *   PDF 捕获改走 html2canvas-pro 的 foreignObjectRendering，由浏览器按预览同一套布局做原生排版后再栅格化，消除 Canvas 字体度量造成的基线偏差；
+ *   捕获前把报告 logo 转成 data URI、把章节标题 / 右侧说明锁成单行并留 3px 右侧余量，既避免克隆中裂图 / 换行，也不改变预览本身的排版；
+ *   PDF 页面尺寸改为报告画布按 96dpi 换算的 841.5 × 595.2756pt，页面图片不再做非整数缩放；中文正文优先引用本机 Microsoft YaHei UI / Microsoft YaHei（仅字体栈引用，不打包字体文件），未安装时回退自托管 Noto Sans SC。
  */
 import notoSansJpCss from "@fontsource-variable/noto-sans-jp/index.css?inline";
 import notoSansKrCss from "@fontsource-variable/noto-sans-kr/index.css?inline";
@@ -58,9 +65,13 @@ import {
   progressLabel,
   progressPct,
   DEFAULT_OVERVIEW_EXPORT_OPTIONS,
+  DEFAULT_OVERVIEW_TASK_COLUMNS,
+  visibleOverviewTaskColumns,
   type OverviewExportInput,
   type OverviewExportLanguage,
   type OverviewExportOptions,
+  type OverviewTaskColumnKey,
+  type OverviewTaskColumns,
   type StageGroup,
 } from "./overviewExportShared";
 
@@ -69,33 +80,58 @@ export type { OverviewExportInput, OverviewExportLanguage, OverviewExportOptions
 /** 无译文时的缺省映射（静默降级：导出保持中文原文；容错口径见 translateApi.ts）。 */
 const EMPTY_TRANSLATIONS: ReadonlyMap<string, string> = new Map();
 
-/** 五个状态色（与页面色签同源；bar = 明细行进度条的填充色）。 */
-type StatusTint = { text: string; bg: string; bar: string };
+/** 五个状态色（与页面色签同源；text = 状态圆点与主文案，bar = 明细行进度条）。 */
+type StatusTint = { text: string; bar: string };
 
 const STATUS_TINT: Record<TaskStatus, StatusTint> = {
-  已完成: { text: "#047857", bg: "#d1fae5", bar: "#10b981" },
-  提前完成: { text: "#a21caf", bg: "#fae8ff", bar: "#d946ef" },
-  进行中: { text: "#b45309", bg: "#fef3c7", bar: "#f59e0b" },
-  待开始: { text: "#0369a1", bg: "#e0f2fe", bar: "#0ea5e9" },
-  已延期: { text: "#be123c", bg: "#ffe4e6", bar: "#f43f5e" },
+  已完成: { text: "#047857", bar: "#10b981" },
+  提前完成: { text: "#a21caf", bar: "#d946ef" },
+  进行中: { text: "#b45309", bar: "#f59e0b" },
+  待开始: { text: "#0369a1", bar: "#0ea5e9" },
+  已延期: { text: "#be123c", bar: "#f43f5e" },
 };
 
 /** PDF 生成用离屏 iframe 的 id（再点一次导出先撤掉上一枚，避免多份报告叠着生成）。 */
 const PDF_FRAME_ID = "overview-export-pdf-frame";
+/** A4 横版报告画布（CSS px；与 overviewPreviewPaged.css 的 .preview-page 常量保持同步）。 */
+export const OVERVIEW_REPORT_PAGE_WIDTH = 1122;
+export const OVERVIEW_REPORT_PAGE_HEIGHT = 793.7008;
+/** 预览 iframe 固定视口；PDF 离屏 iframe 复用同一尺寸，避免宿主窗口参与报告排版。 */
+export const OVERVIEW_PREVIEW_FRAME_WIDTH = 1190;
+export const OVERVIEW_PREVIEW_FRAME_HEIGHT = 880;
 /** 渲染分辨率：A4 横版内容区 1122 × 793.7 CSS px，2 倍输出约 192 dpi。 */
 const PDF_RENDER_SCALE = 2;
-/** A4 横版（PDF 点单位；1 pt = 1/72 in）。 */
-const PDF_PAGE_WIDTH_PT = 841.89;
-const PDF_PAGE_HEIGHT_PT = 595.28;
+/** PDF 页面点尺寸：报告画布按 96dpi 换算，保证 1122 CSS px ↔ 841.5pt、793.7008 CSS px ↔ 595.2756pt 严格 1:1。 */
+const PDF_PAGE_WIDTH_PT = (OVERVIEW_REPORT_PAGE_WIDTH * 72) / 96;
+const PDF_PAGE_HEIGHT_PT = (OVERVIEW_REPORT_PAGE_HEIGHT * 72) / 96;
 /** 等预览分页 / 字体 / logo 就绪的上限；超时直接失败，避免一直卡着导出浮层。 */
 const PDF_READY_TIMEOUT_MS = 15_000;
 /** 仅供 PDF 截图时使用的页面样式：去掉预览背景、阴影和页码，页面本身保留原有页边距。 */
 const PDF_CAPTURE_STYLE = `
-  html, body { background: #ffffff !important; }
-  body.preview-document { padding: 0 !important; visibility: visible !important; }
-  .preview-pages { gap: 0 !important; }
-  .preview-page { box-shadow: none !important; }
+  html, body {
+    width: ${OVERVIEW_REPORT_PAGE_WIDTH}px !important;
+    min-width: ${OVERVIEW_REPORT_PAGE_WIDTH}px !important;
+    max-width: ${OVERVIEW_REPORT_PAGE_WIDTH}px !important;
+    background: #ffffff !important;
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
+  }
+  body.preview-document {
+    width: ${OVERVIEW_REPORT_PAGE_WIDTH}px !important;
+    min-width: ${OVERVIEW_REPORT_PAGE_WIDTH}px !important;
+    padding: 0 !important;
+    visibility: visible !important;
+  }
+  .preview-pages {
+    width: ${OVERVIEW_REPORT_PAGE_WIDTH}px !important;
+    min-width: ${OVERVIEW_REPORT_PAGE_WIDTH}px !important;
+    gap: 0 !important;
+  }
+  .preview-page { flex: none !important; box-shadow: none !important; }
   .preview-page__number { display: none !important; }
+  .section__title { flex-wrap: nowrap !important; white-space: nowrap !important; }
+  .section__title > * { flex-shrink: 0 !important; }
+  .section__note { flex: 0 0 auto !important; margin-right: 3px !important; white-space: nowrap !important; }
 `;
 
 /**
@@ -149,8 +185,8 @@ const FIXED_TEXT: Record<string, LanguageStrings> = {
   阶段进度: { en: "Stage Progress", ja: "ステージ進捗", ko: "단계 진행률" },
   施工阶段统计完成情况: { en: "Completion of the nine construction stages", ja: "9つの施工段階の完了状況", ko: "9개 시공 단계 완료 현황" },
   任务明细: { en: "Task Details", ja: "タスク詳細", ko: "작업 상세" },
-  任务描述: { en: "Task Description", ja: "タスク内容", ko: "작업 설명" },
-  项目进展描述: { en: "Progress Description", ja: "進捗内容", ko: "진행 상세" },
+  任务名称: { en: "Task Name", ja: "タスク名", ko: "작업 이름" },
+  项目描述: { en: "Project Description", ja: "プロジェクト説明", ko: "프로젝트 설명" },
   任务负责人: { en: "Task Owners", ja: "タスク担当者", ko: "작업 담당자" },
   任务状态: { en: "Status", ja: "ステータス", ko: "상태" },
   开始日期: { en: "Start Date", ja: "開始日", ko: "시작일" },
@@ -203,6 +239,15 @@ function fixedText(zh: string, primary: OverviewExportLanguage): string {
   return escapeHtml(main) + (main === zh ? "" : " " + secondaryText(zh, "zh"));
 }
 
+/** 任务表头主 / 次文案各占一行；显式块级 + nowrap，避免系统字体缩放把列头重新挤成多行。 */
+function tableHeadText(zh: string, primary: OverviewExportLanguage): string {
+  const main = localizedValue(zh, primary);
+  const secondary = primary === "zh" ? FIXED_TEXT[zh]?.en ?? "" : main === zh ? "" : zh;
+  const secondaryLang = primary === "zh" ? "en" : "zh";
+  return `<span class="th-main">${escapeHtml(main)}</span>` +
+    (secondary === "" ? "" : `<span class="secondary" lang="${languageAttr(secondaryLang)}">${escapeHtml(secondary)}</span>`);
+}
+
 /** 数据值译文：主体语言在前；非中文主体把中文原文降为小字，译文缺失时逐项回退中文。 */
 function translatedText(zh: string, translated: string | undefined, primary: OverviewExportLanguage): string {
   if (primary === "zh") {
@@ -234,9 +279,14 @@ function percentText(part: number, whole: number): string {
   return whole === 0 ? "—" : String(Math.round((part / whole) * 100)) + "%";
 }
 
-/** 横条进度条（报告里唯一一种进度呈现：阶段进度 / 明细行进度共用）。 */
+/**
+ * 横条进度条（报告里唯一一种进度呈现：阶段进度 / 明细行进度共用）。
+ * 单元素渐变填充：html2canvas-pro 对 overflow / 嵌套空 span 的裁剪会让下载 PDF 丢掉彩色填充，故不再用子节点。
+ */
 function barHtml(pct: number, color: string, extraClass: string): string {
-  return "<div class=\"bar " + extraClass + "\"><span style=\"width: " + String(pct) + "%; background: " + color + "\"></span></div>";
+  const clamped = Math.max(0, Math.min(100, pct));
+  const width = String(clamped) + "%";
+  return "<div class=\"bar " + extraClass + "\" style=\"background: linear-gradient(to right, " + color + " 0%, " + color + " " + width + ", #eceef1 " + width + ", #eceef1 100%)\"></div>";
 }
 
 /** 汇总统计条里的一格（色点 + 数值 + 四语标签（占比）横排）。 */
@@ -284,8 +334,15 @@ function stageOverallStatus(group: StageGroup): TaskStatus | null {
   return "待开始";
 }
 
-/** 任务明细一行：日 / 韩主体额外翻译任务标题；中文 / 英文主体保持原有 title / titleEn 口径。 */
-function taskRowHtml(index: number, task: ProjectTask, managerText: string, translationMap: ReadonlyMap<string, string>, primary: OverviewExportLanguage): string {
+/** 任务明细一行：按面板选择输出列；日 / 韩主体额外翻译任务标题，中文 / 英文主体保持 title / titleEn 口径。 */
+function taskRowHtml(
+  index: number,
+  task: ProjectTask,
+  managerText: string,
+  translationMap: ReadonlyMap<string, string>,
+  primary: OverviewExportLanguage,
+  columns: OverviewTaskColumns,
+): string {
   const tint = STATUS_TINT[task.status];
   const hasTitleEn = task.titleEn !== "";
   let titleMain = task.title;
@@ -318,20 +375,18 @@ function taskRowHtml(index: number, task: ProjectTask, managerText: string, tran
     ? primary === "zh" ? "待分配" : fixedText("待分配", primary)
     : escapeHtml(ownersTextValue);
   const progressZh = progressLabel(task.progress);
-  return (
-    `<tr>` +
-    `<td class="num center">${String(index)}</td>` +
-    `<td class="task"><span class="task__title" lang="${titleLang}">${escapeHtml(titleMain)}</span>${subHtml}</td>` +
-    `<td class="pnote">${noteHtml}</td>` +
-    `<td class="managers"><span class="one-line">${escapeHtml(managerText)}</span></td>` +
-    `<td class="owners"><span class="one-line">${ownersHtml}</span></td>` +
-    `<td class="center"><span class="chip" style="color: ${tint.text}; background: ${tint.bg}">${fixedText(task.status, primary)}</span></td>` +
-    `<td class="num center">${dateText(task.startDate)}</td>` +
-    `<td class="num center">${dateText(task.dueDate)}</td>` +
-    `<td class="num center">${headcountText(task, primary)}</td>` +
-    `<td class="progress">${barHtml(progressPct(task.progress), tint.bar, "bar--row")}<span class="progress__label">${fixedText(progressZh, primary)}</span></td>` +
-    `</tr>`
-  );
+  const cells: Record<OverviewTaskColumnKey, string> = {
+    title: `<td class="task"><span class="task__title" lang="${titleLang}">${escapeHtml(titleMain)}</span>${subHtml}</td>`,
+    note: `<td class="pnote">${noteHtml}</td>`,
+    managers: `<td class="managers"><span class="one-line">${escapeHtml(managerText)}</span></td>`,
+    owners: `<td class="owners"><span class="one-line">${ownersHtml}</span></td>`,
+    status: `<td><span class="chip" style="color: ${tint.text}">${fixedText(task.status, primary)}</span></td>`,
+    startDate: `<td class="num">${dateText(task.startDate)}</td>`,
+    dueDate: `<td class="num">${dateText(task.dueDate)}</td>`,
+    headcount: `<td class="num">${headcountText(task, primary)}</td>`,
+    progress: `<td class="progress">${barHtml(progressPct(task.progress), tint.bar, "bar--row")}<span class="progress__label">${fixedText(progressZh, primary)}</span></td>`,
+  };
+  return `<tr><td class="num">${String(index)}</td>${visibleOverviewTaskColumns(columns).map((column) => cells[column.key]).join("")}</tr>`;
 }
 
 /** 折叠阶段日期范围：忽略空值，取组内最早开始日期与最晚预计完成日期（契约日期为 ISO，可直接做字符串比较）。 */
@@ -349,7 +404,7 @@ function groupDateRange(group: StageGroup): { start: string; due: string } {
   return { start, due };
 }
 
-/** 阶段行只改折叠头：任务表头（10 列）保持原样；折叠阶段不出任务行，完成数 / 项目经理 / 最早开始 / 最晚完成 / 状态 / 进度分别对齐原表列，任务负责人与人数留空。 */
+/** 折叠阶段与任务行共用当前列配置；折叠行把阶段汇总值放回对应可见列，隐藏列不再占位。 */
 function groupSectionHtml(
   counter: { value: number },
   group: StageGroup,
@@ -357,7 +412,9 @@ function groupSectionHtml(
   translationMap: ReadonlyMap<string, string>,
   primary: OverviewExportLanguage,
   collapsed: boolean,
+  columns: OverviewTaskColumns,
 ): string {
+  const visibleColumns = visibleOverviewTaskColumns(columns);
   const countText =
     String(group.done) + " / " + String(group.total) + " " + escapeHtml(localizedValue("完成", primary)) + " · " +
     (primary === "zh" ? secondaryText("completed", "en") : secondaryText("完成", "zh"));
@@ -365,22 +422,25 @@ function groupSectionHtml(
     counter.value += group.tasks.length;
     const pct = group.total === 0 ? 0 : Math.round((group.done / group.total) * 100);
     const status = stageOverallStatus(group);
-    const tint = status === null ? { text: "#52525b", bg: "#f4f4f5" } : STATUS_TINT[status];
+    const tint = status === null ? { text: "#52525b" } : STATUS_TINT[status];
     const dateRange = groupDateRange(group);
     const fill = group.total === 0 ? "#d4d4d8" : pct === 100 ? "#10b981" : "#18181b";
+    const cells: Record<OverviewTaskColumnKey, string> = {
+      title: '<td class="grp__name">' + fixedText(group.name, primary) + '</td>',
+      note: '<td class="grp__count">' + countText + '</td>',
+      managers: '<td class="managers"><span class="one-line">' + escapeHtml(managerText) + '</span></td>',
+      owners: '<td class="owners"></td>',
+      status: '<td class="grp__status"><span class="chip" style="color: ' + tint.text + '">' + fixedText(status ?? "暂无任务", primary) + '</span></td>',
+      startDate: '<td class="num">' + dateText(dateRange.start) + '</td>',
+      dueDate: '<td class="num">' + dateText(dateRange.due) + '</td>',
+      headcount: '<td class="num"></td>',
+      progress: '<td class="grp__progress-cell"><span class="grp__progress">' + barHtml(pct, fill, "bar--grp") + '<span>' + (group.total === 0 ? "—" : String(pct) + "%") + '</span></span></td>',
+    };
     return (
       '<tbody class="grp">' +
       '<tr class="grp__head grp__head--collapsed">' +
-      '<td class="num center"></td>' +
-      '<td class="grp__name">' + fixedText(group.name, primary) + '</td>' +
-      '<td class="grp__count">' + countText + '</td>' +
-      '<td class="managers"><span class="one-line">' + escapeHtml(managerText) + '</span></td>' +
-      '<td class="owners"></td>' +
-      '<td class="grp__status center">' + '<span class="chip" style="color: ' + tint.text + '; background: ' + tint.bg + '">' + fixedText(status ?? "暂无任务", primary) + '</span></td>' +
-      '<td class="num center">' + dateText(dateRange.start) + '</td>' +
-      '<td class="num center">' + dateText(dateRange.due) + '</td>' +
-      '<td class="num center"></td>' +
-      '<td class="grp__progress-cell">' + '<span class="grp__progress">' + barHtml(pct, fill, "bar--grp") + '<span>' + (group.total === 0 ? "—" : String(pct) + "%") + '</span></span></td>' +
+      '<td class="num"></td>' +
+      visibleColumns.map((column) => cells[column.key]).join("") +
       '</tr>' +
       '</tbody>'
     );
@@ -388,12 +448,12 @@ function groupSectionHtml(
   const rows = group.tasks
     .map((task) => {
       counter.value += 1;
-      return taskRowHtml(counter.value, task, managerText, translationMap, primary);
+      return taskRowHtml(counter.value, task, managerText, translationMap, primary, columns);
     })
     .join("");
   return (
     '<tbody class="grp">' +
-    '<tr class="grp__head"><td colspan="10">' +
+    '<tr class="grp__head"><td colspan="' + String(visibleColumns.length + 1) + '">' +
     '<span class="grp__name">' + fixedText(group.name, primary) + '</span>' +
     '<span class="grp__count">' + countText + '</span>' +
     '</td></tr>' +
@@ -415,89 +475,91 @@ const REPORT_STYLE = `
      （overflow-wrap: anywhere），描述列 29% → 31%（经理 / 负责人列各让 1%）；行高随内容增长、页数不设上限。 */
   @page { size: A4 landscape; margin: 10mm 9mm 9mm; }
   * { box-sizing: border-box; }
-  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { margin: 0; color: #1f2329; font-size: 10px; line-height: 1.45;
-    font-family: "Noto Sans SC Variable", "Source Han Sans SC", "Noto Sans SC", sans-serif; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body { margin: 0; color: #1f2329; font-size: 10.5px; line-height: 1.45;
+    -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+    font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC Variable", "Source Han Sans SC", "Noto Sans SC", sans-serif; }
   body.primary-ja { font-family: "Noto Sans JP Variable", "Noto Sans SC Variable", "Noto Sans KR Variable", sans-serif; }
   body.primary-ko { font-family: "Noto Sans KR Variable", "Noto Sans SC Variable", "Noto Sans JP Variable", sans-serif; }
-  .secondary[lang="zh-CN"] { font-family: "Noto Sans SC Variable", "Noto Sans JP Variable", "Noto Sans KR Variable", sans-serif; }
+  .secondary[lang="zh-CN"] { font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC Variable", "Noto Sans JP Variable", "Noto Sans KR Variable", sans-serif; }
   .head { padding-bottom: 6px; border-bottom: 2px solid #18181b; }
   .head__logo { display: block; height: 36px; width: auto; }
   .hero { display: flex; align-items: flex-start; gap: 16px; margin-top: 8px; }
   .hero__left { flex: 1; min-width: 0; text-align: right; }
-  .hero__code { margin: 2px 0 0; font-size: 9.5px; letter-spacing: 0.04em; color: #71717a; }
-  .hero__name { margin: 0; font-size: 17px; line-height: 1.2; font-weight: 700; }
-  .hero__name .secondary { display: block; margin-top: 2px; font-size: 10px; font-weight: 500; }
+  .hero__code { margin: 2px 0 0; font-size: 10px; letter-spacing: 0.04em; color: #71717a; }
+  .hero__name { margin: 0; font-size: 18px; line-height: 1.2; font-weight: 700; }
+  .hero__name .secondary { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 500; }
   .hero__tags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 6px; margin: 5px 0 0; }
-  .tag { display: inline-block; padding: 1px 6px; border-radius: 999px; background: #f4f4f5; color: #52525b; font-size: 9px; }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 999px; background: #f4f4f5; color: #52525b; font-size: 9.5px; }
   .hero__progress { flex: 0 0 240px; }
-  .hero__pct { margin: 0; font-size: 24px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; text-align: left; }
-  .hero__pct span { margin-left: 1px; font-size: 12px; }
-  .hero__label { margin: 2px 0 4px; font-size: 9px; color: #71717a; text-align: left; }
-  .hero__foot { margin: 5px 0 0; font-size: 9px; line-height: 1.5; color: #52525b; text-align: left; }
-  .bar { height: 4px; border-radius: 999px; background: #eceef1; overflow: hidden; }
-  .bar span { display: block; height: 100%; border-radius: 999px; }
+  .hero__pct { margin: 0; font-size: 25px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; text-align: left; }
+  .hero__pct span { margin-left: 1px; font-size: 12.5px; }
+  .hero__label { margin: 2px 0 4px; font-size: 9.5px; color: #71717a; text-align: left; }
+  .hero__foot { margin: 5px 0 0; font-size: 9.5px; line-height: 1.5; color: #52525b; text-align: left; }
+  .bar { height: 4px; border-radius: 999px; background: #eceef1; }
   .stats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 8px; padding: 6px 10px; border: 1px solid #e4e4e7; border-radius: 8px; background: #fafafa; }
-  .stat { display: inline-flex; align-items: baseline; gap: 5px; font-size: 9px; color: #71717a; }
+  .stat { display: inline-flex; align-items: baseline; gap: 5px; font-size: 9.5px; color: #71717a; }
   .stat__dot { width: 6px; height: 6px; border-radius: 999px; align-self: center; }
-  .stat__value { font-size: 13px; font-weight: 700; color: #18181b; font-variant-numeric: tabular-nums; }
+  .stat__value { font-size: 13.5px; font-weight: 700; color: #18181b; font-variant-numeric: tabular-nums; }
   .section { margin-top: 8px; }
-  .section__title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 5px; font-size: 11.5px; font-weight: 700; }
+  .section__title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 5px; font-size: 12px; font-weight: 700; }
   .section__title::before { content: ""; width: 3px; height: 11px; border-radius: 2px; background: #18181b; align-self: center; }
-  .section__note { margin-left: auto; font-size: 9px; font-weight: 400; color: #a1a1aa; }
+  .section__note { margin-left: auto; font-size: 9.5px; font-weight: 400; color: #a1a1aa; }
   .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px 7px; }
   .stage { padding: 4px 7px 5px; border: 1px solid #e4e4e7; border-radius: 6px; background: #ffffff; break-inside: avoid; }
   .stage__head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
-  .stage__name { font-size: 10px; font-weight: 600; }
-  .stage__count { font-size: 9px; color: #71717a; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stage__name { font-size: 10.5px; font-weight: 600; }
+  .stage__count { font-size: 9.5px; color: #71717a; font-variant-numeric: tabular-nums; white-space: nowrap; }
   table.tasks { width: 100%; border-collapse: collapse; table-layout: fixed; }
   table.tasks thead { display: table-header-group; }
-  table.tasks th { padding: 4px 5px; background: #18181b; color: #ffffff; font-size: 9px; font-weight: 600; text-align: left; }
-  table.tasks td { padding: 3px 5px; border-bottom: 1px solid #e9e9ec; font-size: 9px; line-height: 1.4; vertical-align: top; }
+  table.tasks th { padding: 5px 5px 6px; background: #18181b; color: #ffffff; font-size: 9.5px; font-weight: 600; line-height: 1.45; text-align: left; vertical-align: top; overflow: visible; }
+  table.tasks td { padding: 4px 5px 6px; border-bottom: 1px solid #e9e9ec; font-size: 9.5px; line-height: 1.5; vertical-align: top; }
   table.tasks tr { break-inside: avoid; }
   tbody.grp tr.grp__head td { padding: 3px 7px; background: #f4f4f5; border-bottom: 1px solid #e4e4e7; break-after: avoid; }
-  .grp__name { font-size: 10px; font-weight: 700; }
-  .grp__count { margin-left: 6px; font-size: 9px; color: #71717a; }
+  .grp__name { font-size: 10.5px; font-weight: 700; }
+  .grp__count { margin-left: 6px; font-size: 9.5px; color: #71717a; }
   tbody.grp tr.grp__head--collapsed td { padding: 6px 5px; background: #fafafa; border: 0; border-bottom: 1px solid #e4e4e7; vertical-align: middle; }
   tbody.grp tr.grp__head--collapsed td:first-child { padding-left: 7px; border-left: 1px solid #e4e4e7; }
   tbody.grp tr.grp__head--collapsed td:last-child { padding-right: 7px; border-right: 1px solid #e4e4e7; }
-  tbody.grp tr.grp__head--collapsed .grp__status { padding-left: 0; padding-right: 0; }
-  tbody.grp tr.grp__head--collapsed .grp__status .chip { font-size: 8.5px; }
+  tbody.grp tr.grp__head--collapsed .grp__status { padding-left: 5px; padding-right: 5px; }
+  tbody.grp tr.grp__head--collapsed .grp__status .chip { font-size: 9px; }
   tbody.grp tr.grp__head--collapsed .grp__count { margin-left: 0; padding-left: 5px; }
   tbody.grp tr.grp__head--collapsed .grp__progress { display: flex; justify-content: flex-start; width: 100%; min-width: 0; margin-left: 0; gap: 4px; }
   tbody.grp tr.grp__head--collapsed .grp__progress .bar { width: 28px; }
-  .grp__meta { display: inline-flex; align-items: baseline; gap: 3px; margin-left: 7px; color: #71717a; font-size: 8.5px; }
-  .grp__meta-label { font-size: 8.5px; }
-  .grp__meta-value { max-width: 120px; color: #3f3f46; font-size: 8.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .grp__progress { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; min-width: 104px; color: #52525b; font-size: 8.5px; font-variant-numeric: tabular-nums; }
+  .grp__meta { display: inline-flex; align-items: baseline; gap: 3px; margin-left: 7px; color: #71717a; font-size: 9px; }
+  .grp__meta-label { font-size: 9px; }
+  .grp__meta-value { max-width: 120px; color: #3f3f46; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .grp__progress { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; min-width: 104px; color: #52525b; font-size: 9px; font-variant-numeric: tabular-nums; }
   .grp__progress .bar { width: 72px; height: 4px; }
   .task__title { font-weight: 600; color: #18181b; }
-  .task__sub { display: block; margin-top: 1px; font-size: 8.5px; color: #a1a1aa; overflow-wrap: anywhere; }
-  .pnote { font-size: 8.5px; color: #52525b; overflow-wrap: anywhere; }
-  .pnote .secondary { display: block; margin-top: 1px; font-size: 7.5px; }
+  .task__sub { display: block; margin-top: 2px; font-size: 9px; line-height: 1.45; color: #a1a1aa; overflow-wrap: anywhere; }
+  .pnote { font-size: 9px; line-height: 1.5; color: #52525b; overflow-wrap: anywhere; }
+  .pnote .secondary { display: block; margin-top: 1px; font-size: 8px; }
   .one-line { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .managers { font-size: 8.5px; color: #3f3f46; }
-  .chip { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 8.5px; font-weight: 600; white-space: nowrap; }
+  .managers { font-size: 9px; color: #3f3f46; }
+  .chip { position: relative; display: block; box-sizing: border-box; width: 100%; padding: 0 0 0 8px; font-size: 9px; font-weight: 600; line-height: 1.3; white-space: nowrap; text-align: left; }
+  .chip::before { content: ""; position: absolute; left: 0; top: 4px; width: 4px; height: 4px; border-radius: 999px; background: currentColor; }
   .num { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .center { text-align: center; }
   .dim { color: #a1a1aa; }
   .progress { white-space: nowrap; }
   .progress .bar { display: inline-block; width: 28px; height: 4px; vertical-align: middle; }
-  .progress__label { display: inline-block; margin-left: 4px; width: 34px; font-size: 8.5px; color: #52525b; vertical-align: middle; }
-  .empty { margin: 0; padding: 10px; border: 1px dashed #d4d4d8; border-radius: 6px; color: #a1a1aa; font-size: 10px; text-align: center; }
+  .progress__label { display: inline-block; margin-left: 4px; width: 34px; font-size: 9px; color: #52525b; vertical-align: middle; }
+  .empty { margin: 0; padding: 10px; border: 1px dashed #d4d4d8; border-radius: 6px; color: #a1a1aa; font-size: 10.5px; text-align: center; }
   /* 中英双语层级：次要语言统一为小一号浅灰小字（.secondary）——中文主体时是英文，英文主体时是中文；
      表头、状态签、进度档位与阶段名的次要语言独立一行，其余标签同行跟随。 */
-  .secondary { font-size: 8px; color: #a1a1aa; }
-  table.tasks th .secondary { display: block; margin-top: 1px; font-size: 7.5px; font-weight: 500; color: rgba(255, 255, 255, 0.78); }
-  .chip { text-align: center; line-height: 1.3; }
-  .chip .secondary { display: block; font-size: 7px; font-weight: 500; opacity: 0.8; }
+  .secondary { font-size: 8.5px; color: #a1a1aa; }
+  table.tasks th .th-main { display: block; line-height: 1.45; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  table.tasks th .secondary { display: block; margin-top: 2px; font-size: 8px; font-weight: 500; line-height: 1.4; color: rgba(255, 255, 255, 0.78); white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  .chip .secondary { display: block; margin-top: 1px; font-size: 8px; font-weight: 500; line-height: 1.3; color: #71717a; opacity: 1; }
   .stage__head { align-items: flex-start; }
-  .stage__name .secondary { display: block; margin-top: 1px; font-size: 7.5px; font-weight: 400; }
+  .stage__name .secondary { display: block; margin-top: 1px; font-size: 8px; font-weight: 400; }
   .grp__name .secondary { font-weight: 400; }
   .progress__label { width: auto; }
-  .progress__label .secondary { display: block; font-size: 7px; line-height: 1.2; }
-  .section__title .secondary { font-size: 8.5px; font-weight: 600; }
-  .tag .secondary, .stat .secondary, .section__note .secondary, .grp__count .secondary, .hero__code .secondary, .hero__foot .secondary, .stage__count .secondary { font-size: 7.5px; }
+  .progress__label .secondary { display: block; font-size: 7.5px; line-height: 1.2; }
+  .section__title .secondary { font-size: 9px; font-weight: 600; }
+  .tag .secondary, .stat .secondary, .section__note .secondary, .grp__count .secondary, .hero__code .secondary, .hero__foot .secondary, .stage__count .secondary { font-size: 8px; }
   .hero__progress { flex: 0 0 240px; }
 `;
 
@@ -513,6 +575,8 @@ export function buildOverviewReportHtml(
   translationMap: ReadonlyMap<string, string> = EMPTY_TRANSLATIONS,
   primary: OverviewExportLanguage = "zh",
   collapsedStages: readonly string[] = [],
+  columns: OverviewTaskColumns = DEFAULT_OVERVIEW_TASK_COLUMNS,
+  hiddenStages: readonly string[] = [],
 ): string {
   const { project, tasks, summary } = input;
   const groups = groupedByStage(tasks);
@@ -542,14 +606,16 @@ export function buildOverviewReportHtml(
     statHtml("已延期", String(counts.overdue), shareOf(counts.overdue), "#f43f5e", primary),
   ].join("");
 
-  const reportGroups = groups.filter((group) => group.tasks.length > 0 || STAGE_NAMES.includes(group.name));
+  const hidden = new Set(hiddenStages);
+  const shownGroups = groups.filter((group) => !hidden.has(group.name));
+  const reportGroups = shownGroups.filter((group) => group.tasks.length > 0 || STAGE_NAMES.includes(group.name));
   const stageCells = reportGroups.map((group) => stageCellHtml(group, primary)).join("");
-  const detailGroups = groups.filter((group) => group.tasks.length > 0);
+  const detailGroups = shownGroups.filter((group) => group.tasks.length > 0);
   const counter = { value: 0 };
   const managerText = projectManagerText(project);
   const collapsed = new Set(collapsedStages);
   const detailRows = detailGroups
-    .map((group) => groupSectionHtml(counter, group, managerText, translationMap, primary, collapsed.has(group.name)))
+    .map((group) => groupSectionHtml(counter, group, managerText, translationMap, primary, collapsed.has(group.name), columns))
     .join("");
   const fetchedCount = String(tasks.length);
   let clippedNote = "";
@@ -573,34 +639,21 @@ export function buildOverviewReportHtml(
   } else if (primary === "ko") {
     emptyText = "이 프로젝트에는 작업이 없습니다. " + secondaryText("本项目暂无任务。", "zh");
   }
+  const visibleColumns = visibleOverviewTaskColumns(columns);
+  const visibleWidth = visibleColumns.reduce((sum, column) => sum + column.width, 0);
+  const dataWidthScale = visibleWidth === 0 ? 0 : 97 / visibleWidth;
   const tableHtml =
     detailRows === ""
       ? `<p class="empty">${emptyText}</p>`
       : `<table class="tasks">
     <colgroup>
       <col style="width: 3%" />
-      <col style="width: 20%" />
-      <col style="width: 17%" />
-      <col style="width: 8%" />
-      <col style="width: 8%" />
-      <col style="width: 8.5%" />
-      <col style="width: 7.5%" />
-      <col style="width: 7.5%" />
-      <col style="width: 8%" />
-      <col style="width: 12.5%" />
+      ${visibleColumns.map((column) => `<col style="width: ${String(column.width * dataWidthScale)}%" />`).join("")}
     </colgroup>
     <thead>
       <tr>
-        <th class="center"></th>
-        <th>${fixedText("任务描述", primary)}</th>
-        <th>${fixedText("项目进展描述", primary)}</th>
-        <th>${fixedText("项目经理", primary)}</th>
-        <th>${fixedText("任务负责人", primary)}</th>
-        <th class="center">${fixedText("任务状态", primary)}</th>
-        <th class="center">${fixedText("开始日期", primary)}</th>
-        <th class="center">${fixedText("预计完成", primary)}</th>
-        <th class="center">${fixedText("预计所需施工人数", primary)}</th>
-        <th class="center">${fixedText("进度", primary)}</th>
+        <th></th>
+        ${visibleColumns.map((column) => `<th>${tableHeadText(column.label, primary)}</th>`).join("")}
       </tr>
     </thead>
     ${detailRows}
@@ -636,6 +689,7 @@ export function buildOverviewReportHtml(
 <html lang="${languageAttr(primary)}" data-primary-language="${primary}">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=${OVERVIEW_PREVIEW_FRAME_WIDTH}, initial-scale=1" />
 <title>${escapeHtml(docTitle)}</title>
 <style>${REPORT_STYLE}</style>
 </head>
@@ -685,24 +739,30 @@ export function buildOverviewPreviewHtml(
   translationMap: ReadonlyMap<string, string>,
   primary: OverviewExportLanguage,
   collapsedStages: readonly string[] = [],
+  columns: OverviewTaskColumns = DEFAULT_OVERVIEW_TASK_COLUMNS,
+  hiddenStages: readonly string[] = [],
 ): string {
-  return buildOverviewReportHtml(input, translationMap, primary, collapsedStages)
+  return buildOverviewReportHtml(input, translationMap, primary, collapsedStages, columns, hiddenStages)
     .replace("</head>", `<style>${overviewPreviewPagedCss}</style></head>`)
     .replace("</body>", `<script data-overview-preview-runtime="" src="${escapeHtml(new URL(overviewPreviewPagedScriptUrl, window.location.origin).href)}"></script></body>`);
 }
 
 /**
- * 预览与正式导出共用同一份译文请求（主体语言 / 折叠阶段变了也保持一致）：
- * 中文、英文主体取英文；日文、韩文主体取对应语言。折叠阶段的任务不进请求。
+ * 预览与正式导出共用同一份译文请求（主体语言 / 阶段显示 / 折叠状态变了也保持一致）：
+ * 中文、英文主体取英文；日文、韩文主体取对应语言。隐藏或折叠阶段的任务不进请求。
  */
 export function overviewExportTranslationRequest(
   input: OverviewExportInput,
   options: OverviewExportOptions,
 ): { target: TranslationTarget; texts: string[] } {
-  const { primary, collapsedStages } = options;
+  const { primary, collapsedStages, hiddenStages } = options;
   const target: TranslationTarget = primary === "ja" ? "ja" : primary === "ko" ? "ko" : "en";
   const collapsed = new Set(collapsedStages);
-  const visibleTasks = input.tasks.filter((task) => !collapsed.has(task.stage === "" ? "临时任务" : task.stage));
+  const hidden = new Set(hiddenStages);
+  const visibleTasks = input.tasks.filter((task) => {
+    const stage = task.stage === "" ? "临时任务" : task.stage;
+    return !collapsed.has(stage) && !hidden.has(stage);
+  });
   const texts = target === "en"
     ? [input.project.description, ...visibleTasks.map((task) => task.note)]
     : [input.project.description, ...visibleTasks.flatMap((task) => [task.title, task.note])];
@@ -721,10 +781,22 @@ export async function exportProjectOverviewPdf(
   options: OverviewExportOptions = DEFAULT_OVERVIEW_EXPORT_OPTIONS,
   onTranslateProgress?: (done: number, total: number) => void,
 ): Promise<void> {
-  const { primary, collapsedStages } = options;
+  const { primary, collapsedStages, columns, hiddenStages } = options;
   const { target, texts } = overviewExportTranslationRequest(input, options);
   const translationMap = await translateZhTo(texts, target, onTranslateProgress);
-  const html = buildOverviewPreviewHtml(input, translationMap, primary, collapsedStages);
+  const html = buildOverviewPreviewHtml(input, translationMap, primary, collapsedStages, columns, hiddenStages);
+  await exportProjectOverviewPdfHtml(html, input, primary);
+}
+
+/**
+ * 直接导出预览面板已经生成的最终 HTML：不再重建报告 / 重新请求译文，
+ * 让下载 PDF 与用户当下看到的页数、表头换行、折叠阶段和译文完全同源。
+ */
+export async function exportProjectOverviewPdfHtml(
+  html: string,
+  input: OverviewExportInput,
+  primary: OverviewExportLanguage,
+): Promise<void> {
   await downloadPagedOverviewPdf(html, input, primary);
 }
 
@@ -763,17 +835,18 @@ async function downloadPagedOverviewPdf(
   frame.tabIndex = -1;
   frame.setAttribute("aria-hidden", "true");
   // 必须保持真实渲染（display:none / visibility:hidden 会让截图空白）：只挪到视口外。
-  frame.style.cssText = "position: fixed; left: -20000px; top: 0; width: 1280px; height: 900px; border: 0; pointer-events: none;";
+  frame.style.cssText = "position: fixed; left: -20000px; top: 0; width: " + OVERVIEW_PREVIEW_FRAME_WIDTH + "px; height: " + OVERVIEW_PREVIEW_FRAME_HEIGHT + "px; border: 0; pointer-events: none;";
   frame.srcdoc = html;
   document.body.appendChild(frame);
 
   try {
     const paged = await waitForPagedPreview(frame);
     await waitForDocumentAssets(paged.document);
+    const imagesInlined = await inlineDocumentImages(paged.document);
     await prepareCaptureLayout(frame, paged);
 
     const [{ default: html2canvas }, { PDFDocument }] = await Promise.all([
-      import("html2canvas"),
+      import("html2canvas-pro"),
       import("pdf-lib"),
     ]);
     const pdf = await PDFDocument.create();
@@ -783,19 +856,29 @@ async function downloadPagedOverviewPdf(
     pdf.setProducer("LibiaoLink");
 
     for (const pageElement of paged.pages) {
-      const bounds = pageElement.getBoundingClientRect();
-      const canvas = await html2canvas(pageElement, {
+      const captureOptions = {
         backgroundColor: "#ffffff",
         scale: PDF_RENDER_SCALE,
         useCORS: true,
         logging: false,
-        width: Math.ceil(bounds.width),
-        height: Math.ceil(bounds.height),
-        windowWidth: paged.document.documentElement.clientWidth,
-        windowHeight: paged.document.documentElement.scrollHeight,
+        width: Math.ceil(OVERVIEW_REPORT_PAGE_WIDTH),
+        height: Math.ceil(OVERVIEW_REPORT_PAGE_HEIGHT),
+        windowWidth: OVERVIEW_REPORT_PAGE_WIDTH,
+        windowHeight: Math.max(Math.ceil(OVERVIEW_REPORT_PAGE_HEIGHT), Math.ceil(paged.document.documentElement.scrollHeight)),
         scrollX: 0,
         scrollY: 0,
-      });
+      };
+      let canvas: HTMLCanvasElement;
+      if (imagesInlined) {
+        try {
+          canvas = await html2canvas(pageElement, { ...captureOptions, foreignObjectRendering: true });
+        } catch (error) {
+          console.warn("Overview PDF foreignObject capture failed; falling back to canvas rendering.", error);
+          canvas = await html2canvas(pageElement, captureOptions);
+        }
+      } else {
+        canvas = await html2canvas(pageElement, captureOptions);
+      }
       let png: Uint8Array;
       try {
         png = await canvasPngBytes(canvas);
@@ -852,7 +935,47 @@ async function waitForDocumentAssets(doc: Document): Promise<void> {
   }
 }
 
-/** 截图前清掉预览外层装饰，并把 iframe 拉高到全部页面，确保 html2canvas 能稳定取到每一页。 */
+/**
+ * foreignObject 捕获时，外部图片在 SVG 文档里会失去同源上下文而裂图；先抓成本地 data URI。
+ * 只有全部图片都成功内嵌时才走 foreignObject，否则退回兼容的 Canvas 渲染，避免下载件丢 logo。
+ */
+async function inlineDocumentImages(doc: Document): Promise<boolean> {
+  let allInlined = true;
+  await Promise.all(Array.from(doc.images).map(async (image) => {
+    const source = image.currentSrc || image.src;
+    if (source === "" || source.startsWith("data:")) {
+      return;
+    }
+    let url: URL;
+    try {
+      url = new URL(source, doc.baseURI);
+    } catch {
+      allInlined = false;
+      return;
+    }
+    if (url.origin !== window.location.origin) {
+      allInlined = false;
+      return;
+    }
+    try {
+      const response = await fetch(url.href, { cache: "force-cache", credentials: "same-origin" });
+      if (!response.ok) {
+        allInlined = false;
+        return;
+      }
+      image.src = await blobToDataUrl(await response.blob());
+      await image.decode().catch(() => undefined);
+      if (!image.complete) {
+        allInlined = false;
+      }
+    } catch {
+      allInlined = false;
+    }
+  }));
+  return allInlined;
+}
+
+/** 截图前清掉预览外层装饰，并把 iframe 拉高到全部页面，确保 html2canvas-pro 能稳定取到每一页。 */
 async function prepareCaptureLayout(frame: HTMLIFrameElement, paged: PagedPreview): Promise<void> {
   const style = paged.document.createElement("style");
   style.setAttribute("data-overview-pdf-capture", "");
@@ -860,6 +983,16 @@ async function prepareCaptureLayout(frame: HTMLIFrameElement, paged: PagedPrevie
   paged.document.head.appendChild(style);
   frame.style.height = Math.max(900, Math.ceil(paged.document.documentElement.scrollHeight)) + "px";
   await delay(80);
+}
+
+/** Blob → data URI（foreignObject 内嵌图片用；体积只覆盖报告里的少量图片）。 */
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read overview report image"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 /** canvas → PNG 字节（不用 data URL，避免长报告的大图产生额外 base64 内存开销）。 */

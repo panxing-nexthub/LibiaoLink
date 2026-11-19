@@ -6,6 +6,12 @@ import {
   exportHeaderWidthPx,
   renderProjectExportHeader,
 } from "./project-export.header.js";
+import {
+  bodyRowHeightPx,
+  EXPORT_PX_PER_POINT,
+  fittedColumnWidth,
+  headerRowHeightPx,
+} from "./export-layout.js";
 
 /** 项目导出工作簿：纯数据 + 已加载图片 → xlsx 字节。模板列序对齐企微智能表格样例。 */
 
@@ -65,18 +71,23 @@ export interface ProjectExportTaskRow {
   changeDates: string[];
 }
 
-export interface ProjectExportReportRow {
+export interface ProjectExportDailyReportRow {
   date: string;
   author: string;
   doneWork: string;
   plan: string;
   onsitePhotos: ExportPhotoRef[];
-  issueDescription: string;
-  issueCategory: string;
-  issueSolution: string;
-  issueState: string;
-  issuePhotos: ExportPhotoRef[];
   headcount: number | null;
+}
+
+export interface ProjectExportIssueRow {
+  date: string;
+  reporter: string;
+  description: string;
+  category: string;
+  solution: string;
+  photos: ExportPhotoRef[];
+  state: string;
 }
 
 export interface ProjectExportChangeRow {
@@ -122,7 +133,8 @@ export interface ProjectExportPayload {
   project: { id: string; code: string; name: string };
   origin: string | null;
   tasks: ProjectExportTaskRow[];
-  reports: ProjectExportReportRow[];
+  reports: ProjectExportDailyReportRow[];
+  issues: ProjectExportIssueRow[];
   changes: ProjectExportChangeRow[];
   stakeholders: ProjectExportStakeholderRow[];
   images: Map<string, ExportImage>;
@@ -171,12 +183,17 @@ const REPORT_HEADERS = [
   "当日完成工作",
   "明日计划",
   "现场工作附图",
+  "施工人数",
+];
+
+const ISSUE_HEADERS = [
+  "提出日期",
+  "提出人",
   "问题描述",
   "问题归类",
   "解决方案或建议",
   "问题附图",
   "问题是否处理",
-  "施工人数",
 ];
 
 const CHANGE_HEADERS = [
@@ -206,7 +223,8 @@ const STAKEHOLDER_HEADERS = [
 ];
 
 const TASK_WIDTHS: Record<number, number> = { 1: 43, 2: 16.4, 3: 18.9, 4: 13.8, 5: 10, 6: 12, 7: 14, 8: 23.2, 9: 19.8, 10: 15.5, 11: 11.2, 12: 13.8, 13: 14, 14: 17.2, 15: 13.8, 16: 16.4, 17: 21.5, 18: 16 };
-const REPORT_WIDTHS: Record<number, number> = { 1: 13.8, 2: 16.4, 3: 21.5, 4: 23.2, 5: 60.2, 6: 26.7, 7: 18.9, 8: 23.2, 9: 37, 10: 13.8, 11: 11.2 };
+const REPORT_WIDTHS: Record<number, number> = { 1: 14, 2: 20, 3: 42, 4: 36, 5: 58, 6: 12 };
+const ISSUE_WIDTHS: Record<number, number> = { 1: 14, 2: 18, 3: 42, 4: 22, 5: 38, 6: 42, 7: 14 };
 const CHANGE_WIDTHS: Record<number, number> = { 1: 21.5, 2: 13.8, 3: 18.9, 4: 23.2, 5: 30, 6: 30, 7: 23.2, 8: 16.4, 9: 16.4, 10: 23.2, 11: 21.5, 12: 13.8, 13: 21.5 };
 const STAKEHOLDER_WIDTHS: Record<number, number> = { 1: 22, 2: 25, 3: 30, 4: 30, 5: 24, 6: 18, 7: 22 };
 
@@ -216,9 +234,11 @@ const ATTACHMENT_WIDTHS: Record<number, number> = { 1: 16, 2: 9, 3: 30, 4: 18, 5
 const IMAGE_WIDTH_PX = 88;
 const IMAGE_HEIGHT_PX = 64;
 const IMAGE_GAP_PX = 4;
-const PX_PER_POINT = 4 / 3;
+const IMAGE_TOP_GAP_PX = 8;
+const IMAGE_BOTTOM_GAP_PX = 10;
+const PX_PER_POINT = EXPORT_PX_PER_POINT;
 const EMU_PER_PIXEL = 9525;
-const IMAGE_PADDING_PX = 2;
+const IMAGE_PADDING_PX = 4;
 
 const SHANGHAI_PARTS = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Shanghai",
@@ -395,14 +415,37 @@ function applyLinkFont(cell: ExcelJS.Cell): void {
   }
 }
 
-function styleHeader(sheet: ExcelJS.Worksheet, headers: readonly string[]): ExcelJS.Row {
+function fitColumnWidths(
+  sheet: ExcelJS.Worksheet,
+  baseWidths: Record<number, number>,
+  values: readonly string[],
+): void {
+  for (let index = 0; index < values.length; index += 1) {
+    const baseWidth = baseWidths[index + 1] ?? 8.43;
+    const nextWidth = fittedColumnWidth(values[index] ?? "", baseWidth);
+    if (nextWidth > (sheet.getColumn(index + 1).width ?? baseWidth)) {
+      sheet.getColumn(index + 1).width = nextWidth;
+    }
+  }
+}
+
+function widthsOf(sheet: ExcelJS.Worksheet, count: number): number[] {
+  return Array.from({ length: count }, (_value, index) => sheet.getColumn(index + 1).width ?? 8.43);
+}
+
+function styleHeader(
+  sheet: ExcelJS.Worksheet,
+  headers: readonly string[],
+  baseWidths: Record<number, number>,
+): ExcelJS.Row {
+  fitColumnWidths(sheet, baseWidths, headers);
   const row = sheet.addRow([...headers]);
-  row.height = 30;
+  row.height = headerRowHeightPx(headers, widthsOf(sheet, headers.length)) / EXPORT_PX_PER_POINT;
   for (let index = 1; index <= headers.length; index += 1) {
     const cell = row.getCell(index);
     cell.font = { name: EXPORT_FONT_NAME, size: 10, bold: true, color: { argb: "FF111827" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4F6F8" } };
-    cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
     cell.border = {
       top: { style: "thin", color: { argb: "FFE4E7EC" } },
       bottom: { style: "thin", color: { argb: "FFC9D0D8" } },
@@ -462,32 +505,22 @@ function styleBodyRow(sheet: ExcelJS.Worksheet, rowNumber: number, count: number
   for (let index = 1; index <= count; index += 1) {
     const cell = sheet.getCell(rowNumber, index);
     cell.font = { name: EXPORT_FONT_NAME, size: 10 };
-    cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
     applyLinkFont(cell);
   }
 }
 
-function textWidth(value: string): number {
-  let width = 0;
-  for (const char of value) width += /[\u0000-\u00ff]/.test(char) ? 1 : 2;
-  return width;
-}
-
-function estimatedLines(value: string, widthChars: number): number {
-  if (value === "") return 1;
-  let total = 0;
-  for (const line of value.split("\n")) total += Math.max(1, Math.ceil(textWidth(line) / Math.max(4, widthChars)));
-  return total;
+/** 图片格保留图片区，文字从顶部开始，图片在其下方居中排布。 */
+function alignPhotoCell(sheet: ExcelJS.Worksheet, rowNumber: number, column: number, hasImages: boolean): void {
+  if (!hasImages) return;
+  const cell = sheet.getCell(rowNumber, column);
+  cell.alignment = { vertical: "top", horizontal: "center", wrapText: true };
+  applyLinkFont(cell);
 }
 
 function estimatedTextHeight(sheet: ExcelJS.Worksheet, values: readonly string[], columns: readonly number[]): number {
-  let lines = 1;
-  for (let index = 0; index < values.length; index += 1) {
-    const col = columns[index] ?? 1;
-    const width = sheet.getColumn(col).width ?? 8.43;
-    lines = Math.max(lines, estimatedLines(values[index] ?? "", width));
-  }
-  return Math.max(24, Math.min(540, lines * 18 + 8));
+  const widths = columns.map((column) => sheet.getColumn(column).width ?? 8.43);
+  return bodyRowHeightPx(values, widths);
 }
 
 function plainText(cell: ExcelJS.Cell): string {
@@ -519,6 +552,11 @@ function imageCapacity(widthChars: number, gapPx = 0): number {
   return Math.max(1, Math.floor((widthChars * 7 + 5 + gapPx) / (IMAGE_WIDTH_PX + IMAGE_GAP_PX)));
 }
 
+function imageBlockHeightPx(lines: number): number {
+  if (lines <= 0) return 0;
+  return IMAGE_TOP_GAP_PX + lines * IMAGE_HEIGHT_PX + (lines - 1) * IMAGE_GAP_PX + IMAGE_BOTTOM_GAP_PX;
+}
+
 function missingNames(refs: readonly ExportPhotoRef[], images: ReadonlyMap<string, ExportImage>): string[] {
   return refs.filter((ref) => !images.has(ref.fileId)).map((ref) => ref.name);
 }
@@ -539,6 +577,8 @@ function placeImages(
   maxCount = Number.MAX_SAFE_INTEGER,
 ): number {
   const available = availableRefs(refs, images).slice(0, Math.max(0, maxCount));
+  const columnWidthChars = sheet.getColumn(column).width ?? 8.43;
+  const columnWidthPx = Math.max(IMAGE_WIDTH_PX, columnWidthChars * 7 + 5);
   for (let index = 0; index < available.length; index += 1) {
     const ref = available[index];
     if (ref === undefined) continue;
@@ -546,8 +586,10 @@ function placeImages(
     if (image === undefined) continue;
     const slot = index % capacity;
     const line = Math.floor(index / capacity);
-    const xOffsetPx = IMAGE_PADDING_PX + slot * (IMAGE_WIDTH_PX + IMAGE_GAP_PX);
-    const yOffsetPx = baseHeightPx + IMAGE_PADDING_PX + line * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX);
+    const itemsOnLine = Math.min(capacity, available.length - line * capacity);
+    const lineWidthPx = itemsOnLine * IMAGE_WIDTH_PX + Math.max(0, itemsOnLine - 1) * IMAGE_GAP_PX;
+    const xOffsetPx = Math.max(IMAGE_PADDING_PX, (columnWidthPx - lineWidthPx) / 2 + slot * (IMAGE_WIDTH_PX + IMAGE_GAP_PX));
+    const yOffsetPx = baseHeightPx + IMAGE_TOP_GAP_PX + line * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX);
     const imageBuffer = Uint8Array.from(image.bytes).buffer as ArrayBuffer;
     const imageId = workbook.addImage({ buffer: imageBuffer, extension: image.extension });
     const position = {
@@ -571,7 +613,7 @@ async function addTaskSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPa
   const sheet = workbook.addWorksheet(name);
   setWidths(sheet, TASK_WIDTHS, TASK_HEADERS.length);
   await addExportHeader(workbook, sheet, payload.project, "项目任务", sheetWidthsPx(TASK_WIDTHS, TASK_HEADERS.length), TASK_HEADERS.length);
-  styleHeader(sheet, TASK_HEADERS);
+  styleHeader(sheet, TASK_HEADERS, TASK_WIDTHS);
   for (const task of payload.tasks) {
     const row = sheet.addRow([
       task.description,
@@ -597,6 +639,7 @@ async function addTaskSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPa
     styleBodyRow(sheet, row.number, TASK_HEADERS.length);
     const texts: string[] = [];
     for (let col = 1; col <= TASK_HEADERS.length; col += 1) texts.push(plainText(row.getCell(col)));
+    fitColumnWidths(sheet, TASK_WIDTHS, texts);
     row.height = estimatedTextHeight(sheet, texts, Array.from({ length: TASK_HEADERS.length }, (_value, index) => index + 1)) / PX_PER_POINT;
   }
   return sheet;
@@ -605,47 +648,62 @@ async function addTaskSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPa
 async function addReportSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPayload, name: string): Promise<ExcelJS.Worksheet> {
   const sheet = workbook.addWorksheet(name);
   setWidths(sheet, REPORT_WIDTHS, REPORT_HEADERS.length);
-  await addExportHeader(workbook, sheet, payload.project, "日报及问题汇总", sheetWidthsPx(REPORT_WIDTHS, REPORT_HEADERS.length), REPORT_HEADERS.length);
-  styleHeader(sheet, REPORT_HEADERS);
+  await addExportHeader(workbook, sheet, payload.project, "日报记录", sheetWidthsPx(REPORT_WIDTHS, REPORT_HEADERS.length), REPORT_HEADERS.length);
+  styleHeader(sheet, REPORT_HEADERS, REPORT_WIDTHS);
   const archiveMode = payload.attachmentSheet !== undefined;
   const imageLimit = payload.imageLimitPerCell ?? Number.MAX_SAFE_INTEGER;
   for (const report of payload.reports) {
     const onsite = uniquePhotos(report.onsitePhotos);
-    const issuePhotos = uniquePhotos(report.issuePhotos);
-    const onsiteMissing = missingNames(onsite, payload.images);
-    const issueMissing = missingNames(issuePhotos, payload.images);
     const row = sheet.addRow([
       report.date,
       report.author,
       report.doneWork,
       report.plan,
-      archiveMode ? photoArchiveValue(onsite, "现场附图", payload.origin, payload.project.id) : (appendMissing("", onsiteMissing) || null),
-      report.issueDescription,
-      report.issueCategory,
-      report.issueSolution,
-      archiveMode ? photoArchiveValue(issuePhotos, "问题附图", payload.origin, payload.project.id) : (appendMissing("", issueMissing) || null),
-      report.issueState,
+      archiveMode ? photoArchiveValue(onsite, "现场附图", payload.origin, payload.project.id) : (appendMissing("", missingNames(onsite, payload.images)) || null),
       report.headcount,
     ]);
     styleBodyRow(sheet, row.number, REPORT_HEADERS.length);
-    const basePx = estimatedTextHeight(sheet, [
-      plainText(row.getCell(3)),
-      plainText(row.getCell(4)),
-      plainText(row.getCell(5)),
-      plainText(row.getCell(6)),
-      plainText(row.getCell(7)),
-      plainText(row.getCell(8)),
-      plainText(row.getCell(9)),
-    ], [3, 4, 5, 6, 7, 8, 9]);
+    const texts = Array.from({ length: REPORT_HEADERS.length }, (_value, index) => plainText(row.getCell(index + 1)));
+    fitColumnWidths(sheet, REPORT_WIDTHS, texts);
+    const basePx = estimatedTextHeight(sheet, texts, Array.from({ length: REPORT_HEADERS.length }, (_value, index) => index + 1));
     const onsiteAvailable = Math.min(availableRefs(onsite, payload.images).length, imageLimit);
-    const issueAvailable = Math.min(availableRefs(issuePhotos, payload.images).length, imageLimit);
-    const onsiteLines = Math.ceil(onsiteAvailable / imageCapacity(REPORT_WIDTHS[5] ?? 60.2));
-    const issueLines = Math.ceil(issueAvailable / imageCapacity(REPORT_WIDTHS[9] ?? 37));
-    const imageLines = Math.max(onsiteLines, issueLines);
-    const rowHeightPx = basePx + imageLines * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX) + 4;
-    row.height = rowHeightPx / PX_PER_POINT;
-    placeImages(workbook, sheet, onsite, payload.images, 5, row.number, imageCapacity(REPORT_WIDTHS[5] ?? 60.2), basePx, imageLimit);
-    placeImages(workbook, sheet, issuePhotos, payload.images, 9, row.number, imageCapacity(REPORT_WIDTHS[9] ?? 37), basePx, imageLimit);
+    const capacity = imageCapacity(sheet.getColumn(5).width ?? REPORT_WIDTHS[5] ?? 58);
+    const imageLines = onsiteAvailable === 0 ? 0 : Math.ceil(onsiteAvailable / capacity);
+    row.height = (basePx + imageBlockHeightPx(imageLines)) / PX_PER_POINT;
+    alignPhotoCell(sheet, row.number, 5, onsiteAvailable > 0);
+    placeImages(workbook, sheet, onsite, payload.images, 5, row.number, capacity, basePx, imageLimit);
+  }
+  return sheet;
+}
+
+async function addIssueSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPayload, name: string): Promise<ExcelJS.Worksheet> {
+  const sheet = workbook.addWorksheet(name);
+  setWidths(sheet, ISSUE_WIDTHS, ISSUE_HEADERS.length);
+  await addExportHeader(workbook, sheet, payload.project, "问题汇总", sheetWidthsPx(ISSUE_WIDTHS, ISSUE_HEADERS.length), ISSUE_HEADERS.length);
+  styleHeader(sheet, ISSUE_HEADERS, ISSUE_WIDTHS);
+  const archiveMode = payload.attachmentSheet !== undefined;
+  const imageLimit = payload.imageLimitPerCell ?? Number.MAX_SAFE_INTEGER;
+  for (const issue of payload.issues) {
+    const photos = uniquePhotos(issue.photos);
+    const row = sheet.addRow([
+      issue.date,
+      issue.reporter,
+      issue.description,
+      issue.category,
+      issue.solution,
+      archiveMode ? photoArchiveValue(photos, "问题附图", payload.origin, payload.project.id) : (appendMissing("", missingNames(photos, payload.images)) || null),
+      issue.state,
+    ]);
+    styleBodyRow(sheet, row.number, ISSUE_HEADERS.length);
+    const texts = Array.from({ length: ISSUE_HEADERS.length }, (_value, index) => plainText(row.getCell(index + 1)));
+    fitColumnWidths(sheet, ISSUE_WIDTHS, texts);
+    const basePx = estimatedTextHeight(sheet, texts, Array.from({ length: ISSUE_HEADERS.length }, (_value, index) => index + 1));
+    const available = Math.min(availableRefs(photos, payload.images).length, imageLimit);
+    const capacity = imageCapacity(sheet.getColumn(6).width ?? ISSUE_WIDTHS[6] ?? 42);
+    const imageLines = available === 0 ? 0 : Math.ceil(available / capacity);
+    row.height = (basePx + imageBlockHeightPx(imageLines)) / PX_PER_POINT;
+    alignPhotoCell(sheet, row.number, 6, available > 0);
+    placeImages(workbook, sheet, photos, payload.images, 6, row.number, capacity, basePx, imageLimit);
   }
   return sheet;
 }
@@ -654,7 +712,7 @@ async function addChangeSheet(workbook: ExcelJS.Workbook, payload: ProjectExport
   const sheet = workbook.addWorksheet(name);
   setWidths(sheet, CHANGE_WIDTHS, CHANGE_HEADERS.length);
   await addExportHeader(workbook, sheet, payload.project, "变更管理", sheetWidthsPx(CHANGE_WIDTHS, CHANGE_HEADERS.length), CHANGE_HEADERS.length);
-  styleHeader(sheet, CHANGE_HEADERS);
+  styleHeader(sheet, CHANGE_HEADERS, CHANGE_WIDTHS);
   const archiveMode = payload.attachmentSheet !== undefined;
   const imageLimit = payload.imageLimitPerCell ?? Number.MAX_SAFE_INTEGER;
   for (const change of payload.changes) {
@@ -682,24 +740,22 @@ async function addChangeSheet(workbook: ExcelJS.Workbook, payload: ProjectExport
     row.getCell(3).value = filesValue(change.files, payload.origin, payload.project.id);
     row.getCell(11).value = filesValue(change.afterFiles, payload.origin, payload.project.id);
     styleBodyRow(sheet, row.number, CHANGE_HEADERS.length);
-    const basePx = estimatedTextHeight(sheet, [
-      plainText(row.getCell(3)),
-      plainText(row.getCell(4)),
-      plainText(row.getCell(5)),
-      plainText(row.getCell(6)),
-      plainText(row.getCell(7)),
-      plainText(row.getCell(11)),
-      plainText(row.getCell(13)),
-    ], [3, 4, 5, 6, 7, 11, 13]);
+    const texts = Array.from({ length: CHANGE_HEADERS.length }, (_value, index) => plainText(row.getCell(index + 1)));
+    fitColumnWidths(sheet, CHANGE_WIDTHS, texts);
+    const basePx = estimatedTextHeight(sheet, texts, Array.from({ length: CHANGE_HEADERS.length }, (_value, index) => index + 1));
     const beforeAvailable = Math.min(availableRefs(before, payload.images).length, imageLimit);
     const afterAvailable = Math.min(availableRefs(after, payload.images).length, imageLimit);
-    const beforeLines = Math.ceil(beforeAvailable / imageCapacity(CHANGE_WIDTHS[5] ?? 30));
-    const afterLines = Math.ceil(afterAvailable / imageCapacity(CHANGE_WIDTHS[6] ?? 30));
-    const imageLines = Math.max(beforeLines, afterLines);
-    const rowHeightPx = basePx + imageLines * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX) + 4;
-    row.height = rowHeightPx / PX_PER_POINT;
-    placeImages(workbook, sheet, before, payload.images, 5, row.number, imageCapacity(CHANGE_WIDTHS[5] ?? 30), basePx, imageLimit);
-    placeImages(workbook, sheet, after, payload.images, 6, row.number, imageCapacity(CHANGE_WIDTHS[6] ?? 30), basePx, imageLimit);
+    const beforeCapacity = imageCapacity(sheet.getColumn(5).width ?? CHANGE_WIDTHS[5] ?? 30);
+    const afterCapacity = imageCapacity(sheet.getColumn(6).width ?? CHANGE_WIDTHS[6] ?? 30);
+    const imageLines = Math.max(
+      beforeAvailable === 0 ? 0 : Math.ceil(beforeAvailable / beforeCapacity),
+      afterAvailable === 0 ? 0 : Math.ceil(afterAvailable / afterCapacity),
+    );
+    row.height = (basePx + imageBlockHeightPx(imageLines)) / PX_PER_POINT;
+    alignPhotoCell(sheet, row.number, 5, beforeAvailable > 0);
+    alignPhotoCell(sheet, row.number, 6, afterAvailable > 0);
+    placeImages(workbook, sheet, before, payload.images, 5, row.number, beforeCapacity, basePx, imageLimit);
+    placeImages(workbook, sheet, after, payload.images, 6, row.number, afterCapacity, basePx, imageLimit);
   }
   return sheet;
 }
@@ -708,12 +764,13 @@ async function addStakeholderSheet(workbook: ExcelJS.Workbook, payload: ProjectE
   const sheet = workbook.addWorksheet(name);
   setWidths(sheet, STAKEHOLDER_WIDTHS, STAKEHOLDER_HEADERS.length);
   await addExportHeader(workbook, sheet, payload.project, "干系人", sheetWidthsPx(STAKEHOLDER_WIDTHS, STAKEHOLDER_HEADERS.length), STAKEHOLDER_HEADERS.length);
-  styleHeader(sheet, STAKEHOLDER_HEADERS);
+  styleHeader(sheet, STAKEHOLDER_HEADERS, STAKEHOLDER_WIDTHS);
   for (const item of payload.stakeholders) {
     const row = sheet.addRow([item.name, item.contact, item.email, item.position, item.company, item.writer, item.submittedAt]);
     styleBodyRow(sheet, row.number, STAKEHOLDER_HEADERS.length);
     const texts: string[] = [];
     for (let col = 1; col <= STAKEHOLDER_HEADERS.length; col += 1) texts.push(plainText(row.getCell(col)));
+    fitColumnWidths(sheet, STAKEHOLDER_WIDTHS, texts);
     row.height = estimatedTextHeight(sheet, texts, Array.from({ length: STAKEHOLDER_HEADERS.length }, (_value, index) => index + 1)) / PX_PER_POINT;
   }
   return sheet;
@@ -723,7 +780,7 @@ async function addAttachmentSheet(workbook: ExcelJS.Workbook, payload: ProjectEx
   const sheet = workbook.addWorksheet(name);
   setWidths(sheet, ATTACHMENT_WIDTHS, ATTACHMENT_HEADERS.length);
   await addExportHeader(workbook, sheet, payload.project, "附件清单", sheetWidthsPx(ATTACHMENT_WIDTHS, ATTACHMENT_HEADERS.length), ATTACHMENT_HEADERS.length);
-  styleHeader(sheet, ATTACHMENT_HEADERS);
+  styleHeader(sheet, ATTACHMENT_HEADERS, ATTACHMENT_WIDTHS);
   for (const item of payload.attachmentSheet ?? []) {
     const row = sheet.addRow([
       item.sourcePage,
@@ -739,6 +796,7 @@ async function addAttachmentSheet(workbook: ExcelJS.Workbook, payload: ProjectEx
     styleBodyRow(sheet, row.number, ATTACHMENT_HEADERS.length);
     const texts: string[] = [];
     for (let col = 1; col <= ATTACHMENT_HEADERS.length; col += 1) texts.push(plainText(row.getCell(col)));
+    fitColumnWidths(sheet, ATTACHMENT_WIDTHS, texts);
     row.height = estimatedTextHeight(sheet, texts, Array.from({ length: ATTACHMENT_HEADERS.length }, (_value, index) => index + 1)) / PX_PER_POINT;
   }
   return sheet;
@@ -752,12 +810,19 @@ export async function buildProjectExportWorkbook(payload: ProjectExportPayload):
   workbook.modified = new Date();
   workbook.title = payload.project.code + " " + payload.project.name;
   const sheetNames = projectExportSheetNames(payload.project);
-  const [taskSheetName, reportSheetName, changeSheetName, stakeholderSheetName] = sheetNames;
-  if (taskSheetName === undefined || reportSheetName === undefined || changeSheetName === undefined || stakeholderSheetName === undefined) {
+  const [taskSheetName, reportSheetName, issueSheetName, changeSheetName, stakeholderSheetName] = sheetNames;
+  if (
+    taskSheetName === undefined ||
+    reportSheetName === undefined ||
+    issueSheetName === undefined ||
+    changeSheetName === undefined ||
+    stakeholderSheetName === undefined
+  ) {
     throw new Error("项目导出 Sheet 配置不完整");
   }
   await addTaskSheet(workbook, payload, taskSheetName);
   await addReportSheet(workbook, payload, reportSheetName);
+  await addIssueSheet(workbook, payload, issueSheetName);
   await addChangeSheet(workbook, payload, changeSheetName);
   await addStakeholderSheet(workbook, payload, stakeholderSheetName);
   if (payload.attachmentSheet !== undefined) {
@@ -771,13 +836,14 @@ export async function buildProjectExportWorkbook(payload: ProjectExportPayload):
 }
 
 export function projectExportSheetNames(project: { name: string }): string[] {
-  const reportSheetName = "日报及问题汇总";
+  const reportSheetName = "日报记录";
+  const issueSheetName = "问题汇总";
   const changeSheetName = "变更管理";
   const stakeholderSheetName = "干系人";
-  const fixed = [reportSheetName, changeSheetName, stakeholderSheetName, "附件清单"];
+  const fixed = [reportSheetName, issueSheetName, changeSheetName, stakeholderSheetName, "附件清单"];
   let taskSheetName = sheetNameOf(project.name);
   if (fixed.includes(taskSheetName)) taskSheetName = sheetNameOf(taskSheetName + " 项目");
-  return [taskSheetName, reportSheetName, changeSheetName, stakeholderSheetName];
+  return [taskSheetName, reportSheetName, issueSheetName, changeSheetName, stakeholderSheetName];
 }
 
 function projectExportAttachmentSheetName(project: { name: string }, existing: readonly string[]): string {
@@ -847,61 +913,72 @@ export class ProjectExportWorkbookWriter {
       styleBodyRow(sheet, row.number, TASK_HEADERS.length);
       const texts: string[] = [];
       for (let col = 1; col <= TASK_HEADERS.length; col += 1) texts.push(plainText(row.getCell(col)));
+      fitColumnWidths(sheet, TASK_WIDTHS, texts);
       row.height = estimatedTextHeight(sheet, texts, Array.from({ length: TASK_HEADERS.length }, (_value, index) => index + 1)) / PX_PER_POINT;
       row.commit();
     }
     sheet.commit();
   }
 
-  async writeReports(rows: AsyncIterable<ProjectExportReportRow>): Promise<void> {
-    const sheet = await this.createSheet(this.sheetNames[1] ?? "日报及问题汇总", REPORT_WIDTHS, REPORT_HEADERS, "日报及问题汇总");
+  async writeReports(rows: AsyncIterable<ProjectExportDailyReportRow>): Promise<void> {
+    const sheet = await this.createSheet(this.sheetNames[1] ?? "日报记录", REPORT_WIDTHS, REPORT_HEADERS, "日报记录");
     for await (const report of rows) {
       const onsite = uniquePhotos(report.onsitePhotos);
-      const issuePhotos = uniquePhotos(report.issuePhotos);
       const onsiteImages = await this.photoLoader(onsite);
-      const issueImages = await this.photoLoader(issuePhotos);
       const row = sheet.addRow([
         report.date,
         report.author,
         report.doneWork,
         report.plan,
         appendMissing("", missingNames(onsite, onsiteImages)) || null,
-        report.issueDescription,
-        report.issueCategory,
-        report.issueSolution,
-        appendMissing("", missingNames(issuePhotos, issueImages)) || null,
-        report.issueState,
         report.headcount,
       ]);
       styleBodyRow(sheet, row.number, REPORT_HEADERS.length);
-      const basePx = estimatedTextHeight(sheet, [
-        plainText(row.getCell(3)),
-        plainText(row.getCell(4)),
-        plainText(row.getCell(5)),
-        plainText(row.getCell(6)),
-        plainText(row.getCell(7)),
-        plainText(row.getCell(8)),
-        plainText(row.getCell(9)),
-      ], [3, 4, 5, 6, 7, 8, 9]);
-      const onsiteCapacity = imageCapacity(REPORT_WIDTHS[5] ?? 60.2);
-      const issueCapacity = imageCapacity(REPORT_WIDTHS[9] ?? 37);
-      const onsiteAvailable = availableRefs(onsite, onsiteImages);
-      const issueAvailable = availableRefs(issuePhotos, issueImages);
-      const imageLines = Math.max(
-        Math.ceil(onsiteAvailable.length / onsiteCapacity),
-        Math.ceil(issueAvailable.length / issueCapacity),
-      );
-      const rowHeightPx = basePx + imageLines * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX) + (imageLines > 0 ? 4 : 0);
-      row.height = rowHeightPx / PX_PER_POINT;
-      this.placeThumbnails(sheet, onsite, onsiteImages, 5, row.number, onsiteCapacity, basePx);
-      this.placeThumbnails(sheet, issuePhotos, issueImages, 9, row.number, issueCapacity, basePx);
+      const texts = Array.from({ length: REPORT_HEADERS.length }, (_value, index) => plainText(row.getCell(index + 1)));
+      fitColumnWidths(sheet, REPORT_WIDTHS, texts);
+      const basePx = estimatedTextHeight(sheet, texts, Array.from({ length: REPORT_HEADERS.length }, (_value, index) => index + 1));
+      const capacity = imageCapacity(sheet.getColumn(5).width ?? REPORT_WIDTHS[5] ?? 58);
+      const available = availableRefs(onsite, onsiteImages);
+      const imageLines = available.length === 0 ? 0 : Math.ceil(available.length / capacity);
+      row.height = (basePx + imageBlockHeightPx(imageLines)) / PX_PER_POINT;
+      alignPhotoCell(sheet, row.number, 5, available.length > 0);
+      this.placeThumbnails(sheet, onsite, onsiteImages, 5, row.number, capacity, basePx);
+      row.commit();
+    }
+    sheet.commit();
+  }
+
+  async writeIssues(rows: AsyncIterable<ProjectExportIssueRow>): Promise<void> {
+    const sheet = await this.createSheet(this.sheetNames[2] ?? "问题汇总", ISSUE_WIDTHS, ISSUE_HEADERS, "问题汇总");
+    for await (const issue of rows) {
+      const photos = uniquePhotos(issue.photos);
+      const images = await this.photoLoader(photos);
+      const row = sheet.addRow([
+        issue.date,
+        issue.reporter,
+        issue.description,
+        issue.category,
+        issue.solution,
+        appendMissing("", missingNames(photos, images)) || null,
+        issue.state,
+      ]);
+      styleBodyRow(sheet, row.number, ISSUE_HEADERS.length);
+      const texts = Array.from({ length: ISSUE_HEADERS.length }, (_value, index) => plainText(row.getCell(index + 1)));
+      fitColumnWidths(sheet, ISSUE_WIDTHS, texts);
+      const basePx = estimatedTextHeight(sheet, texts, Array.from({ length: ISSUE_HEADERS.length }, (_value, index) => index + 1));
+      const capacity = imageCapacity(sheet.getColumn(6).width ?? ISSUE_WIDTHS[6] ?? 42);
+      const available = availableRefs(photos, images);
+      const imageLines = available.length === 0 ? 0 : Math.ceil(available.length / capacity);
+      row.height = (basePx + imageBlockHeightPx(imageLines)) / PX_PER_POINT;
+      alignPhotoCell(sheet, row.number, 6, available.length > 0);
+      this.placeThumbnails(sheet, photos, images, 6, row.number, capacity, basePx);
       row.commit();
     }
     sheet.commit();
   }
 
   async writeChanges(rows: AsyncIterable<ProjectExportChangeRow>): Promise<void> {
-    const sheet = await this.createSheet(this.sheetNames[2] ?? "变更管理", CHANGE_WIDTHS, CHANGE_HEADERS, "变更管理");
+    const sheet = await this.createSheet(this.sheetNames[3] ?? "变更管理", CHANGE_WIDTHS, CHANGE_HEADERS, "变更管理");
     for await (const change of rows) {
       const before = uniquePhotos(change.beforePhotos);
       const after = uniquePhotos(change.afterPhotos);
@@ -925,25 +1002,20 @@ export class ProjectExportWorkbookWriter {
       row.getCell(3).value = filesValue(change.files, this.origin, this.project.id);
       row.getCell(11).value = filesValue(change.afterFiles, this.origin, this.project.id);
       styleBodyRow(sheet, row.number, CHANGE_HEADERS.length);
-      const basePx = estimatedTextHeight(sheet, [
-        plainText(row.getCell(3)),
-        plainText(row.getCell(4)),
-        plainText(row.getCell(5)),
-        plainText(row.getCell(6)),
-        plainText(row.getCell(7)),
-        plainText(row.getCell(11)),
-        plainText(row.getCell(13)),
-      ], [3, 4, 5, 6, 7, 11, 13]);
-      const beforeCapacity = imageCapacity(CHANGE_WIDTHS[5] ?? 30);
-      const afterCapacity = imageCapacity(CHANGE_WIDTHS[6] ?? 30);
+      const texts = Array.from({ length: CHANGE_HEADERS.length }, (_value, index) => plainText(row.getCell(index + 1)));
+      fitColumnWidths(sheet, CHANGE_WIDTHS, texts);
+      const basePx = estimatedTextHeight(sheet, texts, Array.from({ length: CHANGE_HEADERS.length }, (_value, index) => index + 1));
+      const beforeCapacity = imageCapacity(sheet.getColumn(5).width ?? CHANGE_WIDTHS[5] ?? 30);
+      const afterCapacity = imageCapacity(sheet.getColumn(6).width ?? CHANGE_WIDTHS[6] ?? 30);
       const beforeAvailable = availableRefs(before, beforeImages);
       const afterAvailable = availableRefs(after, afterImages);
       const imageLines = Math.max(
-        Math.ceil(beforeAvailable.length / beforeCapacity),
-        Math.ceil(afterAvailable.length / afterCapacity),
+        beforeAvailable.length === 0 ? 0 : Math.ceil(beforeAvailable.length / beforeCapacity),
+        afterAvailable.length === 0 ? 0 : Math.ceil(afterAvailable.length / afterCapacity),
       );
-      const rowHeightPx = basePx + imageLines * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX) + (imageLines > 0 ? 4 : 0);
-      row.height = rowHeightPx / PX_PER_POINT;
+      row.height = (basePx + imageBlockHeightPx(imageLines)) / PX_PER_POINT;
+      alignPhotoCell(sheet, row.number, 5, beforeAvailable.length > 0);
+      alignPhotoCell(sheet, row.number, 6, afterAvailable.length > 0);
       this.placeThumbnails(sheet, before, beforeImages, 5, row.number, beforeCapacity, basePx);
       this.placeThumbnails(sheet, after, afterImages, 6, row.number, afterCapacity, basePx);
       row.commit();
@@ -952,12 +1024,13 @@ export class ProjectExportWorkbookWriter {
   }
 
   async writeStakeholders(rows: AsyncIterable<ProjectExportStakeholderRow>): Promise<void> {
-    const sheet = await this.createSheet(this.sheetNames[3] ?? "干系人", STAKEHOLDER_WIDTHS, STAKEHOLDER_HEADERS, "干系人");
+    const sheet = await this.createSheet(this.sheetNames[4] ?? "干系人", STAKEHOLDER_WIDTHS, STAKEHOLDER_HEADERS, "干系人");
     for await (const item of rows) {
       const row = sheet.addRow([item.name, item.contact, item.email, item.position, item.company, item.writer, item.submittedAt]);
       styleBodyRow(sheet, row.number, STAKEHOLDER_HEADERS.length);
       const texts: string[] = [];
       for (let col = 1; col <= STAKEHOLDER_HEADERS.length; col += 1) texts.push(plainText(row.getCell(col)));
+      fitColumnWidths(sheet, STAKEHOLDER_WIDTHS, texts);
       row.height = estimatedTextHeight(sheet, texts, Array.from({ length: STAKEHOLDER_HEADERS.length }, (_value, index) => index + 1)) / PX_PER_POINT;
       row.commit();
     }
@@ -993,7 +1066,8 @@ export class ProjectExportWorkbookWriter {
       views: [{ state: "frozen", ySplit: 2, topLeftCell: "A3" }],
     });
     setWidths(sheet, widths, headers.length);
-    const widthPx = sheetWidthsPx(widths, headers.length);
+    fitColumnWidths(sheet, widths, headers);
+    const widthPx = exportHeaderWidthPx(widthsOf(sheet, headers.length));
     const headerRow = sheet.addRow([]);
     headerRow.height = EXPORT_HEADER_ROW_HEIGHT;
     try {
@@ -1015,11 +1089,11 @@ export class ProjectExportWorkbookWriter {
       const cell = headerRow.getCell(1);
       cell.value = "[" + this.project.code + "]  " + this.project.name + "   ·   " + sheetLabel;
       cell.font = { name: EXPORT_FONT_NAME, size: 14, bold: true, color: { argb: "FF111827" } };
-      cell.alignment = { vertical: "middle", horizontal: "left" };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
     }
     headerRow.commit();
-    styleHeader(sheet, headers).commit();
+    styleHeader(sheet, headers, widths).commit();
     return sheet;
   }
 
@@ -1033,19 +1107,24 @@ export class ProjectExportWorkbookWriter {
     baseHeightPx: number,
   ): void {
     const available = availableRefs(refs, images);
+    const columnWidthChars = sheet.getColumn(column).width ?? 8.43;
+    const columnWidthPx = Math.max(IMAGE_WIDTH_PX, columnWidthChars * 7 + 5);
     for (let index = 0; index < available.length; index += 1) {
       const ref = available[index];
       if (ref === undefined) continue;
       const image = images.get(ref.fileId);
       if (image === undefined) continue;
+      const line = Math.floor(index / capacity);
+      const itemsOnLine = Math.min(capacity, available.length - line * capacity);
+      const lineWidthPx = itemsOnLine * IMAGE_WIDTH_PX + Math.max(0, itemsOnLine - 1) * IMAGE_GAP_PX;
       this.images.set(ref.fileId, image);
       this.imagePlacements.push({
         sheetId: sheet.id,
         row: rowNumber,
         column,
         fileId: ref.fileId,
-        xOffsetPx: IMAGE_PADDING_PX + (index % capacity) * (IMAGE_WIDTH_PX + IMAGE_GAP_PX),
-        yOffsetPx: baseHeightPx + IMAGE_PADDING_PX + Math.floor(index / capacity) * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX),
+        xOffsetPx: Math.max(IMAGE_PADDING_PX, (columnWidthPx - lineWidthPx) / 2 + (index % capacity) * (IMAGE_WIDTH_PX + IMAGE_GAP_PX)),
+        yOffsetPx: baseHeightPx + IMAGE_TOP_GAP_PX + line * (IMAGE_HEIGHT_PX + IMAGE_GAP_PX),
         widthPx: IMAGE_WIDTH_PX,
         heightPx: IMAGE_HEIGHT_PX,
       });

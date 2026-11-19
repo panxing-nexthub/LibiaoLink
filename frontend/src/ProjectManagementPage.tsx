@@ -5,6 +5,7 @@ import { AppHeader } from "./components/AppHeader";
 import { InlineCell, InlineDateCell, InlineOptionCell } from "./components/InlineEdit";
 import { MemberAvatar, MemberSearchList, type SearchListStatusButton } from "./components/MemberSelect";
 import { ScrollArea } from "./components/ScrollArea";
+import { FixedHorizontalScrollbar } from "./components/FixedHorizontalScrollbar";
 import { CARD_BODY as KANBAN_CARD_BODY, CARD_NOISE as KANBAN_CARD_NOISE, CARD_SHELL as KANBAN_CARD_SHELL, COLUMN_SHELL as KANBAN_COLUMN_SHELL, STAGE_TAG_CLASS } from "./components/TaskKanban";
 import { RegionSelect } from "./components/RegionSelect";
 import type { SelectOption } from "./components/SelectMenu";
@@ -3025,7 +3026,7 @@ function PmImplementationGantt({
       </div>
       <ScrollArea
         axis="horizontal"
-        thumbAlwaysVisible
+        fixedHorizontalScrollbar
         ariaLabel={t("pm.gantt.aria")}
         viewportClassName="min-h-0"
         className="min-w-full pb-3"
@@ -3537,6 +3538,7 @@ export default function ProjectManagementPage({
   const aliveRef = useRef(true);
   const saveQueues = useRef<Map<string, Promise<void>>>(new Map());
   const tableHeaderScrollRef = useRef<HTMLDivElement>(null);
+  const tableBodyScrollRef = useRef<HTMLDivElement | null>(null);
   const saveTimers = useRef<Map<string, number>>(new Map());
 
   const managerOptions = useMemo(() => directoryMemberOptions(managerCandidates), [managerCandidates]);
@@ -4141,7 +4143,7 @@ export default function ProjectManagementPage({
             role="tablist"
             aria-label={t("pm.view.tabsAria")}
             data-project-management-view-tabs=""
-            className="flex min-h-[52px] items-center gap-1 overflow-x-auto rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5"
+            className="sticky top-16 z-40 flex min-h-[52px] items-center gap-1 overflow-x-auto rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5"
           >
             {PM_VIEW_TABS.map((tab) => {
               const active = tab.key === activeViewTab;
@@ -4199,7 +4201,7 @@ export default function ProjectManagementPage({
               <div
                 ref={tableHeaderScrollRef}
                 data-project-management-head-scroll=""
-                className="sticky top-16 z-20 overflow-x-hidden bg-white"
+                className="sticky top-[116px] z-20 overflow-x-hidden bg-white"
               >
                 <div style={{ minWidth }}>
                   <div role="rowgroup" className="contents">
@@ -4242,8 +4244,9 @@ export default function ProjectManagementPage({
               </div>
             </div>
               <div
+                ref={tableBodyScrollRef}
                 data-project-management-body-scroll=""
-                className="overflow-x-auto"
+                className="scrollbar-hidden overflow-x-auto"
                 onScroll={(event) => {
                   if (tableHeaderScrollRef.current !== null) {
                     tableHeaderScrollRef.current.scrollLeft = event.currentTarget.scrollLeft;
@@ -4653,6 +4656,11 @@ export default function ProjectManagementPage({
             </section>
           ) : null}
         </div>
+        <FixedHorizontalScrollbar
+          scrollRef={tableBodyScrollRef}
+          active={activeViewTab === "table"}
+          ariaLabel={t("pm.table.aria")}
+        />
       </main>
 
       {pendingDelete === null ? null : (

@@ -55,7 +55,7 @@ export type ColumnDef = {
 };
 
 export const TABLE_COLUMNS: ColumnDef[] = [
-  { key: "title", label: "任务描述", width: "340px", min: 340, locked: true },
+  { key: "title", label: "任务名称", width: "340px", min: 340, locked: true },
   // 2026-10-13 业务口径「这个 PM 不要省略」：英文表头「Project manager」实测 ≈100px（微软雅黑 12px 中黑）；
   // 66px 最小宽下被截成「Project ma...」，抬到 104 留余量 —— 中英文表头都整词显示。
   { key: "manager", label: "项目经理", width: "0.66fr", min: 104 },
@@ -68,7 +68,7 @@ export const TABLE_COLUMNS: ColumnDef[] = [
   { key: "onTime", label: "是否按时交付", width: "0.86fr", min: 86 },
   { key: "deliverable", label: "输出成果文件", width: "0.86fr", min: 86 },
   { key: "files", label: "文件", width: "0.96fr", min: 96 },
-  { key: "note", label: "项目进展描述", width: "0.9fr", min: 90 },
+  { key: "note", label: "项目描述", width: "0.9fr", min: 90 },
   { key: "start", label: "开始日期", width: "0.7fr", min: 86 }, // 行内日期按钮左右内衬约 14px；两位数日期「12月17日」在 70px 下会截成省略号：抬到与预计完成日期同宽
   { key: "days", label: "预计所需天数", width: "56px", min: 56, header: "" },
   { key: "due", label: "预计完成日期", width: "0.86fr", min: 86 },
@@ -341,7 +341,7 @@ type TaskBoardProps = {
   canFinalizeTask?: (task: ProjectTask) => boolean;
   /** 任务编辑保存：负责人 / 日期（含联动天数）/ 施工人数 / 紧急重要度 / 进展描述 + 项目经理 id。 */
   onSubmitTaskEdit?: (values: TaskEditSubmit) => Promise<number | null>;
-  /** 任务描述改名（Push 196：抽屉里改临时任务名；阶段任务与节点 / 模板生成的任务由抽屉按锁定口径自行只读）。 */
+  /** 任务名称改名（Push 196：抽屉里改临时任务名；阶段任务与节点 / 模板生成的任务由抽屉按锁定口径自行只读）。 */
   onRenameTask?: (taskId: string, title: string, titleEn: string) => void;
   /**
    * 底部「临时任务」分组头的常驻新建入口（Push 197）：点分组头直接填名称新建（没有模板可挑），
@@ -730,7 +730,7 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
         ) : (
           <InlineTextCell
             value={task.note}
-            ariaLabel={t("board.edit.aria", { field: fieldText(locale, "项目进展描述") })}
+            ariaLabel={t("board.edit.aria", { field: fieldText(locale, "项目描述") })}
             disabled={editLocked}
             disabledHint={editLockedHint}
             display={task.note === "" ? <span className="text-zinc-300">—</span> : <span className="text-zinc-600" title={task.note}>{localizedNote}</span>}
@@ -875,7 +875,7 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
             {column.key === "title" ? (
               cells[column.key]
             ) : (
-              // 单元格内容一律居中于列标题（Push 67 业务口径）；任务描述列保持左对齐（内含四格进度条 + 铅笔）。
+              // 单元格内容一律居中于列标题（Push 67 业务口径）；任务名称列保持左对齐（内含四格进度条 + 铅笔）。
               // 左右各留 4px 内衬（业务口径 2026-09-30「这个触碰到了 要优化一下」）：满宽内容（文件名胶囊 / 进展描述胶囊）
               // 与相邻列不再贴边 —— 两格相邻时天然留出 8px 空隙；内容居中口径不变。
               <div data-column={column.key} data-label={fieldText(locale, column.label)} className="flex min-w-0 items-center justify-center self-stretch px-1">{cells[column.key]}</div>

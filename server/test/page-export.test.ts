@@ -364,9 +364,13 @@ describe("页面级 Excel 导出契约", () => {
       expect(sheet.views[0]).toMatchObject({ state: "frozen", ySplit: 2, topLeftCell: "A3" });
       const headerCell = sheet.getCell(2, 1);
       expect(headerCell.font.name).toBe("Microsoft YaHei");
+      expect(headerCell.alignment).toMatchObject({ horizontal: "center", vertical: "middle", wrapText: true });
       expect(headerCell.border.left).toMatchObject({ style: "thin" });
       expect(headerCell.border.right).toMatchObject({ style: "thin" });
-      expect(sheet.getCell(3, 1).font.name).toBe("Microsoft YaHei");
+      const bodyCell = sheet.getCell(3, 1);
+      expect(bodyCell.font.name).toBe("Microsoft YaHei");
+      expect(bodyCell.alignment).toMatchObject({ horizontal: "center", vertical: "middle", wrapText: true });
+      expect(sheet.getRow(3).height).toBeGreaterThanOrEqual(28.5);
     }
     expect(headersOf(reports)).toEqual(["时间", "关联阶段", "当日完成工作"]);
     expect(reports.getCell(3, 1).value).toBe("2026年11月5日");
@@ -398,7 +402,9 @@ describe("页面级 Excel 导出契约", () => {
     const result = await service.exportPages(PROJECT_ID, USER_ID, "https://pm.example", [{ sheet: "reports", columns: ["doneWork"] }], projectAccess);
     if (result.kind !== "buffer") throw new Error("预期内存工作簿");
     const workbook = await workbookOf(result.buffer);
-    expect(workbook.getWorksheet("日报记录")!.getRow(3).height).toBeGreaterThanOrEqual(46.5);
+    const sheet = workbook.getWorksheet("日报记录")!;
+    expect(sheet.getRow(3).height).toBeGreaterThanOrEqual(43.5);
+    expect(sheet.getColumn(1).width).toBeGreaterThan(42);
   });
 
   it("未勾选页面不读取业务数据；超过 20,000 条时拒绝导出", async () => {

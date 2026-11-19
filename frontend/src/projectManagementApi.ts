@@ -2,8 +2,8 @@ import { apiRequest, apiSend } from "./api";
 
 /**
  * 项目管理页使用独立接口 /api/v1/project-management-records，不调用 projectApi。
- * currentStage / startupCompletedAt / arrivalDate / plannedStartDate / plannedEndDate / implementationDays
- * 为服务端按 code 从项目空间实时只读派生的字段，不进入写请求。
+ * projectId / currentStage / startupCompletedAt / arrivalDate / plannedStartDate / plannedEndDate / implementationDays
+ * 为服务端按 code 从项目空间实时只读派生的字段，不进入写请求；projectId 用于跳转项目详情。
  * implementationHandedOver 是实施工程师选择器顶部「已移交」按钮的可持久化状态。
  */
 export type ProjectManagementMethod =
@@ -17,6 +17,7 @@ export type ProjectManagementRecord = {
   id: string;
   code: string;
   name: string;
+  projectId: string | null;
   managerIds: string[];
   managerNames: Array<string | null>;
   implementationEngineerIds: string[];

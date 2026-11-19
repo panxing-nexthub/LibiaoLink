@@ -328,6 +328,7 @@ describe("项目管理独立记录服务（2026-11-17）", () => {
   it("创建 / 列表按 code 附带项目空间只读快照；无匹配项目返回空值", async () => {
     const { service, repository, snapshots } = makeService();
     snapshots.snapshots.set("PM-001", {
+      projectId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       currentStage: "deploy",
       startupCompletedAt: "2026-05-15",
       arrivalDate: "2026-06-12",
@@ -336,6 +337,7 @@ describe("项目管理独立记录服务（2026-11-17）", () => {
       implementationDays: 16,
     });
     const created = await service.create({ code: " PM-001 " });
+    expect(created.projectId).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     expect(created.currentStage).toBe("deploy");
     expect(created.startupCompletedAt).toBe("2026-05-15");
     expect(created.arrivalDate).toBe("2026-06-12");
@@ -346,6 +348,7 @@ describe("项目管理独立记录服务（2026-11-17）", () => {
     repository.rows = [makeRow({ code: "PM-404" })];
     const listed = await service.list();
     expect(listed.items[0]).toMatchObject({
+      projectId: null,
       currentStage: null,
       startupCompletedAt: null,
       arrivalDate: null,
@@ -406,6 +409,7 @@ describe("项目空间只读快照聚合（2026-11-17）", () => {
     );
 
     expect(snapshots.get("PM-001")).toEqual({
+      projectId: PROJECT_ID,
       currentStage: "trial",
       startupCompletedAt: "2026-05-15",
       arrivalDate: "2026-06-12",
@@ -423,7 +427,10 @@ describe("项目空间只读快照聚合（2026-11-17）", () => {
         task({ stageKey: null, status: "done", actualEnd: "2026-01-01" }),
       ],
     );
-    expect(currentOnly.get("PM-002")).toEqual(EMPTY_PROJECT_MANAGEMENT_PROJECT_SNAPSHOT);
+    expect(currentOnly.get("PM-002")).toEqual({
+      ...EMPTY_PROJECT_MANAGEMENT_PROJECT_SNAPSHOT,
+      projectId: PROJECT_ID,
+    });
 
     const noProject = buildProjectManagementSnapshots([], [task({ stageKey: "assembly", status: "done" })]);
     expect(noProject.size).toBe(0);

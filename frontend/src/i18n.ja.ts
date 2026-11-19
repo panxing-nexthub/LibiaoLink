@@ -50,6 +50,8 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "pm.column.rowNo": "行番号",
   "pm.column.code": "プロジェクト番号",
   "pm.column.name": "プロジェクト名",
+  "pm.project.open": "プロジェクトを開く",
+  "pm.project.openHint": "クリックでプロジェクトを開き、ダブルクリックで編集",
   "pm.column.manager": "プロジェクトマネージャー",
   "pm.column.engineer": "実施エンジニア",
   "pm.column.method": "実施方法",

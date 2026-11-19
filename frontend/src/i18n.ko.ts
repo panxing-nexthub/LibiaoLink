@@ -50,6 +50,8 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "pm.column.rowNo": "행 번호",
   "pm.column.code": "프로젝트 번호",
   "pm.column.name": "프로젝트 이름",
+  "pm.project.open": "프로젝트 열기",
+  "pm.project.openHint": "클릭하여 프로젝트 열기, 더블 클릭하여 편집",
   "pm.column.manager": "프로젝트 매니저",
   "pm.column.engineer": "시행 엔지니어",
   "pm.column.method": "시행 방식",

@@ -41,6 +41,9 @@ export const ProjectManagementRecordSchema = z
     id: UuidSchema,
     code: z.string().openapi({ description: "项目编号：手填，最长 50 字；允许空串以支持逐格保存" }),
     name: z.string().openapi({ description: "项目名称：手填，最长 200 字；允许空串以支持逐格保存" }),
+    projectId: UuidSchema.nullable().openapi({
+      description: "项目空间项目 id（只读派生）：按 code 精确匹配未删除项目；无匹配 = null；项目管理页用于跳转项目详情",
+    }),
     managerIds: z.array(UuidSchema).openapi({
       description: "项目经理账号 id 快照；候选复用现有项目经理资格名单，数组顺序 = 展示顺序",
     }),

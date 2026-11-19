@@ -1,6 +1,6 @@
 /**
  * M6-01 ~ M6-03 日报 / 问题回归（A3 · Push 215 口径）：
- * 同日多条（原「一人一天一条」重复 409 REPORT_ALREADY_EXISTS 随批删除）、草稿写库（A3-02）、未来日期 400（A3-04）、
+ * 同日多条（原「一人一天一条」重复 409 REPORT_ALREADY_EXISTS 随批删除）、草稿写库（A3-02）、日报填写允许未来日期（A3-04 限值仅保留在当日读视图）、
  * 提交自动生成问题（A3-09 幂等 + 问题图转挂）、问题三态允许回退且留痕（A3-10 / A3-13）、
  * 附图（方案一：file_links kind 区分 onsite 现场图 / issue 问题图）、成对删除（删日报 / 删问题）、
  * 乐观锁 409、归档项目 409、跨项目 / 不存在 404、空更新 400。
@@ -410,12 +410,12 @@ describe("日报（M6-01 / M6-02 · A3-01 ~ A3-09）", () => {
     expect(created.date).toBe(PAST_DATE);
   });
 
-  it("未来日期：400 VALIDATION_FAILED（A3-04 只允许当天或补填过去日期）", async () => {
+  it("未来日期：允许提交，state=submitted（日报填写不限未来日期）", async () => {
     const { reports, service } = seed();
-    await expect(
-      service.create(PROJECT, { date: FUTURE_DATE, state: "submitted", doneWork: "未来" }, ACTOR),
-    ).rejects.toMatchObject({ code: "VALIDATION_FAILED", httpStatus: 400 });
-    expect(reports.inserted).toEqual([]);
+    const created = await service.create(PROJECT, { date: FUTURE_DATE, state: "submitted", doneWork: "未来" }, ACTOR);
+    expect(created.state).toBe("submitted");
+    expect(created.date).toBe(FUTURE_DATE);
+    expect(reports.inserted).toHaveLength(1);
   });
 
   it("现场发现问题：提交时自动生成问题（open + 多值归类 + 按归类自动分派 + created 事件 + 审计 + outbox）", async () => {

@@ -707,6 +707,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "board.change.chip": "変更",
   "board.change.projectOpen": "プロジェクト全体の変更履歴を表示",
   "board.change.projectButton": "変更履歴",
+  "board.change.projectToolbar": "変更記録",
   "board.change.projectTitle": "プロジェクト変更履歴",
   "board.change.projectSummary": "{tasks} 件のタスク · {changes} 件の変更",
   "board.change.projectHintShort": "タスクを開き、変更を開いて詳細表示",

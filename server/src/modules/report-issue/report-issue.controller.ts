@@ -67,7 +67,7 @@ export class ReportController {
     return this.reports.list(id, query);
   }
 
-  /** 当日汇总（A7-01）：已提交条目聚合 + 工作日信息；未来日期 400（A02 每日 19:00 群推送的正文数据面）。 */
+  /** 当日汇总（A7-01）：已提交条目聚合 + 工作日信息；未来日期 400（当日读视图；A02 每日 19:00 群推送的正文数据面）。 */
   @Get(":id/reports/summary")
   @RequirePermission("report.view")
   summary(

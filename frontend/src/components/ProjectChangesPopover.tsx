@@ -62,20 +62,24 @@ type ChangeKind = "file_change" | "material_reissue";
 type ChangeKindFilter = "all" | ChangeKind;
 
 /**
- * 项目总览表头「变更关联」按钮（2026-11-10）：触发器是列名本身，不是任务行内的胶囊；
- * 任务行仍保留原有的「变更关联」胶囊与中央详情弹窗。表头按钮打开白底圆角气泡，气泡按视口水平居中，
- * 汇总整个项目所有任务的变更：先按任务展示大记录，展开任务后看到该任务的全部变更，再展开单条变更看小详情。
- * 点击外部 / Esc 关闭；portal 根节点拦截点击与按键冒泡，避免误开任务抽屉。
+ * 项目级变更气泡（2026-11-10；2026-11-18 增加工具区入口）：表头触发器仍是「变更关联」列名，
+ * 项目总览工具区另可渲染「变更记录」按钮；两种入口共用同一份任务汇总、筛选、展开与详情弹窗。
+ * 任务行仍保留原有的「变更关联」胶囊与中央详情弹窗。气泡按视口水平居中，先按任务展示大记录，
+ * 展开任务后看到该任务的全部变更，再展开单条变更看小详情。点击外部 / Esc 关闭；portal 根节点拦截
+ * 点击与按键冒泡，避免误开任务抽屉。
  */
-export function ProjectChangesPopover({ tasks, members, projectId, onOpenTask }: {
+export function ProjectChangesPopover({ tasks, members, projectId, onOpenTask, variant = "header" }: {
   tasks: readonly ProjectTask[];
   members: readonly Member[];
   projectId?: string;
   onOpenTask?: (taskId: string) => void;
+  /** header = 任务表列头；toolbar = 项目总览工具区（在「导出 PDF」旁）。 */
+  variant?: "header" | "toolbar";
 }) {
   const t = useT();
   const locale = useLocale();
   const localize = useLocalizedTranslator();
+  const toolbar = variant === "toolbar";
 
   const groups: ChangeGroup[] = tasks
     .filter((task) => task.changes.length > 0)
@@ -393,6 +397,7 @@ export function ProjectChangesPopover({ tasks, members, projectId, onOpenTask }:
         ref={triggerRef}
         type="button"
         data-project-changes-open="true"
+        data-project-changes-source={variant}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={t("board.change.projectOpen")}
@@ -406,9 +411,20 @@ export function ProjectChangesPopover({ tasks, members, projectId, onOpenTask }:
             event.stopPropagation();
           }
         }}
-        className="inline-flex h-6 max-w-full shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-zinc-200 bg-amber-50 px-2 text-[11px] font-medium leading-5 text-amber-700 outline-none transition hover:border-zinc-300 hover:bg-amber-100/70 hover:text-amber-800 focus-visible:ring-2 focus-visible:ring-amber-500/30"
+        className={toolbar
+          ? "export-docs-btn shrink-0"
+          : "inline-flex h-6 max-w-full shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-zinc-200 bg-amber-50 px-2 text-[11px] font-medium leading-5 text-amber-700 outline-none transition hover:border-zinc-300 hover:bg-amber-100/70 hover:text-amber-800 focus-visible:ring-2 focus-visible:ring-amber-500/30"}
       >
-        {t("board.change.projectButton")}
+        {toolbar ? (
+          <span className="export-docs-btn__face">
+            <svg viewBox="0 0 24 24" width={15} height={15} stroke="currentColor" strokeWidth={1.8} fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 12a9 9 0 1 0 2.64-6.36L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M12 7.5V12l4 2" />
+            </svg>
+            {t("board.change.projectToolbar")}
+          </span>
+        ) : t("board.change.projectButton")}
       </button>
       {open && position !== null ? createPortal(
         <div

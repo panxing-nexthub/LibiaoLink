@@ -40,7 +40,6 @@ import {
   assertReportStateWrite,
   buildDailyReportGroupBody,
   departmentOfCategories,
-  isFutureDate,
   parseReportFilter,
   resolveReportState,
 } from "./report-issue.rules.js";
@@ -189,11 +188,6 @@ export class ReportService {
     await this.loadProjectForWrite(projectId);
     const at = new Date();
     const today = shanghaiToday(at);
-    if (isFutureDate(body.date, today)) {
-      throw new AppError("VALIDATION_FAILED", "不能填报未来日期的日报（A3-04）", [
-        { code: "future_date", message: "填报日期不得晚于今天（" + today + "）", path: "date" },
-      ]);
-    }
     const state = resolveReportState(body.state, body.date, today);
     const stageKeys = [...new Set(body.stageKeys ?? [])];
     const foundIssueText = body.foundIssue === undefined ? "" : body.foundIssue.trim();

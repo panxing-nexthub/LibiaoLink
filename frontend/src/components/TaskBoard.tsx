@@ -309,6 +309,9 @@ type TaskBoardProps = {
   focusTaskId?: string | null;
   /** 关闭深链抽屉后回写地址，去掉 `?task=`。 */
   onFocusClosed?: () => void;
+  /** 项目总览工具区「变更记录」请求打开的任务；打开一次后由父层清空。 */
+  openTaskId?: string | null;
+  onOpenTaskOpened?: () => void;
   onSetProgress?: (taskId: string, progress: number) => void;
   /** 任务状态下拉（五态）：进度与完成日期的联动由服务端裁决（不传 = 状态列只读）。 */
   onSetStatus?: (taskId: string, status: TaskStatus) => void;
@@ -921,7 +924,7 @@ export function ProjectSummary({ summary }: { summary: ApiProjectSummary | null 
   );
 }
 
-export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes = [], onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, onAddNode, onAddNodes, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, filesByTask, projectId, tierTint }: TaskBoardProps) {
+export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes = [], onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, onAddNode, onAddNodes, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, filesByTask, projectId, tierTint }: TaskBoardProps) {
   const t = useT();
   const locale = useLocale();
   /**
@@ -942,6 +945,20 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, onSetProgr
     focusedTaskRef.current = focusTaskId;
     setSelectedTaskId(focusTaskId);
   }, [focusTaskId, tasks]);
+  /** 外部入口（项目总览工具区「变更记录」）请求打开的任务：同一 id 只消费一次。 */
+  const openedTaskRequestRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (openTaskId === null) {
+      openedTaskRequestRef.current = null;
+      return;
+    }
+    if (openedTaskRequestRef.current === openTaskId || !tasks.some((task) => task.id === openTaskId)) {
+      return;
+    }
+    openedTaskRequestRef.current = openTaskId;
+    setSelectedTaskId(openTaskId);
+    onOpenTaskOpened?.();
+  }, [openTaskId, tasks, onOpenTaskOpened]);
   /** 右侧「任务节点 / 模板」卡片停在哪个阶段（点阶段标签打开）。 */
   const [cardStage, setCardStage] = useState<string | null>(null);
   /** 底部「临时任务」分组头的新建表单开着没有（Push 197；与阶段卡片互斥）。 */

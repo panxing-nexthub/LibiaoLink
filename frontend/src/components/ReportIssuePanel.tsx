@@ -1417,7 +1417,7 @@ function ReportList({ reports, focusReportId = null, onEdit, onPatch, onDelete }
             {/* Push 213（业务口径「日报记录 和 问题追随都要有删除按钮 … 请你看看有没有合适的位置」）：行尾动作列 ——
                 Push 223 再补一枚「编辑」（干系人同款 RowEditButton）—— 两枚共用一枚预留槽位（78px = 悬停展开 48 + 间距 6 + 静止 24），
                 哪一枚展开都只吃槽内空间 ⇒ 列宽 / 表宽一格不动（业务反馈「鼠标触碰表格会动」的修法照旧）。 */}
-            <th className="w-[110px] border-b border-zinc-200 px-4 py-3.5 font-medium">
+            <th data-report-actions-head="" className="sticky right-0 z-20 w-[110px] border-b border-l border-zinc-200 bg-zinc-50 px-4 py-3.5 font-medium shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]">
               <span className="sr-only">{t("rp.actions")}</span>
             </th>
           </tr>
@@ -1508,7 +1508,7 @@ function ReportList({ reports, focusReportId = null, onEdit, onPatch, onDelete }
                   {/* 展示only（Push 223）：现场工作附图的增删 / 改名改由行尾「编辑」弹窗（AttachmentPicker）做（点图仍可看大图）。 */}
                   {report.photos.length === 0 ? <span className="text-zinc-400">—</span> : <PhotoStrip items={report.photos} size="lg" />}
                 </td>
-                <td data-mobile-label={t("rp.actions")} className="w-[110px] border-b border-zinc-100 px-4 py-4 align-top" data-report-delete-cell="">
+                <td data-mobile-label={t("rp.actions")} className={"sticky right-0 z-10 w-[110px] border-b border-l border-zinc-100 px-4 py-4 align-top shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)] transition-colors " + (report.id === focusReportId ? "bg-amber-50" : "bg-white group-hover:bg-zinc-50")} data-report-delete-cell="">
                   {/* 行尾动作槽位（Push 223 · 干系人同款两枚：编辑 + 删除）——
                       幽灵态 24px → 悬停 48px **只在槽内长大**；槽容器固定 78px（48 展开 + 6 间距 + 24 静止），
                       单元格内容宽不变 ⇒ 表格列宽 / 表宽一格不动（业务反馈「鼠标触碰表格会动」）。
@@ -1936,7 +1936,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
             {/* Push 213（业务口径「日报记录 和 问题追随都要有删除按钮 … 请你看看有没有合适的位置」）：行尾动作列 ——
                 Push 223 再补一枚「编辑」（干系人同款 RowEditButton）—— 两枚共用同一枚预留槽位
                 （78px = 悬停展开 48 + 间距 6 + 静止 24）；删问题 = 连它来源的那篇日报一起删（同一篇日报整组）。 */}
-            <th className="w-[110px] border-b border-zinc-200 px-4 py-3.5 font-medium">
+            <th data-issue-actions-head="" className="sticky right-0 z-20 w-[110px] border-b border-l border-zinc-200 bg-zinc-50 px-4 py-3.5 font-medium shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]">
               <span className="sr-only">{t("rp.actions")}</span>
             </th>
           </tr>
@@ -2002,7 +2002,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
                   }}
                 />
               </td>
-              <td data-mobile-label={t("rp.actions")} className="w-[110px] px-4 py-4" data-issue-delete-cell="">
+              <td data-mobile-label={t("rp.actions")} className={"sticky right-0 z-10 w-[110px] border-l border-zinc-100 px-4 py-4 shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)] transition-colors " + (tierTint ? "issue-row-tint group-hover:bg-[var(--row-tint-hover)]" + (tierTint === "vivid" ? " tint-vivid" : "") : "bg-white group-hover:bg-zinc-50")} data-issue-delete-cell="">
                 {/* 行尾动作槽位（Push 223 · 干系人同款两枚：编辑 + 删除）—— 槽容器固定 78px（48 展开 + 6 间距 + 24 静止），
                     幽灵态 24px → 悬停 48px 只在槽内长大，不推挤左侧列（业务反馈「问题追踪的没做好 鼠标触碰表格会动」）。
                     px-4(16×2) + 78 = 110 = w-[110px]（与「日报记录」同槽位）。 */}

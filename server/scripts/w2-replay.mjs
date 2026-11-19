@@ -141,16 +141,16 @@ try {
   check("P2", "快照含同一阶段的可建任务节点（供节点来源口径用）", "同一阶段 >= 2 个节点 + 另有其他阶段", "stages=" + stages.length + " nodes=" + nodes.length + " 同阶段节点=" + (nodeStage?.nodes ?? []).length, flow.status === 200 && stages.length >= 2 && nodes.length >= 2 && nodeA !== undefined && nodeB !== undefined && otherStage !== undefined);
 
   // ---------- A15 · 阶段可空（未分组） ----------
-  const t1 = await createTask(projectId, { title: "临时任务·未分组甲" });
+  const t1 = await createTask(projectId, { managerIds: [actorId], title: "临时任务·未分组甲" });
   const task1 = t1.body;
   check("A1", "临时任务不传 stageKey = 「未分组」，落组首位次 0", "201 + stageKey=null + sortIndex=0", t1.status + " " + short({ stageKey: task1?.stageKey, sortIndex: task1?.sortIndex }, 140), t1.status === 201 && task1?.stageKey === null && task1?.sortIndex === 0);
   check("A2", "创建不传 ownerIds = 「待分配」空数组（2026-09-24 口径修订，回到 ADR-021「不做项目经理兜底」；原「兜底项目经理」已下线）", "ownerIds=[]", JSON.stringify(task1?.ownerIds), Array.isArray(task1?.ownerIds) && task1.ownerIds.length === 0);
 
-  const t2 = await createTask(projectId, { title: "临时任务·未分组乙", stageKey: null });
+  const t2 = await createTask(projectId, { managerIds: [actorId], title: "临时任务·未分组乙", stageKey: null });
   const task2 = t2.body;
   check("A3", "显式 stageKey=null 同样落「未分组」；缺省位次 = 组尾 1", "201 + stageKey=null + sortIndex=1", t2.status + " " + short({ stageKey: task2?.stageKey, sortIndex: task2?.sortIndex }, 140), t2.status === 201 && task2?.stageKey === null && task2?.sortIndex === 1);
 
-  const t3 = await createTask(projectId, { title: "临时任务·未分组丙（插队）", sortIndex: 0 });
+  const t3 = await createTask(projectId, { managerIds: [actorId], title: "临时任务·未分组丙（插队）", sortIndex: 0 });
   const task3 = t3.body;
   check("A4", "插入位次 0：新任务占组首（A20「插入位置」）", "201 + sortIndex=0", t3.status + " " + short({ stageKey: task3?.stageKey, sortIndex: task3?.sortIndex }, 140), t3.status === 201 && task3?.sortIndex === 0);
 
@@ -164,7 +164,7 @@ try {
   check("A6", "未分组任务不计入九阶段完成度（此时阶段任务数应为 0）", "sum(tasks.total)=0（未分组 3 条）", "sum=" + stageTotal1 + " ungrouped=" + group1.length, stagesView1.status === 200 && stageTotal1 === 0 && group1.length === 3);
 
   // ---------- A18 · 负责人可空（待分配） ----------
-  const t4 = await createTask(projectId, { title: "临时任务·待分配丁", ownerIds: [] });
+  const t4 = await createTask(projectId, { managerIds: [actorId], title: "临时任务·待分配丁", ownerIds: [] });
   const task4 = t4.body;
   check("B1", "显式 ownerIds=[] = 「待分配」（与缺省同义，2026-09-24 修订）", "201 + ownerIds=[]", t4.status + " " + short({ ownerIds: task4?.ownerIds, sortIndex: task4?.sortIndex }, 140), t4.status === 201 && Array.isArray(task4?.ownerIds) && task4.ownerIds.length === 0);
 

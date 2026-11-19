@@ -115,8 +115,8 @@ try {
   cleanup.projectIds.push(projectA);
   check("P4", "建主回放项目（M2RPL-）", "201", createdA.status + " " + short({ id: projectA, code: createdA.body?.code }, 160), createdA.status === 201 && projectA !== null);
 
-  const taskA1 = await call("POST", "/api/v1/projects/" + projectA + "/tasks", { title: "M2RPL-装配任务一" });
-  const taskA2 = await call("POST", "/api/v1/projects/" + projectA + "/tasks", { title: "M2RPL-装配任务二" });
+  const taskA1 = await call("POST", "/api/v1/projects/" + projectA + "/tasks", { managerIds: [adminId], title: "M2RPL-装配任务一" });
+  const taskA2 = await call("POST", "/api/v1/projects/" + projectA + "/tasks", { managerIds: [adminId], title: "M2RPL-装配任务二" });
   check("P5", "建 2 个任务（关注靶子一 / 二）", "201 x 2", short({ a: taskA1.body?.id ?? null, b: taskA2.body?.id ?? null }, 200), taskA1.status === 201 && taskA2.status === 201);
 
   const plainRow = await db.query("insert into users (casdoor_id, username, display_name, status) values ($1, $2, $3, 'active') returning id", ["m2rpl-" + stamp + "-plain", "m2rpl-" + stamp + "-plain", "M2 回放复核用户"]);
@@ -236,7 +236,7 @@ try {
   const createdB = await call("POST", "/api/v1/projects", { code: "M2RPL-ARC-" + stamp, name: "M2 回放归档项目", projectType: "default", managerIds: [adminId] });
   const projectB = createdB.body?.id ?? null;
   cleanup.projectIds.push(projectB);
-  const taskB1 = await call("POST", "/api/v1/projects/" + projectB + "/tasks", { title: "M2RPL-归档项目任务" });
+  const taskB1 = await call("POST", "/api/v1/projects/" + projectB + "/tasks", { managerIds: [adminId], title: "M2RPL-归档项目任务" });
   const followB = await call("POST", "/api/v1/follows", { objectType: "project", objectId: projectB });
   const followB1 = await call("POST", "/api/v1/follows", { objectType: "task", objectId: taskB1.body?.id });
   check("F8", "归档前：项目 B + 任务 B1 均可关注（201 x 2）", "201 x 2", followB.status + " / " + followB1.status, createdB.status === 201 && followB.status === 201 && followB1.status === 201);
@@ -255,7 +255,7 @@ try {
   const createdC = await call("POST", "/api/v1/projects", { code: "M2RPL-DEL-" + stamp, name: "M2 回放回收站项目", projectType: "default", managerIds: [adminId] });
   const projectC = createdC.body?.id ?? null;
   cleanup.projectIds.push(projectC);
-  const taskC1 = await call("POST", "/api/v1/projects/" + projectC + "/tasks", { title: "M2RPL-回收站项目任务" });
+  const taskC1 = await call("POST", "/api/v1/projects/" + projectC + "/tasks", { managerIds: [adminId], title: "M2RPL-回收站项目任务" });
   await call("POST", "/api/v1/follows", { objectType: "project", objectId: projectC });
   await call("POST", "/api/v1/follows", { objectType: "task", objectId: taskC1.body?.id });
   const rowsBeforeDelete = await db.query("select count(*)::int as n from follows where object_id = any($1::uuid[])", [[projectC, taskC1.body?.id]]);

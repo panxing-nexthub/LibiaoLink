@@ -11209,6 +11209,10 @@
           "total": {
             "type": "integer",
             "minimum": 0
+          },
+          "hasUnfinishedTemporaryTask": {
+            "type": "boolean",
+            "description": "仅归档项目返回，表示是否仍可填报日报（另需具备填报权限）"
           }
         },
         "required": [
@@ -12095,7 +12099,7 @@
             },
             "minItems": 1,
             "maxItems": 200,
-            "description": "项目级项目经理快照（至少一位、可多位）：唯一可编辑来源是 projects.manager_ids，同项目所有任务一致；任务表行内 / 抽屉与项目弹窗修改都按项目级替换，并同步全部任务，不产生任务级经理身份"
+            "description": "项目经理名单（至少一位、可多位）。阶段任务同步项目名单。临时任务创建时手选，按任务独立保存，名单不参与项目权限判定"
           },
           "status": {
             "$ref": "#/components/schemas/TaskBaseStatus"
@@ -12707,6 +12711,15 @@
             "maxItems": 200,
             "description": "任务负责人：缺省 / 显式 [] = 「待分配」（**2026-09-24 业务口径修订**：任务添加后负责人默认为空 —— 不再兜底项目经理）；传数组 = 整体设置（≤ 200 位），数组顺序 = 展示顺序"
           },
+          "managerIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "无阶段、无来源节点的临时任务必填，至少一位有效项目经理。阶段任务使用项目名单，创建时省略此字段"
+          },
           "plannedStart": {
             "allOf": [
               {
@@ -12778,7 +12791,7 @@
         "required": [
           "title"
         ],
-        "description": "创建任务（进度默认 0、状态默认 pending；从模板生成时与整套添加同口径）"
+        "description": "创建任务，进度默认 0、状态默认 pending。无阶段、无来源节点的临时任务可由系统管理员或当前项目名单中的项目经理创建"
       },
       "TaskCreateFromTemplateBody": {
         "type": "object",
@@ -12908,7 +12921,7 @@
                     "null"
                   ]
                 },
-                "description": "当前项目的项目经理姓名数组：与 managerIds 同下标一一对应，同项目所有任务一致"
+                "description": "本任务的项目经理姓名数组，与 managerIds 按下标对应"
               },
               "files": {
                 "type": "array",
@@ -13110,7 +13123,7 @@
                     "null"
                   ]
                 },
-                "description": "当前项目的项目经理姓名数组（与 managerIds 同下标一一对应；同项目所有任务一致；取不到姓名时该位为 null）"
+                "description": "本任务的项目经理姓名数组，与 managerIds 按下标对应，取不到姓名时该位为 null"
               },
               "fileSummary": {
                 "$ref": "#/components/schemas/TaskFileSummary"
@@ -14034,7 +14047,7 @@
             },
             "minItems": 1,
             "maxItems": 200,
-            "description": "项目级项目经理：不传 = 不改；传数组 = 整体替换（至少一位），仅项目编辑者可修改。任务表行内 / 抽屉与项目弹窗共用此名单，修改会同步同项目全部任务；任务负责人只能浏览"
+            "description": "项目经理名单。仅项目编辑者可整体替换（至少一位）。修改阶段任务时同步项目及其阶段任务，修改临时任务时只更新该任务"
           },
           "sortIndex": {
             "type": "integer",
@@ -14436,6 +14449,46 @@
               "fileId",
               "change"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "description": "文件名：fileId 省略（新建）= 新文件名；intent=version 且给出 fileId = 目标文件名称（须与现状一致，不一致 400）；intent=change = 变更后文件名称（Push 256：必填，可不同于目标文件名 —— 完成变更时文件更名为该名称，扩展名随之更新，预览 / 下载按新名称）"
+              },
+              "sizeBytes": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "字节数；上限由服务端配置（UPLOAD_MAX_SIZE_MB），超出返回 400 VALIDATION_FAILED"
+              },
+              "mime": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "contentHash": {
+                "$ref": "#/components/schemas/Sha256"
+              },
+              "intent": {
+                "type": "string",
+                "enum": [
+                  "report_photo"
+                ],
+                "description": "新建日报附图，只接受位图且不能替换文件或关联任务、节点"
+              }
+            },
+            "required": [
+              "projectId",
+              "name",
+              "sizeBytes",
+              "intent"
+            ],
+            "additionalProperties": false
           }
         ],
         "description": "发起上传（分片直传；返回预签名分片 URL 的获取入口）。intent=version：fileId 省略 = 新建文件、给出 = 对既有 draft 文件替换 / 追加版本；intent=change：fileId 必填 = 定档后变更（申请即通过，完成上传时同事务生效；name = 变更后文件名称 —— 完成时文件更名为该名称）"
@@ -14469,9 +14522,10 @@
         "type": "string",
         "enum": [
           "version",
-          "change"
+          "change",
+          "report_photo"
         ],
-        "description": "上传意图：version = 新增/替换版本（仅 draft 文件）；change = 定档后变更（同一事务写 change_requests + 新版本 + 状态 changed）；**目标任务已定档（Task.finalizedAt 非空）时 version 意图一律 409 TASK_FINALIZED**（Push 249：任务定档后不支持任何修改，修改走变更）"
+        "description": "上传意图：version 新建文件或追加草稿版本，change 为定档文件提交变更，report_photo 为日报新建位图附图。目标任务已定档时 version 返回 409 TASK_FINALIZED"
       },
       "UploadPartsBody": {
         "type": "object",
@@ -18180,6 +18234,16 @@
           },
           "400": {
             "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
             "content": {
               "application/json": {
                 "schema": {

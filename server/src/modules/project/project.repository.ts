@@ -12,6 +12,7 @@ import { projectArchives, projectMembers, projects, projectStages } from "../../
 import { dailyReports, issueEvents, issues } from "../../db/schema/reports.js";
 import { projectStakeholders } from "../../db/schema/stakeholders.js";
 import { taskEvents, tasks } from "../../db/schema/tasks.js";
+import { syncProjectManagersToStageTasks } from "../../db/task-scope.js";
 import type { ProjectScopeFilter } from "../permission/index.js";
 import type { ProjectFilter, ProjectSort } from "./project.query.js";
 
@@ -310,7 +311,7 @@ export class ProjectRepository {
   }
 
   /**
-   * 项目级经理变更：同步本项目全部有效任务的项目经理展示快照。
+   * 项目级经理变更：同步本项目有效阶段任务的项目经理展示快照。
    * 未定档任务推进 version，避免旧版行内编辑覆盖；已定档任务只更新展示快照，不推进 version。
    */
   async syncProjectManagersToTasks(
@@ -319,14 +320,7 @@ export class ProjectRepository {
     at: Date,
     client: DbClient = this.database.db,
   ): Promise<void> {
-    await client
-      .update(tasks)
-      .set({ managerIds, version: sql`${tasks.version} + 1`, updatedAt: at })
-      .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt), isNull(tasks.finalizedAt)));
-    await client
-      .update(tasks)
-      .set({ managerIds })
-      .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt), isNotNull(tasks.finalizedAt)));
+    await syncProjectManagersToStageTasks(client, projectId, managerIds, at);
   }
 
   async updateWithVersion(

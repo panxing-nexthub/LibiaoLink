@@ -1162,7 +1162,7 @@ export function PhotoStrip({ items, onRemove, onRename, strip, size = "sm", conf
  *  两个贴图区同在一张表单时，Ctrl+V 只投给**最近点过**的那一个（armed 态在左半上可见）。
  *  Push 205：「当前问题附图」加**前置开关**（业务口径「先填发现的问题 才能填另外三个」）—— disabled 时整卡灰底 / 灰字、
  *  两半都点不开（左半按钮 disabled、粘贴落点不可聚焦、文件框 disabled、文档级粘贴监听不挂）。 */
-export function AttachmentPicker({ projectId, field, items, onChange, ariaLabel, disabled = false, size = "sm", variant = "card", confirmRemove = false }: { projectId: string; field: string; items: readonly ReportPhoto[]; onChange: (items: ReportPhoto[]) => void; ariaLabel: string; disabled?: boolean; /** Push 212 续：主题图清单档位（sm = 表单胶囊档；抽屉沿用各自图幅 —— 问题附图 md / 现场工作附图 lg）。 */ size?: "sm" | "md" | "lg"; /** Push 212 续：形态 —— card = 表单那张虚线贴图卡（业务样）；compact = 紧凑小图标入口（问题详情抽屉用 —— 业务口径「框太大了 不需要」）。 */ variant?: "card" | "compact"; /** Push 224 续：移除图片二次确认 —— 仅抽屉两处开启（× 即时落库，先出确认条）。 */ confirmRemove?: boolean }) {
+export function AttachmentPicker({ projectId, field, items, onChange, ariaLabel, disabled = false, size = "sm", variant = "card", confirmRemove = false, archivedReport = false }: { projectId: string; field: string; items: readonly ReportPhoto[]; onChange: (items: ReportPhoto[]) => void; ariaLabel: string; disabled?: boolean; /** Push 212 续：主题图清单档位（sm = 表单胶囊档；抽屉沿用各自图幅 —— 问题附图 md / 现场工作附图 lg）。 */ size?: "sm" | "md" | "lg"; /** Push 212 续：形态 —— card = 表单那张虚线贴图卡（业务样）；compact = 紧凑小图标入口（问题详情抽屉用 —— 业务口径「框太大了 不需要」）。 */ variant?: "card" | "compact"; /** Push 224 续：移除图片二次确认 —— 仅抽屉两处开启（× 即时落库，先出确认条）。 */ confirmRemove?: boolean; archivedReport?: boolean }) {
   const t = useT();
   /** 本区是否是「最近点过的贴图区」——点一下左半（粘贴落点拿到焦点）置位，粘贴事件按它路由。 */
   const [armed, setArmed] = useState(false);
@@ -1194,7 +1194,7 @@ export function AttachmentPicker({ projectId, field, items, onChange, ariaLabel,
   /** 单张上传（Push 216 接真）：文件库直传完成回填 fileId；失败标「uploaded failed」等待用户删除重贴。 */
   const startUpload = async (file: File, entry: ReportPhoto) => {
     try {
-      const fileId = await uploadPhoto(projectId, file, entry.name);
+      const fileId = await uploadPhoto(projectId, file, entry.name, archivedReport);
       updateEntry(entry, (current) => ({ ...current, fileId, pending: undefined }));
     } catch {
       updateEntry(entry, (current) => ({ ...current, pending: "failed" }));
@@ -1334,6 +1334,7 @@ export function AttachmentPicker({ projectId, field, items, onChange, ariaLabel,
             <input
               data-field={field}
               type="file"
+              accept={archivedReport ? ".png,.jpeg,.jpg,.gif,.webp,.bmp,.tif,.tiff,.avif" : undefined}
               multiple
               disabled={disabled}
               onChange={(event) => {
@@ -2807,7 +2808,7 @@ function ReportFillForm({
       <div>
         <span className={FORM_LABEL}>{fieldText(locale, "现场工作附图")}</span>
         <div className="mt-1">
-          <AttachmentPicker projectId={project.id} field="photos" items={draft.photos} onChange={(items) => onChange({ photos: items })} ariaLabel={t("rp.photosPasteAria")} />
+          <AttachmentPicker projectId={project.id} field="photos" items={draft.photos} onChange={(items) => onChange({ photos: items })} ariaLabel={t("rp.photosPasteAria")} archivedReport={project.status === "archived"} />
         </div>
       </div>
 
@@ -2880,6 +2881,7 @@ function ReportFillForm({
                   <AttachmentPicker
                     projectId={project.id}
                     field="issuePhotos"
+                    archivedReport={project.status === "archived"}
                     items={item.photos}
                     onChange={(items) => { onPatchIssue(index, { photos: items }); }}
                     ariaLabel={t("rp.issuePhotosPasteAria", { n: index + 1 })}
@@ -2934,7 +2936,7 @@ function ReportDraftSidebar({ drafts, selectedId, locale, disabled = false, onSe
   disabled?: boolean;
   onSelect: (report: DailyReport) => void;
   onNew: () => void;
-  onDelete: (report: DailyReport) => void;
+  onDelete?: (report: DailyReport) => void;
 }) {
   const t = useT();
   return (
@@ -2999,7 +3001,7 @@ function ReportDraftSidebar({ drafts, selectedId, locale, disabled = false, onSe
                       {t("report.drafts.selected")}
                     </span>
                   ) : null}
-                  {disabled ? null : (
+                  {disabled || onDelete === undefined ? null : (
                     <span data-report-draft-delete-id={report.id} className="absolute bottom-2 right-2">
                       <RowDeleteButton
                         label={t("report.row.deleteReport", { date: dateText })}
@@ -3036,11 +3038,12 @@ const CLOSE_ANIMATION_MS = 170;
  *  Push 244（业务口径「修改的选择区域要统一 都和施工人数这个一致」+「关联阶段 明日计划也要同理统一」）：抽屉里**所有可编辑行**
  *  （问题描述 / 问题归类 / 处理人 / 解决方案 / 关联阶段 / 当日完成工作 / 明日计划 / 问题是否处理 / 施工人数）的触发器统一为
  *  「施工人数」同款默认小框 —— 撤裸框 / 贴签样式（白底描边 + 内容宽），点按手感与视觉整抽屉一致。 */
-function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchReport, onClose }: {
+function IssueDrawer({ projectId, members, issue, report, readOnly, onPatchIssue, onPatchReport, onClose }: {
   projectId: string;
   members: readonly Member[];
   issue: Issue;
   report: DailyReport | null;
+  readOnly: boolean;
   onPatchIssue: (id: string, patch: IssuePatch) => void;
   onPatchReport: (id: string, patch: ReportPatch) => void;
   onClose: () => void;
@@ -3050,6 +3053,7 @@ function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchR
   const t = useT();
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
+  const fieldValue = (display: ReactNode, editor: (display: ReactNode) => ReactNode) => readOnly ? display : editor(display);
 
   useEffect(() => lockBodyScroll(), [issue.id]);
   /** 键盘焦点陷阱（Push 264 追订）：抽屉打开时焦点进抽屉、Tab 在抽屉内循环、关闭还原到行内触发按钮。 */
@@ -3080,34 +3084,37 @@ function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchR
     {
       key: "title",
       label: fieldText(locale, "问题描述"),
-      value: (
-        <InlineTextCell
-          value={issue.title}
-          ariaLabel={t("rp.editTitleAria", { date: issue.raisedAt })}
-          placeholder={t("report.placeholder.issueTitleSave")}
-          display={<span data-issue-title="" title={isLocalizedLocale(locale) ? issue.title : undefined} className="block whitespace-pre-line break-words">{localize(issue.title)}</span>}
-          onSave={(text) => {
-            onPatchIssue(issue.id, { title: renumberLines(text) });
-          }}
-        />
+      value: fieldValue(
+        <span data-issue-title="" title={isLocalizedLocale(locale) ? issue.title : undefined} className="block whitespace-pre-line break-words">{localize(issue.title)}</span>,
+        (display) => (
+          <InlineTextCell
+            value={issue.title}
+            ariaLabel={t("rp.editTitleAria", { date: issue.raisedAt })}
+            placeholder={t("report.placeholder.issueTitleSave")}
+            display={display}
+            onSave={(text) => {
+              onPatchIssue(issue.id, { title: renumberLines(text) });
+            }}
+          />
+        ),
       ),
     },
     {
       key: "category",
       label: fieldText(locale, "问题归类"),
-      value: (
+      value: fieldValue(<CategoryTags values={issue.categories} />, (display) => (
         <InlineMultiOptionCell
           wrapContent
           values={issue.categories}
           options={ISSUE_CATEGORIES}
           ariaLabel={t("rp.catAria", { date: issue.raisedAt })}
           renderLabel={(name) => categoryChip(name, locale)}
-          display={<CategoryTags values={issue.categories} />}
+          display={display}
           onChange={(values) => {
             onPatchIssue(issue.id, { categories: values });
           }}
         />
-      ),
+      )),
     },
     {
       key: "owner",
@@ -3117,40 +3124,40 @@ function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchR
       // Push 244（业务口径「这个负责人要可以编辑」）：改**行内单选**（成员搜索列表 + 首行「待分派」清空），落值走 patchIssue({ ownerId })。
       // Push 244（业务口径「修改的选择区域要统一 都和施工人数这个一致」+「关联阶段 明日计划也要同理统一」）：**不用裸框** ——
       // 与「施工人数」同款 InlineCell 默认小框（白底描边 + 内容宽），抽屉里所有可编辑行的点按手感 / 视觉统一。
-      value: (
-        <InlineMemberCell
-          value={issue.ownerId}
-          options={members}
-          ariaLabel={t("rp.editOwnerAria", { date: issue.raisedAt })}
-          display={
-            issue.owner === "" ? (
-              <span className="text-zinc-300">—</span>
-            ) : (
-              <span data-issue-owner="">{issue.owner}</span>
-            )
-          }
-          onPick={(member) => {
-            onPatchIssue(issue.id, { ownerId: member.id });
-          }}
-          onClear={() => {
-            onPatchIssue(issue.id, { ownerId: "" });
-          }}
-        />
+      value: fieldValue(
+        issue.owner === "" ? <span className="text-zinc-300">—</span> : <span data-issue-owner="">{issue.owner}</span>,
+        (display) => (
+          <InlineMemberCell
+            value={issue.ownerId}
+            options={members}
+            ariaLabel={t("rp.editOwnerAria", { date: issue.raisedAt })}
+            display={display}
+            onPick={(member) => {
+              onPatchIssue(issue.id, { ownerId: member.id });
+            }}
+            onClear={() => {
+              onPatchIssue(issue.id, { ownerId: "" });
+            }}
+          />
+        ),
       ),
     },
     {
       key: "solution",
       label: fieldText(locale, "解决方案或建议"),
-      value: (
-        <InlineTextCell
-          value={issue.solution}
-          ariaLabel={t("rp.editSolutionAria", { date: issue.raisedAt })}
-          placeholder={t("report.placeholder.issueSuggestionSave")}
-          display={<span data-issue-solution="" title={isLocalizedLocale(locale) ? issue.solution : undefined} className="block whitespace-pre-line break-words">{issue.solution === "" ? "—" : localize(issue.solution)}</span>}
-          onSave={(text) => {
-            onPatchIssue(issue.id, { solution: renumberLines(text) });
-          }}
-        />
+      value: fieldValue(
+        <span data-issue-solution="" title={isLocalizedLocale(locale) ? issue.solution : undefined} className="block whitespace-pre-line break-words">{issue.solution === "" ? "—" : localize(issue.solution)}</span>,
+        (display) => (
+          <InlineTextCell
+            value={issue.solution}
+            ariaLabel={t("rp.editSolutionAria", { date: issue.raisedAt })}
+            placeholder={t("report.placeholder.issueSuggestionSave")}
+            display={display}
+            onSave={(text) => {
+              onPatchIssue(issue.id, { solution: renumberLines(text) });
+            }}
+          />
+        ),
       ),
     },
     {
@@ -3158,7 +3165,7 @@ function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchR
       label: fieldText(locale, "问题附图"),
       // Push 212 续（业务口径「图片也要可以增删」）：与「日报填写 → 当前问题附图」同一套 AttachmentPicker —— 复制粘贴 / 选文件增图、
       // × 删图（改名随组件口径）；图幅沿用抽屉原样 md。
-      value: (
+      value: readOnly ? <PhotoStrip items={issue.photos} size="md" /> : (
         <AttachmentPicker
           projectId={projectId}
           variant="compact"
@@ -3184,16 +3191,19 @@ function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchR
           {
             key: "doneWork",
             label: fieldText(locale, "当日完成工作"),
-            value: (
-              <InlineTextCell
-                value={report.doneWork}
-                ariaLabel={t("rp.editDoneAria", { date: report.date })}
-                placeholder={t("report.placeholder.doneWorkSave")}
-                display={<span data-report-done="" title={isLocalizedLocale(locale) ? report.doneWork : undefined} className="block whitespace-pre-line break-words">{report.doneWork === "" ? "—" : localize(report.doneWork)}</span>}
-                onSave={(text) => {
-                  onPatchReport(report.id, { doneWork: renumberLines(text) });
-                }}
-              />
+            value: fieldValue(
+              <span data-report-done="" title={isLocalizedLocale(locale) ? report.doneWork : undefined} className="block whitespace-pre-line break-words">{report.doneWork === "" ? "—" : localize(report.doneWork)}</span>,
+              (display) => (
+                <InlineTextCell
+                  value={report.doneWork}
+                  ariaLabel={t("rp.editDoneAria", { date: report.date })}
+                  placeholder={t("report.placeholder.doneWorkSave")}
+                  display={display}
+                  onSave={(text) => {
+                    onPatchReport(report.id, { doneWork: renumberLines(text) });
+                  }}
+                />
+              ),
             ),
           },
           { key: "date", label: fieldText(locale, "日期"), value: isoDateText(locale, report.date) },
@@ -3210,23 +3220,26 @@ function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchR
           {
             key: "plan",
             label: fieldText(locale, "明日计划"),
-            value: (
-              <InlineTextCell
-                value={report.plan}
-                ariaLabel={t("rp.editPlanAria", { date: report.date })}
-                placeholder={t("report.placeholder.planSave")}
-                display={<span data-report-plan="" title={isLocalizedLocale(locale) ? report.plan : undefined} className="block whitespace-pre-line break-words">{report.plan === "" ? "—" : localize(report.plan)}</span>}
-                onSave={(text) => {
-                  onPatchReport(report.id, { plan: renumberLines(text) });
-                }}
-              />
+            value: fieldValue(
+              <span data-report-plan="" title={isLocalizedLocale(locale) ? report.plan : undefined} className="block whitespace-pre-line break-words">{report.plan === "" ? "—" : localize(report.plan)}</span>,
+              (display) => (
+                <InlineTextCell
+                  value={report.plan}
+                  ariaLabel={t("rp.editPlanAria", { date: report.date })}
+                  placeholder={t("report.placeholder.planSave")}
+                  display={display}
+                  onSave={(text) => {
+                    onPatchReport(report.id, { plan: renumberLines(text) });
+                  }}
+                />
+              ),
             ),
           },
           {
             key: "reportPhotos",
             label: fieldText(locale, "现场工作附图"),
             // Push 212 续（业务口径「图片也要可以增删」）：与「日报填写 → 现场工作附图」同一套 AttachmentPicker；图幅沿用抽屉原样 lg。
-            value: (
+            value: readOnly ? <PhotoStrip items={report.photos} size="lg" /> : (
               <AttachmentPicker
                 projectId={projectId}
                 variant="compact"
@@ -3244,17 +3257,17 @@ function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchR
           {
             key: "state",
             label: fieldText(locale, "问题是否处理"),
-            value: (
+            value: fieldValue(<IssueStateTag state={issue.state} />, (display) => (
               <InlineOptionCell
                 value={issue.state}
                 options={issueStateOptions(locale)}
                 ariaLabel={t("rp.stateAria", { date: issue.raisedAt })}
-                display={<IssueStateTag state={issue.state} />}
+                display={display}
                 onPick={(value) => {
                   onPatchIssue(issue.id, { state: value as IssueState });
                 }}
               />
-            ),
+            )),
           },
           {
             key: "headcount",
@@ -3265,15 +3278,18 @@ function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchR
             // Push 217 续⑥（业务口径「施工人数抽屉也要可以编辑」）：接行内数字编辑 —— 与「项目总览」任务表 /
             // 任务抽屉同一套口径（InlineNumberCell：点开浮层、0 以上的整数、空 / 0 = 未填出杠、带「人」后缀）；
             // 落值走 PATCH .../reports/{id} 的 headcount（契约 number | null，null = 清空）。
-            value: (
-              <InlineNumberCell
-                value={report.headcount ?? 0}
-                ariaLabel={t("rp.editHeadcountAria", { date: report.date })}
-                display={report.headcount === null || report.headcount === 0 ? <span className="text-zinc-300">—</span> : report.headcount + (locale === "en" ? "" : locale === "ko" ? "명" : " 人")}
-                onSave={(value) => {
-                  onPatchReport(report.id, { headcount: value === 0 ? null : value });
-                }}
-              />
+            value: fieldValue(
+              report.headcount === null || report.headcount === 0 ? <span className="text-zinc-300">—</span> : report.headcount + (locale === "en" ? "" : locale === "ko" ? "명" : " 人"),
+              (display) => (
+                <InlineNumberCell
+                  value={report.headcount ?? 0}
+                  ariaLabel={t("rp.editHeadcountAria", { date: report.date })}
+                  display={display}
+                  onSave={(value) => {
+                    onPatchReport(report.id, { headcount: value === 0 ? null : value });
+                  }}
+                />
+              ),
             ),
           },
         ];
@@ -3285,13 +3301,13 @@ function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchR
     value:
       report === null ? (
         <span className="text-zinc-400">—</span>
-      ) : (
+      ) : fieldValue(<StageTags names={report.stageNames} />, (display) => (
         <InlineCell
           ariaLabel={t("rp.stagesAria", { date: report.date })}
           title={t("rp.pickMultiTitle")}
           width={220}
           height={REPORT_STAGES.length * 30 + 12}
-          display={<StageTags names={report.stageNames} />}
+          display={display}
           render={() => (
             <MultiOptionList
               values={report.stageNames}
@@ -3304,7 +3320,7 @@ function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchR
             />
           )}
         />
-      ),
+      )),
   };
 
   const rowView = (row: { key: string; label: string; value: ReactNode }) => (
@@ -3369,7 +3385,7 @@ function IssueDrawer({ projectId, members, issue, report, onPatchIssue, onPatchR
   );
 }
 
-export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilter, focusReportId = null, focusIssueId = null, onFocusClosed, onClearDateFilter, onChangeSub, readOnly = false }: {
+export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilter, focusReportId = null, focusIssueId = null, onFocusClosed, onClearDateFilter, onChangeSub, readOnly = false, canFill = !readOnly }: {
   project: Project;
   me: MeResponse;
   /** 项目成员（Push 243：问题处理人 / 责任人下拉的候选）。 */
@@ -3392,6 +3408,8 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
   onChangeSub: (sub: DailySubView) => void;
   /** 部门群组只读：查看历史数据，但不渲染填写 / 编辑 / 删除 / 拖拽等写入入口。 */
   readOnly?: boolean;
+  /** 归档项目填写权限由未完成临时任务决定，记录和问题继续只读。 */
+  canFill?: boolean;
 }) {
   const locale = useLocale();
   const t = useT();
@@ -3446,13 +3464,13 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
       focusedIssueRef.current = null;
       return;
     }
-    if (readOnly || focusedIssueRef.current === focusIssueId || !issues.some((issue) => issue.id === focusIssueId)) {
+    if (focusedIssueRef.current === focusIssueId || !issues.some((issue) => issue.id === focusIssueId)) {
       return;
     }
     focusedIssueRef.current = focusIssueId;
     setIssueKeyword("");
     setOpenIssueId(focusIssueId);
-  }, [focusIssueId, issues, readOnly]);
+  }, [focusIssueId, issues]);
   /** 页内搜索（业务口径 2026-09-30「给日报记录 / 问题追踪增加搜索功能，搜索的组件和项目空间右上角的相同」）：
    *  两枚关键词各管一张表（客户端过滤 —— 列表一次取满 limit 200，无需回服务端）；换项目随组件 key 复位。 */
   const [recordKeyword, setRecordKeyword] = useState("");
@@ -3781,7 +3799,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
 
   /** 左侧草稿点选：整篇回填右侧表单，并把草稿 id / 版本 / 填写人一并挂上，后续暂存与提交都更新这一条。 */
   const handleLoadDraft = (report: DailyReport) => {
-    if (readOnly || saving || report.id === draftId) {
+    if (!canFill || saving || report.id === draftId) {
       return;
     }
     setDraft(draftFromReport(report));
@@ -3797,7 +3815,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
 
   /** 从已载入草稿切回空白新建；远端草稿仍保留在左侧列表。 */
   const handleNewReport = () => {
-    if (readOnly || saving) {
+    if (!canFill || saving) {
       return;
     }
     setDraft(emptyDraft());
@@ -3868,7 +3886,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
   /** 提交（已提交）：写库（有本表单草稿 = PATCH 把草稿提交，否则新建）→ 服务端按 A3-09 自动生成问题（幂等）；
    *  成功后重取两表、表单复位并切「日报记录」。 */
   const handleSubmit = () => {
-    if (readOnly || saving) {
+    if (!canFill || saving) {
       return;
     }
     const blocking = uploadBlockingMessage(draft, locale);
@@ -3930,7 +3948,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
   /** 暂存草稿（Push 216 接真 · 业务口径「接真后草稿到底写不写库 写」）：写库 state=draft（同日多条不设限；
    *  已有本表单草稿 = 更新那一条）；契约「当日完成工作」必填 —— 暂存同样先填，否则服务端 400。 */
   const handleSaveDraft = () => {
-    if (readOnly || saving) {
+    if (!canFill || saving) {
       return;
     }
     if (renumberLines(draft.doneWork) === "") {
@@ -4041,8 +4059,10 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
 
       {subTab === "日报填写" ? (
         /* 日报填写 = 左侧草稿列表 + 右侧填写表单；表单仍保持舒适窄栏，其他三块子视图全宽 */
-        readOnly ? (
-          <EmptyCard text={t("access.readOnlyTitle")} hint={t("access.readOnlyHint")} />
+        !canFill ? (
+          project.status === "archived" && project.accessLevel === "edit"
+            ? <EmptyCard text={t("report.archived.closed")} hint={t("report.archived.hint")} />
+            : <EmptyCard text={t("access.readOnlyTitle")} hint={t("access.readOnlyHint")} />
         ) : (
         <div className="mx-auto grid w-full max-w-6xl gap-5 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
           <ReportDraftSidebar
@@ -4052,7 +4072,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
             disabled={saving}
             onSelect={handleLoadDraft}
             onNew={handleNewReport}
-            onDelete={(report) => { requestDeleteReport(report.id); }}
+            onDelete={readOnly ? undefined : (report) => { requestDeleteReport(report.id); }}
           />
           <div className="min-w-0">
             <ReportFillForm
@@ -4155,13 +4175,13 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
           {issues.length === 0 ? (
             <EmptyCard text={t("report.issues.empty")} hint={t("report.issues.emptyHint")} />
           ) : (
-            <IssueBoard issues={issues} onPatch={readOnly ? undefined : patchIssue} onOpen={(id) => { if (!readOnly) setOpenIssueId(id); }} />
+            <IssueBoard issues={issues} onPatch={readOnly ? undefined : patchIssue} onOpen={setOpenIssueId} />
           )}
         </section>
       )}
 
       {/* 问题详情抽屉（Push 209）：点看板卡片打开，Esc / 点遮罩关闭 */}
-      {openIssue === null || readOnly ? null : <IssueDrawer projectId={project.id} members={members} issue={openIssue} report={openIssueReport} onPatchIssue={patchIssue} onPatchReport={patchReport} onClose={() => { setOpenIssueId(null); onFocusClosed?.(); }} />}
+      {openIssue === null ? null : <IssueDrawer projectId={project.id} members={members} issue={openIssue} report={openIssueReport} readOnly={readOnly} onPatchIssue={patchIssue} onPatchReport={patchReport} onClose={() => { setOpenIssueId(null); onFocusClosed?.(); }} />}
 
       {/* 行编辑弹窗（Push 223）：日报 / 问题各一枚 —— 与「干系人」弹窗同款；取消 / Esc / 点遮罩关闭，保存成功才关 */}
       {editingReport === null ? null : (

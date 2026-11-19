@@ -60,7 +60,7 @@ report-issue/
 - **S1 机器人查询快照（2026-11-11）**：`ReportDigestService.getSnapshot(projectId, date)` 在 `repeatable read` + `read only` 事务内一次读取项目、当日日报、按 `raised_at` 的问题及批量附件元数据；日报只返回 `submitted` / `supplement`（草稿只返回 `draftCount`，正文 / 阶段 / 附图不返回），同人同日多篇按 `submittedAt → createdAt → id` 稳定排序；问题包含手工与日报派生两类，返回当前状态 / 责任人 / 解决方案 / 来源日报摘要 / 问题附图。S4 海报快照另批量补充项目经理显示名、日报人数、阶段名与附件当前版本 `objectKey` / `mime`，对象键只留服务端，不进入公开 API。不读取附件字节，不写审计、outbox 或站内信。
 - **A7-05 应填未填（Push 162；M5-06-3 增已提醒）**：`GET :id/reports/missing?date=` —— **名册即应填范围**（`project_members`，项目经理在前；顺序由名册出口保证），逐人下发 `reportId` / `state` / `submittedAt` / `reminderSentAt`；**草稿未提交仍计未填**、已提交（submitted / supplement）不进 `missingUserIds`；`missingCount = 名册 − 已提交`（工作日），**非工作日整列为空（不催报）**；名册外的人当日提交不扩大应填范围（也不因此进名单）。`reminderSentAt` 只按 `A01:<memberId>:<date>` 与 `:aibot` / `:app` 回读发送归档，仅 `last_state=sent` 取最早成功时刻，不写日报主体。
 - **当日读接口共用口径（Push 162）**：`date` 缺省 = 今天（Asia/Shanghai），**未来日期 400 `VALIDATION_FAILED`**（填报已不限未来日期，此限制仅用于当日读视图，`details[].path = date`）；静态段 `summary` / `missing` 路由注册在 `:reportId` **之前**（Nest 按声明顺序匹配）；数据面一次 `listByDate` 取当日全量行，不落分页。
-- **归档项目 409 `PROJECT_ARCHIVED`**（ADR-027）；不可见 / 跨项目 / 不存在统一 404（记录级，h6）。
+- 归档项目有未删除、未完成的临时任务时，允许新增日报、暂存草稿及提交草稿。最后一项完成后，填报返回 409 `PROJECT_ARCHIVED`，历史日报仍可查看。独立的问题处理和日报删除继续受冻结保护。不可见 / 跨项目 / 不存在统一 404（记录级，h6）。
 - **留痕**：审计对象 `daily_report` / `issue`（字段级 changes + metadata）+ outbox `report.submitted` / `issue.created` / `issue.updated`（dedupeKey 带版本或 id）；Push 215 扩 `report.deleted` / `issue.deleted`。
 
 ## 测试与门禁

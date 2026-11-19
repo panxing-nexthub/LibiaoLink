@@ -162,6 +162,11 @@ class FakeReportRepository {
   reportIds = [REPORT_1, REPORT_2, "c3c3c3c3-c3c3-4c3c-8c3c-c3c3c3c3c3c3", "c4c4c4c4-c4c4-4c4c-8c4c-c4c4c4c4c4c4"];
   issuedReports = 0;
   updateCalls = 0;
+  unfinishedTemporaryTask = false;
+
+  async hasUnfinishedTemporaryTask(projectId: string): Promise<boolean> {
+    return this.project?.id === projectId && this.unfinishedTemporaryTask;
+  }
 
   async list(
     projectId: string,
@@ -697,7 +702,7 @@ describe("日报（M6-01 / M6-02 · A3-01 ~ A3-09）", () => {
     expect(db.outbox.map((row) => row.topic)).toContain("report.deleted");
   });
 
-  it("归档项目：写入口一律 409 PROJECT_ARCHIVED（ADR-027）", async () => {
+  it("归档项目没有未完成临时任务时，日报写入口返回 409 PROJECT_ARCHIVED", async () => {
     const { reports, issues, service } = seed();
     reports.project = { id: PROJECT, status: "archived", name: "新能源汽车总装输送线项目" };
     issues.project = { id: PROJECT, status: "archived" };
@@ -713,6 +718,27 @@ describe("日报（M6-01 / M6-02 · A3-01 ~ A3-09）", () => {
       code: "PROJECT_ARCHIVED",
       httpStatus: 409,
     });
+  });
+
+  it("归档后有未完成临时任务时可提交日报和暂存草稿，全部完成后停止填报", async () => {
+    const { reports, service } = seed();
+    reports.project = { id: PROJECT, status: "archived", name: "已归档项目" };
+    reports.unfinishedTemporaryTask = true;
+    const submitted = await service.create(PROJECT, { date: NOW_DAY, state: "submitted", doneWork: "现场复查" }, ACTOR);
+    expect(submitted.state).toBe("submitted");
+    await expect(service.update(PROJECT, submitted.id, { version: submitted.version, doneWork: "改历史" }, ACTOR))
+      .rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    const draft = await service.create(PROJECT, { date: NOW_DAY, state: "draft", doneWork: "复查记录" }, ACTOR);
+    const completedDraft = await service.update(PROJECT, draft.id, { version: draft.version, state: "submitted" }, ACTOR);
+    expect(completedDraft.state).toBe("submitted");
+    const remainingDraft = await service.create(PROJECT, { date: NOW_DAY, state: "draft", doneWork: "未提交" }, ACTOR);
+
+    reports.unfinishedTemporaryTask = false;
+    await expect(service.update(PROJECT, remainingDraft.id, { version: remainingDraft.version, state: "submitted" }, ACTOR))
+      .rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    await expect(service.create(PROJECT, { date: NOW_DAY, state: "draft", doneWork: "新草稿" }, ACTOR))
+      .rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    expect((await service.detail(PROJECT, submitted.id)).doneWork).toBe("现场复查");
   });
 
   it("跨项目 / 不存在：日报详情统一 404 NOT_FOUND", async () => {

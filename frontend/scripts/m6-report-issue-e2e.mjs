@@ -869,7 +869,7 @@ const focusedDateUi = await ev("(function(){var notice=document.querySelector(" 
 check("⑦e-7 date= 与 report= 并用：日期提示保留、目标日报仍精确定位并高亮", focusedDateUi !== null && focusedDateUi.filter === todayIso && focusedDateUi.focused === focusReportForDate && focusedDateUi.rows === 2, JSON.stringify(focusedDateUi));
 
 // ---------- ⑧-0 甘特图层级（Push 244 业务口径「甘特图页面会挡住 日报子页面」）----------
-const ganttTask = await api("/api/v1/projects/" + projectId + "/tasks", "POST", { title: "回放·甘特层级探测", plannedStart: todayIso, plannedEnd: todayIso });
+const ganttTask = await api("/api/v1/projects/" + projectId + "/tasks", "POST", { managerIds: [userRow.id], title: "回放·甘特层级探测", plannedStart: todayIso, plannedEnd: todayIso });
 check("⑧-0a 夹具：建一条有排期的任务（甘特图画出内容 —— 下拉遮挡断言需要页面上真有东西可压）", ganttTask.status === 201, String(ganttTask.status) + " " + ganttTask.text.slice(0, 120));
 await page.send("Page.navigate", { url: "about:blank" });
 await sleep(400);

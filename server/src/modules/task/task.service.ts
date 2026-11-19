@@ -38,6 +38,7 @@ import { AppError } from "../../common/errors/app-error.js";
 import type { DbClient } from "../../db/db-client.js";
 import { DatabaseService } from "../../db/database.service.js";
 import { appendOutbox } from "../../db/outbox.js";
+import { hasUnfinishedTemporaryTask, isTemporaryTask } from "../../db/task-scope.js";
 import { AuditService, diffRecords } from "../admin/index.js";
 import { PermissionService, ProjectManagerEligibilityService, taskCapabilitiesOf, type ProjectAccessContext } from "../permission/index.js";
 import { TaskNodeRepository, TemplateService } from "../template/index.js";
@@ -146,7 +147,7 @@ export class TaskService {
    * 「未分组」任务（stage_key 为空）不是阶段，只进三个计数。
    */
   async summary(projectId: string): Promise<ProjectSummary> {
-    await this.loadProjectOrFail(projectId);
+    const project = await this.loadProjectOrFail(projectId);
     const today = shanghaiToday(new Date());
     const counts = await this.repository.summaryCounts(projectId, today);
     const perStage = await this.repository.taskCountsByStage(this.database.db, projectId);
@@ -170,6 +171,9 @@ export class TaskService {
       overdue: counts.overdue,
       done: counts.done,
       total: counts.total,
+      ...(project.status === "archived" ? {
+        hasUnfinishedTemporaryTask: await hasUnfinishedTemporaryTask(this.database.db, projectId),
+      } : {}),
     };
   }
 
@@ -241,30 +245,36 @@ export class TaskService {
   }
 
   /**
-   * POST /projects/{id}/tasks：从任务节点生成（成员）或手工创建（仅管理员，A1-13）；按节点判重 409。
+   * POST /projects/{id}/tasks：按节点判重，临时任务可由系统管理员或当前项目经理手工创建。
    * w2 · Push 124 / A23 · Push 136：stageKey 可选（缺省 / null = 「未分组」；带节点时缺省取节点阶段）、ownerIds 显式 [] = 「待分配」、
    * sortIndex = 插入位次（越界 / 缺省 = 组尾），组内其余任务位次顺延。
    */
   async create(projectId: string, body: TaskCreateBody, actorId: string): Promise<Task> {
-    const project = await this.loadProjectForWrite(projectId);
     const nodeId = body.taskNodeId ?? null;
     const sourceNodeId = body.sourceNodeId ?? null;
+    const temporary = isTemporaryTask({ stageKey: body.stageKey ?? null, nodeId, taskNodeId: sourceNodeId });
+    const currentProject = await this.loadProjectForWrite(projectId, temporary);
+    const temporaryCreatorIsAdmin = temporary && await this.permission.canManageGroupAccess(actorId);
+    if (temporary && !temporaryCreatorIsAdmin && !currentProject.managerIds.includes(actorId)) {
+      throw new AppError("FORBIDDEN", "仅系统管理员或当前项目的项目经理可创建临时任务");
+    }
+    const selectedManagers = body.managerIds;
+    if (temporary) {
+      if (selectedManagers === undefined || selectedManagers.length === 0) {
+        throw new AppError("VALIDATION_FAILED", "请选择至少一位项目经理");
+      }
+      await this.managerEligibility.assertAssignable(selectedManagers);
+    } else if (selectedManagers !== undefined) {
+      throw new AppError("VALIDATION_FAILED", "只有临时任务可在创建时单独指定项目经理");
+    }
     if (nodeId !== null && sourceNodeId !== null) {
       throw new AppError("VALIDATION_FAILED", "taskNodeId（项目流程节点）与 sourceNodeId（节点库节点）二选一");
     }
-    let stageKey: string | null = body.stageKey ?? null;
+    const requestedStage = body.stageKey ?? null;
+    let sourceStage: string | null = null;
     let title = body.title;
     let titleEn = body.titleEn ?? null;
-    if (nodeId !== null) {
-      const node = await this.repository.findProjectNode(projectId, nodeId);
-      if (node === null || node.status === "deleted") {
-        throw new AppError("VALIDATION_FAILED", "taskNodeId 不属于该项目或节点已删除");
-      }
-      if (stageKey !== null && node.stageKey !== stageKey) {
-        throw new AppError("VALIDATION_FAILED", "stageKey 与来源节点所属阶段不一致（节点阶段：" + node.stageKey + "）");
-      }
-      stageKey = node.stageKey;
-    } else if (sourceNodeId !== null) {
+    if (sourceNodeId !== null) {
       // 节点库来源（M3-07 刀 3 · A1-16）：描述 / 英文名 / 阶段取节点库现值（A1-17 锁定字段），节点必须存在
       const node = await this.nodes.findById(sourceNodeId);
       if (node === null) {
@@ -273,21 +283,34 @@ export class TaskService {
       if (!isProjectStageKey(node.stageKey)) {
         throw new AppError("VALIDATION_FAILED", "该任务节点属于模板专区分组，不能直接生成项目任务");
       }
-      if (stageKey !== null && node.stageKey !== stageKey) {
-        throw new AppError("VALIDATION_FAILED", "stageKey 与来源节点所属阶段不一致（节点阶段：" + node.stageKey + "）");
-      }
-      stageKey = node.stageKey;
+      sourceStage = node.stageKey;
       title = node.title;
       titleEn = node.titleEn;
-    } else {
+    } else if (nodeId === null && !temporary) {
       await this.assertAdmin(actorId, "手工创建非标准任务");
     }
     // 负责人缺省 = 「待分配」空数组（2026-09-24 业务口径：任务添加后负责人默认为空 —— 不再兜底项目经理；A23 的兜底口径据此修订）
     const ownerIds = body.ownerIds !== undefined ? body.ownerIds : [];
-    // 项目经理是项目级字段：创建任务始终沿用项目当前经理，不再接受任务级独立改派。
-    const managerIds = project.managerIds;
     const at = new Date();
     const row = await this.database.db.transaction(async (tx) => {
+      let nodeStage = sourceStage;
+      if (nodeId !== null) {
+        const node = await this.repository.lockProjectNodeForCreate(projectId, nodeId, tx);
+        if (node === null || node.status === "deleted") {
+          throw new AppError("VALIDATION_FAILED", "taskNodeId 不属于该项目或节点已删除");
+        }
+        nodeStage = node.stageKey;
+      }
+      if (nodeStage !== null && requestedStage !== null && nodeStage !== requestedStage) {
+        throw new AppError("VALIDATION_FAILED", "stageKey 与来源节点所属阶段不一致（节点阶段：" + nodeStage + "）");
+      }
+      const stageKey = nodeStage ?? requestedStage;
+      // 指定位次时先锁任务分组，与单条重排保持相同的加锁顺序。
+      if (body.sortIndex !== undefined) await this.repository.listGroupOrder(projectId, stageKey, tx, true);
+      const project = await this.loadProjectForWrite(projectId, temporary, tx);
+      if (temporary && !temporaryCreatorIsAdmin && !project.managerIds.includes(actorId)) {
+        throw new AppError("FORBIDDEN", "仅系统管理员或当前项目的项目经理可创建临时任务");
+      }
       if (nodeId !== null) {
         const existing = await this.repository.findTaskIdByNode(projectId, nodeId, tx);
         if (existing !== null) {
@@ -315,7 +338,7 @@ export class TaskService {
           title,
           titleEn,
           ownerIds,
-          managerIds,
+          managerIds: selectedManagers ?? project.managerIds,
           sortIndex,
           plannedStart: body.plannedStart ?? null,
           plannedEnd: body.plannedEnd ?? null,
@@ -484,62 +507,38 @@ export class TaskService {
    * 乐观锁 + 字段留痕。ownerIds 显式 [] = 「待分配」；sortIndex = 移到该组第 N 位（越界 = 组尾）。
    */
   async update(projectId: string, taskId: string, body: TaskUpdateBody, actorId: string): Promise<Task> {
-    const project = await this.loadProjectForWrite(projectId);
+    await this.loadProjectOrFail(projectId);
     const access = await this.permission.assertProjectVisible(actorId, projectId);
-    // 项目经理不是单条任务的独立字段：任务表 / 抽屉入口传入 managerIds 时，按项目级名单整体替换，
-    // 成功后再把项目名单同步到同项目全部任务（当前任务由 applyUpdate 在同一事务写快照）。
-    const nextManagerIds = body.managerIds;
-    if (nextManagerIds !== undefined) {
-      await this.managerEligibility.assertAssignable(nextManagerIds, { existingUserIds: project.managerIds });
-    }
     const at = new Date();
     const today = shanghaiToday(at);
     const row = await this.runCompletionGuarded(actorId, taskId, () =>
-      this.database.db.transaction(async (tx) => {
-        const updated = await this.applyUpdate(
-          tx,
-          projectId,
-          taskId,
-          {
-            expectedVersion: body.version,
-            title: body.title,
-            titleEn: body.titleEn,
-            sortIndex: body.sortIndex,
-            ownerIds: body.ownerIds,
-            managerIds: body.managerIds,
-            status: body.status,
-            plannedStart: body.plannedStart,
-            plannedEnd: body.plannedEnd,
-            estimatedDays: body.estimatedDays,
-            headcount: body.headcount,
-            priority: body.priority,
-            deliverableTypes: body.deliverableTypes,
-            note: body.note,
-          },
-          actorId,
-          at,
-          today,
-          null,
-          access,
-          true,
-        );
-        if (nextManagerIds !== undefined) {
-          await this.repository.replaceProjectManagersExceptTask(projectId, taskId, nextManagerIds, at, tx);
-          if (nextManagerIds.join("\u0000") !== project.managerIds.join("\u0000")) {
-            await this.audit.record(tx, {
-              actorId,
-              action: "update",
-              objectType: "project",
-              objectId: projectId,
-              projectId,
-              summary: "修改项目级项目经理（任务表入口）",
-              changes: [{ field: "managerIds", from: project.managerIds, to: nextManagerIds }],
-              metadata: { entry: "task_managers", scope: "project" },
-            });
-          }
-        }
-        return updated;
-      }),
+      this.database.db.transaction((tx) => this.applyUpdate(
+        tx,
+        projectId,
+        taskId,
+        {
+          expectedVersion: body.version,
+          title: body.title,
+          titleEn: body.titleEn,
+          sortIndex: body.sortIndex,
+          ownerIds: body.ownerIds,
+          managerIds: body.managerIds,
+          status: body.status,
+          plannedStart: body.plannedStart,
+          plannedEnd: body.plannedEnd,
+          estimatedDays: body.estimatedDays,
+          headcount: body.headcount,
+          priority: body.priority,
+          deliverableTypes: body.deliverableTypes,
+          note: body.note,
+        },
+        actorId,
+        at,
+        today,
+        null,
+        access,
+        true,
+      )),
     );
     return toTaskView(row, today, await this.changeLinksOf(row));
   }
@@ -829,6 +828,8 @@ export class TaskService {
     if (before === null || before.projectId !== projectId) {
       throw new AppError("NOT_FOUND", "任务不存在或不属于该项目");
     }
+    const temporary = isTemporaryTask(before);
+    const project = await this.loadProjectForWrite(projectId, batchId === null && temporary && before.status !== "done", tx);
     if (projectAccess !== null) {
       const capabilities = this.assertTaskWriteAllowed(actorId, projectAccess, before, allowTaskOwner);
       const ownersChanged =
@@ -838,8 +839,10 @@ export class TaskService {
       if (capabilities.source === "task_owner" && (ownersChanged || managersTouched || sortChanged)) {
         throw new AppError("FORBIDDEN", "任务负责人不能修改负责人、项目经理或任务排序");
       }
-      if (managersTouched) {
-        await this.managerEligibility.assertAssignable(request.managerIds!, { existingUserIds: before.managerIds });
+      if (request.managerIds !== undefined) {
+        await this.managerEligibility.assertAssignable(request.managerIds, {
+          existingUserIds: temporary ? before.managerIds : project.managerIds,
+        });
       }
     }
     this.assertTaskMutable(before);
@@ -850,7 +853,7 @@ export class TaskService {
       // Push 196：任务描述（title / titleEn）只对**临时任务**开放（看板「添加 → 临时任务」手工创建、未归入阶段）；
       // Push 197 收窄（业务口径「这个不是临时任务 不能修改」）：归入阶段的任务即便没有来源节点也锁定 ——
       // 阶段任务与节点 / 模板生成的任务仍按 A1-17 走常规编辑不可达，修正走管理员「例外调整」（PATCH …/locked-fields）。
-      if (before.stageKey !== null || before.nodeId !== null || before.taskNodeId !== null) {
+      if (!temporary) {
         throw new AppError("VALIDATION_FAILED", "只有未归入阶段的「临时任务」可改任务描述（阶段任务 / 节点 / 模板生成的任务按 A1-17 锁定），修正请走管理员「例外调整」");
       }
     }
@@ -923,6 +926,22 @@ export class TaskService {
       changes: changes.length > 0 ? changes : null,
       metadata: batchId === null ? undefined : { entry: "batch", batchId },
     });
+    const nextManagers = request.managerIds;
+    if (!temporary && nextManagers !== undefined) {
+      await this.repository.replaceProjectManagersExceptTask(projectId, taskId, nextManagers, at, tx);
+      if (nextManagers.join("\u0000") !== project.managerIds.join("\u0000")) {
+        await this.audit.record(tx, {
+          actorId,
+          action: "update",
+          objectType: "project",
+          objectId: projectId,
+          projectId,
+          summary: "修改项目级项目经理（任务表入口）",
+          changes: [{ field: "managerIds", from: project.managerIds, to: nextManagers }],
+          metadata: { entry: "task_managers", scope: "project" },
+        });
+      }
+    }
     return updated;
   }
 
@@ -933,7 +952,7 @@ export class TaskService {
     body: TaskProgressUpdateBody,
     actorId: string,
   ): Promise<TaskListItem> {
-    await this.loadProjectForWrite(projectId);
+    await this.loadProjectOrFail(projectId);
     const access = await this.permission.assertProjectVisible(actorId, projectId);
     const at = new Date();
     const today = shanghaiToday(at);
@@ -943,6 +962,7 @@ export class TaskService {
       if (before === null || before.projectId !== projectId) {
         throw new AppError("NOT_FOUND", "任务不存在或不属于该项目");
       }
+      await this.loadProjectForWrite(projectId, isOpenTemporaryTask(before), tx);
       this.assertTaskWriteAllowed(actorId, access, before, true);
       this.assertTaskMutable(before);
       if (before.version !== body.version) {
@@ -1030,7 +1050,7 @@ export class TaskService {
    * 存在 draft 成果文件放行 + warning 并触发 R02。
    */
   async complete(projectId: string, taskId: string, body: TaskCompleteBody, actorId: string): Promise<TaskCompleteResponse> {
-    await this.loadProjectForWrite(projectId);
+    await this.loadProjectOrFail(projectId);
     const access = await this.permission.assertProjectVisible(actorId, projectId);
     const at = new Date();
     const today = shanghaiToday(at);
@@ -1040,6 +1060,7 @@ export class TaskService {
         if (before === null || before.projectId !== projectId) {
           throw new AppError("NOT_FOUND", "任务不存在或不属于该项目");
         }
+        await this.loadProjectForWrite(projectId, isOpenTemporaryTask(before), tx);
         this.assertTaskWriteAllowed(actorId, access, before, true);
         this.assertTaskMutable(before);
         if (before.status === "done") {
@@ -1432,26 +1453,30 @@ export class TaskService {
     return this.repository.listChangeLinks(task.changeRefs);
   }
 
-  private async loadProjectOrFail(projectId: string): Promise<TaskProjectRow> {
-    const project = await this.repository.findProject(projectId);
+  private async loadProjectOrFail(projectId: string, tx?: DbClient): Promise<TaskProjectRow> {
+    const project = await this.repository.findProject(projectId, tx, tx !== undefined);
     if (project === null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
     return project;
   }
 
-  /** 任务写入口：归档项目一律 409 PROJECT_ARCHIVED（ADR-027）。 */
-  private async loadProjectForWrite(projectId: string): Promise<TaskProjectRow> {
-    const project = await this.loadProjectOrFail(projectId);
-    if (project.status === "archived") {
+  /** 归档项目只允许创建及处理未完成的手工临时任务。 */
+  private async loadProjectForWrite(projectId: string, allowArchived = false, tx?: DbClient): Promise<TaskProjectRow> {
+    const project = await this.loadProjectOrFail(projectId, tx);
+    if (project.status === "archived" && !allowArchived) {
       throw new AppError("PROJECT_ARCHIVED", "项目已归档，禁止修改任务");
     }
     return project;
   }
 
-  /** 手工创建非标准任务仅管理员（系统功能书 A1-13）。 */
+  /** 阶段内手工创建无来源任务及锁定字段例外调整的管理员硬闸。 */
   private async assertAdmin(actorId: string, action: string): Promise<void> {
     if (await this.permission.canManageGroupAccess(actorId)) return;
     throw new AppError("FORBIDDEN", "仅管理员可" + action + "（系统功能书 A1-13）");
   }
+}
+
+function isOpenTemporaryTask(task: TaskRow): boolean {
+  return task.status !== "done" && isTemporaryTask(task);
 }
 
 /**

@@ -131,7 +131,7 @@ class FakeTaskRepository {
     return this.project;
   }
 
-  async findProjectNode(_projectId: string, nodeId: string): Promise<TaskProjectNodeRow | null> {
+  async lockProjectNodeForCreate(_projectId: string, nodeId: string): Promise<TaskProjectNodeRow | null> {
     return { id: nodeId, stageKey: "install", status: "active" };
   }
 

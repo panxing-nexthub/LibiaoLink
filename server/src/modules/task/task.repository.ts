@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { STAGE_KEYS } from "@libiaolink/contracts";
-import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
@@ -10,6 +10,7 @@ import { users } from "../../db/schema/identity.js";
 import { projectStages, projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
 import { taskEvents, tasks } from "../../db/schema/tasks.js";
+import { syncProjectManagersToStageTasks } from "../../db/task-scope.js";
 import type { TaskListFilter, TaskSort } from "./task.query.js";
 
 export type TaskRow = typeof tasks.$inferSelect;
@@ -69,7 +70,7 @@ export interface TaskInsertInput {
   titleEn: string | null;
   /** 空数组 = 「待分配」（A18 · Push 124 / A23 · Push 136）。 */
   ownerIds: string[];
-  /** 项目级项目经理快照（至少一位；由 projects.manager_ids 统一维护，所有任务保持一致）。 */
+  /** 阶段任务取项目经理名单，临时任务取创建时手选的名单。 */
   managerIds: string[];
   /** 组内位次（A19 / A20：插入位置由 service 计算，本层落列）。 */
   sortIndex: number;
@@ -315,18 +316,18 @@ export class TaskRepository {
   }
 
   /** 项目读（软删过滤）：任务读写都要先过项目可见性 / 归档写保护。 */
-  async findProject(projectId: string, client: DbClient = this.database.db): Promise<TaskProjectRow | null> {
-    const rows = await client
+  async findProject(projectId: string, client: DbClient = this.database.db, lock = false): Promise<TaskProjectRow | null> {
+    const query = client
       .select({ id: projects.id, managerIds: projects.managerIds, stageKey: projects.stageKey, status: projects.status })
       .from(projects)
       .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
       .limit(1);
+    const rows = await (lock ? query.for("no key update") : query);
     return rows[0] ?? null;
   }
 
   /**
-   * 任务表 / 抽屉改项目经理 = 项目级经理全局变更：
-   * projects.manager_ids 与同项目其他有效任务同步；当前任务由 TaskService 的事务内核写入。
+   * 阶段任务改项目经理时更新项目名单和其他阶段任务；当前任务由 TaskService 写入。
    * 已定档任务只更新展示快照，不推进 version，保持定档后的任务写保护。
    */
   async replaceProjectManagersExceptTask(
@@ -340,34 +341,18 @@ export class TaskRepository {
       .update(projects)
       .set({ managerIds, version: sql`${projects.version} + 1`, updatedAt: at })
       .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)));
-    await client
-      .update(tasks)
-      .set({ managerIds })
-      .where(and(
-        eq(tasks.projectId, projectId),
-        ne(tasks.id, taskId),
-        isNull(tasks.deletedAt),
-        isNotNull(tasks.finalizedAt),
-      ));
-    await client
-      .update(tasks)
-      .set({ managerIds, version: sql`${tasks.version} + 1`, updatedAt: at })
-      .where(and(
-        eq(tasks.projectId, projectId),
-        ne(tasks.id, taskId),
-        isNull(tasks.deletedAt),
-        isNull(tasks.finalizedAt),
-      ));
+    await syncProjectManagersToStageTasks(client, projectId, managerIds, at, taskId);
   }
 
-  /** 来源任务节点（校验属于本项目 + 取阶段）：taskCreateBody.taskNodeId 的落点。 */
-  async findProjectNode(projectId: string, nodeId: string, client: DbClient = this.database.db): Promise<TaskProjectNodeRow | null> {
+  /** 与节点操作一致，先锁节点，再锁项目。阶段只用于读取归属。 */
+  async lockProjectNodeForCreate(projectId: string, nodeId: string, client: DbClient): Promise<TaskProjectNodeRow | null> {
     const rows = await client
       .select({ id: projectNodes.id, stageKey: projectStages.stageKey, status: projectNodes.status })
       .from(projectNodes)
       .innerJoin(projectStages, eq(projectStages.id, projectNodes.stageId))
       .where(and(eq(projectNodes.projectId, projectId), eq(projectNodes.id, nodeId)))
-      .limit(1);
+      .limit(1)
+      .for("key share", { of: projectNodes });
     return rows[0] ?? null;
   }
 

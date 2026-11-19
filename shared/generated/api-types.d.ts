@@ -2217,6 +2217,15 @@ export interface paths {
                         "application/json": components["schemas"]["ApiError"];
                     };
                 };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
                 /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
                 404: {
                     headers: {
@@ -14557,6 +14566,8 @@ export interface components {
             overdue: number;
             done: number;
             total: number;
+            /** @description 仅归档项目返回，表示是否仍可填报日报（另需具备填报权限） */
+            hasUnfinishedTemporaryTask?: boolean;
         };
         ProjectUpdateBody: {
             /**
@@ -14793,7 +14804,7 @@ export interface components {
             titleEn: string | null;
             /** @description 任务负责人（A23 · Push 136：一位也可、可多位）：数组顺序 = 展示顺序；**空数组 = 「待分配」**（合法中间状态，沿用 A18）；与 ownerNames 同下标一一对应 */
             ownerIds: components["schemas"]["Uuid"][];
-            /** @description 项目级项目经理快照（至少一位、可多位）：唯一可编辑来源是 projects.manager_ids，同项目所有任务一致；任务表行内 / 抽屉与项目弹窗修改都按项目级替换，并同步全部任务，不产生任务级经理身份 */
+            /** @description 项目经理名单（至少一位、可多位）。阶段任务同步项目名单。临时任务创建时手选，按任务独立保存，名单不参与项目权限判定 */
             managerIds: components["schemas"]["Uuid"][];
             status: components["schemas"]["TaskBaseStatus"];
             displayStatus: components["schemas"]["TaskDisplayStatus"];
@@ -14922,7 +14933,7 @@ export interface components {
             task: components["schemas"]["Task"];
             warnings: components["schemas"]["TaskGateWarning"][];
         };
-        /** @description 创建任务（进度默认 0、状态默认 pending；从模板生成时与整套添加同口径） */
+        /** @description 创建任务，进度默认 0、状态默认 pending。无阶段、无来源节点的临时任务可由系统管理员或当前项目名单中的项目经理创建 */
         TaskCreateBody: {
             /**
              * @description 所属阶段（A15 · Push 124：可选）—— 缺省 / null = 「未分组」（看板「＋ 添加 → 临时任务」）；带 taskNodeId 时缺省取来源节点所属阶段，显式给出且与节点不一致返回 400
@@ -14941,6 +14952,8 @@ export interface components {
             sourceNodeId?: components["schemas"]["Uuid"] & unknown;
             /** @description 任务负责人：缺省 / 显式 [] = 「待分配」（**2026-09-24 业务口径修订**：任务添加后负责人默认为空 —— 不再兜底项目经理）；传数组 = 整体设置（≤ 200 位），数组顺序 = 展示顺序 */
             ownerIds?: components["schemas"]["Uuid"][];
+            /** @description 无阶段、无来源节点的临时任务必填，至少一位有效项目经理。阶段任务使用项目名单，创建时省略此字段 */
+            managerIds?: components["schemas"]["Uuid"][];
             plannedStart?: components["schemas"]["DateOnly"] & (string | null);
             plannedEnd?: components["schemas"]["DateOnly"] & (string | null);
             estimatedDays?: number | null;
@@ -14988,7 +15001,7 @@ export interface components {
         TaskDetail: components["schemas"]["Task"] & {
             /** @description 负责人姓名数组：与 ownerIds 同下标一一对应；「待分配」= 空数组 */
             ownerNames: (string | null)[];
-            /** @description 当前项目的项目经理姓名数组：与 managerIds 同下标一一对应，同项目所有任务一致 */
+            /** @description 本任务的项目经理姓名数组，与 managerIds 按下标对应 */
             managerNames: (string | null)[];
             files: components["schemas"]["TaskFileBrief"][];
             capabilities?: components["schemas"]["TaskCapabilities"] & unknown;
@@ -15032,7 +15045,7 @@ export interface components {
         TaskListItem: components["schemas"]["Task"] & {
             /** @description 负责人姓名数组（users.display_name 随行下发，与 ownerIds 同下标一一对应）；「待分配」= 空数组；某位取不到姓名时该位为 null（前端显示「—」） */
             ownerNames: (string | null)[];
-            /** @description 当前项目的项目经理姓名数组（与 managerIds 同下标一一对应；同项目所有任务一致；取不到姓名时该位为 null） */
+            /** @description 本任务的项目经理姓名数组，与 managerIds 按下标对应，取不到姓名时该位为 null */
             managerNames: (string | null)[];
             fileSummary: components["schemas"]["TaskFileSummary"];
             capabilities?: components["schemas"]["TaskCapabilities"];
@@ -15292,7 +15305,7 @@ export interface components {
             titleEn?: string | null;
             /** @description 任务负责人（A23 · Push 136）：不传 = 不改；显式 [] = 置空为「待分配」（卡片拖进「待分配」列）；传数组 = 整体替换（≤ 200 位）、顺序 = 展示顺序 */
             ownerIds?: components["schemas"]["Uuid"][];
-            /** @description 项目级项目经理：不传 = 不改；传数组 = 整体替换（至少一位），仅项目编辑者可修改。任务表行内 / 抽屉与项目弹窗共用此名单，修改会同步同项目全部任务；任务负责人只能浏览 */
+            /** @description 项目经理名单。仅项目编辑者可整体替换（至少一位）。修改阶段任务时同步项目及其阶段任务，修改临时任务时只更新该任务 */
             managerIds?: components["schemas"]["Uuid"][];
             /** @description 组内位次（A19 / A20 · Push 124）：把任务移到该组第 N 位（0 起，越界 = 组尾）—— 同组其余任务位次顺延；不传 = 不动顺序 */
             sortIndex?: number;
@@ -15389,6 +15402,19 @@ export interface components {
             intent: "change";
             fileId: components["schemas"]["Uuid"] & unknown;
             change: components["schemas"]["ChangeIntentBody"];
+        } | {
+            projectId: components["schemas"]["Uuid"];
+            /** @description 文件名：fileId 省略（新建）= 新文件名；intent=version 且给出 fileId = 目标文件名称（须与现状一致，不一致 400）；intent=change = 变更后文件名称（Push 256：必填，可不同于目标文件名 —— 完成变更时文件更名为该名称，扩展名随之更新，预览 / 下载按新名称） */
+            name: string;
+            /** @description 字节数；上限由服务端配置（UPLOAD_MAX_SIZE_MB），超出返回 400 VALIDATION_FAILED */
+            sizeBytes: number;
+            mime?: string;
+            contentHash?: components["schemas"]["Sha256"];
+            /**
+             * @description 新建日报附图，只接受位图且不能替换文件或关联任务、节点
+             * @enum {string}
+             */
+            intent: "report_photo";
         };
         /** @description 发起上传结果：新建 / 追加版本返回上传会话；附件域命中同内容既有文件则秒传复用（reused=true、upload=null） */
         UploadCreateResponse: {
@@ -15399,10 +15425,10 @@ export interface components {
             duplicateHint: components["schemas"]["DuplicateHint"];
         };
         /**
-         * @description 上传意图：version = 新增/替换版本（仅 draft 文件）；change = 定档后变更（同一事务写 change_requests + 新版本 + 状态 changed）；**目标任务已定档（Task.finalizedAt 非空）时 version 意图一律 409 TASK_FINALIZED**（Push 249：任务定档后不支持任何修改，修改走变更）
+         * @description 上传意图：version 新建文件或追加草稿版本，change 为定档文件提交变更，report_photo 为日报新建位图附图。目标任务已定档时 version 返回 409 TASK_FINALIZED
          * @enum {string}
          */
-        UploadIntent: "version" | "change";
+        UploadIntent: "version" | "change" | "report_photo";
         /** @description 批量获取分片预签名 URL（首传与断点续传共用；续传前先查会话状态拿缺失分片） */
         UploadPartsBody: {
             partNumbers: number[];

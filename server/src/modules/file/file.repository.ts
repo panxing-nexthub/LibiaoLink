@@ -9,6 +9,7 @@ import { projectNodes } from "../../db/schema/flow.js";
 import { users } from "../../db/schema/identity.js";
 import { projectStages, projects } from "../../db/schema/projects.js";
 import { tasks } from "../../db/schema/tasks.js";
+import { hasUnfinishedTemporaryTask } from "../../db/task-scope.js";
 import type { ChangeRequestListFilter, ChangeRequestSort } from "./change.query.js";
 import type { FileListFilter, FileListSort } from "./file.query.js";
 
@@ -250,13 +251,23 @@ async function loadByIdChunks<TRow>(
 export class FileRepository {
   constructor(private readonly database: DatabaseService) {}
 
-  async findProjectBrief(projectId: string, client: DbClient = this.database.db): Promise<FileProjectBriefRow | null> {
-    const rows = await client
+  async findProjectBrief(projectId: string, client: DbClient = this.database.db, lock = false): Promise<FileProjectBriefRow | null> {
+    const query = client
       .select({ id: projects.id, status: projects.status, deletedAt: projects.deletedAt })
       .from(projects)
       .where(eq(projects.id, projectId))
       .limit(1);
+    const rows = await (lock ? query.for("no key update") : query);
     return rows[0] ?? null;
+  }
+
+  hasUnfinishedTemporaryTask(projectId: string, client: DbClient = this.database.db, taskId?: string): Promise<boolean> {
+    return hasUnfinishedTemporaryTask(client, projectId, taskId);
+  }
+
+  async lockAttachmentTask(taskId: string, tx: DbClient): Promise<void> {
+    // 文件插入会通过外键持有此锁。先锁任务，再锁项目，与任务完成时的加锁顺序一致。
+    await tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.id, taskId)).for("key share");
   }
 
   /** 补发申请：一次取齐自动带入表单的项目编号 / 名称 / 客户。 */

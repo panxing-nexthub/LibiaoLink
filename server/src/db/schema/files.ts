@@ -119,7 +119,7 @@ export const uploadSessions = pgTable(
     index("ix_upload_sessions_expiry").on(table.status, table.expiresAt),
     check(
       "ck_upload_sessions_intent",
-      sql`${table.intent} in ${sql.raw(sqlValueList(["version", "change"]))}`,
+      sql`${table.intent} in ${sql.raw(sqlValueList(["version", "change", "report_photo"]))}`,
     ),
     check(
       "ck_upload_sessions_status",

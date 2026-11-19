@@ -2,7 +2,7 @@
 /**
  * M6 真机回放（S6·report-issue 日报 / 问题 + M6-01 收口 + M6-05 · 工作台 A6-01 / A6-03（2026-09-30 复评：四组 / 不限窗口 / 项目经理含我）· Push 215 口径）：
  *   证据一（A3-02 / A3-04 · 日报填报）：新报今天（今天 = submitted，过去日期 = 补填 supplement）、
- *           同人同项目同日可多条（Push 215：原「一人一天一条」409 REPORT_ALREADY_EXISTS 删除）、未来日期 400、
+ *           同人同项目同日可多条（Push 215：原「一人一天一条」409 REPORT_ALREADY_EXISTS 删除）、未来日期允许（submitted）、
  *           草稿写库（state=draft 落行）+ 提交；关联阶段（stageKeys / stageNames 同下标）；附图校验（未知文件 400）。
  *   证据二（A3-09 问题生成 · 幂等 · 附图转挂 · A3-08 停用）：提交后现场发现问题非空 → 自动生成问题
  *           （source_report_id 唯一兜底；多值归类；部门名归类 = 责任部门、原因类 = null）；
@@ -195,7 +195,8 @@ try {
   check("R2", "同日多条（Push 215）：同人同项目同日第二条照常新建（无 409 判重）", "201 / 新 id / issueCategories 两项", createToday2.status + " " + short({ id: reportWithIssueId, first: reportId, categories: createToday2.body?.issueCategories }, 200), sameDayOk === true);
 
   const future = await call("POST", API + "/reports", { date: tomorrow, doneWork: "未来" });
-  check("R3", "未来日期 400 VALIDATION_FAILED", "400 VALIDATION_FAILED", future.status + " " + (future.body?.code ?? "-"), future.status === 400 && future.body?.code === "VALIDATION_FAILED");
+  const futureRow = await db.query("select state, submitted_at from daily_reports where id = $1", [future.body?.id]);
+  check("R3", "未来日期允许（state=submitted + submitted_at 非空）", "201 / submitted / submitted_at 非空", future.status + " " + (future.body?.state ?? "-") + " / 库内 " + short(futureRow.rows[0] ?? null, 120), future.status === 201 && future.body?.state === "submitted" && future.body?.date === tomorrow && future.body?.submittedAt !== null && future.body?.submittedAt !== undefined && futureRow.rows[0]?.state === "submitted" && futureRow.rows[0]?.submitted_at !== null);
 
   const backfill = await call("POST", API + "/reports", { date: yesterday, doneWork: "昨天：下料完成", headcount: 8 });
   check("R4", "补填昨天（state=supplement）", "201 supplement", backfill.status + " " + (backfill.body?.state ?? "-"), backfill.status === 201 && backfill.body?.state === "supplement");
@@ -532,7 +533,7 @@ lines.push(failures === 0 ? "- 全部断言通过（" + evidence.steps.filter((s
 lines.push("");
 lines.push("## 验收对照（M6-01 ~ M6-03 + M6-01 收口 + M6-05（2026-09-30 口径复评）+ M7-04 · Push 215）");
 lines.push("");
-lines.push("- A3-02 / A3-04（日报填报）= R1 ~ R9：新报（submitted）/ 同日多条（无 409 判重）/ 未来日期 400 / 补填（supplement）/ 草稿写库 + 提交 / 列表日期倒序 / 详情回读（stageKeys / stageNames 同下标、现场附图）/ 未知文件 400。");
+lines.push("- A3-02 / A3-04（日报填报）= R1 ~ R9：新报（submitted）/ 同日多条（无 409 判重）/ 未来日期允许（submitted）/ 补填（supplement）/ 草稿写库 + 提交 / 列表日期倒序 / 详情回读（stageKeys / stageNames 同下标、现场附图）/ 未知文件 400。");
 lines.push("- A3-08（回写任务进展，Push 215 停用）= T1：提交日报不再改任务 note、不再写 task_events(note_change)。");
 lines.push("- A3-09（问题自动生成 · 幂等 · 附图转挂）= I1 ~ I4：source_report_id 唯一兜底幂等；原文 / 多值归类 / 提出人 / 提出日期；问题图从日报侧（kind=issue）转挂到问题侧，日报侧只剩现场图。");
 lines.push("- A3-11 / A3-12（归类多值与分派）= I1 / E6 / E7：多值归类（十项、命中任一即入选筛选）；部门名归类落 owner_department，原因类不自动落部门（null = 待分派）。");

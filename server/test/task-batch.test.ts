@@ -149,7 +149,7 @@ class FakeTaskRepository {
   ): Promise<void> {
     this.project = { ...this.project, managerIds: [...managerIds] };
     for (const [id, row] of this.tasks) {
-      if (id === taskId || row.projectId !== projectId || row.deletedAt !== null) continue;
+      if (id === taskId || row.projectId !== projectId || row.deletedAt !== null || row.stageKey === null) continue;
       this.tasks.set(id, row.finalizedAt === null
         ? { ...row, managerIds: [...managerIds], version: row.version + 1, updatedAt: at }
         : { ...row, managerIds: [...managerIds] });
@@ -377,10 +377,25 @@ describe("M3-04 · 任务批量操作（A1-08）", () => {
 });
 
 describe("项目级项目经理", () => {
-  it("任务表改经理同步项目名单与全部任务；已定档任务只更新展示快照、不推进 version", async () => {
+  it.each(["active", "archived"])("%s 项目修改临时任务经理，只修改该任务", async (status) => {
+    const repo = new FakeTaskRepository();
+    repo.project = { ...repo.project, status };
+    repo.tasks.set(TASK_A, makeRow(TASK_A, { stageKey: null, nodeId: null, taskNodeId: null }));
+    const { service, audit } = makeService(repo);
+    const manager = "66666666-6666-4666-8666-666666666666";
+    const updated = await service.update(PROJECT, TASK_A, { managerIds: [manager], version: 3 }, ACTOR);
+    expect(updated.managerIds).toEqual([manager]);
+    expect(repo.project.managerIds).toEqual([DEFAULT_MANAGER]);
+    expect(repo.tasks.get(TASK_B)?.managerIds).toEqual([DEFAULT_MANAGER]);
+    expect(audit.entries).not.toContainEqual(expect.objectContaining({ objectType: "project" }));
+  });
+
+  it("阶段任务改经理同步项目与其他阶段任务，保留临时任务经理及定档任务版本", async () => {
     const repo = new FakeTaskRepository();
     const finalizedAt = new Date("2026-11-10T00:00:00Z");
+    const temporaryTaskId = "33333333-3333-4333-8333-333333333333";
     repo.tasks.set(TASK_B, makeRow(TASK_B, { managerIds: [DEFAULT_MANAGER], version: 7, finalizedAt }));
+    repo.tasks.set(temporaryTaskId, makeRow(temporaryTaskId, { stageKey: null, nodeId: null, version: 5 }));
     const { service, audit } = makeService(repo);
     const manager = "66666666-6666-4666-8666-666666666666";
 
@@ -392,6 +407,7 @@ describe("项目级项目经理", () => {
     expect(repo.tasks.get(TASK_A)?.version).toBe(4);
     expect(repo.tasks.get(TASK_B)?.managerIds).toEqual([manager]);
     expect(repo.tasks.get(TASK_B)?.version).toBe(7);
+    expect(repo.tasks.get(temporaryTaskId)).toMatchObject({ managerIds: [DEFAULT_MANAGER], version: 5 });
     expect(audit.entries).toContainEqual(expect.objectContaining({
       objectType: "project",
       summary: "修改项目级项目经理（任务表入口）",

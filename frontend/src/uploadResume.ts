@@ -19,6 +19,7 @@ export type UploadResumeRecord = {
   fileName: string;
   sizeBytes: number;
   taskId: string | null;
+  reportPhoto?: true;
   partSizeBytes: number;
   totalParts: number;
   expiresAt: string;
@@ -30,6 +31,7 @@ type ResumeQuery = {
   fileName: string;
   sizeBytes: number;
   taskId: string | null;
+  reportPhoto?: true;
 };
 
 function storage(): Storage | null {
@@ -60,6 +62,7 @@ function loadAll(): UploadResumeRecord[] {
         typeof row.fileName === "string" &&
         typeof row.sizeBytes === "number" &&
         (typeof row.taskId === "string" || row.taskId === null) &&
+        (row.reportPhoto === undefined || row.reportPhoto === true) &&
         typeof row.partSizeBytes === "number" &&
         typeof row.totalParts === "number" &&
         typeof row.expiresAt === "string"
@@ -92,7 +95,8 @@ function matches(record: UploadResumeRecord, query: ResumeQuery): boolean {
     record.contentHash === query.contentHash.toLowerCase() &&
     record.fileName === query.fileName &&
     record.sizeBytes === query.sizeBytes &&
-    record.taskId === query.taskId
+    record.taskId === query.taskId &&
+    record.reportPhoto === query.reportPhoto
   );
 }
 

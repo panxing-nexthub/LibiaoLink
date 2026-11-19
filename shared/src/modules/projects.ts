@@ -85,6 +85,7 @@ export const ProjectSummarySchema = z
     overdue: z.number().int().min(0),
     done: z.number().int().min(0),
     total: z.number().int().min(0),
+    hasUnfinishedTemporaryTask: z.boolean().optional().openapi({ description: "仅归档项目返回，表示是否仍可填报日报（另需具备填报权限）" }),
   })
   .openapi("ProjectSummary", { description: "项目总览汇总卡统计（任务派生；口径见 v0.2 §2.4 与前端功能需求 §3.4）" });
 

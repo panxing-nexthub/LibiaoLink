@@ -10,6 +10,7 @@ import type { StagePlacement } from "./StageAddCard";
 import { StageAddCard } from "./StageAddCard";
 import { TaskDrawer } from "./TaskDrawer";
 import type { TaskEditSubmit } from "./TaskDrawer";
+import { TempTaskCreateForm, type TempTaskCreateValues } from "./TempTaskCreateForm";
 import { STATUS_TAG_CLASS, type TaskPatch } from "./TaskBoard";
 import { fieldText, isLocalizedLocale, mdText, progressLabelOf, stageText, statusText, useLocale, useLocalizedText, useT } from "../i18n";
 import { trackerStep } from "./Tracker";
@@ -114,10 +115,6 @@ const ADD_ENTRY =
 
 /** 入口右侧的小字说明。 */
 const ADD_ENTRY_HINT = "shrink-0 text-[10px] font-normal text-zinc-400";
-
-/** 临时任务表单输入框（与任务表行内编辑同一套「白底 + 淡灰描边」小框口径）。 */
-const ADD_INPUT =
-  "w-full rounded-lg border border-zinc-200/90 bg-white/75 px-2 py-1.5 text-xs text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white";
 
 /** 阶段选择里的一格。 */
 const ADD_STAGE =
@@ -237,7 +234,7 @@ type TaskKanbanProps = {
    * 列底「添加 → 临时任务」：标题由用户自己填（英文名可空）；负责人 / 状态按所在列给、阶段留空。
    * 返回 = 新建任务的 id（失败 = null）—— Push 196 起建完由看板直接打开它的任务详情抽屉，补时间等细节。
    */
-  onAddTask?: (context: KanbanAddContext, values: { title: string; titleEn: string }) => Promise<string | null>;
+  onAddTask?: (context: KanbanAddContext, values: TempTaskCreateValues) => Promise<string | null>;
   /**
    * 列底「添加 → 阶段任务」：从该阶段节点池 / 模板挑的节点加进项目，并带上所在列的负责人 / 状态。
    * Push 111：`nodes` 支持一次多个（「整套添加」按列表顺序整段插入），`placement` = 该阶段内的插入位置（业务口径「人员要指定位置放入」）。
@@ -291,6 +288,7 @@ type TaskKanbanProps = {
   onChanged?: () => void;
   /** 当前登录人姓名（Push 254 · 抽屉「变更申请」页「变更申请人」只读展示）；不传 = 显示「当前登录人」。 */
   actorName?: string;
+  allowFileChanges?: boolean;
   projectId?: string;
 };
 
@@ -323,6 +321,9 @@ function groupTasks(tasks: ProjectTask[], mode: KanbanMode): KanbanGroup[] {
   // Push 136：一个任务可以有多位负责人 —— 这张卡出现在**每一位**负责人的列里（列计数 = 该人手上的任务数）；
   // 一位都没有 = 「待分配」列。同一位负责人在同一列里只出现一次。接线后按契约 ownerIds 分组（姓名只作展示）。
   const byOwner = new Map<string, KanbanGroup>();
+  if (tasks.length === 0) {
+    byOwner.set(OWNER_NONE_KEY, { key: OWNER_NONE_KEY, ownerId: null, ownerName: "", status: "待开始", items: [] });
+  }
   for (const task of tasks) {
     const addItem = (key: string, ownerId: string | null, ownerName: string): void => {
       const found = byOwner.get(key);
@@ -562,6 +563,7 @@ function KanbanColumn({
   onAddStageTask,
   stageTasksOf,
   members,
+  managerMembers,
   onSetActualEnd,
   draggingId,
   dropIndex,
@@ -582,6 +584,7 @@ function KanbanColumn({
   onSetActualEnd?: (taskId: string, iso: string) => void;
   /** 人员目录（卡片头像 / 列头头像按负责人 id 取成员）。 */
   members: readonly Member[];
+  managerMembers: readonly Member[];
   /** 正在被拖动的卡片 id（Push 108；null = 没有在拖）。 */
   draggingId: string | null;
   /** 本列是不是当前落点、插到第几格（Push 108；null = 不是落点 —— 高亮与槽位都不出）。 */
@@ -589,7 +592,7 @@ function KanbanColumn({
   /** 卡片按下（Push 108）：交给 TaskKanban 统一判「点一下 / 拖动」；不传 = 这张卡片不可拖。 */
   onPointerDownDrag?: (taskId: string, node: HTMLElement, event: ReactPointerEvent<HTMLDivElement>) => void;
   /** 建完临时任务返回新任务 id（Push 196：TaskKanban 拿到后直接打开它的详情抽屉）。 */
-  onAddTask?: (context: KanbanAddContext, values: { title: string; titleEn: string }) => Promise<string | null>;
+  onAddTask?: (context: KanbanAddContext, values: TempTaskCreateValues) => Promise<string | null>;
   onAddStageTask?: (context: KanbanAddContext, stage: string, nodes: readonly TemplatePresetNode[], placement: StagePlacement, templateId?: string) => void;
   /** 该阶段现有任务（Push 111）：给「插入位置」当锚点 —— 顺序 = 项目总览里这些任务的先后。 */
   stageTasksOf: (stage: string) => readonly { id: string; title: string }[];
@@ -600,8 +603,6 @@ function KanbanColumn({
   const owner = group.ownerId === null ? undefined : members.find((member) => member.id === group.ownerId);
   /** 列头 / 落点提示上的展示名（负责人看板用姓名，进展看板用状态名）。 */
   const groupLabel = mode === "owner" ? (group.ownerName === "" ? t("kanban.group.unassigned") : group.ownerName) : statusText(locale, group.key);
-  const [title, setTitle] = useState("");
-  const [titleEn, setTitleEn] = useState("");
   const [cardPos, setCardPos] = useState<{ top: number; left: number }>({ top: 112, left: 16 });
   /** 本列的浮层（Push 118）：浮层状态是整块看板共用的，只有 `key` 是本列时才归本列。 */
   const mine = overlay !== null && overlay.key === group.key ? overlay : null;
@@ -610,6 +611,7 @@ function KanbanColumn({
   /** 本列的「阶段任务」模板卡片开的是哪个阶段（没开 = null）。 */
   const templateStage = mine !== null && mine.kind === "template" ? mine.stage : null;
   const columnRef = useRef<HTMLElement | null>(null);
+  const addButtonRef = useRef<HTMLButtonElement | null>(null);
   /** 落点就在本列（Push 108）：整列描边高亮 + 列内浮出插入槽位（槽位插到第 `dropIndex` 格）。 */
   const isDropTarget = dropIndex !== null;
   /** 拖动的就是本列的卡片（同列放开 = 只换顺序，不写负责人 / 状态）。 */
@@ -635,16 +637,7 @@ function KanbanColumn({
     openPanel("none");
   };
 
-  /** 本列开着的是不是「列内浮层」（菜单 / 临时任务表单 / 阶段选择）：模板卡片自带一套关闭逻辑，不算在内。 */
-  const panelActive = mine !== null && mine.kind !== "template";
-
-  // 浮层关掉之后清掉临时任务表单里没提交的内容（下次打开是空表单）
-  useEffect(() => {
-    if (!panelActive) {
-      setTitle("");
-      setTitleEn("");
-    }
-  }, [panelActive]);
+  const panelActive = panel === "menu" || panel === "stage";
 
   // `Esc` / 点浮层外的空白处关掉（阶段任务的模板卡片自带同一套关闭逻辑）
   useEffect(() => {
@@ -739,38 +732,26 @@ function KanbanColumn({
           {panel === "menu" ? (
             <div className={ADD_POPOVER} role="menu" aria-label={t("kanban.add.aria", { name: groupLabel })}>
               <p className="px-1 pb-1 text-[11px] text-zinc-400">{t("kanban.add.task")}</p>
-              <button type="button" role="menuitem" onClick={() => { openPanel("temp"); }} className={ADD_ENTRY}>
+              {onAddTask === undefined ? null : <button type="button" role="menuitem" onClick={() => {
+                addButtonRef.current?.focus({ preventScroll: true });
+                openPanel("temp");
+              }} className={ADD_ENTRY}>
                 {t("kanban.add.temp")}
                 <span className={ADD_ENTRY_HINT}>{t("kanban.add.tempHint")}</span>
-              </button>
-              <button type="button" role="menuitem" onClick={() => { openPanel("stage"); }} className={ADD_ENTRY + " mt-1"}>
+              </button>}
+              {onAddStageTask === undefined ? null : <button type="button" role="menuitem" onClick={() => { openPanel("stage"); }} className={ADD_ENTRY + " mt-1"}>
                 {t("kanban.add.stage")}
                 <span className={ADD_ENTRY_HINT}>{t("kanban.add.stageHint")}</span>
-              </button>
+              </button>}
             </div>
           ) : null}
 
-          {panel === "temp" ? (
-            <form
-              className={ADD_POPOVER}
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (title.trim() === "") {
-                  return;
-                }
-                // Push 196：建完由上层拿到新任务 id 并直接打开它的详情抽屉（不阻塞浮层关闭）
-                void onAddTask?.(context, { title: title.trim(), titleEn: titleEn.trim() });
-                closePanels();
-              }}
-            >
-              <p className="px-1 pb-1 text-[11px] text-zinc-400">{t("kanban.add.temp")}</p>
-              <input autoFocus value={title} onChange={(event) => { setTitle(event.target.value); }} placeholder={t("drawer.title.placeholder")} className={ADD_INPUT} />
-              <input value={titleEn} onChange={(event) => { setTitleEn(event.target.value); }} placeholder={t("drawer.titleEn.placeholder")} className={ADD_INPUT + " mt-1.5"} />
-              <div className="mt-2 flex items-center justify-end gap-1.5">
-                <button type="button" onClick={closePanels} className="rounded-lg border border-white/70 bg-white/60 px-2 py-1 text-[11px] text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-700">{t("common.cancel")}</button>
-                <button type="submit" disabled={title.trim() === ""} className="rounded-lg bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-white/60 disabled:text-zinc-400">{t("kanban.create")}</button>
-              </div>
-            </form>
+          {panel === "temp" && onAddTask !== undefined ? (
+            <TempTaskCreateForm
+              managerOptions={managerMembers}
+              onCreate={(values) => onAddTask(context, values)}
+              onClose={closePanels}
+            />
           ) : null}
 
           {panel === "stage" ? (
@@ -787,6 +768,7 @@ function KanbanColumn({
           ) : null}
 
           {canAdd ? <button
+            ref={addButtonRef}
             type="button"
             onClick={() => { openPanel(panel === "none" ? "menu" : "none"); }}
             aria-label={t("kanban.add.aria", { name: groupLabel })}
@@ -822,7 +804,7 @@ function KanbanColumn({
   );
 }
 
-export function TaskKanban({ mode, tasks, focusTaskId = null, onFocusClosed, canFinalizeTask, canEditManagers = false, canDragTasks = false, customDeliverableTypes = [], onCreateDeliverableType, members, managerMembers, onAddTask, onAddStageTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onSetStatus, onSetActualEnd, onReorderTask, onSetProgress, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, projectId }: TaskKanbanProps) {
+export function TaskKanban({ mode, tasks, focusTaskId = null, onFocusClosed, canFinalizeTask, canEditManagers = false, canDragTasks = false, customDeliverableTypes = [], onCreateDeliverableType, members, managerMembers, onAddTask, onAddStageTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onSetStatus, onSetActualEnd, onReorderTask, onSetProgress, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, projectId }: TaskKanbanProps) {
   const t = useT();
   /**
    * 任务详情抽屉选中的任务 id（Push 196 由对象改存 id）：点卡片与「建完临时任务」都先落 id，抽屉按 id 从最新列表取行 ——
@@ -1165,9 +1147,9 @@ export function TaskKanban({ mode, tasks, focusTaskId = null, onFocusClosed, can
 
   /**
    * 列底「添加 → 临时任务」（Push 196）：建完直接打开这个任务的详情抽屉（确认时间等细节；名字可在抽屉里再改）——
-   * 表单提交那一刻先关浮层，创建成功（拿到 id）再开抽屉；新建行随列表刷新回来即渲染。
+   * 创建成功后关闭面板并打开抽屉；新建行随列表刷新回来即渲染。
    */
-  const addTaskAndOpen = async (context: KanbanAddContext, values: { title: string; titleEn: string }): Promise<string | null> => {
+  const addTaskAndOpen = async (context: KanbanAddContext, values: TempTaskCreateValues): Promise<string | null> => {
     if (onAddTask === undefined) return null;
     const createdId = await onAddTask(context, values);
     if (createdId !== null) {
@@ -1176,7 +1158,7 @@ export function TaskKanban({ mode, tasks, focusTaskId = null, onFocusClosed, can
     return createdId;
   };
 
-  if (tasks.length === 0) {
+  if (tasks.length === 0 && onAddTask === undefined) {
     return (
       <div className="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center text-sm text-zinc-500">
         {t("kanban.hint.noTasks")}
@@ -1207,10 +1189,11 @@ export function TaskKanban({ mode, tasks, focusTaskId = null, onFocusClosed, can
               overlay={addOverlay}
               setOverlay={setAddOverlay}
               onOpenTask={openTask}
-              onAddTask={addTaskAndOpen}
+              onAddTask={onAddTask === undefined ? undefined : addTaskAndOpen}
               onAddStageTask={onAddStageTask}
               stageTasksOf={stageTasksOf}
               members={members}
+              managerMembers={managerMembers}
               onSetActualEnd={onSetActualEnd}
               draggingId={canDragTasks ? draggingId : null}
               dropIndex={dropTarget !== null && dropTarget.key === group.key ? dropTarget.index : null}
@@ -1250,6 +1233,7 @@ export function TaskKanban({ mode, tasks, focusTaskId = null, onFocusClosed, can
         onUnfinalize={onUnfinalize}
         onChanged={onChanged}
         actorName={actorName}
+        allowFileChanges={allowFileChanges}
         projectId={projectId}
         onClose={() => {
           setSelectedTaskId(null);

@@ -236,7 +236,7 @@ async function addTask(projectId, body, request = api) {
 // Push 231 扩列：逾期 / 今日两条在创建时补齐任务表扩展列（成果文件只能建时给；开始日期 / 天数 / 人数 / 进展描述随行落库）
 const tOverdue = await addTask(projectA, { stageKey: "design", title: "回放·逾期任务", titleEn: "Replay overdue", ownerIds: [me.id], plannedStart: START_OVERDUE, plannedEnd: DUE_OVERDUE, priority: "高", estimatedDays: 5, headcount: 6, deliverableTypes: ["CAD图纸", "合同"], note: "回放·进展描述：图纸已出，等待评审" });
 const tToday = await addTask(projectA, { stageKey: "design", title: "回放·今日任务", ownerIds: [me.id], plannedStart: START_TODAY, plannedEnd: TODAY, priority: "中", headcount: 3, deliverableTypes: ["验收单"] });
-const tUpcoming = await addTask(projectA, { stageKey: null, title: "回放·即将任务", ownerIds: [me.id], plannedEnd: DUE_UPCOMING, priority: "低" });
+const tUpcoming = await addTask(projectA, { managerIds: [me.id], stageKey: null, title: "回放·即将任务", ownerIds: [me.id], plannedEnd: DUE_UPCOMING, priority: "低" });
 const tDone = await addTask(projectA, { stageKey: "design", title: "回放·已完成任务", ownerIds: [me.id], plannedEnd: TODAY });
 const tFar = await addTask(projectA, { stageKey: "design", title: "回放·远期任务", ownerIds: [other.id], plannedEnd: DUE_FAR });
 const tUnscheduled = await addTask(projectA, { stageKey: "design", title: "回放·未排期任务", ownerIds: [me.id], plannedEnd: null });

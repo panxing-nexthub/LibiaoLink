@@ -146,8 +146,8 @@ try {
   cleanup.projectId = created.body?.id ?? null;
   check("P4", "建回放项目（M6RPL-）", "201", created.status + " " + short({ id: cleanup.projectId, code: created.body?.code }, 160), created.status === 201);
 
-  const taskA = await call("POST", "/api/v1/projects/" + cleanup.projectId + "/tasks", { title: "M6RPL-引用守卫靶子（被问题引用）" });
-  const taskB = await call("POST", "/api/v1/projects/" + cleanup.projectId + "/tasks", { title: "M6RPL-对照任务（无引用）" });
+  const taskA = await call("POST", "/api/v1/projects/" + cleanup.projectId + "/tasks", { managerIds: [adminId], title: "M6RPL-引用守卫靶子（被问题引用）" });
+  const taskB = await call("POST", "/api/v1/projects/" + cleanup.projectId + "/tasks", { managerIds: [adminId], title: "M6RPL-对照任务（无引用）" });
   taskAId = taskA.body?.id ?? null;
   taskBId = taskB.body?.id ?? null;
   check("P5", "建 2 个任务（引用守卫靶子 + 无引用对照）", "201 x 2", short({ a: taskAId, b: taskBId }, 200), taskA.status === 201 && taskB.status === 201);
@@ -371,7 +371,7 @@ try {
   // ---------- 证据六：工作台（M6-05 · A6-01 我的任务四组 / A6-03 我的问题两栏 · 2026-09-30 口径复评） ----------
   // 命中口径 = 任务负责人含我 或 项目项目经理含我（本回放项目 managerIds=[adminId]，本项目未完成任务均可见）+ 未完成；
   // 分组不限窗口：plannedEnd 昨天 → overdue / 今天 → today / 远期 → upcoming / 空 → unscheduled（新增组）。
-  const bench = await call("POST", API + "/tasks", { title: "M6RPL-工作台靶子（四组 / 两栏）" });
+  const bench = await call("POST", API + "/tasks", { managerIds: [adminId], title: "M6RPL-工作台靶子（四组 / 两栏）" });
   let benchTask = bench.body ?? null;
   const workspaceNew = await call("GET", "/api/v1/workspace");
   const newHit = (workspaceNew.body?.myTasks?.unscheduled ?? []).find((item) => item.id === benchTask?.id) ?? null;

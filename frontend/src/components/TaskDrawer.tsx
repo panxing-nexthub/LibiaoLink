@@ -241,6 +241,7 @@ function draftOf(task: ProjectTask | null): Draft {
 type TaskDrawerProps = {
   /** 当前账号是否可对该任务定档 / 取消定档（服务端投影 canFinalize，且任务已设定输出成果文件）。 */
   canFinalize?: boolean;
+  allowFileChanges?: boolean;
   /** 项目经理是项目级字段：仅当前项目编辑者可改并同步全项目；任务负责人不得改。 */
   canEditManagers?: boolean;
   task: ProjectTask | null;
@@ -322,7 +323,7 @@ type TaskDrawerProps = {
  * 任务名称（中文 / 英文）自 Push 196 起对「临时任务」开放（**Push 197 收窄：仅未归入阶段的临时任务** —— 业务口径 2026-09-28「这个不是临时任务 不能修改」；失焦即存，中文名必填），
  * 阶段任务与节点 / 模板生成的任务仍锁定（抽屉里不出这一行，服务端同口径 400 兜底）。
  */
-export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEditManagers = false, members, managerMembers, customDeliverableTypes = [], onCreateDeliverableType, onSubmit, onRename, onProgress, onSetStatus, onSetActualEnd, onFinalize, onUnfinalize, onChanged, actorName, onUploadFiles, onDeleteFile, onRenameFile, projectId, onClose }: TaskDrawerProps) {
+export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEditManagers = false, allowFileChanges = true, members, managerMembers, customDeliverableTypes = [], onCreateDeliverableType, onSubmit, onRename, onProgress, onSetStatus, onSetActualEnd, onFinalize, onUnfinalize, onChanged, actorName, onUploadFiles, onDeleteFile, onRenameFile, projectId, onClose }: TaskDrawerProps) {
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
   const taskId = task === null ? null : task.id;
@@ -780,7 +781,9 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
   const unfinalizeLockedByPlannedEnd = isTaskOwnerUnfinalizeLockedByPlannedEnd(task);
   const unfinalizeAria = unfinalizeLockedByPlannedEnd ? t("drawer.finalize.afterDueAria") : onUnfinalize === undefined ? t("drawer.finalize.onAria") : t("drawer.finalize.offAria");
   const unfinalizeTitle = unfinalizeLockedByPlannedEnd ? t("drawer.finalize.afterDueTitle") : onUnfinalize === undefined ? t("drawer.finalize.onTitle") : t("drawer.finalize.offTitle");
-  const visibleTabs = filesWritable ? DRAWER_TABS : DRAWER_TABS.filter((item) => item.key !== "change");
+  const canChangeFiles = filesWritable && allowFileChanges;
+  const visibleTabs = canChangeFiles ? DRAWER_TABS : DRAWER_TABS.filter((item) => item.key !== "change");
+  const visibleTab = !canChangeFiles && tab === "change" ? "detail" : tab;
   /** 逾期提示与服务端展示态同一口径（已延期 = 未完成且过了预计完成日期）。 */
   const overdue = task.status === "已延期";
   /** 「是否按时交付」的逾期标注（服务端展示态 + onTime 派生）。 */
@@ -1594,7 +1597,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
     },
   ];
 
-  const materialModeActive = tab === "change" && changeMode === "material";
+  const materialModeActive = visibleTab === "change" && changeMode === "material";
 
   return (
     <div className="fixed inset-0 z-50">
@@ -1766,7 +1769,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
         <div data-drawer-tabs="true" className="shrink-0 border-b border-zinc-100 px-6">
           <div role="tablist" aria-label={t("drawer.tabs.aria")} className="flex gap-1">
             {visibleTabs.map((item) => {
-              const active = item.key === tab;
+              const active = item.key === visibleTab;
               if (item.key !== "change") {
                 return (
                   <button
@@ -1868,7 +1871,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
           </div>
         </div>
 
-        {tab === "detail" ? (
+        {visibleTab === "detail" ? (
           <>
             <div data-drawer-progress="" className="border-b border-zinc-100 px-6 py-4">
               <div className="flex items-center justify-between">
@@ -1916,7 +1919,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
               </dl>
             </ScrollArea>
           </>
-        ) : tab === "change" ? (
+        ) : visibleTab === "change" ? (
           changeMode === "material" ? (
             <ScrollArea key="change-material" viewportClassName="min-h-0 flex-1" className="px-6" ariaLabel={t("mr.aria")}>
               <MaterialReissueForm projectId={projectId ?? ""} task={task} members={members} onSubmitted={handleMaterialReissueSubmitted} />

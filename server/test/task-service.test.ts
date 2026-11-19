@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AppError } from "../src/common/errors/app-error.js";
 import type { DatabaseService } from "../src/db/database.service.js";
 import type { DbClient } from "../src/db/db-client.js";
 import type { PermissionService, ProjectManagerEligibilityService } from "../src/modules/permission/index.js";
@@ -127,7 +128,7 @@ class FakeTaskRepository {
   async findProject(): Promise<TaskProjectRow | null> {
     return this.project;
   }
-  async findProjectNode(): Promise<TaskProjectNodeRow | null> {
+  async lockProjectNodeForCreate(): Promise<TaskProjectNodeRow | null> {
     return this.node;
   }
   async findTaskIdByNode(): Promise<string | null> {
@@ -297,6 +298,7 @@ class FakeDatabase {
   outbox: unknown[] = [];
   db = {
     transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(this.makeTx()),
+    insert: this.makeTx().insert,
   };
   makeTx() {
     return {
@@ -332,6 +334,7 @@ function makeService(
   gate: FakeTaskGateRepository = new FakeTaskGateRepository(),
   audit: FakeAuditService = new FakeAuditService(),
   database: FakeDatabase = new FakeDatabase(),
+  managerEligibility: Pick<ProjectManagerEligibilityService, "assertAssignable"> = { assertAssignable: async () => {} },
 ): TaskService {
   return new TaskService(
     database as unknown as DatabaseService,
@@ -341,7 +344,7 @@ function makeService(
     audit as unknown as AuditService,
     {} as unknown as TaskNodeRepository,
     {} as unknown as TemplateService,
-    { assertAssignable: async () => {} } as unknown as ProjectManagerEligibilityService,
+    managerEligibility as ProjectManagerEligibilityService,
   );
 }
 
@@ -386,8 +389,19 @@ describe("TaskService.create（A10 / A1-13）", () => {
     });
   });
 
-  it("手工创建（无节点）非管理员 → 403；管理员 → 放行", async () => {
+  it("创建任务前锁定来源流程节点，节点已被并发删除时拒绝创建", async () => {
     const repo = new FakeTaskRepository();
+    const node = { id: NODE, stageKey: "install", status: "active" };
+    repo.node = node;
+    vi.spyOn(repo, "lockProjectNodeForCreate").mockResolvedValue({ ...node, status: "deleted" });
+    await expect(makeService(repo).create(PROJECT, { title: "货架组装", taskNodeId: NODE }, ACTOR))
+      .rejects.toMatchObject({ code: "VALIDATION_FAILED", httpStatus: 400 });
+    expect(repo.inserted).toBeNull();
+  });
+
+  it("阶段内手工创建无来源任务仍要求管理员，本项目经理返回 403", async () => {
+    const repo = new FakeTaskRepository();
+    repo.project = { id: PROJECT, managerIds: [ACTOR], stageKey: "presale", status: "active" };
     const permission = new FakePermissionService();
     const service = makeService(repo, permission);
     await expect(service.create(PROJECT, { stageKey: "install", title: "临时任务" }, ACTOR)).rejects.toMatchObject({
@@ -397,6 +411,52 @@ describe("TaskService.create（A10 / A1-13）", () => {
     permission.groupAccessAdmin = true;
     const created = await service.create(PROJECT, { stageKey: "install", title: "临时任务" }, ACTOR);
     expect(created.title).toBe("临时任务");
+  });
+
+  it.each(["active", "archived"])("%s 项目的在任项目经理可以手工创建临时任务", async (status) => {
+    const repo = new FakeTaskRepository();
+    repo.project = { id: PROJECT, managerIds: [MANAGER, ACTOR], stageKey: "acceptance", status };
+    const service = makeService(repo);
+    const created = await service.create(PROJECT, { title: "现场复查", managerIds: [MANAGER] }, ACTOR);
+    expect(created).toMatchObject({ stageKey: null, status: "pending", managerIds: [MANAGER] });
+    expect(repo.project.managerIds).toEqual([MANAGER, ACTOR]);
+    expect(repo.project.status).toBe(status);
+  });
+
+  it.each([undefined, []])("临时任务必须手选项目经理（managerIds=%j）", async (managerIds) => {
+    const repo = new FakeTaskRepository();
+    repo.project = { id: PROJECT, managerIds: [ACTOR], stageKey: "acceptance", status: "archived" };
+    await expect(makeService(repo).create(PROJECT, { title: "现场复查", managerIds }, ACTOR))
+      .rejects.toMatchObject({ code: "VALIDATION_FAILED", httpStatus: 400 });
+    expect(repo.inserted).toBeNull();
+  });
+
+  it("临时任务的新经理须符合资格，现有项目经理身份不能作为新任务的资格兜底", async () => {
+    const repo = new FakeTaskRepository();
+    repo.project = { id: PROJECT, managerIds: [MANAGER, ACTOR], stageKey: "acceptance", status: "archived" };
+    const assertAssignable = vi.fn().mockRejectedValue(new AppError("VALIDATION_FAILED", "项目经理不符合条件"));
+    const service = makeService(repo, undefined, undefined, undefined, undefined, { assertAssignable });
+    await expect(service.create(PROJECT, { title: "现场复查", managerIds: [MANAGER] }, ACTOR))
+      .rejects.toMatchObject({ code: "VALIDATION_FAILED", httpStatus: 400 });
+    expect(assertAssignable).toHaveBeenCalledExactlyOnceWith([MANAGER]);
+    expect(repo.inserted).toBeNull();
+  });
+
+  it("阶段任务使用项目经理名单，创建请求不能独立指定经理", async () => {
+    const repo = new FakeTaskRepository();
+    repo.node = { id: NODE, stageKey: "install", status: "active" };
+    await expect(makeService(repo).create(PROJECT, { taskNodeId: NODE, title: "货架组装", managerIds: [MANAGER_2] }, ACTOR))
+      .rejects.toMatchObject({ code: "VALIDATION_FAILED", httpStatus: 400 });
+    expect(repo.inserted).toBeNull();
+  });
+
+  it("临时任务创建按写入时的项目经理名单校验，已移除的经理即使仍有编辑权也返回 403", async () => {
+    const repo = new FakeTaskRepository();
+    const previous = { id: PROJECT, managerIds: [ACTOR], stageKey: "acceptance", status: "archived" };
+    repo.project = { ...previous, managerIds: [MANAGER] };
+    vi.spyOn(repo, "findProject").mockResolvedValueOnce(previous);
+    await expect(makeService(repo).create(PROJECT, { title: "现场复查", managerIds: [MANAGER] }, ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(repo.inserted).toBeNull();
   });
 
   it("stageKey 与来源节点阶段不一致 → 400", async () => {
@@ -417,6 +477,41 @@ describe("TaskService.create（A10 / A1-13）", () => {
       code: "PROJECT_ARCHIVED",
       httpStatus: 409,
     });
+  });
+
+  it("归档项目由管理员新增临时任务，配置成果后上传文件即可完成", async () => {
+    const repo = new FakeTaskRepository();
+    repo.project = { id: PROJECT, managerIds: [MANAGER], stageKey: "acceptance", status: "archived" };
+    const permission = new FakePermissionService();
+    const gate = new FakeTaskGateRepository();
+    gate.uploadedCounts = [];
+    const service = makeService(repo, permission, gate);
+    const taskBody = { stageKey: null, title: "归档后补做", managerIds: [MANAGER] };
+    await expect(service.create(PROJECT, taskBody, ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    permission.groupAccessAdmin = true;
+    const created = await service.create(PROJECT, taskBody, ACTOR);
+    expect(created).toMatchObject({ stageKey: null, status: "pending" });
+    repo.task = repo.inserted;
+    const edited = await service.update(PROJECT, created.id, {
+      version: created.version, title: "归档后现场补做", deliverableTypes: ["CAD图纸"],
+    }, ACTOR);
+    await expect(service.updateProgress(PROJECT, created.id, { version: edited.version, progress: 1 }, ACTOR))
+      .rejects.toMatchObject({ code: "TASK_REQUIRED_DOC_MISSING" });
+    gate.uploadedCounts = [{ docType: null, present: 1 }];
+    const completed = await service.updateProgress(PROJECT, created.id, { version: edited.version, progress: 1 }, ACTOR);
+    expect(completed).toMatchObject({ title: "归档后现场补做", status: "done" });
+    expect(repo.project.status).toBe("archived");
+  });
+
+  it("归档项目的阶段任务和已完成临时任务仍冻结", async () => {
+    const repo = new FakeTaskRepository();
+    repo.project = { id: PROJECT, managerIds: [MANAGER], stageKey: "acceptance", status: "archived" };
+    const service = makeService(repo);
+    await expect(service.updateProgress(PROJECT, TASK, { version: 3, progress: 1 }, ACTOR)).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    await expect(service.update(PROJECT, TASK, { version: 3, managerIds: [MANAGER_2] }, ACTOR)).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    repo.task = makeRow({ stageKey: null, nodeId: null, status: "done", progress: "1" });
+    await expect(service.update(PROJECT, TASK, { version: 3, status: "active" }, ACTOR)).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    expect(repo.touched).toEqual([]);
   });
 });
 
@@ -621,7 +716,7 @@ describe("TaskService w2 落库口径（A15 / A18 / A19 / A20 · Push 124）", (
     const permission = new FakePermissionService();
     permission.groupAccessAdmin = true;
     const service = makeService(repo, permission);
-    const created = await service.create(PROJECT, { title: "临时任务", ownerIds: [] }, ACTOR);
+    const created = await service.create(PROJECT, { title: "临时任务", ownerIds: [], managerIds: [MANAGER] }, ACTOR);
     expect(created.stageKey).toBeNull();
     expect(created.ownerIds).toEqual([]);
   });
@@ -642,7 +737,7 @@ describe("TaskService w2 落库口径（A15 / A18 / A19 / A20 · Push 124）", (
     const permission = new FakePermissionService();
     permission.groupAccessAdmin = true;
     const service = makeService(repo, permission);
-    const created = await service.create(PROJECT, { title: "临时任务", sortIndex: 0 }, ACTOR);
+    const created = await service.create(PROJECT, { title: "临时任务", sortIndex: 0, managerIds: [MANAGER] }, ACTOR);
     expect(created.sortIndex).toBe(0);
     expect(repo.shifted).toEqual([{ from: 0, to: null, delta: 1 }]);
   });

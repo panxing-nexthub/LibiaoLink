@@ -1078,6 +1078,7 @@ export default function App() {
           taskHiddenColumns={taskTableHiddenColumns}
           onTaskHiddenColumnsChange={handleSaveTaskHiddenColumns}
           canManageStakeholders={canManageStakeholders}
+          canCreateTemporaryTask={permissions !== null && (permissions.groupAccessAdmin || detail?.managerIds.includes(permissions.userId) === true)}
           onSetProjectDone={canUpdateProject && detail?.accessLevel === "edit" ? handleSetProjectDone : undefined}
         />
         {editModal}

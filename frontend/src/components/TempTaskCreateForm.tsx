@@ -1,89 +1,123 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
+import type { Member } from "../data/members";
 import { useT } from "../i18n";
+import { MemberMultiSelect } from "./MemberSelect";
+import { useFocusTrap } from "./useFocusTrap";
 
-/** 输入框样式：与看板「添加 → 临时任务」表单同一套「白底 + 淡灰描边」小框口径。 */
 const INPUT_CLASS =
-  "w-full rounded-lg border border-zinc-200/90 bg-white/75 px-2 py-1.5 text-xs text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white";
+  "w-full rounded-lg border border-zinc-200/90 bg-white/75 px-3 py-2 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 focus:bg-white";
 
-type TempTaskCreateFormProps = {
-  /**
-   * 提交（上层负责落库 + 建完打开任务详情抽屉）：返回新任务 id（失败 = null）。
-   * 成功（id 非空）后表单自动清空；失败保留输入便于重试。
-   */
-  onCreate: (values: { title: string; titleEn: string }) => Promise<string | null>;
-  /** 「取消」回调（不传 = 不渲染取消按钮）。 */
-  onCancel?: () => void;
+export type TempTaskCreateValues = {
+  title: string;
+  titleEn: string;
+  managerIds: string[];
 };
 
-/**
- * 「临时任务」新建表单（Push 197 · 业务口径「没有模板 点击后直接新建即可填写任务名称」）：
- * 项目总览底部「临时任务」分组头（TaskBoard）与看板列底「添加 → 临时任务」（TaskKanban）共用 ——
- * 临时任务没有节点 / 模板可挑，点入口后直接填名称（中文必填、英文可留空）；建完由上层直接打开它的详情抽屉补时间等细节。
- * Push 207 收窄（业务口径「临时任务不应该存在于阶段里面新建」）：阶段添加卡片（StageAddCard）那份入口下架，
- * 本表单不再从阶段面板打开。
- * 表单本体只到「输入 + 创建 / 取消」，外框由调用方给（看板列底 / 卡片列表 / 分组头浮层各随所在容器）。
- */
-export function TempTaskCreateForm({ onCreate, onCancel }: TempTaskCreateFormProps) {
+type TempTaskCreateFormProps = {
+  managerOptions: readonly Member[];
+  onCreate: (values: TempTaskCreateValues) => Promise<string | null>;
+  onClose: () => void;
+};
+
+/** 项目总览和看板共用的新建面板，固定在视口内。 */
+export function TempTaskCreateForm({ managerOptions, onCreate, onClose }: TempTaskCreateFormProps) {
   const t = useT();
+  const headingId = useId();
+  const dialogRef = useFocusTrap<HTMLDivElement>();
   const [title, setTitle] = useState("");
   const [titleEn, setTitleEn] = useState("");
+  const [managerIds, setManagerIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  /** 中文名必填（与抽屉改名的口径一致）：空名时创建按钮禁用。 */
-  const invalid = title.trim() === "";
+  const invalid = title.trim() === "" || managerIds.length === 0;
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (invalid || busy) {
-      return;
-    }
+    if (invalid || busy) return;
     setBusy(true);
-    void onCreate({ title: title.trim(), titleEn: titleEn.trim() })
-      .then((createdId) => {
-        if (createdId !== null) {
-          setTitle("");
-          setTitleEn("");
-        }
-      })
-      .finally(() => {
-        setBusy(false);
-      });
+    try {
+      const createdId = await onCreate({ title: title.trim(), titleEn: titleEn.trim(), managerIds });
+      if (createdId !== null) onClose();
+    } finally {
+      setBusy(false);
+    }
   };
 
-  return (
-    <form data-temp-task-form="true" aria-label={t("tt.formAria")} onSubmit={submit}>
-      <input
-        autoFocus
-        value={title}
-        onChange={(event) => { setTitle(event.target.value); }}
-        placeholder={t("tt.name")}
-        aria-label={t("tt.nameAria")}
-        className={INPUT_CLASS}
-      />
-      <input
-        value={titleEn}
-        onChange={(event) => { setTitleEn(event.target.value); }}
-        placeholder={t("tt.nameEn")}
-        aria-label={t("tt.nameEnAria")}
-        className={INPUT_CLASS + " mt-1.5"}
-      />
-      <div className="mt-2 flex items-center justify-end gap-1.5">
-        {onCancel === undefined ? null : (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-lg border border-white/70 bg-white/60 px-2 py-1 text-[11px] text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-700"
-          >
-            {t("common.cancel")}
-          </button>
-        )}
-        <button
-          type="submit"
-          disabled={invalid || busy}
-          className="rounded-lg bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-white/60 disabled:text-zinc-400"
-        >
-          {t("tt.create")}
-        </button>
+  return createPortal(
+    <div
+      className="fixed inset-0 z-40 grid place-items-center overflow-hidden bg-zinc-950/10 p-4"
+      onPointerDown={(event) => { event.stopPropagation(); }}
+      onClick={(event) => {
+        if (!busy && event.target === event.currentTarget) onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        const openPicker = dialogRef.current?.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"][aria-expanded="true"]');
+        if (openPicker) {
+          openPicker.focus({ preventScroll: true });
+          return;
+        }
+        event.stopPropagation();
+        if (!busy) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        data-temp-task-dialog="true"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={headingId}
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-[400px] overflow-y-auto overscroll-contain rounded-2xl border border-white/80 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.98),rgba(255,255,255,0.94))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_12px_40px_rgba(15,23,42,0.22)] backdrop-blur-2xl backdrop-saturate-150"
+      >
+        <h2 id={headingId} className="mb-3 text-sm font-semibold text-zinc-800">{t("tt.formAria")}</h2>
+        <form data-temp-task-form="true" onSubmit={submit}>
+          <fieldset disabled={busy} className="grid min-w-0 gap-2">
+            <input
+              required
+              maxLength={200}
+              value={title}
+              onChange={(event) => { setTitle(event.target.value); }}
+              placeholder={t("tt.name")}
+              aria-label={t("tt.nameAria")}
+              className={INPUT_CLASS}
+            />
+            <input
+              maxLength={200}
+              value={titleEn}
+              onChange={(event) => { setTitleEn(event.target.value); }}
+              placeholder={t("tt.nameEn")}
+              aria-label={t("tt.nameEnAria")}
+              className={INPUT_CLASS}
+            />
+            <div data-temp-task-manager="true">
+              <p className="mb-1 text-xs font-medium text-zinc-700">{t("tt.managerRequired")}</p>
+              <MemberMultiSelect
+                values={managerIds}
+                onChange={setManagerIds}
+                options={managerOptions}
+                ariaLabel={t("tt.managerRequired")}
+              />
+            </div>
+            <div className="mt-1 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-zinc-200 bg-white/60 px-3 py-1.5 text-xs text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="submit"
+                disabled={invalid || busy}
+                className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
+              >
+                {t("tt.create")}
+              </button>
+            </div>
+          </fieldset>
+        </form>
       </div>
-    </form>
+    </div>,
+    document.body,
   );
 }

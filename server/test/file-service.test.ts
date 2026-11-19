@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Logger } from "@nestjs/common";
+import { UploadCreateBodySchema } from "@libiaolink/contracts";
 import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { ClockService } from "../src/common/clock/clock.service.js";
@@ -189,6 +190,8 @@ function part(partNumber: number, sizeBytes: number): UploadedPart {
 /** 仓储替身：只记录调用并返回预置行（类型经 as unknown as FileRepository 桥接）。 */
 class FakeFileRepository {
   project: FileProjectBriefRow | null = { id: PROJECT, status: "active", deletedAt: null };
+  unfinishedTemporaryTask = false;
+  unfinishedTemporaryTaskIds = new Set<string>();
   node: FileNodeBriefRow | null = { id: NODE, projectId: PROJECT, deletedAt: null };
   task: FileTaskBriefRow | null = { id: TASK, projectId: PROJECT, ownerIds: [ACTOR], finalizedAt: null };
   file: FileRow | null = makeFileRow();
@@ -221,6 +224,12 @@ class FakeFileRepository {
   async findProjectBrief(): Promise<FileProjectBriefRow | null> {
     return this.project;
   }
+
+  async hasUnfinishedTemporaryTask(_projectId: string, _client?: unknown, taskId?: string): Promise<boolean> {
+    return taskId === undefined ? this.unfinishedTemporaryTask : this.unfinishedTemporaryTaskIds.has(taskId);
+  }
+
+  async lockAttachmentTask(): Promise<void> {}
 
   async findNodeBrief(): Promise<FileNodeBriefRow | null> {
     return this.node;
@@ -1168,6 +1177,41 @@ describe("FileService.createUpload（M4-01 发起上传）", () => {
     ).rejects.toMatchObject({ code: "NOT_FOUND", httpStatus: 404 });
   });
 
+  it("归档日报附图只在有未完成临时任务时允许新建位图和继续上传", async () => {
+    const h = makeService();
+    const body = { projectId: PROJECT, name: "复查.png", sizeBytes: MI_B, intent: "report_photo" } as const;
+    h.repo.project = { id: PROJECT, status: "archived", deletedAt: null };
+    expect(UploadCreateBodySchema.safeParse({ ...body, taskId: TASK }).success).toBe(false);
+    expect(UploadCreateBodySchema.safeParse({ ...body, fileId: FILE }).success).toBe(false);
+    await expect(h.service.createUpload(body, ACTOR)).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+
+    h.repo.unfinishedTemporaryTask = true;
+    await expect(h.service.createUpload({ ...body, name: "复查.pdf" }, ACTOR)).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+    const result = await h.service.createUpload(body, ACTOR);
+    expect(result.upload?.intent).toBe("report_photo");
+    expect(h.repo.insertedFiles).toMatchObject([{ nodeId: null, taskId: null }]);
+
+    h.repo.unfinishedTemporaryTask = false;
+    await expect(h.service.signParts(result.file.id, result.upload!.id, { partNumbers: [1] }, ACTOR))
+      .rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    await expect(h.service.completeUpload(result.file.id, result.upload!.id, { contentHash: "0".repeat(64) }, ACTOR))
+      .rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+  });
+
+  it("归档项目只给未完成的临时任务新增成果附件", async () => {
+    const h = makeService();
+    h.repo.project = { id: PROJECT, status: "archived", deletedAt: null };
+    h.repo.unfinishedTemporaryTask = true;
+    h.repo.unfinishedTemporaryTaskIds.add(OTHER_TASK);
+    const body = { projectId: PROJECT, name: "现场复查.pdf", sizeBytes: MI_B, intent: "version", taskId: TASK } as const;
+    await expect(h.service.createUpload(body, ACTOR)).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    h.repo.unfinishedTemporaryTaskIds.add(TASK);
+    await expect(h.service.createUpload({ ...body, taskId: undefined }, ACTOR)).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    const result = await h.service.createUpload(body, ACTOR);
+    expect(result.file.taskId).toBe(TASK);
+    expect(result.upload?.intent).toBe("version");
+  });
+
   it("nodeId / taskId 跨项目 → 400（防挂接到别的项目）", async () => {
     const h = makeService();
     h.repo.node = { id: NODE, projectId: OTHER_PROJECT, deletedAt: null };
@@ -1369,6 +1413,13 @@ describe("FileService.getUpload（会话状态 / 续传依据）", () => {
     expect(h.storage.listed).toHaveLength(0);
   });
 
+  it("对象存储已无分片会话时返回可重建的 410", async () => {
+    const h = makeService();
+    h.repo.session = makeSessionRow({ storageUploadId: "storage-1" });
+    h.storage.listError = new StorageError("upload_not_found", "multipart upload completed");
+    await expect(h.service.getUpload(FILE, SESSION, ACTOR)).rejects.toMatchObject({ code: "UPLOAD_SESSION_EXPIRED", httpStatus: 410 });
+  });
+
   it("会话过期 → 409 FILE_STATE_INVALID（惰性清理）", async () => {
     const h = makeService();
     h.repo.session = makeSessionRow({ storageUploadId: "storage-1", expiresAt: new Date(NOW.getTime() - 1) });
@@ -1495,6 +1546,55 @@ describe("FileService.completeUpload（合并 / 复制到契约键 / 落版本�
       destinationKey: BLOB_KEY,
       contentType: "application/octet-stream",
     });
+  });
+
+  it("归档日报附图校验位图内容后正常登记版本", async () => {
+    const h = readyHarness();
+    h.repo.project = { id: PROJECT, status: "archived", deletedAt: null };
+    h.repo.unfinishedTemporaryTask = true;
+    h.repo.file = makeFileRow({ name: "复查.png", taskId: null, nodeId: null });
+    h.repo.session = makeSessionRow({ intent: "report_photo", storageUploadId: "storage-1", mime: "image/png" });
+    h.storage.prefix = PNG_PREFIX;
+    const result = await h.service.completeUpload(FILE, SESSION, { contentHash: declareActualHash(h) }, ACTOR);
+    expect(result.file.taskId).toBeNull();
+    expect(result.version.mime).toBe("image/png");
+    expect(result.changeRequest).toBeNull();
+  });
+
+  it("最终临时任务在分片合并后完成时，终止辅助上传会话并允许重新发起", async () => {
+    const h = readyHarness();
+    h.repo.project = { id: PROJECT, status: "archived", deletedAt: null };
+    h.repo.unfinishedTemporaryTask = true;
+    h.repo.file = makeFileRow({ name: "复查.png", taskId: null, nodeId: null });
+    h.repo.session = makeSessionRow({ intent: "report_photo", storageUploadId: "storage-1", mime: "image/png" });
+    h.storage.prefix = PNG_PREFIX;
+    const merge = h.storage.completeMultipartUpload.bind(h.storage);
+    vi.spyOn(h.storage, "completeMultipartUpload").mockImplementationOnce(async (input) => {
+      const merged = await merge(input);
+      h.repo.unfinishedTemporaryTask = false;
+      h.storage.listError = new StorageError("upload_not_found", "multipart upload completed");
+      return merged;
+    });
+    await expect(h.service.completeUpload(FILE, SESSION, { contentHash: declareActualHash(h) }, ACTOR))
+      .rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    expect(h.repo.insertedVersions).toHaveLength(0);
+    expect(h.storage.purged).toContain(STAGING_KEY);
+    expect(h.repo.session?.status).toBe("expired");
+    h.repo.unfinishedTemporaryTask = true;
+    await expect(h.service.getUpload(FILE, SESSION, ACTOR)).rejects.toMatchObject({ code: "FILE_STATE_INVALID" });
+  });
+
+  it("未完成的归档临时任务可以登记成果附件版本", async () => {
+    const h = readyHarness();
+    h.repo.project = { id: PROJECT, status: "archived", deletedAt: null };
+    h.repo.unfinishedTemporaryTaskIds.add(TASK);
+    h.repo.file = makeFileRow({ taskId: TASK, nodeId: null, currentVersionId: null });
+    h.repo.unfinishedTemporaryTaskIds.delete(TASK);
+    await expect(h.service.completeUpload(FILE, SESSION, { contentHash: HASH }, ACTOR)).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    h.repo.unfinishedTemporaryTaskIds.add(TASK);
+    const result = await h.service.completeUpload(FILE, SESSION, { contentHash: HASH }, ACTOR);
+    expect(result.file.taskId).toBe(TASK);
+    expect(result.version.mime).toBe("application/pdf");
   });
 
   it("H1 · S2：扩展名 / 声明 MIME 冲突 → 422 拒绝，不复制、不落版本", async () => {

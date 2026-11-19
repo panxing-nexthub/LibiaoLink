@@ -125,6 +125,7 @@ type FilePreviewResponse = {
 /** 上传文件的可选关联（taskId 给出时文件挂到该任务；file_links 同事务建立）。 */
 export type UploadFileOptions = {
   taskId?: string;
+  reportPhoto?: true;
   /** 定档上传（Push 249 · 业务口径「若是则上传文件后该任务定档不支持任何修改」）：传输完成即对该文件定档
    *  （POST /files/{id}/finalize）—— 挂接任务随文件定档一并锁定（服务端同事务、幂等）。 */
   finalize?: boolean;
@@ -292,7 +293,7 @@ const inFlightUploads = new Map<string, Promise<string>>();
 export async function uploadFile(projectId: string, file: Blob, name: string, options: UploadFileOptions = {}): Promise<string> {
   const contentHash = await sha256Blob(file);
   const taskId = options.taskId ?? null;
-  const key = projectId + "|" + contentHash + "|" + (taskId ?? "");
+  const key = projectId + "|" + contentHash + "|" + (taskId ?? "") + (options.reportPhoto ? "|report_photo" : "");
   const running = inFlightUploads.get(key);
   if (running !== undefined) {
     return running;
@@ -304,6 +305,7 @@ export async function uploadFile(projectId: string, file: Blob, name: string, op
       fileName: name,
       sizeBytes: file.size,
       taskId,
+      reportPhoto: options.reportPhoto,
     });
     if (resumable !== null) {
       const resumed = await resumeStoredUpload(resumable, file, contentHash, options.finalize === true);
@@ -315,7 +317,7 @@ export async function uploadFile(projectId: string, file: Blob, name: string, op
       sizeBytes: file.size,
       mime: file.type === "" ? undefined : file.type,
       contentHash,
-      intent: "version",
+      intent: options.reportPhoto ? "report_photo" : "version",
       taskId: options.taskId,
     });
     // 附件域秒传复用（2026-10-12）：直接复用既有文件，不重复定档。
@@ -337,6 +339,7 @@ export async function uploadFile(projectId: string, file: Blob, name: string, op
       fileName: name,
       sizeBytes: file.size,
       taskId,
+      reportPhoto: options.reportPhoto,
       partSizeBytes: created.upload.partSizeBytes,
       totalParts: created.upload.totalParts,
       expiresAt: created.upload.expiresAt,
@@ -615,8 +618,8 @@ export async function uploadFiles(
 }
 
 /** 上传一张图片 / 文件（粘贴与选文件共用）：返回 file_links 用的文件 id。 */
-export function uploadPhoto(projectId: string, blob: Blob, name: string): Promise<string> {
-  return uploadFile(projectId, blob, name);
+export function uploadPhoto(projectId: string, blob: Blob, name: string, archivedReport = false): Promise<string> {
+  return uploadFile(projectId, blob, name, archivedReport ? { reportPhoto: true } : undefined);
 }
 
 /** 图片扩展名判定（TaskFileBrief 不带 mime）：抽屉里只有图片给「点击预览」。（Push 226 续） */

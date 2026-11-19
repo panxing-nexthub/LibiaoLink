@@ -6,6 +6,7 @@ import type { DbClient } from "../../db/db-client.js";
 import { users } from "../../db/schema/identity.js";
 import { projects } from "../../db/schema/projects.js";
 import { dailyReports } from "../../db/schema/reports.js";
+import { hasUnfinishedTemporaryTask } from "../../db/task-scope.js";
 import type { DailyReportFilter } from "./report-issue.rules.js";
 
 /** 日报行（含提交人显示名）。 */
@@ -205,8 +206,9 @@ export class ReportRepository {
   async findProject(
     projectId: string,
     client: DbClient = this.database.db,
+    lock = false,
   ): Promise<{ id: string; code: string; status: string; name: string; managerIds: string[] } | null> {
-    const rows = await client
+    const query = client
       .select({
         id: projects.id,
         code: projects.code,
@@ -217,7 +219,12 @@ export class ReportRepository {
       .from(projects)
       .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
       .limit(1);
+    const rows = await (lock ? query.for("no key update") : query);
     return rows[0] ?? null;
+  }
+
+  hasUnfinishedTemporaryTask(projectId: string, client: DbClient = this.database.db): Promise<boolean> {
+    return hasUnfinishedTemporaryTask(client, projectId);
   }
 
   /** 批量取显示名（查询海报项目经理位）；缺失用户由调用方过滤。 */

@@ -1077,7 +1077,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
       setExportOverlayVisible(true);
     }, 250);
     try {
-      await exportProjectOverviewPdfHtml(previewHtml, { project, tasks, summary }, options.primary);
+      await exportProjectOverviewPdfHtml(previewHtml, { project, tasks, summary }, options.exportName);
     } catch {
       setToolError(t("export.error"));
     } finally {

@@ -1518,6 +1518,7 @@ function ReportList({ reports, focusReportId = null, onEdit, onPatch, onDelete }
                       {onEdit === undefined ? null : <span data-report-edit-slot="">
                         <RowEditButton
                           label={t("report.row.editReport", { date: report.date })}
+                          persistent
                           onEdit={() => {
                             onEdit(report);
                           }}
@@ -1526,6 +1527,7 @@ function ReportList({ reports, focusReportId = null, onEdit, onPatch, onDelete }
                       {onDelete === undefined ? null : <span data-report-delete-slot="">
                         <RowDeleteButton
                           label={t("report.row.deleteReport", { date: report.date })}
+                          persistent
                           onDelete={() => {
                             onDelete(report.id);
                           }}
@@ -2009,6 +2011,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
                     {onEdit === undefined ? null : <span data-issue-edit-slot="">
                       <RowEditButton
                         label={t("report.row.editIssue", { date: issue.raisedAt })}
+                        persistent
                         onEdit={() => {
                           onEdit(issue);
                         }}
@@ -2017,6 +2020,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
                     {onDelete === undefined ? null : <span data-issue-delete-slot="">
                       <RowDeleteButton
                         label={t("report.row.deleteIssue", { date: issue.raisedAt })}
+                        persistent
                         onDelete={() => {
                           onDelete(issue);
                         }}

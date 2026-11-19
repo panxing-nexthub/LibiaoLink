@@ -4107,7 +4107,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
               hint={recordsHint}
             />
             <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center">
-              <PageExportButton projectId={project.id} initialSheet="reports" />
+              <PageExportButton projectId={project.id} projectCode={project.code} projectName={project.description} initialSheet="reports" />
               <div data-report-search="" className="w-full sm:w-72">
                 <SearchInput value={recordKeyword} onChange={setRecordKeyword} placeholder={t("report.records.search")} className="w-full" />
               </div>
@@ -4133,7 +4133,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
               hint={issuesHint}
             />
             <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center">
-              <PageExportButton projectId={project.id} initialSheet="issues" />
+              <PageExportButton projectId={project.id} projectCode={project.code} projectName={project.description} initialSheet="issues" />
               <div data-issue-search="" className="w-full sm:w-72">
                 <SearchInput value={issueKeyword} onChange={setIssueKeyword} placeholder={t("report.issues.search")} className="w-full" />
               </div>

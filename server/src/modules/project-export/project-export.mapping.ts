@@ -137,7 +137,7 @@ export function taskExportRow(
     actualEnd: formatTaskDate(task.actualEnd),
     stage: taskStageName(task.stageKey),
     priority: task.priority ?? "",
-    endedAt: latestChange === undefined ? "" : formatCalendarDate(latestChange.appliedAt),
+    latestChangeDate: latestChange === undefined ? "" : formatCalendarDate(latestChange.appliedAt),
     files: [...taskFiles],
     changeDates: task.changeLinks.map((link) => formatCalendarDate(link.appliedAt)),
   };

@@ -1,3 +1,23 @@
+> **2026-11-19 11:30–11:34 日报未来日期 + 项目总览变更记录正式发布（prod-20261119-1130-px-report-future-change-records-01668f46）**：正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261119-1130-px-report-future-change-records-01668f46`，previous = `prod-20261119-1041-px-project-management-responsive-link-16e64d5d`；source = `main@01668f46`（PR #912 项目管理 + PR #913 日报未来日期 / 变更记录）。staging = `/srv/data/deploy-prod-20261119-1130-px-report-future-change-records-01668f46`，备份 = `/srv/data/backups/before-prod-20261119-1130-px-report-future-change-records-01668f46`。
+>
+> **改动 / 验收**：日报填写与暂存不再拒绝未来日期；过去日期仍为 `supplement`，当天 / 未来提交为 `submitted`；summary / missing / 机器人查询未来日期 400 保持不变。项目总览「导出 PDF」旁已上线「变更记录」，复用变更关联列头的项目级气泡、筛选、详情、文件预览下载与任务抽屉。前端主包与测试机已验收构建逐字节一致：`index.html` 522 B · `13e51c16…`、`assets/index-BERnvXqd.js` 2,462,327 B · `fc449989…`、CSS 231,014 B · `19b67381…`；bundle 命中 `board.change.projectToolbar`。
+>
+> **发布件 / 运行态**：前端增量包 913,794 B · `a75676d0…` · 4 文件；服务端增量包 12,314 B · `7acfb527…` · 4 文件；shared 契约增量包 112,668 B · `e4639d4a…` · 2 文件；build-info 1,536 B · `f83ccaab…`；新 manifest 9,519 B · `21a1a257…`。staging 与安装后 4 / 4、4 / 4、2 / 2 文件哈希通过；宿主与 api / worker 容器内目标文件哈希一致。`/`、`/healthz`、`/readyz`、新 JS / 两个新 chunk / 旧 JS / CSS 均 200，readyz 四项全 true，未登录 `/api/v1/access` 401；api / worker / web 均 healthy、RestartCount 0、OOM false，api / worker 近期错误 0，web 仅 api 重启窗口 3 条通知流断连。
+>
+> **备份 / 回滚**：`frontend-dist-before.tar.gz` 74,306,757 B · `3f0e9b5b…`、`server-report-issue-before.tar.gz` 12,343 B · `300aeed6…`、`shared-report-contract-before.tar.gz` 110,589 B · `3d9faac8…`、原 manifest 9,612 B · `e484d7fd…`、`SHA256SUMS` 392 B · `bdb8de54…`，4 / 4 SHA-256 通过。回滚恢复前端 / 服务端 / shared 备份与原 manifest，再重启 api / worker；无数据库回滚。
+>
+> **边界**：仅正式机 `10.1.103.44`；测试机 `10.1.104.44` 未触碰。无数据库 / DDL / 迁移 / Compose / env / Secret / MinIO / CAD / 访问白名单变更；前端 1,392 → 1,395 文件，旧哈希资源保留。PR #912 / #913 CI 均 6 / 6，main CI run `2237` 6 / 6。
+
+> **2026-11-19 11:00–11:05 日报未来日期口径 + 项目总览变更记录（测试机 server / shared 增量；test-20261119-1100-px-report-future-change-records-99b824b3）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261119-1100-px-report-future-change-records-99b824b3`，previous = `test-20261119-1025-px-project-management-compact-dynamic-width-16e64d5d`；staging = `/srv/data/deploy-test-test-20261119-1100-px-report-future-change-records-99b824b3/staging`，备份 = `/srv/data/backups/before-test-test-20261119-1100-px-report-future-change-records-99b824b3`。
+>
+> **改动 / 验收**：日报填写与暂存不再拒绝未来日期；过去日期仍由服务端推导为 `supplement`，当天 / 未来提交为 `submitted`；`summary` / `missing` / 机器人查询的未来日期 400 保持不变。真实登录浏览器实测默认日期 `2026/11/19`，改选 `2026/11/20` 后提交成功，库内 `state=submitted`、`submitted_at` 非空；验收行随后经页面删除，最新日报记录不再含 `2026-11-20`，同日 summary 返回 400 `VALIDATION_FAILED` / `future_date`。项目总览工具栏为「导出 PDF / 变更记录 / 筛选」，点击「变更记录」打开与「变更关联」列头同源的“项目变更记录”弹层（3 个任务 / 4 条变更）。
+>
+> **发布件 / 运行态**：服务端增量包 12,314 B · `30c9434b…` · 4 文件；shared 契约增量包 112,669 B · `11a1538b…` · 2 文件；`build-info.json` 1,342 B · `6bf06190…`；`release-files.sha256` 443 B · `ed15de87…`；新 manifest 7,676 B · `1b10a877…`。staging / 安装后 4 / 4 服务端文件与 2 / 2 shared 文件哈希通过。当前前端主包在本次发布前已与本地构建一致：`index.html` 522 B · `13e51c16…`、`assets/index-BERnvXqd.js` 2,462,327 B · `fc449989…`、CSS 231,014 B · `19b67381…`，bundle 命中「变更记录」。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；api / worker / web 全 healthy、RestartCount 0、OOM false，本轮仅重启 api / worker；api / worker 近期错误日志 0，web 在 api 重启窗口出现 1 次 upstream connection refused，恢复后无新增。
+>
+> **备份 / 回滚**：`server-report-issue-before.tar.gz` 12,337 B · `07f7e7a7…`、`shared-report-contract-before.tar.gz` 113,077 B · `a05627f2…`、原 manifest 8,181 B · `6a933d1c…`、`SHA256SUMS` 298 B · `72e7dd34…`，4 / 4 SHA-256 通过。回滚在 `/opt/libiaolink/server/dist` 与 `/opt/libiaolink/shared` 解压对应 before 包、恢复原 manifest 并重启 api / worker。
+>
+> **边界**：仅测试机 `10.1.104.44`；正式机 `10.1.103.44` 未触碰。无 DDL / 迁移 / 依赖 / Compose / env / Secret / MinIO / CAD 变更；前端文件未重复替换。代码已推送 `px` 常驻分支 `99b824b3`；服务端与 shared 口径待 wmj 复核后合入 `main`。
+
 > **2026-11-19 10:41–10:50 项目管理表格多分辨率自适应 + 项目编号 / 名称跳转正式发布（prod-20261119-1041-px-project-management-responsive-link-16e64d5d）**：正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261119-1041-px-project-management-responsive-link-16e64d5d`，previous = `prod-20261118-2336-px-project-management-three-user-980e9b40`；staging = `/srv/data/deploy-prod-20261119-1041-px-project-management-responsive-link-16e64d5d`，备份 = `/srv/data/backups/before-prod-20261119-1041-px-project-management-responsive-link-16e64d5d`。从 `px@16e64d5d` 创建隔离构建，只叠加项目管理响应式列宽 / 项目跳转 / `projectId` 只读派生所需改动，不带入工作区其他未发布功能。
 >
 > **改动 / 验收**：表格项目名称固定 200px、风险提醒固定 160px，其余列按内容自适应；1366 仅表格区一条浏览器原生横向滚动条，1920 无横向滚动，日期与表头 0 截断；项目编号和项目名称单击分别跳转到对应 `#/project/{id}`。正式库 6 条项目管理记录全部匹配到未删除项目空间记录；潘兴真实账号完成表格、项目编号 / 名称跳转、甘特-实施及仪表盘 / 项目空间 / 任务模板 / 我的任务冒烟，控制台 0 error。

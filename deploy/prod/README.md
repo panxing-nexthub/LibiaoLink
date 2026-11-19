@@ -1,3 +1,45 @@
+> **2026-11-19 10:41–10:50 项目管理表格多分辨率自适应 + 项目编号 / 名称跳转正式发布（prod-20261119-1041-px-project-management-responsive-link-16e64d5d）**：正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261119-1041-px-project-management-responsive-link-16e64d5d`，previous = `prod-20261118-2336-px-project-management-three-user-980e9b40`；staging = `/srv/data/deploy-prod-20261119-1041-px-project-management-responsive-link-16e64d5d`，备份 = `/srv/data/backups/before-prod-20261119-1041-px-project-management-responsive-link-16e64d5d`。从 `px@16e64d5d` 创建隔离构建，只叠加项目管理响应式列宽 / 项目跳转 / `projectId` 只读派生所需改动，不带入工作区其他未发布功能。
+>
+> **改动 / 验收**：表格项目名称固定 200px、风险提醒固定 160px，其余列按内容自适应；1366 仅表格区一条浏览器原生横向滚动条，1920 无横向滚动，日期与表头 0 截断；项目编号和项目名称单击分别跳转到对应 `#/project/{id}`。正式库 6 条项目管理记录全部匹配到未删除项目空间记录；潘兴真实账号完成表格、项目编号 / 名称跳转、甘特-实施及仪表盘 / 项目空间 / 任务模板 / 我的任务冒烟，控制台 0 error。
+>
+> **发布件 / 运行态**：前端增量包 948,441 B · `c9edb7fc…` · 5 文件；服务端增量包 7,927 B · `55de2341…` · 4 文件；build-info 2,995 B · `ca7fc967…`。安装后前端 1,392 文件，5 / 5 文件哈希通过；服务端 4 / 4 文件哈希通过。公网 `index.html` 522 B · `4d2ecb27…`、主包 `assets/index-Fn_u-06o.js` 2,461,210 B · `c8dd257c…`、CSS `assets/index-Qj4kGqsQ.css` 231,014 B · `19b67381…`；`/`、`/healthz`、`/readyz`、新 JS / CSS、上一版 JS 均 200，未登录项目管理 API 401，readyz 四项全 true。api / worker / web 均 healthy、RestartCount 0、OOM false，api 与 worker 近期错误日志 0。
+>
+> **备份 / 清单 / 回滚**：备份 `frontend-dist-before.tar.gz` 73,346,913 B · `27a8288a…`、`server-project-management-before.tar.gz` 7,874 B · `951907e4…`、原 manifest 9,451 B · `3aa5b69c…`、`SHA256SUMS` 295 B · `9a1fed97…`，3 / 3 SHA-256 通过。新 manifest 9,612 B · `e484d7fd…`，`root:root 644` 原子替换。回滚恢复前端备份与项目管理服务端目录备份，恢复原 manifest 后重启 api；无数据库回滚。
+>
+> **边界**：仅正式机前端 5 个文件与项目管理服务端 4 个产物；shared / 数据库 / DDL / 迁移 / Compose / env / Secret / MinIO / CAD 未改，测试机 `10.1.104.44` 未触碰，web / worker 未重启。部署时代码位于隔离构建，随后由 `px` 分支 PR 合并入库。
+
+> **2026-11-19 10:25–10:36 项目管理表格视图多分辨率自适应（测试机前端-only，test-20261119-1025-px-project-management-compact-dynamic-width-16e64d5d）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261119-1025-px-project-management-compact-dynamic-width-16e64d5d`，previous = `test-20261119-1011-px-project-management-gantt-year-scroll-sync-16e64d5d`（`test-20261119-1022-px-project-management-compact-dynamic-width-16e64d5d` 为同功能中间构建，不纳入正式回滚链）；staging = `/srv/data/deploy-test-test-20261119-1025-px-project-management-compact-dynamic-width-16e64d5d`，备份 = `/srv/data/backups/before-test-test-20261119-1025-px-project-management-compact-dynamic-width-16e64d5d`。
+>
+> **改动 / 验收**：表格视图表头与内容统一左对齐并收紧间距；项目名称固定 200px、风险提醒固定 160px，超出继续省略且点击后覆盖展开；其余列按当前显示内容测量宽度，只在实际内容不足时扩展，并附加 8px 渲染安全余量，修复 `2026年10月1日` 等日期末字被截成省略号。视口实测覆盖 900 / 1024 / 1280 / 1366 / 1440 / 1536 / 1920 / 2560：36 个日期单元格与 13 列表头 0 截断，名称 / 风险列始终为 200 / 160，900–1536 仅表格区出现一条浏览器原生横向滚动条，1920 / 2560 无横向滚动，页面根节点均无横向溢出；900 与 1024 下最右侧日期筛选浮层自动改到触发列左侧并保持相邻，控制台 0 error / warning。
+>
+> **发布件**：`frontend-dist.tar.gz` 22,565,275 B · `3ebcf00d…` · 692 条目 / 678 文件；`build-info.json` 1,480 B · `f82d53c0…`；`frontend-files.sha256` 91,073 B · `c6b585ca…`；`release-files.sha256` 257 B · `12eb0524…`。安装后前端文件数 853，678 / 678 文件哈希通过，0 FAILED。公网主包 `assets/index-BERnvXqd.js` 2,462,327 B · `fc449989…`、CSS `assets/index-Qj4kGqsQ.css` 231,014 B · `19b67381…`、`index.html` 522 B · `13e51c16…`；`/`、`/healthz`、`/readyz`、新 JS / 新 CSS 均 200，未登录 API 401，readyz 四项全 true。`libiaolink-api` / `libiaolink-worker` / `libiaolink-web` 均 healthy，RestartCount 0。
+>
+> **备份 / 回滚**：备份 `frontend-dist-before.tar.gz` 82,337,130 B · `b81c1e8a…`、原 manifest 7,076 B · `3c0a915b…`、`SHA256SUMS` 189 B · `d129f3c7…`，2 / 2 SHA-256 通过；安装前前端 850 文件，本次净增 3 个哈希资源，旧哈希资源全部保留。本次发布清单 8,181 B · `6a933d1c…`，原子替换并保持 `root:root 644`。回滚解压 `frontend-dist-before.tar.gz` 并恢复原 manifest，无需重启服务，页面刷新即回退。
+>
+> **边界**：仅测试机 `10.1.104.44` 前端 dist 与发布清单；正式机 `10.1.103.44` 未触碰。server / shared / 数据库 / compose / env / Secret / MinIO / CAD 均未改，web / api / worker 未因本次部署重启。代码未提交 / 未推送。
+
+> **2026-11-19 10:11–10:12 项目管理甘特-实施年份滚动同步（测试机前端-only，test-20261119-1011-px-project-management-gantt-year-scroll-sync-16e64d5d）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261119-1011-px-project-management-gantt-year-scroll-sync-16e64d5d`，previous = `test-20261119-1006-px-project-management-cell-mode-remount-16e64d5d`；staging = `/srv/data/deploy-test-test-20261119-1011-px-project-management-gantt-year-scroll-sync-16e64d5d`，备份 = `/srv/data/backups/before-test-test-20261119-1011-px-project-management-gantt-year-scroll-sync-16e64d5d`。
+>
+> **问题 / 修复**：甘特-实施点击上一年后回不到 2026；现在年份标签跟随横向可视图区实时判定，滚轮或横向滚动到整屏均为 2026 的区域时自动恢复 `2026年`，不再固定停留在最后一次点击年份。
+>
+> **发布件**：`frontend-dist.tar.gz` 22,566,056 B · `e29450a7…` · 692 条目 / 678 文件；`build-info.json` 1,062 B · `530644a9…`；`frontend-files.sha256` 91,073 B · `3e307b31…`；`release-files.sha256` 257 B · `f212458f…`。公网入口 `index.html` 522 B · `5d311fa4…`、主包 `assets/index-DmEWtl8y.js` 2,460,771 B · `edf9f9d1…`、CSS `assets/index-BIjFrKKt.css` 231,015 B · `0529d449…`。
+>
+> **备份 / 回滚**：备份 `frontend-dist-before.tar.gz` 80,456,943 B · `9f989e40…`、原 manifest 7,076 B · `3c0a915b…`、`SHA256SUMS` 189 B · `a5c8091a…`，2 / 2 SHA-256 通过。回滚解压 `frontend-dist-before.tar.gz` 并恢复原 manifest，无需重启服务。
+>
+> **边界**：仅测试机前端；正式机 `10.1.103.44` 未触碰。server / shared / 数据库 / compose / env / Secret / MinIO / CAD 均未改，容器未因本次部署重启。代码未提交 / 未推送。
+
+> **2026-11-19 10:02–10:11 项目管理单元格空白区编辑 / 文字跳转分离及编辑退出残留修复（测试机前端-only，test-20261119-1006-px-project-management-cell-mode-remount-16e64d5d）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261119-1006-px-project-management-cell-mode-remount-16e64d5d`，previous = `test-20261119-1002-px-project-management-cell-edit-text-link-16e64d5d`；staging = `/srv/data/deploy-test-test-20261119-1006-px-project-management-cell-mode-remount-16e64d5d`，备份 = `/srv/data/backups/before-test-test-20261119-1006-px-project-management-cell-mode-remount-16e64d5d`。
+>
+> 项目编号与项目名称链接取消下划线。点击单元格空白区域进入行内编辑且不跳转，只有点击蓝色文字才进入项目详情；双击文字或按 F2 仍可编辑。复现并修复编辑框切换问题：`contentEditable` 手动写入的文本节点在退出编辑、React 复用同一外层节点时残留，导致旧文字与新链接文字重叠、出现重复内容和异常省略号；编辑态与展示态现使用不同 React key 强制重建，切换单元格后原格仅保留一份正确文本。
+>
+> **发布件**：`frontend-dist.tar.gz` 22,566,036 B · `bc3eaf59…` · 692 条目 / 678 文件；build-info 1,059 B · `8d8f1fff…`；frontend-files.sha256 91,073 B · `c9096c8d…`；release-files.sha256 257 B · `7e1b3afa…`；staged 678 / 678 哈希通过。与安装前对比变化 4 个文件：`index.html`、`assets/index-v1XLf6jN.js`、`assets/es-Co6hzPYm.js`、`assets/html2canvas-BVSRZpt7.js`；CSS 与其余资源不变，旧哈希资源全部保留。
+>
+> **验证**：公网 `index.html` 522 B · `ac020e31…`、主包 `assets/index-v1XLf6jN.js` 2,460,657 B · `522edaf0…`、CSS `assets/index-BIjFrKKt.css` 231,015 B · `0529d449…`；上一版 `assets/index-zm-vilJT.js` 仍 200。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true，未登录 `/auth/me` 401。真实登录 Chrome 实测：点击项目编号空白区后 `contenteditable=true` 且 URL 保持 `#/project-management`；再点下一格后编辑焦点切到 `1-code`，`0-code` 恢复单一链接文本、无重复节点；点击蓝色项目编号进入 `#/project/{id}`；甘特月刻度下点击左侧双箭头，定位日期从 `2025年3月19日` 变为 `2025年2月19日`；控制台 0 error。前端 typecheck / build 通过。
+>
+> **备份 / 回滚**：备份 `frontend-dist-before.tar.gz` 79,541,995 B · `9bba36dd…`、原 manifest 7,785 B · `bcff8228…`、`SHA256SUMS` 189 B · `cc6e2446…`，2 / 2 SHA-256 通过。回滚解压 `frontend-dist-before.tar.gz` 并恢复原 manifest，无需重启服务。前端文件 840 → 843；新 manifest 7,076 B · `3c0a915b…`，root:root 644。
+>
+> **边界**：仅测试机前端 dist；正式机 `10.1.103.44` 未触碰。server / shared / 数据库 / compose / env / Secret / MinIO / CAD 均未改，web / api / worker 未因本次部署重启。代码未提交 / 未推送。
+
 > **2026-11-18 23:36–23:41 项目管理正式上线（仅潘兴、李侠伟、杨敏）**：正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261118-2336-px-project-management-three-user-980e9b40`，previous = `prod-20261118-1529-px-poster-robot-asset`；staging = `/srv/data/deploy-prod-20261118-2336-px-project-management-three-user-980e9b40`，备份 = `/srv/data/backups/before-prod-20261118-2336-px-project-management-three-user-980e9b40`。
 >
 > **访问限制**：服务端 `ProjectManagementAccessGuard` 对 `/api/v1/project-management-records` 全部读写接口做白名单校验，非授权账号返回 403；前端同步隐藏导航入口并拦截 `#/project-management` 直链。白名单按企业邮箱稳定识别，正式机账号核对为潘兴 `panxing@libiaorobot.com` / `72d0c4d6-f75d-4843-bcb6-458e4bbf9247`、李侠伟 `lixiawei@libiaorobot.com` / `e1e5ce5e-e909-4a22-8ea9-623a9c45a89a`、杨敏 `yangm@libiaorobot.com` / `c85f4965-c0b6-434c-ad5c-231d6cc4e384`。生产共享契约实测：三人均 true，其他邮箱 false。

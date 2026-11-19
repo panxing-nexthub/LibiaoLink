@@ -7,6 +7,7 @@ import { tasks } from "../../db/schema/tasks.js";
 
 /** 项目空间只读快照：项目管理记录按 code 精确匹配 projects.code 后派生展示，不写回任何项目表。 */
 export type ProjectManagementProjectSnapshot = {
+  projectId: string | null;
   currentStage: string | null;
   startupCompletedAt: string | null;
   arrivalDate: string | null;
@@ -32,6 +33,7 @@ export type ProjectManagementSnapshotTaskRow = {
 };
 
 export const EMPTY_PROJECT_MANAGEMENT_PROJECT_SNAPSHOT: ProjectManagementProjectSnapshot = Object.freeze({
+  projectId: null,
   currentStage: null,
   startupCompletedAt: null,
   arrivalDate: null,
@@ -102,6 +104,7 @@ export function buildProjectManagementSnapshots(
     }
     const currentStage = [...STAGE_KEYS].reverse().find((key) => snapshot.startedStageKeys.has(key)) ?? null;
     result.set(project.code, {
+      projectId: project.id,
       currentStage,
       startupCompletedAt: snapshot.startupCompletedAt,
       arrivalDate: snapshot.arrivalDate,

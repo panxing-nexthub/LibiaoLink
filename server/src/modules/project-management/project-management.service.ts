@@ -185,6 +185,7 @@ export class ProjectManagementService {
       id: row.id,
       code: row.code,
       name: row.name,
+      projectId: snapshot.projectId,
       managerIds: row.managerIds,
       managerNames: row.managerIds.map((id) => names.get(id) ?? null),
       implementationEngineerIds: row.implementationEngineerIds,

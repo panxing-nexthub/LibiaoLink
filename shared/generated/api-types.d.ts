@@ -14288,6 +14288,7 @@ export interface components {
             code: string;
             /** @description 项目名称：手填，最长 200 字；允许空串以支持逐格保存 */
             name: string;
+            projectId: components["schemas"]["Uuid"] & (string | null);
             /** @description 项目经理账号 id 快照；候选复用现有项目经理资格名单，数组顺序 = 展示顺序 */
             managerIds: components["schemas"]["Uuid"][];
             /** @description 项目经理姓名：按 managerIds 顺序解析；账号停用 / 删除后仍保留可解析的姓名，取不到为 null */

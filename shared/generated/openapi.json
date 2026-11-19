@@ -10074,6 +10074,20 @@
             "type": "string",
             "description": "项目名称：手填，最长 200 字；允许空串以支持逐格保存"
           },
+          "projectId": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "项目空间项目 id（只读派生）：按 code 精确匹配未删除项目；无匹配 = null；项目管理页用于跳转项目详情"
+              }
+            ]
+          },
           "managerIds": {
             "type": "array",
             "items": {
@@ -10276,6 +10290,7 @@
           "id",
           "code",
           "name",
+          "projectId",
           "managerIds",
           "managerNames",
           "implementationEngineerIds",

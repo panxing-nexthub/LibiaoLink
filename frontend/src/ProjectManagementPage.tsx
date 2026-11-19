@@ -16,6 +16,7 @@ import { directoryMemberOptions, type DirectoryUser } from "./directory";
 import { dictLabel, type Dicts } from "./dicts";
 import { fullDateText, stageText, useLocale, useT, type TextKey } from "./i18n";
 import type { ProjectManagerCandidate } from "./projectManagerCandidates";
+import { PROJECT_BASE_HASH } from "./useHashRoute";
 import { stageNameOf } from "./taskApi";
 import {
   createProjectManagementRecord,
@@ -64,8 +65,8 @@ type PmColumn = {
 
 const ROW_NUMBER_WIDTH = 48;
 const CODE_MIN_WIDTH = 150;
-const CODE_CHAR_WIDTH = 8;
-const CODE_PADDING = 24;
+const PM_TABLE_NAME_WIDTH = 200;
+const PM_TABLE_RISK_WIDTH = 160;
 const MIN_TRAILING_EMPTY_ROWS = 5;
 const MIN_TABLE_ROWS = 6;
 const TEXT_AUTOSAVE_DELAY_MS = 450;
@@ -93,19 +94,19 @@ const PM_VIEW_TABS = [
 type PmViewTabKey = (typeof PM_VIEW_TABS)[number]["key"];
 
 const COLUMNS: readonly PmColumn[] = [
-  { key: "code", labelKey: "pm.column.code", width: "180px", min: CODE_MIN_WIDTH },
-  { key: "name", labelKey: "pm.column.name", width: "200px", min: 200 },
-  { key: "manager", labelKey: "pm.column.manager", width: "1.12fr", min: 150 },
-  { key: "engineer", labelKey: "pm.column.engineer", width: "1.2fr", min: 180 },
-  { key: "method", labelKey: "pm.column.method", width: "1.08fr", min: 150 },
-  { key: "stage", labelKey: "pm.column.stage", width: "1.08fr", min: 130 },
-  { key: "startup", labelKey: "pm.column.started", width: "0.9fr", min: 110 },
-  { key: "risk", labelKey: "pm.column.risk", width: "1.35fr", min: 160 },
-  { key: "arrival", labelKey: "pm.column.arrival", width: "0.92fr", min: 110 },
-  { key: "location", labelKey: "pm.column.location", width: "1.14fr", min: 130 },
-  { key: "start", labelKey: "pm.column.planStart", width: "1.02fr", min: 120 },
-  { key: "end", labelKey: "pm.column.planEnd", width: "1.02fr", min: 120 },
-  { key: "days", labelKey: "pm.column.days", width: "0.62fr", min: 80 },
+  { key: "code", labelKey: "pm.column.code", width: CODE_MIN_WIDTH + "px", min: CODE_MIN_WIDTH },
+  { key: "name", labelKey: "pm.column.name", width: PM_TABLE_NAME_WIDTH + "px", min: PM_TABLE_NAME_WIDTH },
+  { key: "manager", labelKey: "pm.column.manager", width: "120px", min: 120 },
+  { key: "engineer", labelKey: "pm.column.engineer", width: "130px", min: 130 },
+  { key: "method", labelKey: "pm.column.method", width: "120px", min: 120 },
+  { key: "stage", labelKey: "pm.column.stage", width: "110px", min: 110 },
+  { key: "startup", labelKey: "pm.column.started", width: "100px", min: 100 },
+  { key: "risk", labelKey: "pm.column.risk", width: PM_TABLE_RISK_WIDTH + "px", min: PM_TABLE_RISK_WIDTH },
+  { key: "arrival", labelKey: "pm.column.arrival", width: "100px", min: 100 },
+  { key: "location", labelKey: "pm.column.location", width: "100px", min: 100 },
+  { key: "start", labelKey: "pm.column.planStart", width: "110px", min: 110 },
+  { key: "end", labelKey: "pm.column.planEnd", width: "110px", min: 110 },
+  { key: "days", labelKey: "pm.column.days", width: "72px", min: 72 },
 ];
 
 
@@ -158,6 +159,7 @@ const METHOD_META: Record<ProjectManagementMethod, { labelKey: TextKey; chipClas
 type RowSaveState = "idle" | "dirty" | "saving" | "error";
 
 type PmSnapshotFields = {
+  projectId: string | null;
   currentStage: string | null;
   startupCompletedAt: string | null;
   arrivalDate: string | null;
@@ -226,6 +228,7 @@ const createEmptyRow = (clientId: string = nextLocalRowId()): PmRow => ({
 const createEmptyRows = (): PmRow[] => Array.from({ length: MIN_TABLE_ROWS }, () => createEmptyRow());
 
 const emptySnapshotFields = (): PmSnapshotFields => ({
+  projectId: null,
   currentStage: null,
   startupCompletedAt: null,
   arrivalDate: null,
@@ -244,6 +247,7 @@ const emptyOverrideFields = (): PmOverrideFields => ({
 });
 
 const snapshotFieldsOf = (record: ProjectManagementRecord): PmSnapshotFields => ({
+  projectId: record.projectId,
   currentStage: record.currentStage,
   startupCompletedAt: record.startupCompletedAt,
   arrivalDate: record.arrivalDate,
@@ -505,6 +509,9 @@ type TextCellProps = {
   cellKey: string;
   isCode?: boolean;
   maxLength?: number;
+  projectHref?: string | null;
+  projectOpenLabel?: string;
+  projectOpenHint?: string;
   onInput: (value: string) => void;
   onBlur: () => void;
 };
@@ -518,17 +525,44 @@ function TextCell({
   cellKey,
   isCode = false,
   maxLength,
+  projectHref = null,
+  projectOpenLabel,
+  projectOpenHint,
   onInput,
   onBlur,
 }: TextCellProps) {
   const nodeRef = useRef<HTMLDivElement | null>(null);
+  const openTimerRef = useRef<number | null>(null);
+  const [linkedEditing, setLinkedEditing] = useState(false);
+  const linked = !readOnly && projectHref !== null && projectHref !== "" && value.trim() !== "";
+
+  const clearOpenTimer = (): void => {
+    if (openTimerRef.current !== null) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => clearOpenTimer, []);
 
   useLayoutEffect(() => {
     const node = nodeRef.current;
-    if (node !== null && document.activeElement !== node && node.textContent !== value) {
+    if (node === null) {
+      return;
+    }
+    if (document.activeElement !== node && node.textContent !== value) {
       node.textContent = value;
     }
-  }, [value]);
+    if (linked && linkedEditing && document.activeElement !== node) {
+      node.focus();
+      const range = document.createRange();
+      const selection = window.getSelection();
+      range.selectNodeContents(node);
+      range.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+  }, [value, linked, linkedEditing]);
 
   if (readOnly) {
     return (
@@ -543,8 +577,75 @@ function TextCell({
     );
   }
 
+  const openProject = (): void => {
+    if (projectHref !== null && projectHref !== "") {
+      window.location.assign(projectHref);
+    }
+  };
+
+  if (linked && !linkedEditing) {
+    return (
+      <div
+        key="project-link-display"
+        data-project-management-cell={cellKey}
+        data-project-management-code={isCode ? "" : undefined}
+        onClick={() => {
+          setLinkedEditing(true);
+        }}
+        className={
+          "min-h-11 cursor-text truncate px-2 py-3 text-xs leading-5 text-zinc-700 transition hover:bg-zinc-50 " +
+          (align === "left" ? "text-left " : "text-center ")
+        }
+      >
+        <span
+          role="link"
+          tabIndex={0}
+          aria-label={projectOpenLabel === undefined ? ariaLabel : ariaLabel + " " + projectOpenLabel}
+          title={projectOpenHint}
+          data-project-management-project-link=""
+          onClick={(event) => {
+            event.stopPropagation();
+            if (event.detail > 1) {
+              clearOpenTimer();
+              return;
+            }
+            clearOpenTimer();
+            openTimerRef.current = window.setTimeout(() => {
+              openTimerRef.current = null;
+              const selection = window.getSelection();
+              if (selection === null || selection.isCollapsed) {
+                openProject();
+              }
+            }, 240);
+          }}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            clearOpenTimer();
+            setLinkedEditing(true);
+          }}
+          onKeyDown={(event: KeyboardEvent<HTMLSpanElement>) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              openProject();
+            } else if (event.key === "F2") {
+              event.preventDefault();
+              setLinkedEditing(true);
+            }
+          }}
+          className={
+            "inline-block max-w-full cursor-pointer truncate align-bottom text-blue-700 outline-none transition hover:text-blue-800 focus:rounded-sm focus:bg-blue-50/60 focus:ring-2 focus:ring-blue-500 " +
+            (align === "left" ? "text-left " : "text-center ")
+          }
+        >
+          {value}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
+      key="project-link-editor"
       ref={nodeRef}
       contentEditable
       suppressContentEditableWarning
@@ -568,7 +669,12 @@ function TextCell({
         }
         onInput(text);
       }}
-      onBlur={onBlur}
+      onBlur={() => {
+        onBlur();
+        if (linked) {
+          setLinkedEditing(false);
+        }
+      }}
       onPaste={(event) => {
         event.preventDefault();
         const pasted = event.clipboardData.getData("text/plain").replace(/\s*\r?\n\s*/g, " ");
@@ -624,7 +730,7 @@ function MemberCell({
     return (
       <div
         data-project-management-cell={cellKey}
-        className="flex min-h-11 min-w-0 items-center justify-center overflow-hidden px-2 py-3"
+        className="flex min-h-11 min-w-0 items-center justify-start overflow-hidden px-2 py-3 text-left"
       >
         {statusActive ? (
           <span className={PM_TABLE_TAG_CLASS + " bg-[#f02b2b] font-semibold text-white"}>{label}</span>
@@ -647,7 +753,7 @@ function MemberCell({
         onClick={() => {
           setOpen((previous) => !previous);
         }}
-        className="flex min-h-11 w-full min-w-0 items-center justify-center gap-1 px-2 py-3 text-xs leading-5 outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500"
+        className="flex min-h-11 w-full min-w-0 items-center justify-start gap-1 px-2 py-3 text-left text-xs leading-5 outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500"
       >
         {statusActive ? (
           <span className={PM_TABLE_TAG_CLASS + " bg-[#f02b2b] font-semibold text-white"}>{label}</span>
@@ -730,7 +836,7 @@ function MethodCell({
 
   if (disabled) {
     return (
-      <div data-project-management-cell={cellKey} className="flex min-h-11 items-center justify-center px-2 py-3 text-xs leading-5">
+      <div data-project-management-cell={cellKey} className="flex min-h-11 items-center justify-start px-2 py-3 text-left text-xs leading-5">
         {value === "" ? null : (
           <span className={PM_TABLE_TAG_CLASS + " " + METHOD_META[value].chipClass}>
             {label}
@@ -752,7 +858,7 @@ function MethodCell({
         onClick={() => {
           setOpen((previous) => !previous);
         }}
-        className="flex min-h-11 w-full min-w-0 items-center justify-center gap-1 px-2 py-3 text-xs leading-5 outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500"
+        className="flex min-h-11 w-full min-w-0 items-center justify-start gap-1 px-2 py-3 text-left text-xs leading-5 outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500"
       >
         {value === "" ? (
           <span className="truncate text-zinc-300">{placeholder}</span>
@@ -817,7 +923,7 @@ function ReadOnlyStageCell({ stageName, value, label, cellKey }: { stageName: st
       aria-label={label}
       data-project-management-cell={cellKey}
       title={value === "" ? undefined : value}
-      className="flex min-h-11 min-w-0 items-center justify-center px-2 py-3"
+      className="flex min-h-11 min-w-0 items-center justify-start px-2 py-3 text-left"
     >
       {value === "" ? (
         <span className="text-zinc-300">—</span>
@@ -836,7 +942,7 @@ function ReadOnlyCell({ value, label, cellKey }: { value: string; label: string;
       aria-label={label}
       data-project-management-cell={cellKey}
       title={value === "" ? undefined : value}
-      className="min-h-11 truncate px-2 py-3 text-center text-xs leading-5 text-zinc-600"
+      className="min-h-11 truncate px-2 py-3 text-left text-xs leading-5 text-zinc-600"
     >
       {value}
     </div>
@@ -865,7 +971,7 @@ function EditableDateCell({
         ariaLabel={ariaLabel}
         bare
         showAuto={showAuto}
-        triggerClassName="min-h-11 w-full justify-center px-2 py-3 text-xs leading-5 tabular-nums text-zinc-600 hover:bg-blue-50/40"
+        triggerClassName="min-h-11 w-full justify-start px-2 py-3 text-left text-xs leading-5 tabular-nums text-zinc-600 hover:bg-blue-50/40"
         display={display === "" ? <span className="text-zinc-300">—</span> : display}
         onChange={onChange}
       />
@@ -891,7 +997,7 @@ function DaysCell({
         width={220}
         height={178}
         bare
-        triggerClassName="min-h-11 w-full justify-center px-2 py-3 text-xs leading-5 tabular-nums text-zinc-600 hover:bg-blue-50/40"
+        triggerClassName="min-h-11 w-full justify-start px-2 py-3 text-left text-xs leading-5 tabular-nums text-zinc-600 hover:bg-blue-50/40"
         display={value === null ? <span className="text-zinc-300">—</span> : String(value)}
         render={(close) => (
           <DaysEditor
@@ -1149,7 +1255,7 @@ function ProjectManagementColumnHeader({
       }
     >
       {kind === "none" ? (
-        <span className={"flex h-full items-center px-2 " + (isFirst ? "justify-start pl-4" : "justify-center")}>
+        <span className="flex h-full items-center justify-start px-2">
           {label}
         </span>
       ) : (
@@ -1164,8 +1270,7 @@ function ProjectManagementColumnHeader({
             setOpen((previous) => !previous);
           }}
           className={
-            "flex h-full w-full min-w-0 items-center gap-1.5 px-2 outline-none transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 " +
-            (isFirst ? "justify-start pl-4 " : "justify-center ") +
+            "flex h-full w-full min-w-0 items-center justify-start gap-1 px-2 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 " +
             (open
               ? "bg-blue-50 text-blue-700 ring-2 ring-inset ring-blue-500 "
               : active
@@ -2244,21 +2349,6 @@ function PmImplementationGantt({
   const ganttScrollRequestIdRef = useRef(0);
   const ganttScaleConfig = PM_GANTT_SCALES[ganttScale];
   const ganttDayWidth = ganttScaleConfig.dayWidth;
-  const ganttAnchorLabels = useMemo(() => {
-    const date = new Date(pmGanttTimeOf(ganttAnchorIso));
-    return {
-      year: new Intl.DateTimeFormat(intlLocale, {
-        year: "numeric",
-        timeZone: "UTC",
-      }).format(date),
-      date: new Intl.DateTimeFormat(intlLocale, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        timeZone: "UTC",
-      }).format(date),
-    };
-  }, [ganttAnchorIso, intlLocale]);
   const requestGanttScroll = (iso: string, behavior: ScrollBehavior): void => {
     ganttScrollRequestIdRef.current += 1;
     setGanttScrollRequest({
@@ -2267,23 +2357,8 @@ function PmImplementationGantt({
       id: ganttScrollRequestIdRef.current,
     });
   };
-  const selectGanttScale = (nextScale: PmGanttScale): void => {
-    setGanttScale(nextScale);
-    setSelectedGanttColumnKey(null);
-    requestGanttScroll(ganttAnchorIso, "auto");
-  };
   const toggleGanttColumn = (key: string): void => {
     setSelectedGanttColumnKey((current) => (current === key ? null : key));
-  };
-  const shiftGanttAnchor = (direction: -1 | 1): void => {
-    const nextIso = pmGanttShiftByScale(ganttAnchorIso, ganttScale, direction);
-    setGanttAnchorIso(nextIso);
-    requestGanttScroll(nextIso, "auto");
-  };
-  const shiftGanttAnchorYear = (direction: -1 | 1): void => {
-    const nextIso = pmGanttShiftByScale(ganttAnchorIso, "year", direction);
-    setGanttAnchorIso(nextIso);
-    requestGanttScroll(nextIso, "auto");
   };
   const goToGanttToday = (): void => {
     const today = pmGanttTodayIso();
@@ -2683,6 +2758,51 @@ function PmImplementationGantt({
     };
   }, [ganttAnchorIso, ganttScale, groups, intlLocale]);
 
+  const ganttViewportReferenceIndex =
+    timeline.days.length === 0
+      ? -1
+      : Math.max(
+          0,
+          Math.min(
+            timeline.days.length - 1,
+            Math.round(
+              (ganttScrollLeft + ganttTimelineViewportWidth / 3) /
+                Math.max(ganttDayWidth, 1),
+            ),
+          ),
+        );
+  const ganttViewportReferenceIso =
+    ganttViewportReferenceIndex < 0
+      ? ganttAnchorIso
+      : timeline.days[ganttViewportReferenceIndex].iso;
+  const ganttAnchorLabels = useMemo(() => {
+    const date = new Date(pmGanttTimeOf(ganttViewportReferenceIso));
+    return {
+      year: new Intl.DateTimeFormat(intlLocale, {
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(date),
+      date: new Intl.DateTimeFormat(intlLocale, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      }).format(date),
+    };
+  }, [ganttViewportReferenceIso, intlLocale]);
+  const selectGanttScale = (nextScale: PmGanttScale): void => {
+    const referenceIso = ganttViewportReferenceIso;
+    setGanttScale(nextScale);
+    setGanttAnchorIso(referenceIso);
+    setSelectedGanttColumnKey(null);
+    requestGanttScroll(referenceIso, "auto");
+  };
+  const shiftGanttAnchor = (direction: -1 | 1): void => {
+    const nextIso = pmGanttShiftByScale(ganttViewportReferenceIso, ganttScale, direction);
+    setGanttAnchorIso(nextIso);
+    requestGanttScroll(nextIso, "auto");
+  };
+
   const selectedGanttColumn = useMemo(() => {
     if (selectedGanttColumnKey === null) {
       return null;
@@ -2822,9 +2942,9 @@ function PmImplementationGantt({
         <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
-            aria-label={t("pm.gantt.previousYear")}
-            title={t("pm.gantt.previousYear")}
-            onClick={() => shiftGanttAnchorYear(-1)}
+            aria-label={t("pm.gantt.previousPeriod")}
+            title={t("pm.gantt.previousPeriod")}
+            onClick={() => shiftGanttAnchor(-1)}
             className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
           >
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-4 w-4">
@@ -3339,6 +3459,59 @@ type ProjectManagementPageProps = {
   managerCandidates: ProjectManagerCandidate[];
 };
 
+const PM_TABLE_BODY_FONT = "400 12px Noto Sans SC, Microsoft YaHei, sans-serif";
+const PM_TABLE_HEADER_FONT = "500 12px Noto Sans SC, Microsoft YaHei, sans-serif";
+const PM_TABLE_CHIP_FONT = "500 12px Noto Sans SC, Microsoft YaHei, sans-serif";
+const PM_TABLE_STRONG_FONT = "600 12px Noto Sans SC, Microsoft YaHei, sans-serif";
+const PM_TABLE_CELL_PADDING_X = 16;
+const PM_TABLE_CHIP_PADDING_X = 16;
+const PM_TABLE_CHIP_MAX_WIDTH = 180;
+const PM_TABLE_CONTROL_GAP = 4;
+const PM_TABLE_CHEVRON_WIDTH = 12;
+const PM_TABLE_ACTIVE_DOT_WIDTH = 6;
+const PM_TABLE_VISIBLE_MEMBER_CHIPS = 6;
+const PM_TABLE_TEXT_SAFETY = 8;
+
+const pmTableTextWidth = (text: string, font: string = PM_TABLE_BODY_FONT): number =>
+  Math.ceil(pmGanttTextWidth(text, font)) + PM_TABLE_TEXT_SAFETY;
+
+const pmTableHeaderWidth = (label: string, filterable: boolean): number =>
+  pmTableTextWidth(label, PM_TABLE_HEADER_FONT) +
+  PM_TABLE_CELL_PADDING_X +
+  (filterable
+    ? PM_TABLE_CONTROL_GAP + PM_TABLE_CHEVRON_WIDTH + PM_TABLE_CONTROL_GAP + PM_TABLE_ACTIVE_DOT_WIDTH
+    : 0);
+
+const pmTablePlainCellWidth = (text: string): number =>
+  pmTableTextWidth(text) + PM_TABLE_CELL_PADDING_X;
+
+const pmTableTagCellWidth = (text: string, withChevron: boolean): number =>
+  pmTableTextWidth(text, PM_TABLE_CHIP_FONT) +
+  PM_TABLE_CHIP_PADDING_X +
+  PM_TABLE_CELL_PADDING_X +
+  (withChevron ? PM_TABLE_CONTROL_GAP + PM_TABLE_CHEVRON_WIDTH : 0);
+
+const pmTableMemberCellWidth = (names: readonly string[], font: string = PM_TABLE_CHIP_FONT): number => {
+  if (names.length === 0) {
+    return 0;
+  }
+  const visible = names.slice(0, PM_TABLE_VISIBLE_MEMBER_CHIPS);
+  const chipWidths = visible.map((name) =>
+    Math.min(pmTableTextWidth(name, font) + PM_TABLE_CHIP_PADDING_X, PM_TABLE_CHIP_MAX_WIDTH),
+  );
+  const rest = names.length - visible.length;
+  if (rest > 0) {
+    chipWidths.push(pmTableTextWidth("+" + String(rest), PM_TABLE_STRONG_FONT) + PM_TABLE_CHIP_PADDING_X);
+  }
+  return (
+    PM_TABLE_CELL_PADDING_X +
+    chipWidths.reduce((total, width) => total + width, 0) +
+    PM_TABLE_CONTROL_GAP * Math.max(0, chipWidths.length - 1) +
+    PM_TABLE_CONTROL_GAP +
+    PM_TABLE_CHEVRON_WIDTH
+  );
+};
+
 export default function ProjectManagementPage({
   me,
   dicts,
@@ -3537,6 +3710,8 @@ export default function ProjectManagementPage({
   }, [loadState]);
 
   const methodLabel = (value: ProjectManagementMethod): string => t(METHOD_META[value].labelKey);
+  const projectOpenLabel = t("pm.project.open");
+  const projectOpenHint = t("pm.project.openHint");
   const updateTextFilter = (key: PmTextColumnKey, value: string): void => {
     setTextFilters((current) => ({ ...current, [key]: value }));
   };
@@ -3871,13 +4046,70 @@ export default function ProjectManagementPage({
     }
   };
 
-  const codeWidth = rows.reduce(
-    (width, row) => Math.max(width, row.code.length * CODE_CHAR_WIDTH + CODE_PADDING),
-    CODE_MIN_WIDTH,
-  );
-  const columns = COLUMNS.map((column) =>
-    column.key === "code" ? { ...column, width: codeWidth + "px", min: codeWidth } : column,
-  );
+  const tableColumnWidths = new Map<PmColumnKey, number>();
+  const bumpTableColumnWidth = (key: PmColumnKey, width: number): void => {
+    tableColumnWidths.set(key, Math.max(tableColumnWidths.get(key) ?? 0, width));
+  };
+
+  COLUMNS.forEach((column) => {
+    bumpTableColumnWidth(
+      column.key,
+      pmTableHeaderWidth(t(column.labelKey), FILTER_KIND_BY_COLUMN[column.key] !== "none"),
+    );
+  });
+
+  displayRows.forEach((row) => {
+    if (row.code.trim() !== "") {
+      bumpTableColumnWidth("code", pmTablePlainCellWidth(row.code));
+    }
+    bumpTableColumnWidth("manager", pmTableMemberCellWidth(displayNamesOf(row.managerIds, row.managerNames, directory)));
+    bumpTableColumnWidth(
+      "engineer",
+      row.implementationHandedOver
+        ? pmTableMemberCellWidth([t("pm.engineer.handedOver")], PM_TABLE_STRONG_FONT)
+        : pmTableMemberCellWidth(displayNamesOf(row.implementationEngineerIds, row.implementationEngineerNames, directory)),
+    );
+    if (row.implementationMethod !== "") {
+      bumpTableColumnWidth("method", pmTableTagCellWidth(methodLabel(row.implementationMethod), true));
+    }
+    const stageName = effectiveStageOf(row) === null ? "" : stageNameOf(effectiveStageOf(row));
+    const stageLabel = stageName === "" ? "" : stageText(locale, stageName);
+    if (stageLabel !== "") {
+      bumpTableColumnWidth("stage", pmTableTagCellWidth(stageLabel, false));
+    }
+    const startupValue = effectiveDateOf(row, "startup");
+    if (startupValue !== null) {
+      bumpTableColumnWidth("startup", pmTablePlainCellWidth(fullDateText(locale, startupValue)));
+    }
+    const arrivalValue = effectiveDateOf(row, "arrival");
+    if (arrivalValue !== null) {
+      bumpTableColumnWidth("arrival", pmTablePlainCellWidth(fullDateText(locale, arrivalValue)));
+    }
+    const regionLabel = row.region === "" || row.region === "未分类" ? "" : dictLabel(dicts, "region", row.region);
+    if (regionLabel !== "") {
+      bumpTableColumnWidth("location", pmTableTagCellWidth(regionLabel, false));
+    }
+    const plannedStartValue = effectiveDateOf(row, "start");
+    if (plannedStartValue !== null) {
+      bumpTableColumnWidth("start", pmTablePlainCellWidth(fullDateText(locale, plannedStartValue)));
+    }
+    const plannedEndValue = effectiveDateOf(row, "end");
+    if (plannedEndValue !== null) {
+      bumpTableColumnWidth("end", pmTablePlainCellWidth(fullDateText(locale, plannedEndValue)));
+    }
+    const daysValue = effectiveDaysOf(row);
+    if (daysValue !== null) {
+      bumpTableColumnWidth("days", pmTablePlainCellWidth(String(daysValue)));
+    }
+  });
+
+  const columns = COLUMNS.map((column) => {
+    if (column.key === "name" || column.key === "risk") {
+      return column;
+    }
+    const width = Math.max(column.min, Math.ceil(tableColumnWidths.get(column.key) ?? 0));
+    return { ...column, width: width + "px", min: width };
+  });
   const gridTemplate = ROW_NUMBER_WIDTH + "px " + tableGridTemplate(columns);
   const minWidth = ROW_NUMBER_WIDTH + tableMinWidth(columns);
 
@@ -4029,6 +4261,7 @@ export default function ProjectManagementPage({
                     const newRow = row.recordId === null;
                     const rowEditable = loadState === "ready";
                     const rowName = row.name.trim() === "" ? row.code : row.name;
+                    const projectHref = row.projectId ? PROJECT_BASE_HASH + encodeURIComponent(row.projectId) : null;
                     const rowStatus =
                       row.saveState === "saving"
                         ? t("pm.status.saving")
@@ -4101,6 +4334,9 @@ export default function ProjectManagementPage({
                                 cellKey={cellKey}
                                 isCode
                                 maxLength={50}
+                                projectHref={projectHref}
+                                projectOpenLabel={projectOpenLabel}
+                                projectOpenHint={projectOpenHint}
                                 onInput={(value) => {
                                   handleTextInput(row, value, "code");
                                 }}
@@ -4119,6 +4355,9 @@ export default function ProjectManagementPage({
                                 multilineOnFocus
                                 cellKey={cellKey}
                                 maxLength={200}
+                                projectHref={projectHref}
+                                projectOpenLabel={projectOpenLabel}
+                                projectOpenHint={projectOpenHint}
                                 onInput={(value) => {
                                   handleTextInput(row, value, "name");
                                 }}
@@ -4198,7 +4437,7 @@ export default function ProjectManagementPage({
                                   options={stageOptions}
                                   ariaLabel={ariaLabel}
                                   bare
-                                  triggerClassName="min-h-11 w-full !justify-center px-2 py-3 !text-center text-xs leading-5 text-zinc-600 hover:bg-blue-50/40"
+                                  triggerClassName="min-h-11 w-full !justify-start px-2 py-3 !text-left text-xs leading-5 text-zinc-600 hover:bg-blue-50/40"
                                   display={stageLabel === "" ? <span className="text-zinc-300">—</span> : <span className={PM_TABLE_TAG_CLASS + " " + (STAGE_TAG_CLASS[stageName] ?? "bg-zinc-200 text-zinc-600")}>{stageLabel}</span>}
                                   onPick={(value) => {
                                     handleStageOverrideChange(row, value === "" ? null : value);
@@ -4292,7 +4531,7 @@ export default function ProjectManagementPage({
                                 value={row.riskReminder}
                                 readOnly={!rowEditable}
                                 ariaLabel={ariaLabel}
-                                align="center"
+                                align="left"
                                 multilineOnFocus
                                 cellKey={cellKey}
                                 maxLength={2000}
@@ -4316,7 +4555,7 @@ export default function ProjectManagementPage({
                                   onChange={(value) => {
                                     handleRegionChange(row, value);
                                   }}
-                                  triggerClassName="flex min-h-11 w-full min-w-0 items-center justify-center gap-1 px-2 py-3 text-center text-xs leading-5 outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                                  triggerClassName="flex min-h-11 w-full min-w-0 items-center justify-start gap-1 px-2 py-3 text-left text-xs leading-5 outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500"
                                   showChevron={false}
                                   valueClassName={PM_TABLE_TAG_CLASS + " " + memberFilterToneOf(regionLabel)}
                                 />
@@ -4324,7 +4563,7 @@ export default function ProjectManagementPage({
                             ) : (
                               <div
                                 data-project-management-cell={cellKey}
-                                className="flex min-h-11 min-w-0 items-center justify-center overflow-hidden px-2 py-3"
+                                className="flex min-h-11 min-w-0 items-center justify-start overflow-hidden px-2 py-3 text-left"
                               >
                                 {regionLabel === "" ? (
                                   <span className="text-zinc-300">—</span>

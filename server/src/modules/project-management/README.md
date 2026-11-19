@@ -2,6 +2,8 @@
 
 > 2026-11-17 口径：项目管理页是**独立准备记录页**。记录字段只落 `project_management_records`，不创建 / 修改业务项目；当记录的项目编号与项目空间 `projects.code` 精确匹配时，列表额外**只读**带出项目空间实时派生字段。项目空间没有被项目管理页写入，也没有外键或回收站联动。
 
+> **2026-11-19 口径补充**：项目编号与项目空间未删除项目精确匹配时，响应额外返回只读 `projectId`；项目管理表格的项目编号与项目名称据此跳转 `#/project/{id}`。无匹配为 null，不新增数据库列或迁移。
+
 > **2026-11-18 口径补充**：表格所有列均可编辑。项目空间自动识别字段（项目当前阶段、启动时间、到货日期、计划实施开始 / 完成、实施天数）以实时派生值为默认值；用户写入后存为 `*_override` 人工覆盖值并优先展示，清空覆盖值即恢复自动值。项目空间仍只读、不反向写入。实施工程师「已移交」为可持久化状态按钮：`implementationHandedOver = true` 时清空工程师列表且格子只显示「已移交」；重新选择工程师时服务端与前端同时取消该状态。
 
 ## 边界
@@ -19,6 +21,7 @@
 
 | API 字段 | 项目空间来源 | 口径 |
 |---|---|---|
+| `projectId` | `projects.id` | 按记录 `code` 精确匹配到的未删除项目 id；无匹配 = null。只用于前端跳转，不写回项目空间 |
 | `currentStage` | `tasks.stage_key` / `tasks.status` | 与项目总览汇总卡「最新阶段」一致：未删除且基础态为 `active` / `done` 的任务中，按九阶段顺序取最靠后的阶段；无已动工任务 = null |
 | `startupCompletedAt` | `tasks.actual_end` | 标题为「项目启动」或英文标题为「Project Startup」的任务实际完成日期；多条取最晚；未完成 = null |
 | `arrivalDate` | `tasks.actual_end` | `stage_key = assembly`（组装发货）的全部未删除任务中，最晚的实际完成日期 |
@@ -39,7 +42,7 @@
 | PATCH | `/api/v1/project-management-records/{id}` | 局部更新 + `version` 乐观锁 |
 | DELETE | `/api/v1/project-management-records/{id}` | 物理删除；`If-Match: <version>` |
 
-所有接口只要求登录 + CSRF，不挂项目记录级权限，也不进入项目回收站。
+所有接口要求登录 + CSRF，并叠加项目管理首批上线白名单守卫；非白名单账号返回 403。记录不进入项目回收站。
 
 ## 字段
 
@@ -52,7 +55,7 @@
 - `riskReminder`：风险提醒，最长 2000 字，未填为 null。
 - `region`：项目地点字典值，空值回落为 `未分类`。
 - `currentStageOverride` / `startupCompletedAtOverride` / `arrivalDateOverride` / `plannedStartDateOverride` / `plannedEndDateOverride` / `implementationDaysOverride`：人工覆盖值；null = 使用自动识别 / 自动计算值。
-- `currentStage` / `startupCompletedAt` / `arrivalDate` / `plannedStartDate` / `plannedEndDate` / `implementationDays`：项目空间只读派生快照，不接收客户端写入；前端按「覆盖值 ?? 自动值」展示。
+- `projectId` / `currentStage` / `startupCompletedAt` / `arrivalDate` / `plannedStartDate` / `plannedEndDate` / `implementationDays`：项目空间只读派生快照，不接收客户端写入；前端按「覆盖值 ?? 自动值」展示，`projectId` 用于项目详情跳转。
 - `version` / `createdAt` / `updatedAt`：乐观锁与时间戳。
 
 ## 前端交互
@@ -60,6 +63,7 @@
 - 文本输入停顿约 450ms 自动 PATCH / POST；失焦立即冲刷待保存内容。
 - 人员、实施方式、地点选择后立即保存。
 - 每行保存队列串行执行，避免同一行请求乱序；冲突返回 409 `VERSION_CONFLICT`。
+- 项目编号 / 名称在 `projectId` 非空时显示为项目详情链接；单击或 Enter 打开项目，双击或 F2 进入原有文本编辑。
 - 项目当前阶段 / 启动时间 / 到货日期 / 计划实施日期 / 实施天数均可点击编辑：阶段走九阶段下拉（含「自动识别」），日期走日历（清除即恢复自动），天数走数字编辑（「恢复自动」清除覆盖）。项目编号变化后先清空旧自动快照，保存成功立即回填；人工覆盖值不因编号变化自动清空。
 - 后台刷新仅合并派生字段，并按 `record.id` 与当前 `code` 双重校验，避免覆盖未保存文本、人工覆盖值或其它字段。
 - 表格初始 6 行；出现数据后，最末数据行下方固定只保留 5 个空行，多余尾部空白行收敛。点击空白格或空白行失焦不会创建记录。

@@ -68,7 +68,7 @@ export const TABLE_COLUMNS: ColumnDef[] = [
   { key: "onTime", label: "是否按时交付", width: "0.86fr", min: 86 },
   { key: "deliverable", label: "输出成果文件", width: "0.86fr", min: 86 },
   { key: "files", label: "文件", width: "0.96fr", min: 96 },
-  { key: "note", label: "项目描述", width: "0.9fr", min: 90 },
+  { key: "note", label: "任务描述", width: "0.9fr", min: 90 },
   { key: "start", label: "开始日期", width: "0.7fr", min: 86 }, // 行内日期按钮左右内衬约 14px；两位数日期「12月17日」在 70px 下会截成省略号：抬到与预计完成日期同宽
   { key: "days", label: "预计所需天数", width: "56px", min: 56, header: "" },
   { key: "due", label: "预计完成日期", width: "0.86fr", min: 86 },
@@ -730,7 +730,7 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
         ) : (
           <InlineTextCell
             value={task.note}
-            ariaLabel={t("board.edit.aria", { field: fieldText(locale, "项目描述") })}
+            ariaLabel={t("board.edit.aria", { field: fieldText(locale, "任务描述") })}
             disabled={editLocked}
             disabledHint={editLockedHint}
             display={task.note === "" ? <span className="text-zinc-300">—</span> : <span className="text-zinc-600" title={task.note}>{localizedNote}</span>}

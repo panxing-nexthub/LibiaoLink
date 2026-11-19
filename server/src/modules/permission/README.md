@@ -8,7 +8,7 @@
 |---|---|
 | 类型 | 领域模块（domain，横切策略层） |
 | 职责 | ADR-011 策略服务落地形态：功能权限（can）/ 记录级可见集 / 字段级策略 / 五出口（页面 · 导出 · 搜索 · 通知）投影统一出口 |
-| 主责 | wmj（团队分工.md §2 / §6 第 6 行） |
+| 主责 | wmj（团队分工.md §2） |
 | 对外接口 | PermissionService（getAuthorization / can / assertCan / assertWritable / canManageBlueprint / assertCanManageBlueprint / canManageTaskNodes / assertCanManageTaskNodes / canManageTaskTemplates / assertCanManageTaskTemplates / canManageTaskTemplate / assertCanManageTaskTemplate / canBrowseProjectOverview / projectScope / projectGroupAccessLevelsOf / auditAccessOf / resolveProjectAccess / assertProjectVisible / permissionsOf / invalidate / projectIdOfNode）、ProjectManagerEligibilityService（listCandidates / eligibleUserIds / assertAssignable）、ProjectAccessGuard + @ProjectAccess / @RequirePermission / @ProjectScope、纯函数策略（permission.rules.ts：projectScopeSpec / can / visibleFields / hiddenFields / projectFields / planExit / exitsConsistent）；HTTP：GET /api/v1/permissions/me |
 
 ## 已实现（h6）

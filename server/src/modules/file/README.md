@@ -37,7 +37,7 @@ CAD 异常审计（2026-10-23，F-03）：解析失败、资源超限、超时�
 |---|---|
 | 类型 | 平台模块（platform） |
 | 职责 | 文件、版本、定档、变更（申请即通过）、预览编排（含产物对象清理收口）、单文件 / 批量 ZIP 下载（短时签名）、在线查看（ONLYOFFICE 受控端点）、回收站 |
-| 主责 | lan（团队分工.md §2 后端平台） |
+| 主责 | wmj（团队分工.md §2 后端平台） |
 | 预留对外接口 | FileService、PreviewService、PreviewReadService、PreviewContentService、FileDownloadService、ChangeService、FileArchiveCleanupHandler |
 | 依据 | 系统功能书 A4-01~A4-18 / D2；技术设计v0.2 §5.1-5.3；契约 shared/src/modules/files.ts；ADR-006（对象键形态）/ ADR-022（不触发 projects.updated_at） |
 

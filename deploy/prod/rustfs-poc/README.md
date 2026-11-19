@@ -153,7 +153,7 @@ Ubuntu 测试机上的 Compose 文件 Secret 会保留宿主属主。RustFS 以 
 
 ## 7. 测试机部署门禁
 
-1. PR 通过 `wmj` / `lan` 中至少一名合格评审者批准并合入 `main`。
+1. PR 通过 `wmj` / `px` 中至少一名合格评审者批准并合入 `main`。
 2. 在测试机确认 `libiaolink-minio`、`api`、`worker`、443 门面健康基线。
 3. 只执行 `prepare → up → apply → check → it`；不得顺手 `up` 其他 profile。
 4. 记录容器健康、`docker inspect`、数据目录权限、Secret 权限、`storage:init --check`、`storage:it`、权限负向、重启持久化与 SSH 隧道证据。

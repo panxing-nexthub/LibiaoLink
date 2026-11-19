@@ -1,12 +1,12 @@
 # LibiaoLink 协作与开发规则（CONTRIBUTING）
 
 > 本文是《通用开发规则》结合 LibiaoLink 现状的落地版，章节编号保持原文档编号；已落地：第 5 节（Git 工作流）、第 11–17 节；待补充：第 1–4、6–10 节（总原则、开工流程、提交与 PR、评审与合并、测试与验证等）。
-> 适用范围：本仓库全体成员（`px`、`wmj`、`lan`）与在本仓库工作的自动化代理；代理补充约定见 `AGENTS.md`，两者冲突时以更严格者为准。
+> 适用范围：本仓库全体成员（`px`、`wmj`）与在本仓库工作的自动化代理；代理补充约定见 `AGENTS.md`，两者冲突时以更严格者为准。
 
 ## 5. Git 工作流（落地版）
 
-- 分支模型：`main` 为唯一主干；开发者常驻分支 `px` / `wmj` / `lan` 为各人默认工作分支，由本人创建并维护（不要代他人创建，避免分支归属显示在他人账号下），合并后保留、不删除。
-- 推送流程：所有改动先推送到自己的常驻分支（例：`px` 的改动推 `px`），确认无误后经 PR（`px` / `wmj` / `lan` → `main`）合入 `main`；禁止直接推送 `main`（`main` 已启用分支保护：require PR + 必需检查 `frontend` / `server` / `database`）。
+- 分支模型：`main` 为唯一主干；开发者常驻分支 `px` / `wmj` 为各人默认工作分支，由本人创建并维护（不要代他人创建，避免分支归属显示在他人账号下），合并后保留、不删除。
+- 推送流程：所有改动先推送到自己的常驻分支（例：`px` 的改动推 `px`），确认无误后经 PR（`px` / `wmj` → `main`）合入 `main`；禁止直接推送 `main`（`main` 已启用分支保护：require PR + 必需检查 `frontend` / `server` / `database`）。
 - 合并方式：squash-only；合并后源分支保留，常驻分支继续承接后续开发。
 - 常驻分支受规则集 `resident-branches-no-deletion` 保护，禁止删除。
 - 每个 PR 至少携带一条开发日志记录（见第 11 节）；PR 描述按 `.github/pull_request_template.md` 填写。
@@ -15,7 +15,7 @@
 
 - 位置与顺序：`开发日志.md`，最新记录在最上面。
 - 触发时机：每次向远端推送功能分支、或创建 / 更新 PR 之前，必须更新开发日志；一个 PR 至少一条记录，同一分支多次推送用「推送序号」区分（本仓库记录见 `开发日志.md`）。
-- 记录格式：标题行 `日期 时间 | 作者 | 分支 | Push 序号`；作者 = 当次推送人（`px` / `wmj` / `lan`）。
+- 记录格式：标题行 `日期 时间 | 作者 | 分支 | Push 序号`；作者 = 当次推送人（`px` / `wmj`）。
 - 每条记录至少包含：日期时间、作者、分支、推送序号、PR / commit、变更类型（feat / fix / docs / refactor 等）、做了什么、新增功能、修复 / 重构 / 优化、测试与验证（实际执行的命令与结果；失败、跳过、未运行必须如实写明）、文档同步、风险与后续事项。
 - 日志条目随产生它的 PR 一起提交；PR 合并后视为历史记录，不再修改；补充内容新增记录，不重写已合入的事实。
 - 日志不得包含 Secret、Token、密码、生产数据、备份内容或本地敏感路径（如本机绝对路径）。
@@ -56,7 +56,7 @@
 - 依赖引入与升级；
 - 测试基座 / 测试基础设施的新增与修改（`frontend/scripts/smoke-test.mjs` 及后续测试设施）。
 
-单人维护时，以上变更必须取得另一名合格人工评审者批准才能合并（现团队 `px` / `wmj` / `lan` 互为评审人）。
+单人维护时，以上变更必须取得另一名合格人工评审者批准才能合并（现团队 `px` / `wmj` 互为评审人）。
 
 ## 16. 发布与标签
 
@@ -80,8 +80,8 @@
 - 交付说明列出：修改内容、验证证据、剩余风险与后续事项。
 ## 附录 A：仓库落地清单（LibiaoLink 现状）
 
-1. 仓库初始化：主干 `main`；开发者常驻分支 `px` / `wmj` / `lan`（由本人创建并维护，各人默认分支，合并后保留、不删除，各自承接本人后续开发；推送流程见第 5 节）；共享区域主理人待明确。
-2. 平台保护：已配置（2026-09-17 仓库转公开后全部生效）—— squash-only 合并、合并后保留源分支（`delete_branch_on_merge=false`）、常驻分支删除保护（规则集 `resident-branches-no-deletion`：`px` / `wmj` / `lan`）、`main` 分支保护（require PR、必需状态检查 `frontend` / `server` / `database`、conversation resolution、linear history、禁止 force push / 删除、enforce admins、无绕过者）、GitHub Secret scanning + push protection、Dependabot 漏洞提醒与安全更新、`CODEOWNERS`（评审自动路由；已按模块细化，路由表见 `团队分工.md` §5.1）。暂不可用：Secret scanning 的 non-provider patterns 与 validity checks（需付费 SKU）。
+1. 仓库初始化：主干 `main`；现行开发者常驻分支 `px` / `wmj`（由本人创建并维护，各人默认分支，合并后保留、不删除，各自承接本人后续开发；推送流程见第 5 节）；共享区域主理人待明确。
+2. 平台保护：已配置（2026-09-17 仓库转公开后全部生效）—— squash-only 合并、合并后保留源分支（`delete_branch_on_merge=false`）、常驻分支删除保护（规则集 `resident-branches-no-deletion`：`px` / `wmj`；`lan` 分支自 2026-11-19 起不再作为本仓开发分支）、`main` 分支保护（require PR、必需状态检查 `frontend` / `server` / `database`、conversation resolution、linear history、禁止 force push / 删除、enforce admins、无绕过者）、GitHub Secret scanning + push protection、Dependabot 漏洞提醒与安全更新、`CODEOWNERS`（评审自动路由；已按模块细化，现行路由见 `.github/CODEOWNERS` 与 `团队分工.md` §2）。暂不可用：Secret scanning 的 non-provider patterns 与 validity checks（需付费 SKU）。
 3. 文档骨架：`README.md`、`AGENTS.md`、本文件、`开发日志.md`、`系统功能书.md`、`前端功能需求.md`、`字段对照清单.md`、`技术设计v0.1-选型分析.md`、`技术设计v0.2-架构与数据模型.md`、`团队分工.md`、PR 模板（`.github/pull_request_template.md`）已有；待补 ADR 目录与唯一索引。
 4. CI 门禁：`.github/workflows/ci.yml` 已配置（PR 与 `main` push 触发）：`frontend`（锁定安装 → typecheck → build；`main` 必需检查）、`shared`（typecheck → 契约漂移检查）、`server`（shared 构建 → 锁定安装 → typecheck → vitest → build → 边界规则；`main` 必需检查）、`database`（postgres:18 service（trust）→ 角色脚本 → 空库迁移 + 幂等复跑 → `check:db-schema`；`main` 必需检查）；仓库转公开后复跑成功（run 35185708338，job `frontend` success）；前端 smoke 尚未纳入（依赖本地 Casdoor 沙箱 + 3000 端口 dev server）；依赖漏洞通过 Dependabot 提醒与安全更新。
 5. 接口契约：前端需求已在 `前端功能需求.md` 第三节列出；后端落地时先定义唯一来源与生成流程，再写第一个纵切片。

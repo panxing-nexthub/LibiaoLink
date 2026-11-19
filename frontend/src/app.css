@@ -3406,10 +3406,15 @@ body {
   }
 
   [data-stakeholder-cell="actions"] {
+    position: static !important;
     display: flex !important;
     justify-content: flex-end !important;
+    padding-right: 0 !important;
     padding-top: 0.55rem;
     border-top: 1px solid rgba(228, 228, 231, 0.72);
+    border-left: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 
   /* ── HTML 宽表统一字段卡：日报 / 问题 / 回收站 / 项目文件 / 操作记录 / 工作台问题 ── */

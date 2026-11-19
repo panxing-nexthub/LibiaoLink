@@ -1417,9 +1417,7 @@ function ReportList({ reports, focusReportId = null, onEdit, onPatch, onDelete }
             {/* Push 213（业务口径「日报记录 和 问题追随都要有删除按钮 … 请你看看有没有合适的位置」）：行尾动作列 ——
                 Push 223 再补一枚「编辑」（干系人同款 RowEditButton）—— 两枚共用一枚预留槽位（78px = 悬停展开 48 + 间距 6 + 静止 24），
                 哪一枚展开都只吃槽内空间 ⇒ 列宽 / 表宽一格不动（业务反馈「鼠标触碰表格会动」的修法照旧）。 */}
-            <th data-report-actions-head="" className="sticky right-0 z-20 w-[110px] border-b border-l border-zinc-200 bg-zinc-50 px-4 py-3.5 font-medium shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]">
-              <span className="sr-only">{t("rp.actions")}</span>
-            </th>
+            <th data-report-actions-head="" aria-label={t("rp.actions")} className="sticky right-0 z-20 w-[110px] border-b border-l border-zinc-200 bg-zinc-50 px-4 py-3.5 font-medium shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]" />
           </tr>
         </thead>
         <tbody>
@@ -1936,9 +1934,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
             {/* Push 213（业务口径「日报记录 和 问题追随都要有删除按钮 … 请你看看有没有合适的位置」）：行尾动作列 ——
                 Push 223 再补一枚「编辑」（干系人同款 RowEditButton）—— 两枚共用同一枚预留槽位
                 （78px = 悬停展开 48 + 间距 6 + 静止 24）；删问题 = 连它来源的那篇日报一起删（同一篇日报整组）。 */}
-            <th data-issue-actions-head="" className="sticky right-0 z-20 w-[110px] border-b border-l border-zinc-200 bg-zinc-50 px-4 py-3.5 font-medium shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]">
-              <span className="sr-only">{t("rp.actions")}</span>
-            </th>
+            <th data-issue-actions-head="" aria-label={t("rp.actions")} className="sticky right-0 z-20 w-[110px] border-b border-l border-zinc-200 bg-zinc-50 px-4 py-3.5 font-medium shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]" />
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-100">

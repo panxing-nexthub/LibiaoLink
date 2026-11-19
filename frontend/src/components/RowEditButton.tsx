@@ -23,7 +23,7 @@ export function RowEditButton({ onEdit, label, persistent = false }: { onEdit: (
       onKeyDown={(event) => event.stopPropagation()}
       className={
         "group/edit relative flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full transition-[width,background-color,color,opacity] duration-300 ease-out hover:w-12 hover:bg-zinc-900 hover:text-white focus-visible:w-12 focus-visible:bg-zinc-900 focus-visible:text-white focus-visible:opacity-100 focus-visible:outline-none " +
-        (persistent ? "bg-[#FECA04] text-zinc-900 shadow-[0_1px_2px_rgba(15,23,42,0.10)] opacity-100" : "bg-transparent text-zinc-300 opacity-0 group-hover:opacity-100")
+        (persistent ? "bg-transparent text-zinc-300 opacity-100" : "bg-transparent text-zinc-300 opacity-0 group-hover:opacity-100")
       }
     >
       <span className="pointer-events-none absolute -translate-y-3 text-[11px] font-semibold opacity-0 transition-all duration-300 group-hover/edit:translate-y-0 group-hover/edit:opacity-100 group-focus-visible/edit:translate-y-0 group-focus-visible/edit:opacity-100">

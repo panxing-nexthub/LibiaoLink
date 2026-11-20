@@ -85,7 +85,7 @@ function profileDigest({ sourceVersion, attributes, subjects, members }) {
 export async function saveProjectProfile(client, projectId, input) {
   await locked(client, "case-project-profile", projectId);
   const { rows: [project] } = await client.query(`
-    select source_version from project_read.project_summary where project_id = $1 and deleted_at is null and source_missing_at is null
+    select source_version from project_read.project_directory where project_id = $1 and deleted_at is null and source_missing_at is null
   `, [projectId]);
   if (!project) throw new CaseAggregateError("NOT_FOUND", "可选项目不存在");
   if (project.source_version !== input.sourceVersion) throw new CaseAggregateError("PROJECT_VERSION_CONFLICT", "项目版本已变化");

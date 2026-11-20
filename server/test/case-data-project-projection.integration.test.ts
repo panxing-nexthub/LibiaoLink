@@ -1,4 +1,7 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 import { expect, it } from "vitest";
@@ -55,11 +58,78 @@ async function addProject(db: Client, id: string, code: string, managers: string
 
 async function summary(db: Client, id: string) {
   const { rows } = await db.query(`
-    select project_name, manager_names, source_version, status, archived_at, deleted_at,
+    select project_code, project_name, manager_names, source_version, status, archived_at, deleted_at,
            synced_at::text, source_updated_at::text, missing_scans, source_missing_at, last_seen_at::text
     from project_read.project_summary where project_id = $1
   `, [id]);
   return rows[0];
+}
+
+async function waitForSummary(
+  db: Client,
+  id: string,
+  predicate: (row: Record<string, unknown>) => boolean,
+  timeoutMs = 8000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  let observed: Record<string, unknown> | undefined;
+  while (Date.now() < deadline) {
+    observed = await summary(db, id);
+    if (observed && predicate(observed)) return observed;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for project ${id}; last row: ${JSON.stringify(observed)}`);
+}
+
+function startWatch() {
+  const child = spawn(process.execPath, [executable, "watch"], {
+    env: {
+      ...process.env,
+      CASE_PROJECTION_SECRET_DIR: secretDir!,
+      CASE_PROJECTION_BATCH_SIZE: "100",
+      CASE_PROJECTION_BATCH_PAUSE_MS: "0",
+      CASE_PROJECTION_OVERLAP_SECONDS: "300",
+      CASE_PROJECTION_WATCH_MS: "250",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.setEncoding("utf8").on("data", (chunk) => { stderr += chunk; });
+  const lines = createInterface({ input: child.stdout });
+  const iterator = lines[Symbol.asyncIterator]();
+  const exit = once(child, "exit") as Promise<[number | null, NodeJS.Signals | null]>;
+
+  async function nextLine(timeoutMs: number) {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Watch output timed out; stderr: ${stderr}`)), timeoutMs);
+    });
+    try {
+      const result = await Promise.race([iterator.next(), timeout]);
+      if (result.done) throw new Error(`Watch exited before output; stderr: ${stderr}`);
+      return JSON.parse(result.value) as Record<string, unknown>;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  async function nextLineWhere(predicate: (line: Record<string, unknown>) => boolean, timeoutMs = 8000) {
+    const deadline = Date.now() + timeoutMs;
+    while (true) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new Error(`Watch status timed out; stderr: ${stderr}`);
+      const line = await nextLine(remaining);
+      if (predicate(line)) return line;
+    }
+  }
+
+  async function close() {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    await exit;
+    lines.close();
+  }
+
+  return { child, exit, nextLineWhere, close, stderr: () => stderr };
 }
 
 it.skipIf(!coreAdminUrl || !caseAdminUrl || !secretDir)(
@@ -140,4 +210,50 @@ it.skipIf(!coreAdminUrl || !caseAdminUrl || !secretDir)(
     }
   },
   25_000,
+);
+
+
+it.skipIf(!coreAdminUrl || !caseAdminUrl || !secretDir)(
+  "watches core project inserts and updates into project_summary within seconds",
+  async () => {
+    const source = fixture(coreAdminUrl!, "libiaolink");
+    const target = fixture(caseAdminUrl!, "libiaolink_case");
+    await Promise.all([source.connect(), target.connect()]);
+    let watcher: ReturnType<typeof startWatch> | undefined;
+    try {
+      watcher = startWatch();
+      expect(await watcher.nextLineWhere((line) => line.status === "started")).toMatchObject({
+        mode: "watch", status: "started", intervalMs: 250,
+      });
+
+      const projectId = randomUUID();
+      const projectCode = `WATCH-${projectId.slice(0, 12)}`;
+      const insertedAt = Date.now();
+      await addProject(source, projectId, projectCode, [randomUUID()], null);
+      expect(await waitForSummary(target, projectId, (row) => row.project_name === projectCode))
+        .toMatchObject({ project_code: projectCode, manager_names: [null] });
+      expect(Date.now() - insertedAt).toBeLessThan(5000);
+
+      await source.query(
+        "update public.projects set name = $2, version = 1, updated_at = clock_timestamp() where id = $1",
+        [projectId, "watch 实时更新"],
+      );
+      expect(await waitForSummary(target, projectId, (row) => row.project_name === "watch 实时更新"))
+        .toMatchObject({ project_name: "watch 实时更新", source_version: 1 });
+
+      if (process.platform !== "win32") {
+        watcher.child.kill("SIGTERM");
+        expect(await watcher.nextLineWhere((line) => line.status === "stopped")).toMatchObject({
+          mode: "watch", status: "stopped",
+        });
+        const [exitCode, signal] = await watcher.exit;
+        expect({ exitCode, signal }).toEqual({ exitCode: 0, signal: null });
+        expect(watcher.stderr()).toBe("");
+      }
+    } finally {
+      if (watcher) await watcher.close();
+      await Promise.all([source.end(), target.end()]);
+    }
+  },
+  20_000,
 );

@@ -111,10 +111,97 @@ async function requireConnection(db, database, role) {
   }
 }
 
+async function runOnce(source, target, mode, config) {
+  await target.query("begin");
+  let sourceTransaction = false;
+  try {
+    await requireConnection(target, "libiaolink_case", "case_project_projection_rw");
+    const { rows: [{ acquired }] } = await target.query(
+      "select pg_try_advisory_xact_lock($1::bigint) as acquired", [projectionLock]);
+    if (!acquired) {
+      await target.query("rollback");
+      return { mode, status: "busy" };
+    }
+
+    await source.query("begin isolation level repeatable read read only");
+    sourceTransaction = true;
+    await requireConnection(source, "libiaolink", "case_project_ro");
+    const { rows: [{ upper }] } = await source.query("select transaction_timestamp()::text as upper");
+    const result = mode === "incremental" ? await increment(source, target, config, upper)
+      : await reconcile(source, target, config);
+    await source.query("commit");
+    sourceTransaction = false;
+    await target.query("commit");
+    return { mode, status: "ok", ...result };
+  } catch (error) {
+    if (sourceTransaction) await source.query("rollback").catch(() => {});
+    await target.query("rollback").catch(() => {});
+    throw error;
+  }
+}
+
+const retryableProjectionErrors = new Set([
+  "40001", "40P01", "55P03", "57014", "53300", "57P03",
+]);
+
+function isConnectionFailure(error) {
+  const code = error?.code;
+  return (typeof code === "string" && (
+    code.startsWith("08") || code.startsWith("57P")
+    || ["ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDOUT"].includes(code)
+  )) || (error instanceof Error
+    && /Client has already been closed|Connection terminated|not queryable/.test(error.message));
+}
+
+function logWatchError(error, durationMs) {
+  const payload = { mode: "watch", status: "error", durationMs };
+  if (typeof error?.code === "string") payload.code = error.code;
+  payload.message = error instanceof Error ? error.message : String(error);
+  console.error(JSON.stringify(payload));
+}
+
+async function waitForNextRun(intervalMs, signal) {
+  try {
+    await delay(intervalMs, undefined, { signal });
+  } catch (error) {
+    if (!signal.aborted) throw error;
+  }
+}
+
+async function watch(source, target, config) {
+  const intervalMs = readInteger("CASE_PROJECTION_WATCH_MS", 1000, 250, 60000);
+  const stopping = new AbortController();
+  const stop = () => stopping.abort();
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  try {
+    console.log(JSON.stringify({ mode: "watch", status: "started", intervalMs }));
+    while (!stopping.signal.aborted) {
+      const started = Date.now();
+      try {
+        const result = await runOnce(source, target, "incremental", config);
+        if (result.status === "ok" && (result.projectsChanged > 0 || result.summariesRenamed > 0)) {
+          console.log(JSON.stringify({ ...result, durationMs: Date.now() - started }));
+        }
+      } catch (error) {
+        logWatchError(error, Date.now() - started);
+        // 配置或连接故障应由进程守护重启；可恢复的 SQL 错误留在循环内重试。
+        if (error instanceof CaseDataError || isConnectionFailure(error)
+            || !retryableProjectionErrors.has(error?.code)) throw error;
+      }
+      if (!stopping.signal.aborted) await waitForNextRun(intervalMs, stopping.signal);
+    }
+  } finally {
+    process.removeListener("SIGINT", stop);
+    process.removeListener("SIGTERM", stop);
+  }
+  console.log(JSON.stringify({ mode: "watch", status: "stopped" }));
+}
+
 async function main() {
   const [mode, ...otherArgs] = process.argv.slice(2);
-  if (!["incremental", "reconcile"].includes(mode) || otherArgs.length !== 0) {
-    throw new CaseDataError("用法为 project-projection.mjs incremental 或 reconcile");
+  if (!["incremental", "reconcile", "watch"].includes(mode) || otherArgs.length !== 0) {
+    throw new CaseDataError("用法为 project-projection.mjs incremental、reconcile 或 watch");
   }
   const config = {
     batchSize: readInteger("CASE_PROJECTION_BATCH_SIZE", 100, 1, 500),
@@ -132,23 +219,13 @@ async function main() {
     statement_timeout: 5_000, lock_timeout: 500, idle_in_transaction_session_timeout: 30_000,
   });
   try {
-    await target.connect();
-    await target.query("begin");
-    await requireConnection(target, "libiaolink_case", "case_project_projection_rw");
-    const { rows: [{ acquired }] } = await target.query("select pg_try_advisory_xact_lock($1::bigint) as acquired", [projectionLock]);
-    if (!acquired) {
-      console.log(JSON.stringify({ mode, status: "busy" }));
+    await Promise.all([source.connect(), target.connect()]);
+    if (mode === "watch") {
+      await watch(source, target, config);
       return;
     }
-
-    await source.connect();
-    await source.query("begin isolation level repeatable read read only");
-    await requireConnection(source, "libiaolink", "case_project_ro");
-    const { rows: [{ upper }] } = await source.query("select transaction_timestamp()::text as upper");
-    const result = mode === "incremental" ? await increment(source, target, config, upper) : await reconcile(source, target, config);
-    await source.query("commit");
-    await target.query("commit");
-    console.log(JSON.stringify({ mode, status: "ok", durationMs: Date.now() - started, ...result }));
+    const result = await runOnce(source, target, mode, config);
+    console.log(JSON.stringify({ ...result, durationMs: Date.now() - started }));
   } finally {
     await Promise.all([source.end(), target.end()]);
   }

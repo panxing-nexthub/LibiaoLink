@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { caseCatalogCursorPattern, CaseProjectCatalogQuerySchema } from "@libiaolink/contracts/case-data/project-catalog";
+import { CaseAggregateError } from "./case-aggregate.mjs";
 import { CaseDataError } from "./database-credentials.mjs";
 import { withCaseAuthoringTransaction } from "./case-authoring-transaction.mjs";
 
@@ -9,8 +10,35 @@ const selectAvailableProjects = `
          customer_text as "customerText", region, project_type as "projectType", manager_ids as "managerIds",
          manager_names as "managerNames", status, source_version as "sourceVersion", source_updated_at as "updatedAt",
          archived_at as "archivedAt", deleted_at as "deletedAt", synced_at as "syncedAt"
-  from project_read.project_summary where deleted_at is null and source_missing_at is null
+  from project_read.project_directory where deleted_at is null and source_missing_at is null
 `;
+const localProjectColumns = `project_id as "externalProjectId", project_code as "projectCode", project_name as "projectName",
+  customer_text as "customerText", region, project_type as "projectType", manager_ids as "managerIds",
+  manager_names as "managerNames", status, source_version as "sourceVersion", source_updated_at as "updatedAt",
+  archived_at as "archivedAt", null::timestamptz as "deletedAt", synced_at as "syncedAt"`;
+const localProjectConflicts = new Map([
+  ["ux_project_code_claim_code", ["PROJECT_CODE_EXISTS", "项目编号已存在"]],
+  ["ux_local_projects_code", ["PROJECT_CODE_EXISTS", "项目编号已存在"]],
+  ["pk_project_code_claim", ["PROJECT_ID_EXISTS", "项目 ID 已存在"]],
+  ["pk_local_projects", ["PROJECT_ID_EXISTS", "项目 ID 已存在"]],
+]);
+
+const localProjectPatchColumns = {
+  projectCode: ["project_code", "text"],
+  projectName: ["project_name", "text"],
+  customerText: ["customer_text", "text"],
+  region: ["region", "text"],
+  projectType: ["project_type", "text"],
+  managerIds: ["manager_ids", "uuid[]"],
+  managerNames: ["manager_names", "text[]"],
+  status: ["status", "text"],
+};
+
+function rethrowProjectConflict(error) {
+  const conflict = error?.code === "23505" ? localProjectConflicts.get(error.constraint) : null;
+  if (conflict) throw new CaseAggregateError(...conflict);
+  throw error;
+}
 
 export class CatalogQueryError extends Error {
   constructor(path, message) {
@@ -68,6 +96,68 @@ export function parseCatalogQuery(params, cursorKey) {
   return { limit, filters, afterId: cursor === undefined ? null : decodeCursor(cursor, filters, cursorKey) };
 }
 
+export async function registerLocalProject(client, input) {
+  try {
+    const { rows: [project] } = await client.query(`
+      insert into project_read.local_projects (project_id, project_code, project_name, customer_text, region,
+        project_type, manager_ids, manager_names, status, archived_at)
+      values (coalesce($1::uuid, uuidv7()), $2, $3, $4, $5, $6, $7::uuid[], $8::text[], $9,
+        case when $9 = 'archived' then statement_timestamp() end)
+      returning ${localProjectColumns}
+    `, [input.externalProjectId ?? null, input.projectCode, input.projectName, input.customerText, input.region,
+      input.projectType, input.managerIds, input.managerNames, input.status]);
+    return { status: 201, body: project, resourceId: project.externalProjectId };
+  } catch (error) {
+    rethrowProjectConflict(error);
+  }
+}
+
+export async function patchLocalProject(client, projectId, expectedVersion, patch) {
+  const fields = Object.keys(patch);
+  if (fields.length === 0 || fields.some((field) => !Object.hasOwn(localProjectPatchColumns, field))) {
+    throw new CaseAggregateError("VALIDATION_FAILED", "请求包含不可更新的本地项目字段");
+  }
+
+  const { rows: [local] } = await client.query(
+    "select source_version from project_read.local_projects where project_id = $1 for update", [projectId],
+  );
+  if (!local) {
+    const { rowCount } = await client.query(
+      "select 1 from project_read.project_summary where project_id = $1", [projectId],
+    );
+    if (rowCount) throw new CaseAggregateError("PROJECT_SOURCE_READ_ONLY", "核心项目只读，不能通过本地项目接口更新");
+    throw new CaseAggregateError("NOT_FOUND", "本地项目不存在");
+  }
+  if (local.source_version !== expectedVersion) {
+    throw new CaseAggregateError("PROJECT_VERSION_CONFLICT", "项目版本已变化");
+  }
+
+  const assignments = fields.map((field, index) => {
+    const [column, type] = localProjectPatchColumns[field];
+    return `${column} = $${index + 2}::${type}`;
+  });
+  const statusIndex = fields.indexOf("status");
+  if (statusIndex >= 0) {
+    assignments.push(`archived_at = case when $${statusIndex + 2} = 'archived'
+      then coalesce(archived_at, statement_timestamp()) else null end`);
+  }
+  assignments.push("source_version = source_version + 1", "source_updated_at = statement_timestamp()",
+    "updated_at = statement_timestamp()", "synced_at = statement_timestamp()");
+  const values = fields.map((field) => patch[field]);
+
+  try {
+    const { rows: [project] } = await client.query(`
+      update project_read.local_projects
+      set ${assignments.join(", ")}
+      where project_id = $1
+      returning ${localProjectColumns}
+    `, [projectId, ...values]);
+    return { status: 200, body: project, resourceId: project.externalProjectId };
+  } catch (error) {
+    rethrowProjectConflict(error);
+  }
+}
+
 export function createProjectCatalog(pool, cursorKey) {
   async function query(sql, parameters) {
     if (pool.waitingCount >= 8) throw new CaseDataError("项目目录连接等待队列已满");
@@ -91,5 +181,7 @@ export function createProjectCatalog(pool, cursorKey) {
       const nextCursor = rows.length > limit ? encodeCursor(items.at(-1).externalProjectId, filters, cursorKey) : null;
       return { items, nextCursor };
     },
+    registerLocal: (client, input) => registerLocalProject(client, input),
+    updateLocal: (client, projectId, expectedVersion, patch) => patchLocalProject(client, projectId, expectedVersion, patch),
   };
 }

@@ -12,15 +12,39 @@ export interface paths {
         };
         /**
          * 查询可选项目目录
-         * @description 本地 Scope 为 case-data:projects:read。包含归档项目，分页游标只能与原筛选条件一起使用。
+         * @description 本地 Scope 为 case-data:projects:read。合并核心只读投影与本地注册项目，包含归档项目；分页游标只能与原筛选条件一起使用。
          */
         get: operations["listCaseProjects"];
+        put?: never;
+        /**
+         * 注册本地项目
+         * @description 本地 Scope 为 case-data:projects:write。项目仅写入 libiaolink_case，不进入核心库；项目编号在目录可用项范围内跨来源唯一，项目 ID 跨全部核心历史摘要与本地项目唯一。
+         */
+        post: operations["registerLocalCaseProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * 更新或归档本地项目
+         * @description 本地 Scope 为 case-data:projects:write。仅能更新 libiaolink_case 中的本地项目，核心投影项目只读。expectedVersion 必须匹配当前 sourceVersion；status=archived 时归档，改回其它状态时解档。
+         */
+        patch: operations["patchLocalCaseProject"];
         trace?: never;
     };
     "/api/v1/projects/{projectId}/profile": {
@@ -473,6 +497,52 @@ export interface components {
                 message: string;
                 path: string;
             }[];
+        };
+        RegisterLocalCaseProjectBody: {
+            /** Format: uuid */
+            operationId: string;
+            traceId?: string;
+            operatorUserKey: string;
+            /**
+             * Format: uuid
+             * @description 可选的本地项目 UUID；省略时由案例库生成 UUIDv7，跨核心投影与本地项目全局唯一
+             */
+            externalProjectId?: string;
+            /** @description 项目编号：与核心目录可用项跨来源唯一；软删除或源缺失的历史摘要不占编号，归档项仍占用 */
+            projectCode: string;
+            projectName: string;
+            /** @default null */
+            customerText: string | null;
+            /** @default 未分类 */
+            region: string;
+            /** @default 未分类 */
+            projectType: string;
+            /** @default [] */
+            managerIds: string[];
+            /** @default [] */
+            managerNames: (string | null)[];
+            /**
+             * @default active
+             * @enum {string}
+             */
+            status: "active" | "paused" | "done" | "archived";
+        };
+        PatchLocalCaseProjectBody: {
+            /** Format: uuid */
+            operationId: string;
+            traceId?: string;
+            operatorUserKey: string;
+            expectedVersion: number;
+            /** @description 项目编号：与核心目录可用项跨来源唯一；软删除或源缺失的历史摘要不占编号，归档项仍占用 */
+            projectCode?: string;
+            projectName?: string;
+            customerText?: string | null;
+            region?: string;
+            projectType?: string;
+            managerIds?: string[];
+            managerNames?: (string | null)[];
+            /** @enum {string} */
+            status?: "active" | "paused" | "done" | "archived";
         };
         CaseProjectProfileView: {
             /** Format: uuid */
@@ -1092,7 +1162,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 只读项目摘要分页 */
+            /** @description 核心与本地项目合并的目录分页 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1130,6 +1200,218 @@ export interface operations {
             };
             /** @description 超过本地请求频率或并发限额 */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    registerLocalCaseProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterLocalCaseProjectBody"];
+            };
+        };
+        responses: {
+            /** @description 已注册的本地项目目录项 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseProjectCatalogItem"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例或可选项目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 项目编号或项目 ID 已由其他来源占用 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求体过大 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    patchLocalCaseProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchLocalCaseProjectBody"];
+            };
+        };
+        responses: {
+            /** @description 更新后的本地项目目录项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseProjectCatalogItem"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 本地项目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 项目版本冲突、项目编号冲突、幂等冲突或核心项目只读 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求体过大 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

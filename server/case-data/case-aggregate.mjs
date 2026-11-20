@@ -49,8 +49,8 @@ export async function insertCase(client, input) {
   // 项目可选性、项目版本和方案类型从同一个 SQL 快照读取。
   const { rows: [{ projectAvailable, projectVersionMatches, solutionsAllowed, ...created }] } = await client.query(`
     with available_project as (
-      select project_id, source_version, ${projectAllowsSolutions("project_summary.project_id", "$13")} as solutions_allowed
-      from project_read.project_summary
+      select project_id, source_version, ${projectAllowsSolutions("project_directory.project_id", "$13")} as solutions_allowed
+      from project_read.project_directory
       where project_id = $2 and deleted_at is null and source_missing_at is null
     ), inserted as (
       insert into "case".cases (id, source_project_id, locale, title, summary, change_summary,

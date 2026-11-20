@@ -171,6 +171,187 @@
         ],
         "additionalProperties": false
       },
+      "RegisterLocalCaseProjectBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "externalProjectId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "可选的本地项目 UUID；省略时由案例库生成 UUIDv7，跨核心投影与本地项目全局唯一"
+          },
+          "projectCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50,
+            "description": "项目编号：与核心目录可用项跨来源唯一；软删除或源缺失的历史摘要不占编号，归档项仍占用"
+          },
+          "projectName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "customerText": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200,
+            "default": null
+          },
+          "region": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "default": "未分类"
+          },
+          "projectType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "default": "未分类"
+          },
+          "managerIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 200,
+            "default": []
+          },
+          "managerNames": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "maxItems": 200,
+            "default": []
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "done",
+              "archived"
+            ],
+            "default": "active"
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey",
+          "projectCode",
+          "projectName"
+        ],
+        "additionalProperties": false
+      },
+      "PatchLocalCaseProjectBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "traceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operatorUserKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "projectCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50,
+            "description": "项目编号：与核心目录可用项跨来源唯一；软删除或源缺失的历史摘要不占编号，归档项仍占用"
+          },
+          "projectName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "customerText": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "region": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "projectType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "managerIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 200
+          },
+          "managerNames": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "maxItems": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "done",
+              "archived"
+            ]
+          }
+        },
+        "required": [
+          "operationId",
+          "operatorUserKey",
+          "expectedVersion"
+        ],
+        "additionalProperties": false
+      },
       "CaseProjectProfileView": {
         "type": "object",
         "properties": {
@@ -2563,7 +2744,7 @@
           }
         ],
         "summary": "查询可选项目目录",
-        "description": "本地 Scope 为 case-data:projects:read。包含归档项目，分页游标只能与原筛选条件一起使用。",
+        "description": "本地 Scope 为 case-data:projects:read。合并核心只读投影与本地注册项目，包含归档项目；分页游标只能与原筛选条件一起使用。",
         "parameters": [
           {
             "schema": {
@@ -2622,7 +2803,7 @@
         ],
         "responses": {
           "200": {
-            "description": "只读项目摘要分页",
+            "description": "核心与本地项目合并的目录分页",
             "content": {
               "application/json": {
                 "schema": {
@@ -2663,6 +2844,263 @@
           },
           "429": {
             "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "registerLocalCaseProject",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "注册本地项目",
+        "description": "本地 Scope 为 case-data:projects:write。项目仅写入 libiaolink_case，不进入核心库；项目编号在目录可用项范围内跨来源唯一，项目 ID 跨全部核心历史摘要与本地项目唯一。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterLocalCaseProjectBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "已注册的本地项目目录项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseProjectCatalogItem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "案例或可选项目不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "项目编号或项目 ID 已由其他来源占用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}": {
+      "patch": {
+        "operationId": "patchLocalCaseProject",
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "summary": "更新或归档本地项目",
+        "description": "本地 Scope 为 case-data:projects:write。仅能更新 libiaolink_case 中的本地项目，核心投影项目只读。expectedVersion 必须匹配当前 sourceVersion；status=archived 时归档，改回其它状态时解档。",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchLocalCaseProjectBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新后的本地项目目录项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseProjectCatalogItem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "服务令牌无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少所需 Scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "本地项目不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "项目版本冲突、项目编号冲突、幂等冲突或核心项目只读",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数或案例字段非法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过本地请求频率或并发限额",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDataGatewayError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "案例请求处理失败",
             "content": {
               "application/json": {
                 "schema": {

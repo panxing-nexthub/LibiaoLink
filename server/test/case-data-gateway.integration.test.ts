@@ -420,6 +420,284 @@ it.skipIf(!adminUrl || !gatewayUrl)("authenticates and scopes project catalog an
   }
 }, 25_000);
 
+it.skipIf(!adminUrl || !gatewayUrl)("registers local projects in the case catalog without copying them into the core projection", async () => {
+  for (const connection of [adminUrl!, gatewayUrl!]) {
+    const url = new URL(connection);
+    expect(url.hostname).toBe("127.0.0.1");
+    expect(url.pathname).toBe("/libiaolink_case");
+  }
+  const db = new Client({ connectionString: adminUrl });
+  await db.connect();
+  const dir = await mkdtemp(join(tmpdir(), "libiaolink-case-local-project-"));
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const token = (claims: Record<string, unknown>) => serviceToken(privateKey, claims);
+  const localProjectId = "10000000-0000-4000-8000-00000000a001";
+  const coreProjectId = "10000000-0000-4000-8000-00000000a000";
+  const hiddenCoreId = "10000000-0000-4000-8000-00000000a006";
+  const hiddenLocalId = "10000000-0000-4000-8000-00000000a007";
+  const manager = randomUUID();
+
+  try {
+    await writeGatewayCredentials(dir, gatewayUrl!, publicKey);
+    const gateway = await startGateway(dir);
+    try {
+      const { base } = gateway;
+      const writeScopes = "case-data:projects:write case-data:projects:read case-data:cases:write";
+      const author = token({ sub: "local-project-author", client_id: "local-project-author", scope: writeScopes });
+      const reader = token({ sub: "local-project-reader", client_id: "local-project-reader", scope: readScope });
+      const jsonHeaders = { Authorization: `Bearer ${author}`, "Content-Type": "application/json" };
+      const input = {
+        operationId: "0190d2e4-a020-7000-8000-000000000001",
+        externalProjectId: localProjectId,
+        operatorUserKey: "local_project_author",
+        projectCode: "LOCAL-PROJECT-001",
+        projectName: "本地案例项目",
+        customerText: "本地客户",
+        region: "华南",
+        projectType: "分拣",
+        managerIds: [],
+        managerNames: [],
+        status: "active",
+      };
+      const register = (body: Record<string, unknown> = input, bearer = author) => fetch(`${base}/api/v1/projects`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(4000),
+      });
+
+      const forbidden = await register(input, reader);
+      expect(forbidden.status).toBe(403);
+      expect(await forbidden.json()).toMatchObject({ code: "FORBIDDEN" });
+
+      const createdResponse = await register();
+      expect(createdResponse.status).toBe(201);
+      const created = await createdResponse.json() as Record<string, unknown>;
+      expect(created).toMatchObject({
+        externalProjectId: localProjectId, projectCode: "LOCAL-PROJECT-001", projectName: "本地案例项目",
+        customerText: "本地客户", region: "华南", projectType: "分拣", managerIds: [], managerNames: [],
+        status: "active", sourceVersion: 1, archivedAt: null, deletedAt: null,
+      });
+      expect(created.updatedAt).toEqual(expect.any(String));
+      expect(created.syncedAt).toEqual(expect.any(String));
+
+      const replay = await register();
+      expect(replay.status).toBe(201);
+      expect(await replay.json()).toEqual(created);
+
+      await db.query(`
+        insert into project_read.project_summary
+          (project_id, project_code, project_name, customer_text, region, project_type, manager_ids, manager_names,
+           status, source_version, source_updated_at, archived_at, deleted_at, source_missing_at, synced_at)
+        values ($1, 'CORE-PROJECT-001', '核心目录项目', null, '华东', '分拣', array[$2::uuid], array[null::text],
+                'active', 7, now(), null, null, null, now())
+      `, [coreProjectId, manager]);
+
+      await db.query(`
+        insert into project_read.project_summary
+          (project_id, project_code, project_name, customer_text, region, project_type, manager_ids, manager_names,
+           status, source_version, source_updated_at, archived_at, deleted_at, source_missing_at, synced_at)
+        values ($1, 'HIDDEN-PROJECT-001', '源缺失项目', null, '华东', '分拣',
+                array[$2::uuid], array[null::text], 'active', 1, now(), null, null, now(), now())
+      `, [hiddenCoreId, manager]);
+
+      const hiddenLocal = await register({
+        ...input, operationId: "0190d2e4-a020-7000-8000-000000000010",
+        externalProjectId: hiddenLocalId, projectCode: "HIDDEN-PROJECT-001", projectName: "可复用隐藏编号的本地项目",
+      });
+      expect(hiddenLocal.status).toBe(201);
+      expect(await hiddenLocal.json()).toMatchObject({
+        externalProjectId: hiddenLocalId, projectCode: "HIDDEN-PROJECT-001", status: "active",
+      });
+      const hiddenClaims = await db.query(
+        "select source_kind, is_available from project_read.project_code_claim where project_code = $1 order by source_kind",
+        ["HIDDEN-PROJECT-001"],
+      );
+      expect(hiddenClaims.rows).toEqual([
+        { source_kind: "core", is_available: false },
+        { source_kind: "local", is_available: true },
+      ]);
+      await expect(db.query(
+        "update project_read.project_summary set source_missing_at = null, synced_at = now() where project_id = $1",
+        [hiddenCoreId],
+      )).rejects.toMatchObject({ code: "23505", constraint: "ux_project_code_claim_code" });
+
+      await expect(db.query(`
+        insert into project_read.project_summary
+          (project_id, project_code, project_name, customer_text, region, project_type, manager_ids, manager_names,
+           status, source_version, source_updated_at, archived_at, deleted_at, source_missing_at, synced_at)
+        values ($1, 'LOCAL-PROJECT-001', '冲突核心项目', null, '华东', '分拣', array[$2::uuid], array[null::text],
+                'active', 1, now(), null, null, null, now())
+      `, ["10000000-0000-4000-8000-00000000a004", manager])).rejects.toMatchObject({
+        code: "23505", constraint: "ux_project_code_claim_code",
+      });
+
+      await expect(db.query(`
+        insert into project_read.project_summary
+          (project_id, project_code, project_name, customer_text, region, project_type, manager_ids, manager_names,
+           status, source_version, source_updated_at, archived_at, deleted_at, source_missing_at, synced_at)
+        values ($1, 'CORE-PROJECT-002', '冲突核心项目', null, '华东', '分拣', array[$2::uuid], array[null::text],
+                'active', 1, now(), null, null, null, now())
+      `, [localProjectId, manager])).rejects.toMatchObject({
+        code: "23505", constraint: "pk_project_code_claim",
+      });
+
+      const listedResponse = await fetch(`${base}/api/v1/projects?limit=200`, {
+        headers: { Authorization: `Bearer ${reader}` }, signal: AbortSignal.timeout(4000),
+      });
+      expect(listedResponse.status).toBe(200);
+      const listed = await listedResponse.json() as { items: Array<Record<string, unknown>> };
+      expect(listed.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({ externalProjectId: localProjectId, projectCode: "LOCAL-PROJECT-001" }),
+        expect.objectContaining({ externalProjectId: coreProjectId, projectCode: "CORE-PROJECT-001" }),
+      ]));
+
+      const duplicateLocal = await register({
+        ...input, operationId: "0190d2e4-a020-7000-8000-000000000002",
+        externalProjectId: "10000000-0000-4000-8000-00000000a002",
+      });
+      expect(duplicateLocal.status).toBe(409);
+      expect(await duplicateLocal.json()).toMatchObject({ code: "PROJECT_CODE_EXISTS" });
+
+      const duplicateCore = await register({
+        ...input, operationId: "0190d2e4-a020-7000-8000-000000000003",
+        externalProjectId: "10000000-0000-4000-8000-00000000a003", projectCode: "CORE-PROJECT-001",
+      });
+      expect(duplicateCore.status).toBe(409);
+      expect(await duplicateCore.json()).toMatchObject({ code: "PROJECT_CODE_EXISTS" });
+
+      const duplicateCoreId = await register({
+        ...input, operationId: "0190d2e4-a020-7000-8000-000000000005",
+        externalProjectId: coreProjectId, projectCode: "LOCAL-PROJECT-002",
+      });
+      expect(duplicateCoreId.status).toBe(409);
+      expect(await duplicateCoreId.json()).toMatchObject({ code: "PROJECT_ID_EXISTS" });
+
+      const caseResponse = await fetch(`${base}/api/v1/projects/${localProjectId}/cases`, {
+        method: "POST", headers: jsonHeaders,
+        body: JSON.stringify({
+          operationId: "0190d2e4-a020-7000-8000-000000000004", externalProjectId: localProjectId,
+          sourceVersion: 1, operatorUserKey: "local_project_author", locale: "zh-CN", title: "本地项目案例",
+          confidentiality: { schemaVersion: 1, mode: "partial", customerIdentity: "internal",
+            contentVisibility: "internal", mediaPermission: "secret" },
+        }),
+        signal: AbortSignal.timeout(4000),
+      });
+      expect(caseResponse.status).toBe(201);
+      expect(await caseResponse.json()).toMatchObject({ sourceProjectId: localProjectId, title: "本地项目案例" });
+
+      const localCount = await db.query("select count(*)::int as count from project_read.local_projects where project_id = $1", [localProjectId]);
+      expect(localCount.rows).toEqual([{ count: 1 }]);
+      const projected = await db.query("select count(*)::int as count from project_read.project_summary where project_id = $1", [localProjectId]);
+      expect(projected.rows).toEqual([{ count: 0 }]);
+      const claim = await db.query(`select source_kind from project_read.project_code_claim where project_code = 'LOCAL-PROJECT-001'`);
+      expect(claim.rows).toEqual([{ source_kind: "local" }]);
+
+      const patch = (projectId: string, body: Record<string, unknown>, bearer = author) => fetch(`${base}/api/v1/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(4000),
+      });
+      const writeContext = (operationId: string, expectedVersion: number, fields: Record<string, unknown>) => ({
+        operationId, operatorUserKey: "local_project_author", expectedVersion, ...fields,
+      });
+
+      const forbiddenPatch = await patch(localProjectId, writeContext(
+        "0190d2e4-a020-7000-8000-000000000006", 1, { projectName: "无权更新" },
+      ), reader);
+      expect(forbiddenPatch.status).toBe(403);
+      expect(await forbiddenPatch.json()).toMatchObject({ code: "FORBIDDEN" });
+
+      const missingPatch = await patch("10000000-0000-4000-8000-00000000a099", writeContext(
+        "0190d2e4-a020-7000-8000-000000000007", 1, { projectName: "不存在" },
+      ));
+      expect(missingPatch.status).toBe(404);
+      expect(await missingPatch.json()).toMatchObject({ code: "NOT_FOUND" });
+
+      const corePatch = await patch(coreProjectId, writeContext(
+        "0190d2e4-a020-7000-8000-000000000008", 7, { projectName: "试图改名核心项目" },
+      ));
+      expect(corePatch.status).toBe(409);
+      expect(await corePatch.json()).toMatchObject({ code: "PROJECT_SOURCE_READ_ONLY" });
+
+      const stalePatch = await patch(localProjectId, writeContext(
+        "0190d2e4-a020-7000-8000-000000000009", 9, { projectName: "旧版本更新" },
+      ));
+      expect(stalePatch.status).toBe(409);
+      expect(await stalePatch.json()).toMatchObject({ code: "PROJECT_VERSION_CONFLICT" });
+
+      const emptyPatch = await patch(localProjectId, writeContext(
+        "0190d2e4-a020-7000-8000-00000000000a", 1, {},
+      ));
+      expect(emptyPatch.status).toBe(422);
+      expect(await emptyPatch.json()).toMatchObject({ code: "VALIDATION_FAILED" });
+
+      const managerPairPatch = await patch(localProjectId, writeContext(
+        "0190d2e4-a020-7000-8000-00000000000b", 1, { managerIds: [manager] },
+      ));
+      expect(managerPairPatch.status).toBe(422);
+      expect(await managerPairPatch.json()).toMatchObject({ code: "VALIDATION_FAILED" });
+
+      const archiveBody = writeContext("0190d2e4-a020-7000-8000-00000000000c", 1, {
+        projectName: "本地案例项目（归档）", customerText: null, region: "华中", projectType: "搬运",
+        managerIds: [manager], managerNames: ["项目经理"], status: "archived",
+      });
+      const archivedResponse = await patch(localProjectId, archiveBody);
+      expect(archivedResponse.status).toBe(200);
+      const archived = await archivedResponse.json() as Record<string, unknown>;
+      expect(archived).toMatchObject({
+        externalProjectId: localProjectId, projectCode: "LOCAL-PROJECT-001", projectName: "本地案例项目（归档）",
+        customerText: null, region: "华中", projectType: "搬运", managerIds: [manager], managerNames: ["项目经理"],
+        status: "archived", sourceVersion: 2, archivedAt: expect.any(String), deletedAt: null,
+      });
+
+      const archiveReplay = await patch(localProjectId, archiveBody);
+      expect(archiveReplay.status).toBe(200);
+      expect(await archiveReplay.json()).toEqual(archived);
+
+      const idempotencyConflict = await patch(localProjectId, {
+        ...archiveBody, projectName: "同一操作标识的另一请求",
+      });
+      expect(idempotencyConflict.status).toBe(409);
+      expect(await idempotencyConflict.json()).toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+
+      const unarchiveResponse = await patch(localProjectId, writeContext(
+        "0190d2e4-a020-7000-8000-00000000000d", 2, { status: "active" },
+      ));
+      expect(unarchiveResponse.status).toBe(200);
+      expect(await unarchiveResponse.json()).toMatchObject({ status: "active", sourceVersion: 3, archivedAt: null });
+
+      const codeConflict = await patch(localProjectId, writeContext(
+        "0190d2e4-a020-7000-8000-00000000000e", 3, { projectCode: "CORE-PROJECT-001" },
+      ));
+      expect(codeConflict.status).toBe(409);
+      expect(await codeConflict.json()).toMatchObject({ code: "PROJECT_CODE_EXISTS" });
+
+      const renamedCode = await patch(localProjectId, writeContext(
+        "0190d2e4-a020-7000-8000-00000000000f", 3, { projectCode: "LOCAL-PROJECT-001-UPDATED" },
+      ));
+      expect(renamedCode.status).toBe(200);
+      expect(await renamedCode.json()).toMatchObject({
+        projectCode: "LOCAL-PROJECT-001-UPDATED", status: "active", sourceVersion: 4,
+      });
+      const updatedClaim = await db.query(
+        "select source_kind from project_read.project_code_claim where project_code = $1", ["LOCAL-PROJECT-001-UPDATED"],
+      );
+      expect(updatedClaim.rows).toEqual([{ source_kind: "local" }]);
+      const oldClaim = await db.query(
+        "select count(*)::int as count from project_read.project_code_claim where project_code = $1", ["LOCAL-PROJECT-001"],
+      );
+      expect(oldClaim.rows).toEqual([{ count: 0 }]);
+    } finally {
+      await gateway.stop();
+    }
+  } finally {
+    await db.end();
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 25_000);
+
 it.skipIf(!adminUrl || !cleanupUrl)("cleans only expired operations confirmed settled by the owning outbox", async () => {
   for (const connection of [adminUrl!, cleanupUrl!]) {
     const url = new URL(connection);

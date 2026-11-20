@@ -1,0 +1,12 @@
+# 与 /opt/libiaolink-case/deploy/docker-compose.yml 叠加使用。
+# 基础 compose 中的 projection 服务必须已具备案例应用挂载、密钥目录和环境变量。
+services:
+  projection:
+    command:
+      - node
+      - case-data/project-projection.mjs
+      - watch
+    environment:
+      CASE_PROJECTION_WATCH_MS: "${CASE_PROJECTION_WATCH_MS:-1000}"
+    restart: unless-stopped
+    stop_grace_period: 5s

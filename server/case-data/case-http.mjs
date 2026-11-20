@@ -51,7 +51,7 @@ export function matchCaseDataRoute(pathname) {
   return matchReleaseRoute(pathname) ?? matchProjectDataRoute(pathname);
 }
 
-function parse(schema, input, path) {
+export function parse(schema, input, path) {
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
     throw new CaseRequestError("请求字段无效", parsed.error.issues.slice(0, 20).map((issue) => ({
@@ -61,7 +61,7 @@ function parse(schema, input, path) {
   return parsed.data;
 }
 
-async function readBody(request) {
+export async function readBody(request) {
   if (request.headers["idempotency-key"] !== undefined) {
     throw new CaseRequestError("本地联调使用请求体 operationId");
   }

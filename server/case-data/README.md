@@ -1,6 +1,6 @@
 # 案例数据面迁移
 
-迁移只在独立 PostgreSQL 实例的 `libiaolink_case` 数据库执行。首条迁移创建 `project_read.project_summary`，供项目投影任务写入、网关读取。迁移记录保存在案例库的 `"case".case_schema_migrations`。
+迁移只在独立 PostgreSQL 实例的 `libiaolink_case` 数据库执行。首条迁移创建 `project_read.project_summary`，供项目投影任务写入；`0012` 新增本地项目、跨来源编号占用和合并目录视图。迁移记录保存在案例库的 `"case".case_schema_migrations`。
 
 ## 角色与权限
 
@@ -14,12 +14,14 @@ psql --dbname libiaolink_case -v ON_ERROR_STOP=1 -f server/case-data/roles/0001_
 
 运行角色使用各自独立凭据。`0002_project_read_permissions.sql` 按下表授予权限。
 
-| 数据库角色 | 项目摘要权限 |
+| 数据库角色 | 项目目录权限 |
 |---|---|
-| `case_project_projection_rw` | `SELECT`、`INSERT`、`UPDATE`，用于更新摘要和对账标记 |
-| `case_gateway_authoring_rw` | `SELECT`，用于网关作者端的项目目录和项目校验 |
+| `case_project_projection_rw` | `project_summary` 的 `SELECT`、`INSERT`、`UPDATE`，用于更新核心摘要和对账标记 |
+| `case_gateway_authoring_rw` | `project_summary` / `project_directory` 的 `SELECT`；`local_projects` 的 `SELECT`、`INSERT`、`UPDATE` |
 
-两个运行角色均只获得 `project_read` 的 `USAGE`，表权限如上。项目缺失通过对账标记保留历史，表结构和迁移账本由 `case_migrator` 管理。公开发布服务使用单独角色，按发布读面另行授权。
+两个运行角色均只获得 `project_read` 的 `USAGE`，表权限如上。项目缺失通过对账标记保留历史，表结构和迁移账本由 `case_migrator` 管理。`project_summary` 的字段、投影写入角色和网关读取权限保持不变；本地项目不写入该表。公开发布服务使用单独角色，按发布读面另行授权。
+
+`project_code_claim` 只由迁移角色和 security definer 触发器维护，两个运行角色均无直接权限；`project_directory` 使用 `security_invoker`，继续按调用者权限读取两个来源。
 
 ## 运行迁移
 
@@ -37,10 +39,11 @@ CASE_MIGRATION_SECRET_DIR=/path/to/mounted/secrets node server/case-data/migrate
 
 核心库管理员用 `psql -v ON_ERROR_STOP=1` 在核心 `libiaolink` 执行 `roles/core_project_read.sql`。该文件只配置 `case_project_ro` 和项目、经理字段的列级授权。账号默认只读，连接上限为 2，语句、锁及事务空闲超时分别为 5 秒、500 毫秒、10 秒。生产投影优先连接已有只读节点。
 
-案例库应用 `0003_project_projection_state.sql` 后，为投影任务挂载两个独立连接串文件 `case_project_ro_database_url` 和 `case_project_projection_rw_database_url`。文件权限和 TLS 要求同迁移凭据。后续部署分别调度增量和低频全量对账。
+案例库应用 `0003_project_projection_state.sql` 后，为投影任务挂载两个独立连接串文件 `case_project_ro_database_url` 和 `case_project_projection_rw_database_url`。文件权限和 TLS 要求同迁移凭据。项目目录默认以常驻 `watch` 模式执行秒级增量，低频全量对账单独调度；`CASE_PROJECTION_OVERLAP_SECONDS` 只是长事务安全回看窗口，不是刷新周期。
 
 ```sh
 CASE_PROJECTION_SECRET_DIR=/path/to/mounted/secrets node server/case-data/project-projection.mjs incremental
+CASE_PROJECTION_SECRET_DIR=/path/to/mounted/secrets node server/case-data/project-projection.mjs watch
 CASE_PROJECTION_SECRET_DIR=/path/to/mounted/secrets node server/case-data/project-projection.mjs reconcile
 ```
 
@@ -48,13 +51,14 @@ CASE_PROJECTION_SECRET_DIR=/path/to/mounted/secrets node server/case-data/projec
 |---|---:|---|
 | `CASE_PROJECTION_BATCH_SIZE` | 100 | 增量与全量 ID 扫描的每页条数，允许 1–500 |
 | `CASE_PROJECTION_BATCH_PAUSE_MS` | 25 | 满批后的暂停毫秒数，允许 0–1000 |
-| `CASE_PROJECTION_OVERLAP_SECONDS` | 300 | 增量重叠回看秒数，允许 1–86400 |
+| `CASE_PROJECTION_WATCH_MS` | 1000 | `watch` 每轮增量间隔毫秒数，允许 250–60000 |
+| `CASE_PROJECTION_OVERLAP_SECONDS` | 300 | 增量安全回看窗口秒数（不是刷新周期），允许 1–86400 |
 
 增量以 `(updated_at, id)` 分页，分别维护项目和经理水位。每次运行读取同一核心只读快照，摘要和水位在案例库同事务提交。对账按 UUID 扫描源项目，补读缺失或版本、时间戳、归档和删除标志变化的摘要，并核对经理显示名。连续两次成功对账均缺失时写 `source_missing_at`，摘要继续保留。再次观察到项目时清除缺失标记。
 
-两种模式共用案例库事务锁，同一时刻只运行一个任务。并发调用返回 `status: "busy"`，失败返回非零退出码，按原模式重跑即可。成功输出包含读取页数、行数、变更计数和耗时，增量另返回本次水位。调度周期和批次参数以运行环境的容量验收为准。
+`incremental` 适合外部定时器；`watch` 是生产默认的常驻模式，默认每 1 秒扫描一次，项目目录变更通常在秒级可见；`reconcile` 保持低频全量对账。两种一次性模式与 `watch` 共用案例库事务锁，同一时刻只运行一个任务。并发调用返回 `status: "busy"`。`watch` 对可恢复的 SQL 错误写结构化错误日志后继续下一轮；角色配置或连接故障以非零退出码结束，必须由 Docker / systemd 等进程守护立即重启。部署时必须持续运行 `watch`，不能只用一次性 `incremental` 代替。成功输出包含读取页数、行数、变更计数和耗时，增量另返回本次水位。调度周期和批次参数以运行环境的容量验收为准。
 
-## 本地项目目录网关
+## 项目目录网关
 
 `gateway.mjs` 是独立 HTTP 入口，默认监听 `127.0.0.1:34602`。它以 `case_gateway_authoring_rw` 连接案例库，每次目录查询运行在只读事务中。`GET /healthz` 检查进程，`GET /readyz` 检查案例库连接身份与目录查询权限。
 
@@ -73,15 +77,44 @@ CASE_GATEWAY_TOKEN_AUDIENCE=case-data-gateway \
 node server/case-data/gateway.mjs
 ```
 
-`GET /api/v1/projects` 要求 `Authorization: Bearer <access_token>` 和 `case-data:projects:read` Scope。当前本地签发方以 `sub == client_id` 表示服务账号。网关核对签名、令牌类型、签发方、受众和有效期。JWKS 在启动时加载，替换本地公钥后重启进程。实际签发方、密钥轮换接入和 mTLS 方式待 C02 冻结。[JWT access token profile](https://www.rfc-editor.org/rfc/rfc9068.html) · [JWT 验证实践](https://www.rfc-editor.org/rfc/rfc8725.html)
+`GET /api/v1/projects` 要求 `Authorization: Bearer <access_token>` 和 `case-data:projects:read` Scope；`POST /api/v1/projects` 与 `PATCH /api/v1/projects/{projectId}` 要求 `case-data:projects:write`。当前本地签发方以 `sub == client_id` 表示服务账号。网关核对签名、令牌类型、签发方、受众和有效期。JWKS 在启动时加载，替换本地公钥后重启进程。实际签发方、密钥轮换接入和 mTLS 方式待 C02 冻结。[JWT access token profile](https://www.rfc-editor.org/rfc/rfc9068.html) · [JWT 验证实践](https://www.rfc-editor.org/rfc/rfc8725.html)
 
-项目目录使用绑定筛选条件的签名游标，按项目 UUID 升序查询。归档项目可见，软删除和源缺失项目排除。首次投影前的目录响应暂按草案返回空列表，数据库或查询权限不可用时返回 503。可用 `CASE_GATEWAY_PORT` 覆盖本地端口。
+项目目录把核心只读投影与本地项目按 UUID 合并，使用绑定筛选条件的签名游标升序查询。归档项目可见，软删除和源缺失项目排除。本地项目只在 `libiaolink_case.project_read.local_projects` 保存，不进入核心库；`project_summary` 仍是核心单向投影。首次投影前的核心目录项为空，但已注册的本地项目仍可列出；数据库或查询权限不可用时返回 503。可用 `CASE_GATEWAY_PORT` 覆盖本地端口。
 
-目录的参数和返回字段已纳入独立 [OpenAPI](../../shared/generated/case-data-openapi.json)，运行时复用查询参数的 Zod 契约。
+目录的参数和返回字段已纳入独立 [OpenAPI](../../shared/generated/case-data-openapi.json)，运行时复用 Zod 契约。本地项目注册沿用写入协议：请求体必须携带 UUIDv7 `operationId`、`operatorUserKey`，同一操作键重放首次结果。
+
+```json
+{
+  "operationId": "0190d2e4-a020-7000-8000-000000000001",
+  "operatorUserKey": "case-author-001",
+  "projectCode": "LOCAL-2026-001",
+  "projectName": "本地新建项目",
+  "customerText": "示例客户",
+  "region": "华南",
+  "projectType": "分拣",
+  "managerIds": [],
+  "managerNames": [],
+  "status": "active"
+}
+```
+
+`externalProjectId` 可省略，由案例库生成 UUIDv7；若提供则同时参与全局唯一校验。项目 ID 在所有核心历史摘要与本地项目之间永久唯一；项目编号在目录可用项范围内跨来源唯一，即软删除或 `source_missing_at` 的历史摘要不占编号，核心在册/归档项目与全部本地项目（含归档）占编号。若源缺失的核心项目带同号重新出现，约束会让投影失败并保留冲突供人工处理，不会静默产生重号。冲突返回 409 `PROJECT_CODE_EXISTS`，项目 ID 冲突返回 409 `PROJECT_ID_EXISTS`。创建成功后返回 201 与目录项；核心 `project_summary` 不增加任何本地行。
+
+`PATCH /api/v1/projects/{projectId}` 只更新本地项目；`externalProjectId` 不可变，可更新项目编号、名称、客户、区域、类型、经理和状态。请求必须带 `expectedVersion`（即目录项的 `sourceVersion`），命中后原子递增版本并更新 `updatedAt`/`syncedAt`；版本不一致返回 409 `PROJECT_VERSION_CONFLICT`。`status: "archived"` 会设置 `archivedAt`，改回其它状态会清空 `archivedAt`。核心投影项目返回 409 `PROJECT_SOURCE_READ_ONLY`；更新项目编号仍执行跨来源唯一校验，并沿用 `operationId` 幂等。
+
+```json
+{
+  "operationId": "0190d2e4-a020-7000-8000-000000000002",
+  "operatorUserKey": "case-author-001",
+  "expectedVersion": 1,
+  "projectName": "本地新建项目（已归档）",
+  "status": "archived"
+}
+```
 
 ## 案例侧项目补充资料
 
-`0010_case_project_data.sql` 接入主体、别名、项目主体关系和成员表，并授权写入既有的 `case.project_profiles`。源项目目录继续由只读投影提供，案例侧资料写入独立的 `case` schema。
+`0010_case_project_data.sql` 接入主体、别名、项目主体关系和成员表，并授权写入既有的 `case.project_profiles`。项目校验读取核心投影与本地注册项目合并后的目录，案例侧资料写入独立的 `case` schema。
 
 | 动作 | 本地接口 | Scope |
 |---|---|---|
@@ -169,7 +202,7 @@ node server/case-data/operation-cleanup.mjs /path/to/settled-outbox.json
 
 ## C10 本地端到端联调
 
-`server/test/case-data-gateway.integration.test.ts` 的 C10 用例从项目目录读取来源版本，经案例创建及更新、真实素材上传、staging、本地审批、outbox 激活、公开读取和撤回。案例库应用 `0001–0011`。另起仅监听回环地址的 PostgreSQL 实例，在 `case_partner_fixture` 库初始化案例小组 v0.2 的 `03-local-schema/001_local_schema_up.sql`。使用独立的作者、公开与媒体服务令牌，通过测试桶 `libiaolink-case-proof` 验证实际对象版本。媒体夹具通过 HTTP 回传合成结果，故障代理独立注入丢请求或丢响应。
+`server/test/case-data-gateway.integration.test.ts` 的 C10 用例从项目目录读取来源版本，经案例创建及更新、真实素材上传、staging、本地审批、outbox 激活、公开读取和撤回。案例库应用 `0001–0012`。另起仅监听回环地址的 PostgreSQL 实例，在 `case_partner_fixture` 库初始化案例小组 v0.2 的 `03-local-schema/001_local_schema_up.sql`。使用独立的作者、公开与媒体服务令牌，通过测试桶 `libiaolink-case-proof` 验证实际对象版本。媒体夹具通过 HTTP 回传合成结果，故障代理独立注入丢请求或丢响应。
 
 测试沿用网关的 `CASE_DATA_GATEWAY_TEST_ADMIN_URL`、`CASE_DATA_GATEWAY_TEST_DATABASE_URL`、`CASE_DATA_PUBLIC_TEST_DATABASE_URL` 及 `CASE_DATA_ASSETS_TEST_ENDPOINT`、`CASE_DATA_ASSETS_TEST_BUCKET`、`CASE_DATA_ASSETS_TEST_ACCESS_KEY`、`CASE_DATA_ASSETS_TEST_SECRET_KEY`。新增 `CASE_DATA_PARTNER_TEST_DATABASE_URL` 用于夹具写业务决定，`CASE_DATA_PARTNER_OUTBOX_TEST_DATABASE_URL` 用于独立 worker 进程。worker 只接收后者、网关 HTTP 地址和作者服务令牌。worker 角色读审批记录，对本地 outbox、案例状态和分享链接拥有查询与更新权限。
 

@@ -50,7 +50,7 @@ export async function stageCaseRelease(client, caseId, clientId, input) {
       jsonb_build_object('externalProjectId', project_id, 'projectCode', project_code, 'projectName', project_name,
         'region', region, 'projectType', project_type, 'status', status, 'sourceVersion', source_version,
         'sourceUpdatedAt', source_updated_at) as "projectSnapshot"
-    from project_read.project_summary where project_id = $1 and deleted_at is null and source_missing_at is null
+    from project_read.project_directory where project_id = $1 and deleted_at is null and source_missing_at is null
   `, [sourceProjectId]);
   if (!source) throw new CaseAggregateError("NOT_FOUND", "可选项目不存在");
   if (source.sourceVersion !== input.sourceVersion) throw new CaseAggregateError("PROJECT_VERSION_CONFLICT", "项目版本已变化");

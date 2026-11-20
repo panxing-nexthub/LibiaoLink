@@ -5,17 +5,20 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import pg from "pg";
 import { readCaseAssetStorage } from "./case-asset-storage.mjs";
-import { CaseRequestError, createCaseHttp, matchCaseDataRoute } from "./case-http.mjs";
+import { CaseRequestError, createCaseHttp, matchCaseDataRoute, parse, readBody } from "./case-http.mjs";
 import { createCaseReleaseReads } from "./case-releases.mjs";
 import { CaseDataError, errorCode, readCredential, readDatabaseUrl } from "./database-credentials.mjs";
 import { createServiceAuthenticator } from "./gateway-auth.mjs";
 import { createCapacityGuard, createRequestAdmission } from "./gateway-controls.mjs";
 import { CatalogQueryError, createProjectCatalog, parseCatalogQuery } from "./project-catalog.mjs";
+import { createProjectCatalogHttp } from "./project-catalog-http.mjs";
 
 const directoryVariable = "CASE_GATEWAY_SECRET_DIR";
 const publicDirectoryVariable = "CASE_GATEWAY_PUBLIC_SECRET_DIR";
 const projectPath = "/api/v1/projects";
+const projectItemPattern = /^\/api\/v1\/projects\/([^/]+)$/;
 const projectReadScope = "case-data:projects:read";
+const projectWriteScope = "case-data:projects:write";
 const rateWindowMs = 60_000;
 const uploadActions = new Set(["create", "target", "part", "complete", "media-input"]);
 const retryableDatabaseErrors = new Set(["55P03", "57014", "53300", "57P03"]);
@@ -51,7 +54,7 @@ function rateLimit(maximum) {
   };
 }
 
-function makeHandler({ authenticate, catalog, cases, assetStorage, publicProbe, cursorKey, projectsPerMinute,
+function makeHandler({ authenticate, catalog, projectCatalog, cases, assetStorage, publicProbe, cursorKey, projectsPerMinute,
   admit, checkCapacity }) {
   const retryAfter = rateLimit(projectsPerMinute);
   const caseRetryAfter = rateLimit(projectsPerMinute);
@@ -86,22 +89,25 @@ function makeHandler({ authenticate, catalog, cases, assetStorage, publicProbe, 
       }
       const url = new URL(request.url, "http://case-gateway.local");
       const caseRoute = matchCaseDataRoute(url.pathname);
-      if (!caseRoute && ![projectPath, "/healthz", "/readyz"].includes(url.pathname)) {
+      const projectItem = projectItemPattern.exec(url.pathname);
+      if (!caseRoute && !projectItem && ![projectPath, "/healthz", "/readyz"].includes(url.pathname)) {
         return fail(404, "NOT_FOUND", "资源不存在");
       }
-      route = caseRoute?.path ?? url.pathname;
-      const allowed = caseRoute ? Object.keys(caseRoute.scopes) : ["GET"];
+      route = caseRoute?.path ?? (projectItem ? "/api/v1/projects/{projectId}" : url.pathname);
+      const allowed = caseRoute ? Object.keys(caseRoute.scopes) : projectItem ? ["PATCH"] :
+        route === projectPath ? ["GET", "POST"] : ["GET"];
       if (!allowed.includes(request.method)) {
         return fail(405, "METHOD_NOT_ALLOWED", "请求方法无效", [], { Allow: allowed.join(", ") });
       }
       if (route === "/healthz") return send(200, { status: "ok" });
 
-      if (caseRoute || route === projectPath) {
+      if (caseRoute || projectItem || route === projectPath) {
         const authorization = request.headersDistinct.authorization;
         const principal = authorization?.length === 1 ? authenticate(authorization[0]) : null;
         if (!principal) return fail(401, "AUTH_REQUIRED", "服务认证失败", [], { "WWW-Authenticate": "Bearer" });
         clientId = principal.clientId;
-        const scope = caseRoute ? caseRoute.scopes[request.method] : projectReadScope;
+        const scope = caseRoute ? caseRoute.scopes[request.method] :
+          request.method === "GET" ? projectReadScope : projectWriteScope;
         if (!principal.scopes.has(scope)) return fail(403, "FORBIDDEN", "缺少请求所需权限");
         const limit = caseRoute?.publicRelease ? publicRetryAfter : scope === "case-data:assets:process" ?
           mediaRetryAfter : caseRoute?.assetAction ? assetRetryAfter :
@@ -142,6 +148,34 @@ function makeHandler({ authenticate, catalog, cases, assetStorage, publicProbe, 
           });
           return;
         }
+        return result.status >= 400
+          ? fail(result.status, result.body.code, result.body.message, result.body.details, result.headers)
+          : send(result.status, result.body, result.headers);
+      }
+
+      if (projectItem && request.method === "PATCH") {
+        if (url.searchParams.size !== 0) throw new CaseRequestError("项目更新不接受查询参数");
+        const capacityCode = await checkCapacity("write");
+        if (capacityCode) {
+          return fail(503, capacityCode, "案例存储容量受限，请稍后用原操作标识重试", [],
+            { "Retry-After": 5, Connection: "close" });
+        }
+        const result = await projectCatalog.update(request, clientId, projectItem[1], writeMetadata);
+        resourceId = result.resourceId ?? result.body?.externalProjectId;
+        return result.status >= 400
+          ? fail(result.status, result.body.code, result.body.message, result.body.details, result.headers)
+          : send(result.status, result.body, result.headers);
+      }
+
+      if (route === projectPath && request.method === "POST") {
+        if (url.searchParams.size !== 0) throw new CaseRequestError("项目注册不接受查询参数");
+        const capacityCode = await checkCapacity("write");
+        if (capacityCode) {
+          return fail(503, capacityCode, "案例存储容量受限，请稍后用原操作标识重试", [],
+            { "Retry-After": 5, Connection: "close" });
+        }
+        const result = await projectCatalog.register(request, clientId, writeMetadata);
+        resourceId = result.resourceId ?? result.body?.externalProjectId;
         return result.status >= 400
           ? fail(result.status, result.body.code, result.body.message, result.body.details, result.headers)
           : send(result.status, result.body, result.headers);
@@ -227,6 +261,7 @@ async function main() {
     statement_timeout: 2_000, lock_timeout: 500, idle_in_transaction_session_timeout: 60_000 });
   pool.on("error", (error) => console.error(JSON.stringify({ event: "catalog_connection_failed", code: errorCode(error) })));
   const catalog = createProjectCatalog(pool, cursorKey);
+  const projectCatalog = createProjectCatalogHttp(pool, catalog, { parse, readBody });
   const publicPool = publicConnectionString ? new pg.Pool({
     connectionString: publicConnectionString, max: 2, connectionTimeoutMillis: 2_000, statement_timeout: 2_000,
     lock_timeout: 500, idle_in_transaction_session_timeout: 10_000,
@@ -236,8 +271,8 @@ async function main() {
   const cases = createCaseHttp(pool, assetStorage, releaseReads, Boolean(publicPool));
   const server = createServer({ maxHeaderSize: 16_384, requestTimeout: 10_000, headersTimeout: 5_000,
     connectionsCheckingInterval: 1_000 },
-    makeHandler({ authenticate, catalog, cases, assetStorage, publicProbe: publicPool ? releaseReads.probe : null,
-      cursorKey, projectsPerMinute, admit, checkCapacity }));
+    makeHandler({ authenticate, catalog, projectCatalog, cases, assetStorage,
+      publicProbe: publicPool ? releaseReads.probe : null, cursorKey, projectsPerMinute, admit, checkCapacity }));
   const listening = once(server, "listening");
   server.listen(port, "127.0.0.1");
   await listening;

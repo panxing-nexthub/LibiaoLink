@@ -7,7 +7,8 @@ import { CaseAuthoringViewSchema, CaseCreateBodySchema, CaseOperationIdSchema, C
   CasePatchBodySchema, CaseUuidSchema } from "./case-requests.ts";
 import { ActivateCaseReleaseBodySchema, CaseReleaseHistorySchema, CaseReleaseReceiptSchema, DeactivateCaseReleaseBodySchema,
   PublishedCaseReleaseSchema, StageCaseReleaseBodySchema } from "./release-requests.ts";
-import { CaseProjectCatalogPageSchema, CaseProjectCatalogQuerySchema } from "./project-catalog.ts";
+import { CaseProjectCatalogPageSchema, CaseProjectCatalogQuerySchema, CaseProjectCatalogItemSchema,
+  PatchLocalCaseProjectBodySchema, RegisterLocalCaseProjectBodySchema } from "./project-catalog.ts";
 import { CaseProjectProfileViewSchema, CaseSubjectViewSchema, SaveCaseProjectProfileBodySchema,
   SaveCaseSubjectBodySchema } from "./project-data.ts";
 
@@ -32,10 +33,31 @@ export function buildCaseDataOpenApiDocument() {
   registry.registerPath({
     method: "get", path: "/api/v1/projects", operationId: "listCaseProjects", security,
     summary: "查询可选项目目录",
-    description: "本地 Scope 为 case-data:projects:read。包含归档项目，分页游标只能与原筛选条件一起使用。",
+    description: "本地 Scope 为 case-data:projects:read。合并核心只读投影与本地注册项目，包含归档项目；分页游标只能与原筛选条件一起使用。",
     request: { query: CaseProjectCatalogQuerySchema },
-    responses: { 200: { description: "只读项目摘要分页", content: json(CaseProjectCatalogPageSchema) },
+    responses: { 200: { description: "核心与本地项目合并的目录分页", content: json(CaseProjectCatalogPageSchema) },
       401: errors[401], 403: errors[403], 422: error("查询参数或游标无效"), 429: errors[429], 503: errors[503] },
+  });
+  registry.registerPath({
+    method: "post", path: "/api/v1/projects", operationId: "registerLocalCaseProject", security,
+    summary: "注册本地项目",
+    description: "本地 Scope 为 case-data:projects:write。项目仅写入 libiaolink_case，不进入核心库；项目编号在目录可用项范围内跨来源唯一，项目 ID 跨全部核心历史摘要与本地项目唯一。",
+    request: { body: { required: true, content: json(RegisterLocalCaseProjectBodySchema) } },
+    responses: { 201: { description: "已注册的本地项目目录项", content: json(CaseProjectCatalogItemSchema) },
+      ...writeErrors, 409: error("项目编号或项目 ID 已由其他来源占用") },
+  });
+  registry.registerPath({
+    method: "patch", path: "/api/v1/projects/{projectId}", operationId: "patchLocalCaseProject", security,
+    summary: "更新或归档本地项目",
+    description: "本地 Scope 为 case-data:projects:write。仅能更新 libiaolink_case 中的本地项目，核心投影项目只读。expectedVersion 必须匹配当前 sourceVersion；status=archived 时归档，改回其它状态时解档。",
+    request: {
+      params: z.object({ projectId: CaseUuidSchema }),
+      body: { required: true, content: json(PatchLocalCaseProjectBodySchema) },
+    },
+    responses: { 200: { description: "更新后的本地项目目录项", content: json(CaseProjectCatalogItemSchema) },
+      ...writeErrors, 404: error("本地项目不存在"),
+      409: error("项目版本冲突、项目编号冲突、幂等冲突或核心项目只读"),
+    },
   });
   const profilePath = "/api/v1/projects/{projectId}/profile";
   const profileParams = z.object({ projectId: CaseUuidSchema });

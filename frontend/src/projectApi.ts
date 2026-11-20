@@ -8,7 +8,7 @@
  */
 import { apiDownload, apiRequest, apiSend, readAllPages } from "./api";
 import { EMPTY_LIST_QUERY, type ListQueryState } from "./useHashRoute";
-import type { Project, ProjectArchiveKind, ProjectStatusValue } from "./types";
+import type { Project, ProjectArchiveKind, ProjectReadStatus } from "./types";
 
 export type ProjectExportFormat = "xlsx" | "zip";
 
@@ -24,7 +24,7 @@ export type ApiProject = {
   managerIds: string[];
   managerNames: Array<string | null>;
   stageKey: string;
-  status: ProjectStatusValue;
+  status: ProjectReadStatus;
   hasOpenPostArchiveTask: boolean;
   archiveKind: ProjectArchiveKind | null;
   /** 最终项目权限：管理员 / 所管本项目的项目经理 / 规则 edit 为 edit。 */
@@ -51,7 +51,7 @@ export type ProjectMapOverviewItem = {
   region: string;
   projectType: string;
   projectTypes?: string[];
-  status: ProjectStatusValue;
+  status: ProjectReadStatus;
   accessLevel: "edit" | "view" | null;
 };
 

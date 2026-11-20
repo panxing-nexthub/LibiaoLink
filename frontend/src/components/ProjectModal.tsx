@@ -9,7 +9,7 @@ import { ScrollArea } from "./ScrollArea";
 import { MemberMultiSelect } from "./MemberSelect";
 import { RegionSelect } from "./RegionSelect";
 import { useFocusTrapFor } from "./useFocusTrap";
-import { PROJECT_STATUS_VALUES, type ProjectStatusValue, type ProjectArchiveKind } from "../types";
+import { PROJECT_STATUS_VALUES, type ProjectReadStatus, type ProjectArchiveKind } from "../types";
 import { fieldText, isLocalizedLocale, projectStatusTextOf, projectTypeText, useLocale, useMachineText, useT } from "../i18n";
 import { regionNameEn } from "../data/regionPicker";
 import { fetchUsedRegions } from "../projectApi";
@@ -35,8 +35,8 @@ export type ProjectDraft = {
   projectTypes: string[];
   /** 项目地区：字典 region 的码 / 标准国家清单里的中文国名（Push 195 模态窗点选）。 */
   region: string;
-  /** 项目状态（Push 262）：active / paused 走 PATCH；archived 走归档端点（见 App.handleUpdateProject）。 */
-  status: ProjectStatusValue;
+  /** 编辑已有 done 项目时可保留旧状态。 */
+  status: ProjectReadStatus;
 };
 
 /** 弹窗提交结果（Push 262）：ok = 成功（父层关窗）；error = 提示文案；archive-confirm = 旧服务端 422 归档缺项兼容。 */
@@ -104,8 +104,8 @@ export function ProjectModal({ mode, initial, initialArchiveKind, hasOpenPostArc
   const [projectTypes, setProjectTypes] = useState<string[]>(() => initial?.projectTypes ?? dicts.projectType.slice(0, 1).map((item) => item.code));
   /** 新建默认不带地区（业务口径「新建项目不要默认英国 默认为空即可」）：占位「请选择地区」，由用户在小窗里点选。 */
   const [region, setRegion] = useState<string>(initial?.region ?? "");
-  /** 项目状态（Push 262）：新建 = active；编辑 = 库里现值（未知值回落 active 兜底）。 */
-  const [status, setStatus] = useState<ProjectStatusValue>(initial?.status ?? "active");
+  const [status, setStatus] = useState<ProjectReadStatus>(initial?.status ?? "active");
+  const statusOptions = initial?.status === "done" ? ["done", ...PROJECT_STATUS_VALUES] as const : PROJECT_STATUS_VALUES;
   const [archiveKind, setArchiveKind] = useState<ProjectArchiveKind>("accepted");
   const [regionPopoverOpen, setRegionPopoverOpen] = useState(false);
   /**
@@ -384,7 +384,7 @@ export function ProjectModal({ mode, initial, initialArchiveKind, hasOpenPostArc
             <div className="block">
               <span className="mb-1.5 block text-sm font-medium text-zinc-700">{t("modal.status.field")}</span>
               <div role="radiogroup" aria-label={t("modal.status.aria")} className="flex flex-wrap gap-2">
-                {PROJECT_STATUS_VALUES.map((value) => {
+                {statusOptions.map((value) => {
                   const archiveOption = value === "archived";
                   const disabled = archivedLock ? !(canArchive && value === "active") : archiveOption && !canArchive;
                   return (

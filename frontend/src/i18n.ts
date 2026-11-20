@@ -5214,15 +5214,16 @@ export function priorityText(locale: Locale, priority: string): string {
   return localizedName(locale, priority, PRIORITY_EN, PRIORITY_JA, PRIORITY_KO);
 }
 
-/** 项目状态英文名（契约取值 active / paused / archived）。 */
+/** 项目状态英文名，含旧 API 已完成状态。 */
 const PROJECT_STATUS_EN: Record<string, string> = {
   active: "Active",
   paused: "Paused",
+  done: "Done",
   archived: "Archived",
 };
 
-const PROJECT_STATUS_JA: Record<string, string> = { active: "進行中", paused: "一時停止", archived: "アーカイブ済み" };
-const PROJECT_STATUS_KO: Record<string, string> = { active: "진행 중", paused: "일시 중지", archived: "보관됨" };
+const PROJECT_STATUS_JA: Record<string, string> = { active: "進行中", paused: "一時停止", done: "完了", archived: "アーカイブ済み" };
+const PROJECT_STATUS_KO: Record<string, string> = { active: "진행 중", paused: "일시 중지", done: "완료", archived: "보관됨" };
 
 /** 项目状态显示名（非中文界面按契约状态码换本地名；未知值原样返回）。 */
 export function projectStatusTextOf(locale: Locale, status: string): string {

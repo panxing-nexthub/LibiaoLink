@@ -460,7 +460,7 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
         activeFilters.statuses,
         (status) => projectStatusTextOf(locale, status),
         PROJECT_STATUS_VALUES.slice(),
-      ),
+      ).filter(({ value }) => value !== "done"),
     [activeFilters.statuses, facets.status, locale],
   );
   const newestDay = useMemo(

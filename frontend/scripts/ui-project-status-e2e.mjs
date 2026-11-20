@@ -340,6 +340,13 @@ try {
   check("① 卡片状态字在场：每张卡一枚（data-card-status）、三档取值、文案 = 中文状态（共 " + String(cards.length) + " 张）",
     cardsReady === true && cards.length > 0 && cards.every((c) => STATUS_VALUES.includes(c.status) && (c.status === "archived" ? ["已验收归档", "异常归档", "归档（临时任务）"].includes(c.text) : STATUS_TEXT[c.status] === c.text)),
     JSON.stringify(cards.slice(0, 2)));
+  const priorities = cards.map((card) => {
+    const row = dbStatus.get(card.code);
+    if (row?.status === "active" || row?.open_post_archive_task) return 0;
+    return row?.status === "paused" ? 1 : 2;
+  });
+  check("进行中与归档后有未完成临时任务的项目同组优先，其次是已暂停，最后是普通归档",
+    priorities.every((priority, index) => index === 0 || priorities[index - 1] <= priority));
   const archiveLabels = { accepted: "已验收归档", unaccepted: "异常归档" };
   const mismatch = cards.filter((card) => {
     const row = dbStatus.get(card.code);

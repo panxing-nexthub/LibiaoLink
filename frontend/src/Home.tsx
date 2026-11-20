@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
-import { keepLiveOrder } from "./liveSync";
 import { useLiveRefresh } from "./useLiveRefresh";
 import { ApiError } from "./api";
 import { cardBorderOf, cardTintOf, useBackgroundTier, useCardWatermark } from "./backgroundTier";
@@ -20,7 +19,7 @@ import { useFocusTrap } from "./components/useFocusTrap";
 import { dictLabel, projectAccent, type Dicts } from "./dicts";
 import { directoryMemberOptions, directoryName, type DirectoryUser } from "./directory";
 import { readStoredSidebarOpen, saveFiltersPref, saveSidebarPref } from "./homePrefs";
-import { EMPTY_FACETS, buildListQuery, fetchProjectFacets, fetchProjectList, fetchProjectMapOverview, toUiProject, type ProjectExportFormat, type ProjectFacets, type ProjectMapOverviewItem } from "./projectApi";
+import { EMPTY_FACETS, buildListQuery, fetchProjectFacets, fetchProjectList, fetchProjectMapOverview, toUiProject, type ApiProject, type ProjectExportFormat, type ProjectFacets, type ProjectMapOverviewItem } from "./projectApi";
 import { newSavedFilterId, sameCriteria } from "./savedFilters";
 import type { FilterCriteria, SavedFilter } from "./savedFilters";
 import { buildListHash, EMPTY_LIST_QUERY, hasListFilters, initialRouteRestored, openProject, replaceListQuery, useHashRoute } from "./useHashRoute";
@@ -131,6 +130,16 @@ function mapOverviewMatchesListRequest(project: ProjectMapOverviewItem, filters:
   }
   const keyword = filters.q.trim().toLocaleLowerCase();
   return keyword === "" || (project.name + "\n" + project.code).toLocaleLowerCase().includes(keyword);
+}
+
+function projectSpaceCards(rows: ApiProject[]): Project[] {
+  // 各页已按选定的创建时间合并。稳定排序保留每组内的服务端顺序。
+  const priority = (project: Project): number => {
+    if (project.status === "active") return 0;
+    if (project.status === "archived") return project.hasOpenPostArchiveTask ? 0 : 2;
+    return 1;
+  };
+  return rows.map(toUiProject).sort((a, b) => priority(a) - priority(b));
 }
 
 export default function Home({ me, dicts, directory, managerCandidates, dictTools, canManageDicts, canDeleteProject, canCreateProject, canUpdateProject, canExportProject, onExportProject, exportingProjectId, onDeleteProject, onCreate, onEdit, refreshToken, savedFilters, onSavedFiltersChange }: HomeProps) {
@@ -277,7 +286,7 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
       })),
     ]);
     return () => {
-      setItems((previous) => keepLiveOrder(previous, page.items.map(toUiProject)));
+      setItems(projectSpaceCards(page.items));
       setTotal(page.total);
       setFacets({ total: managers.total, region: regions.region, projectType: types.projectType, managerId: managers.managerId, stageKey: regions.stageKey, status: statuses.status });
       setSavedCounts(Object.fromEntries(counts));
@@ -301,7 +310,7 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
         if (cancelled) {
           return;
         }
-        setItems(page.items.map(toUiProject));
+        setItems(projectSpaceCards(page.items));
         setTotal(page.total);
         setFacets({
           total: managerFacets.total,

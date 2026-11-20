@@ -51,8 +51,8 @@ export type Project = {
   version: number;
   /** 当前阶段 key（契约 stageKey）。 */
   stageKey: string;
-  /** 项目状态（契约 status：active / paused / archived）。 */
-  status: ProjectStatusValue;
+  /** 项目状态，兼容旧 API 返回的 done。 */
+  status: ProjectReadStatus;
   hasOpenPostArchiveTask: boolean;
   archiveKind: ProjectArchiveKind | null;
   /** 当前登录人在该项目的最终项目权限：管理员 / 所管本项目的项目经理 / 规则 edit 为 edit；其余可见关系为 view。 */
@@ -67,14 +67,16 @@ export type Project = {
 
 /** 项目状态取值（契约 projects.status：active / paused / archived）。 */
 export type ProjectStatusValue = "active" | "paused" | "archived";
+export type ProjectReadStatus = ProjectStatusValue | "done";
 
 /** 项目状态的展示顺序。 */
 export const PROJECT_STATUS_VALUES: readonly ProjectStatusValue[] = ["active", "paused", "archived"];
 
 /** 项目状态中文（Push 262：卡片状态字与编辑弹窗同源；与地图图例/操作记录口径一致）。 */
-export const PROJECT_STATUS_TEXT: Record<ProjectStatusValue, string> = {
+export const PROJECT_STATUS_TEXT: Record<ProjectReadStatus, string> = {
   active: "进行中",
   paused: "已暂停",
+  done: "已完成",
   archived: "已归档",
 };
 

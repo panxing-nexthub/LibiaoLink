@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { projectStatusTextOf, useLocale, useLocalizedText, useT } from "../i18n";
 import type { ProjectExportFormat } from "../projectApi";
-import type { ProjectArchiveKind, ProjectStatusValue } from "../types";
+import type { ProjectArchiveKind, ProjectReadStatus } from "../types";
 import { RowDeleteButton } from "./RowDeleteButton";
 import { usePopover } from "./usePopover";
 
@@ -33,6 +33,7 @@ function glowOf(color: string): string {
 
 const statusBadges = {
   active: { background: "bg-[#08634c]" },
+  done: { background: "bg-[#27643b]" },
   temporary: { background: "bg-[#383877]" },
   accepted: { background: "bg-[#194c78]" },
   unaccepted: { background: "bg-[#8c2d35]" },
@@ -46,7 +47,7 @@ type CardProps = {
   /** 项目类型展示名（字典 name；未知码回落码本身）。 */
   typeLabel: string;
   /** 项目状态取值（契约 projects.status —— 回放钩子 data-card-status）。 */
-  status: ProjectStatusValue;
+  status: ProjectReadStatus;
   hasOpenPostArchiveTask: boolean;
   archiveKind: ProjectArchiveKind | null;
   statusId?: string;

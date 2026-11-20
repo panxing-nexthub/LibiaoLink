@@ -718,7 +718,7 @@ export default function App() {
         return { kind: "ok" };
       }
       if (draft.status !== "archived") {
-        await updateProject(project.id, fields, version, draft.status);
+        await updateProject(project.id, fields, version, draft.status === "done" ? undefined : draft.status);
         setDataVersion((value) => value + 1);
         return { kind: "ok" };
       }

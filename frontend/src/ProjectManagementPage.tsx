@@ -528,6 +528,7 @@ type TextCellProps = {
   ariaLabel: string;
   align: "left" | "center";
   multilineOnFocus: boolean;
+  allowLineBreaks?: boolean;
   cellKey: string;
   isCode?: boolean;
   maxLength?: number;
@@ -538,12 +539,21 @@ type TextCellProps = {
   onBlur: () => void;
 };
 
+const pmReadEditableText = (node: HTMLElement, multiline: boolean): string => {
+  if (!multiline) {
+    return node.textContent ?? "";
+  }
+  const text = node.innerText;
+  return text === "" ? node.textContent ?? "" : text;
+};
+
 function TextCell({
   value,
   readOnly,
   ariaLabel,
   align,
   multilineOnFocus,
+  allowLineBreaks = false,
   cellKey,
   isCode = false,
   maxLength,
@@ -672,13 +682,13 @@ function TextCell({
       contentEditable
       suppressContentEditableWarning
       role="textbox"
-      aria-multiline="false"
+      aria-multiline={allowLineBreaks}
       aria-label={ariaLabel}
       spellCheck={false}
       data-project-management-cell={cellKey}
       data-project-management-code={isCode ? "" : undefined}
       onInput={(event) => {
-        const raw = event.currentTarget.textContent ?? "";
+        const raw = pmReadEditableText(event.currentTarget, allowLineBreaks);
         const text = maxLength === undefined ? raw : raw.slice(0, maxLength);
         if (text !== raw) {
           event.currentTarget.textContent = text;
@@ -699,15 +709,18 @@ function TextCell({
       }}
       onPaste={(event) => {
         event.preventDefault();
-        const pasted = event.clipboardData.getData("text/plain").replace(/\s*\r?\n\s*/g, " ");
-        const text = maxLength === undefined ? pasted : pasted.slice(0, maxLength);
+        const pasted = event.clipboardData.getData("text/plain");
+        const normalized = allowLineBreaks
+          ? pasted
+          : pasted.replace(/\s*\r?\n\s*/g, " ");
+        const text = maxLength === undefined ? normalized : normalized.slice(0, maxLength);
         document.execCommand("insertText", false, text);
       }}
       onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
         if (event.key !== "Enter") {
           return;
         }
-        if (!multilineOnFocus) {
+        if (!allowLineBreaks) {
           event.preventDefault();
           event.currentTarget.blur();
           return;
@@ -719,13 +732,15 @@ function TextCell({
         }
         const range = selection.getRangeAt(0);
         range.deleteContents();
-        const lineBreak = document.createTextNode("\n");
+        const lineBreak = document.createElement("br");
+        const caretAnchor = document.createTextNode("");
         range.insertNode(lineBreak);
-        range.setStartAfter(lineBreak);
+        lineBreak.parentNode?.insertBefore(caretAnchor, lineBreak.nextSibling);
+        range.setStart(caretAnchor, 0);
         range.collapse(true);
         selection.removeAllRanges();
         selection.addRange(range);
-        const raw = event.currentTarget.textContent ?? "";
+        const raw = pmReadEditableText(event.currentTarget, allowLineBreaks);
         const text = maxLength === undefined ? raw : raw.slice(0, maxLength);
         if (text !== raw) {
           event.currentTarget.textContent = text;
@@ -4915,6 +4930,7 @@ export default function ProjectManagementPage({
                                 ariaLabel={ariaLabel}
                                 align="left"
                                 multilineOnFocus
+                                allowLineBreaks
                                 cellKey={cellKey}
                                 maxLength={2000}
                                 onInput={(value) => {

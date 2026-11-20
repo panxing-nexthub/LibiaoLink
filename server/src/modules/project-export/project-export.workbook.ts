@@ -458,26 +458,29 @@ function styleHeader(
   return row;
 }
 
-function sheetWidthsPx(widths: Record<number, number>, count: number): number {
-  return exportHeaderWidthPx(
-    Array.from({ length: count }, (_value, index) => widths[index + 1] ?? 8.43),
-  );
+function prepareExportHeader(
+  sheet: ExcelJS.Worksheet,
+  project: { code: string; name: string },
+  sheetLabel: string,
+  columnCount: number,
+): void {
+  sheet.mergeCells(1, 1, 1, columnCount);
+  const brandCell = sheet.getCell(1, 1);
+  brandCell.font = { name: EXPORT_FONT_NAME, size: 16, bold: true, color: { argb: "FF111827" } };
+  brandCell.alignment = { vertical: "middle", horizontal: "center", wrapText: false };
+  brandCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+  sheet.getRow(1).height = EXPORT_HEADER_ROW_HEIGHT;
+  sheet.views = [{ state: "frozen", ySplit: 2, topLeftCell: "A3" }];
 }
 
-async function addExportHeader(
+async function renderExportHeader(
   workbook: ExcelJS.Workbook,
   sheet: ExcelJS.Worksheet,
   project: { code: string; name: string },
   sheetLabel: string,
-  widthPx: number,
   columnCount: number,
 ): Promise<void> {
-  const width = Math.max(240, widthPx);
-  sheet.mergeCells(1, 1, 1, columnCount);
-  const brandCell = sheet.getCell(1, 1);
-  brandCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
-  sheet.getRow(1).height = EXPORT_HEADER_ROW_HEIGHT;
-  sheet.views = [{ state: "frozen", ySplit: 2, topLeftCell: "A3" }];
+  const width = Math.max(240, exportHeaderWidthPx(widthsOf(sheet, columnCount)));
   try {
     const header = await renderProjectExportHeader(project, sheetLabel, width);
     const imageId = workbook.addImage({
@@ -490,10 +493,7 @@ async function addExportHeader(
       editAs: "twoCell",
     } as unknown as ExcelJS.ImageRange);
   } catch {
-    brandCell.value = "[" + project.code + "]  " + project.name + "   ·   " + sheetLabel;
-    brandCell.font = { name: EXPORT_FONT_NAME, size: 16, bold: true, color: { argb: "FF111827" } };
-    brandCell.alignment = { vertical: "middle", horizontal: "center", wrapText: false };
-    brandCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+    sheet.getCell(1, 1).value = "[" + project.code + "]  " + project.name + "   ·   " + sheetLabel;
   }
 }
 
@@ -614,7 +614,7 @@ function placeImages(
 async function addTaskSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPayload, name: string): Promise<ExcelJS.Worksheet> {
   const sheet = workbook.addWorksheet(name);
   setWidths(sheet, TASK_WIDTHS, TASK_HEADERS.length);
-  await addExportHeader(workbook, sheet, payload.project, "项目任务", sheetWidthsPx(TASK_WIDTHS, TASK_HEADERS.length), TASK_HEADERS.length);
+  prepareExportHeader(sheet, payload.project, "项目任务", TASK_HEADERS.length);
   styleHeader(sheet, TASK_HEADERS, TASK_WIDTHS);
   for (const task of payload.tasks) {
     const row = sheet.addRow([
@@ -644,13 +644,14 @@ async function addTaskSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPa
     fitColumnWidths(sheet, TASK_WIDTHS, texts);
     row.height = estimatedTextHeight(sheet, texts, Array.from({ length: TASK_HEADERS.length }, (_value, index) => index + 1)) / PX_PER_POINT;
   }
+  await renderExportHeader(workbook, sheet, payload.project, "项目任务", TASK_HEADERS.length);
   return sheet;
 }
 
 async function addReportSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPayload, name: string): Promise<ExcelJS.Worksheet> {
   const sheet = workbook.addWorksheet(name);
   setWidths(sheet, REPORT_WIDTHS, REPORT_HEADERS.length);
-  await addExportHeader(workbook, sheet, payload.project, "日报记录", sheetWidthsPx(REPORT_WIDTHS, REPORT_HEADERS.length), REPORT_HEADERS.length);
+  prepareExportHeader(sheet, payload.project, "日报记录", REPORT_HEADERS.length);
   styleHeader(sheet, REPORT_HEADERS, REPORT_WIDTHS);
   const archiveMode = payload.attachmentSheet !== undefined;
   const imageLimit = payload.imageLimitPerCell ?? Number.MAX_SAFE_INTEGER;
@@ -675,13 +676,14 @@ async function addReportSheet(workbook: ExcelJS.Workbook, payload: ProjectExport
     alignPhotoCell(sheet, row.number, 5, onsiteAvailable > 0);
     placeImages(workbook, sheet, onsite, payload.images, 5, row.number, capacity, basePx, imageLimit);
   }
+  await renderExportHeader(workbook, sheet, payload.project, "日报记录", REPORT_HEADERS.length);
   return sheet;
 }
 
 async function addIssueSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPayload, name: string): Promise<ExcelJS.Worksheet> {
   const sheet = workbook.addWorksheet(name);
   setWidths(sheet, ISSUE_WIDTHS, ISSUE_HEADERS.length);
-  await addExportHeader(workbook, sheet, payload.project, "问题汇总", sheetWidthsPx(ISSUE_WIDTHS, ISSUE_HEADERS.length), ISSUE_HEADERS.length);
+  prepareExportHeader(sheet, payload.project, "问题汇总", ISSUE_HEADERS.length);
   styleHeader(sheet, ISSUE_HEADERS, ISSUE_WIDTHS);
   const archiveMode = payload.attachmentSheet !== undefined;
   const imageLimit = payload.imageLimitPerCell ?? Number.MAX_SAFE_INTEGER;
@@ -707,13 +709,14 @@ async function addIssueSheet(workbook: ExcelJS.Workbook, payload: ProjectExportP
     alignPhotoCell(sheet, row.number, 6, available > 0);
     placeImages(workbook, sheet, photos, payload.images, 6, row.number, capacity, basePx, imageLimit);
   }
+  await renderExportHeader(workbook, sheet, payload.project, "问题汇总", ISSUE_HEADERS.length);
   return sheet;
 }
 
 async function addChangeSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPayload, name: string): Promise<ExcelJS.Worksheet> {
   const sheet = workbook.addWorksheet(name);
   setWidths(sheet, CHANGE_WIDTHS, CHANGE_HEADERS.length);
-  await addExportHeader(workbook, sheet, payload.project, "变更管理", sheetWidthsPx(CHANGE_WIDTHS, CHANGE_HEADERS.length), CHANGE_HEADERS.length);
+  prepareExportHeader(sheet, payload.project, "变更管理", CHANGE_HEADERS.length);
   styleHeader(sheet, CHANGE_HEADERS, CHANGE_WIDTHS);
   const archiveMode = payload.attachmentSheet !== undefined;
   const imageLimit = payload.imageLimitPerCell ?? Number.MAX_SAFE_INTEGER;
@@ -759,13 +762,14 @@ async function addChangeSheet(workbook: ExcelJS.Workbook, payload: ProjectExport
     placeImages(workbook, sheet, before, payload.images, 5, row.number, beforeCapacity, basePx, imageLimit);
     placeImages(workbook, sheet, after, payload.images, 6, row.number, afterCapacity, basePx, imageLimit);
   }
+  await renderExportHeader(workbook, sheet, payload.project, "变更管理", CHANGE_HEADERS.length);
   return sheet;
 }
 
 async function addStakeholderSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPayload, name: string): Promise<ExcelJS.Worksheet> {
   const sheet = workbook.addWorksheet(name);
   setWidths(sheet, STAKEHOLDER_WIDTHS, STAKEHOLDER_HEADERS.length);
-  await addExportHeader(workbook, sheet, payload.project, "干系人", sheetWidthsPx(STAKEHOLDER_WIDTHS, STAKEHOLDER_HEADERS.length), STAKEHOLDER_HEADERS.length);
+  prepareExportHeader(sheet, payload.project, "干系人", STAKEHOLDER_HEADERS.length);
   styleHeader(sheet, STAKEHOLDER_HEADERS, STAKEHOLDER_WIDTHS);
   for (const item of payload.stakeholders) {
     const row = sheet.addRow([item.name, item.phone, item.wechat, item.email, item.title, item.company, item.writer, item.role]);
@@ -775,13 +779,14 @@ async function addStakeholderSheet(workbook: ExcelJS.Workbook, payload: ProjectE
     fitColumnWidths(sheet, STAKEHOLDER_WIDTHS, texts);
     row.height = estimatedTextHeight(sheet, texts, Array.from({ length: STAKEHOLDER_HEADERS.length }, (_value, index) => index + 1)) / PX_PER_POINT;
   }
+  await renderExportHeader(workbook, sheet, payload.project, "干系人", STAKEHOLDER_HEADERS.length);
   return sheet;
 }
 
 async function addAttachmentSheet(workbook: ExcelJS.Workbook, payload: ProjectExportPayload, name: string): Promise<ExcelJS.Worksheet> {
   const sheet = workbook.addWorksheet(name);
   setWidths(sheet, ATTACHMENT_WIDTHS, ATTACHMENT_HEADERS.length);
-  await addExportHeader(workbook, sheet, payload.project, "附件清单", sheetWidthsPx(ATTACHMENT_WIDTHS, ATTACHMENT_HEADERS.length), ATTACHMENT_HEADERS.length);
+  prepareExportHeader(sheet, payload.project, "附件清单", ATTACHMENT_HEADERS.length);
   styleHeader(sheet, ATTACHMENT_HEADERS, ATTACHMENT_WIDTHS);
   for (const item of payload.attachmentSheet ?? []) {
     const row = sheet.addRow([
@@ -801,6 +806,7 @@ async function addAttachmentSheet(workbook: ExcelJS.Workbook, payload: ProjectEx
     fitColumnWidths(sheet, ATTACHMENT_WIDTHS, texts);
     row.height = estimatedTextHeight(sheet, texts, Array.from({ length: ATTACHMENT_HEADERS.length }, (_value, index) => index + 1)) / PX_PER_POINT;
   }
+  await renderExportHeader(workbook, sheet, payload.project, "附件清单", ATTACHMENT_HEADERS.length);
   return sheet;
 }
 
@@ -919,6 +925,7 @@ export class ProjectExportWorkbookWriter {
       row.height = estimatedTextHeight(sheet, texts, Array.from({ length: TASK_HEADERS.length }, (_value, index) => index + 1)) / PX_PER_POINT;
       row.commit();
     }
+    await this.renderExportHeader(sheet, "项目任务", TASK_HEADERS.length);
     sheet.commit();
   }
 
@@ -947,6 +954,7 @@ export class ProjectExportWorkbookWriter {
       this.placeThumbnails(sheet, onsite, onsiteImages, 5, row.number, capacity, basePx);
       row.commit();
     }
+    await this.renderExportHeader(sheet, "日报记录", REPORT_HEADERS.length);
     sheet.commit();
   }
 
@@ -976,6 +984,7 @@ export class ProjectExportWorkbookWriter {
       this.placeThumbnails(sheet, photos, images, 6, row.number, capacity, basePx);
       row.commit();
     }
+    await this.renderExportHeader(sheet, "问题汇总", ISSUE_HEADERS.length);
     sheet.commit();
   }
 
@@ -1022,6 +1031,7 @@ export class ProjectExportWorkbookWriter {
       this.placeThumbnails(sheet, after, afterImages, 6, row.number, afterCapacity, basePx);
       row.commit();
     }
+    await this.renderExportHeader(sheet, "变更管理", CHANGE_HEADERS.length);
     sheet.commit();
   }
 
@@ -1036,6 +1046,7 @@ export class ProjectExportWorkbookWriter {
       row.height = estimatedTextHeight(sheet, texts, Array.from({ length: STAKEHOLDER_HEADERS.length }, (_value, index) => index + 1)) / PX_PER_POINT;
       row.commit();
     }
+    await this.renderExportHeader(sheet, "干系人", STAKEHOLDER_HEADERS.length);
     sheet.commit();
   }
 
@@ -1069,9 +1080,23 @@ export class ProjectExportWorkbookWriter {
     });
     setWidths(sheet, widths, headers.length);
     fitColumnWidths(sheet, widths, headers);
-    const widthPx = exportHeaderWidthPx(widthsOf(sheet, headers.length));
     const headerRow = sheet.addRow([]);
     headerRow.height = EXPORT_HEADER_ROW_HEIGHT;
+    const cell = headerRow.getCell(1);
+    cell.font = { name: EXPORT_FONT_NAME, size: 14, bold: true, color: { argb: "FF111827" } };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+    headerRow.commit();
+    styleHeader(sheet, headers, widths).commit();
+    return sheet;
+  }
+
+  private async renderExportHeader(
+    sheet: ExcelJS.Worksheet,
+    sheetLabel: string,
+    columnCount: number,
+  ): Promise<void> {
+    const widthPx = exportHeaderWidthPx(widthsOf(sheet, columnCount));
     try {
       const header = await renderProjectExportHeader(this.project, sheetLabel, widthPx);
       const fileId = "export-header-" + String(sheet.id);
@@ -1085,18 +1110,11 @@ export class ProjectExportWorkbookWriter {
         yOffsetPx: 0,
         widthPx,
         heightPx: EXPORT_HEADER_HEIGHT_PX,
-        fitTo: { columns: headers.length, rows: 1 },
+        fitTo: { columns: columnCount, rows: 1 },
       });
     } catch {
-      const cell = headerRow.getCell(1);
-      cell.value = "[" + this.project.code + "]  " + this.project.name + "   ·   " + sheetLabel;
-      cell.font = { name: EXPORT_FONT_NAME, size: 14, bold: true, color: { argb: "FF111827" } };
-      cell.alignment = { vertical: "middle", horizontal: "center" };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+      sheet.getCell(1, 1).value = "[" + this.project.code + "]  " + this.project.name + "   ·   " + sheetLabel;
     }
-    headerRow.commit();
-    styleHeader(sheet, headers, widths).commit();
-    return sheet;
   }
 
   private placeThumbnails(

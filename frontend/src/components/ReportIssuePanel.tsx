@@ -2552,6 +2552,7 @@ function ReportFillForm({
   onSubmit,
   onSaveDraft,
   dateLocked = false,
+  locked = false,
   groupSync,
 }: {
   project: Project;
@@ -2572,6 +2573,8 @@ function ReportFillForm({
   onSaveDraft: () => void;
   /** 已载入服务端草稿：填报日期与草稿绑定，PATCH 不可改日期，表单同步锁只读。 */
   dateLocked?: boolean;
+  /** 归档且无未完成临时任务：保留表单结构与内容，但整体锁定，不能填写或提交。 */
+  locked?: boolean;
   /** 项目群同步复选框：仅项目经理 + 已绑定群时传入，默认不勾选。 */
   groupSync?: {
     checked: boolean;
@@ -2677,14 +2680,21 @@ function ReportFillForm({
   return (
     <form
       data-fill-form="true"
+      aria-disabled={locked ? "true" : undefined}
       onSubmit={(event) => {
         event.preventDefault();
-        if (missing.length === 0) {
+        if (!locked && missing.length === 0) {
           onSubmit();
         }
       }}
       className="scroll-mt-[140px] space-y-4 rounded-xl border border-zinc-200 bg-white p-5"
     >
+      {locked ? (
+        <div data-report-archived-readonly="" role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {t("report.archived.readOnly")}
+        </div>
+      ) : null}
+      <fieldset disabled={locked} className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-60">
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block">
           <span className={FORM_LABEL}>{fieldText(locale, "项目名称")}</span>
@@ -2934,10 +2944,13 @@ function ReportFillForm({
             <span>{t("report.groupSync.button")}</span>
           </label>
         )}
-        <span data-fill-hint className={"text-xs " + (missing.length === 0 ? "text-zinc-400" : "text-rose-500")}>
-          {missing.length === 0 ? t("report.form.footer") : t("report.form.missing", { list: missing.join(isLocalizedLocale(locale) ? ", " : "、") })}
-        </span>
+        {locked ? null : (
+          <span data-fill-hint className={"text-xs " + (missing.length === 0 ? "text-zinc-400" : "text-rose-500")}>
+            {missing.length === 0 ? t("report.form.footer") : t("report.form.missing", { list: missing.join(isLocalizedLocale(locale) ? ", " : "、") })}
+          </span>
+        )}
       </div>
+      </fieldset>
     </form>
   );
 }
@@ -4073,17 +4086,15 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
 
       {subTab === "日报填写" ? (
         /* 日报填写 = 左侧草稿列表 + 右侧填写表单；表单仍保持舒适窄栏，其他三块子视图全宽 */
-        !canFill ? (
-          project.status === "archived" && project.accessLevel === "edit"
-            ? <EmptyCard text={t("report.archived.closed")} hint={t("report.archived.hint")} />
-            : <EmptyCard text={t("access.readOnlyTitle")} hint={t("access.readOnlyHint")} />
+        !canFill && !(project.status === "archived" && project.accessLevel === "edit") ? (
+          <EmptyCard text={t("access.readOnlyTitle")} hint={t("access.readOnlyHint")} />
         ) : (
         <div className="mx-auto grid w-full max-w-6xl gap-5 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
           <ReportDraftSidebar
             drafts={draftReports}
             selectedId={draftId}
             locale={locale}
-            disabled={saving}
+            disabled={saving || !canFill}
             onSelect={handleLoadDraft}
             onNew={handleNewReport}
             onDelete={readOnly ? undefined : (report) => { requestDeleteReport(report.id); }}
@@ -4102,6 +4113,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
               onSubmit={handleSubmit}
               onSaveDraft={handleSaveDraft}
               dateLocked={draftId !== null}
+              locked={!canFill}
               groupSync={groupSyncOption}
             />
             {draftChanged ? (

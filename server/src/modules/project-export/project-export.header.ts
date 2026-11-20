@@ -141,6 +141,7 @@ export async function renderProjectExportHeader(
 
   const compact = widthPx < 760;
   const veryCompact = widthPx < 520;
+  const startSize = widthPx >= 1800 ? 22 : widthPx >= 1400 ? 20 : compact ? 16 : 18;
   const logoHeight = veryCompact ? 30 : compact ? 38 : 47;
   const logoWidth = logoHeight * 156 / 55;
   const logoX = veryCompact ? 12 : 22;
@@ -151,7 +152,7 @@ export async function renderProjectExportHeader(
   ctx.fillStyle = "#111111";
   let leftLimit = logoX + logoWidth + (veryCompact ? 12 : 18);
   if (!compact) {
-    setFont(ctx, true, 13.5);
+    setFont(ctx, true, startSize);
     const confidential = "商业秘密文件 / Confidential";
     ctx.fillText(confidential, leftLimit, HEADER_HEIGHT_PX / 2 + 0.5);
     leftLimit += ctx.measureText(confidential).width + 26;
@@ -160,7 +161,6 @@ export async function renderProjectExportHeader(
   const rightLimit = widthPx - (veryCompact ? 12 : 22);
   const available = Math.max(24, rightLimit - leftLimit);
   const title = "[" + project.code + "]  " + project.name + "   ·   " + sheetLabel;
-  const startSize = widthPx >= 1800 ? 22 : widthPx >= 1400 ? 20 : compact ? 16 : 18;
   const fitted = fitTitle(ctx, title, available, startSize, veryCompact ? 10 : 11);
 
   let titleX = widthPx / 2;

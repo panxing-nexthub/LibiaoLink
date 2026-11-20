@@ -1,3 +1,21 @@
+> **2026-11-20 10:44–10:53 Excel 导出表头字体比例修复（测试机 + 正式机 server delta · Push 851）**：测试机 release = `test-20261120-1044-px-export-header-height-792abd34`，previous = `test-20261120-1013-px-archive-readonly-report-lock-28e314ac`；正式机 release = `prod-20261120-1050-px-export-header-height-792abd34`，previous = `prod-20261120-1021-px-temp-task-group-fields-7338cae7`。两站均来自 px `792abd34`，仅替换 `server/dist/modules/project-export` 下 2 个运行时文件。
+>
+> **根因 / 改动**：原实现按正文初始列宽生成表头 PNG，正文动态扩列后 Excel 将位图横向拉满，造成字体和 Logo 纵向压扁。项目全量导出六张 Sheet 改为正文列宽定稿后再生成表头；内存与流式一致；「商业秘密文件 / Confidential」与主标题共用同一自适应字号。页面级导出沿用已定稿列宽路径。
+>
+> **门禁 / 发布件**：server typecheck / build / check:boundaries 通过；全量 Vitest 134 个文件通过 / 11 个跳过，2016 通过 / 75 跳过。两站共用 `server-project-export.tar.gz` 11,100 B · `1748e60e…`；header JS 6,162 B · `eac79f2f…`，workbook JS 43,327 B · `992572b0…`；staging / live 哈希均一致。
+>
+> **验收 / 运行态**：两站 api / worker 已重启，api / worker / web / postgres healthy，RestartCount 0、OOM false，近 10 分钟 api / worker 部署窗口错误 0；`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true，未登录项目 API 401。测试机 manifest `24adb559…`、备份 17,010 B；正式机 manifest `238003c1…`、备份 18,698 B；各 3 个文件，2 / 2 SHA-256 校验通过。无前端 / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。
+
+> **2026-11-20 10:13–10:21 归档只读提示区分与日报表单保留禁用（测试机 frontend-only · test-20261120-1013-px-archive-readonly-report-lock-28e314ac）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261120-1013-px-archive-readonly-report-lock-28e314ac`，previous = `test-20261120-1003-px-temp-task-group-fields-f8df53cb`；staging = `/srv/data/deploy-test-20261120-1013-px-archive-readonly-report-lock-28e314ac/staging`，备份 = `/srv/data/backups/before-test-20261120-1013-px-archive-readonly-report-lock-28e314ac`。代码来源 px `28e314ac`，随 Push 850 进入常驻分支。
+
+> **根因 / 改动**：归档项目此前把任务能力统一收敛为只读，但任务行仍提示「当前账号仅可查看该任务，不能编辑」；日报页则把整块表单替换为「日报填写已关闭」空态。现由项目详情标记 `archiveLocked`：归档项目内仅保留未完成手工临时任务的编辑例外，其余任务统一提示「当前项目已归档，无法编辑」；日报填写页不再关闭，保留草稿栏与完整表单，通过 `fieldset disabled` 锁定填报日期、施工人数、阶段、当日工作、明日计划、附件、问题块及提交 / 暂存，并在表单顶部显示「当前项目已归档，日报不能填写」。中 / 英 / 日 / 韩文案同步，删除旧 `report.archived.closed` / `report.archived.hint`。
+
+> **验收**：frontend `npm run typecheck` / `npm run build` 通过；测试机归档项目 `LBGN23171-G1` / `CAD测试专项` 实机复核：任务字段锁定提示与点击 Toast 均为「当前项目已归档，无法编辑」，旧关闭空态不在页面和主包；日报页完整表单仍在，日期、人数、阶段、正文、附件、问题、提交与暂存控件均为 `disabled`，顶部显示归档状态提示；刷新后加载 `assets/index-Ct8Yh48s.js`。
+
+> **发布件 / 运行态**：前端 678 文件 / 692 归档条目，`frontend-dist.tar.gz` 22,589,336 B · `27681bf7…`；`build-info.json` 906 B · `9b0bc032…`；`frontend-files.sha256` 91,081 B · `82658e65…`；`release-files.sha256` 257 B · `1e24ab5e…`。安装后线上 934 → 937 文件，内容变化 4 个：`index.html` 522 B · `2d918c6e…`、主包 `assets/index-Ct8Yh48s.js` 2,478,974 B · `4ec4fc87…`、CSS `assets/index-D2WjCV3v.css` 233,152 B · `a38320cd…`、分包 `assets/es-Biq95_6A.js` 428,098 B · `a5a30c19…`；线上 678 / 678 哈希通过，旧 hashed 资源保留。
+
+> **运行态 / 备份 / 回滚**：`/`、`/healthz`、`/readyz` 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；web / api / worker / postgres healthy、RestartCount 0、OOM false，本轮未重启容器。备份 107,717,814 B，含 `frontend-dist-before.tar.gz` 107,710,736 B · `e5c77654…`、原 manifest 6,792 B · `f2218f59…`、原文件数 934 与 `SHA256SUMS`，3 / 3 校验通过。新 `RELEASE_MANIFEST.json` 5,753 B · `40029173…`，`root:root 644` 原子替换；回滚时解压 `frontend-dist-before.tar.gz` 回 `/opt/libiaolink/frontend/dist`，恢复 `RELEASE_MANIFEST.json.before` 后无需重启容器。仅测试机 `10.1.104.44`，正式机 `10.1.103.44` 未触碰；无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / MinIO / CAD 变更。
+
 > **2026-11-20 10:03–10:05 临时任务群通知字段与同步提示（测试机 server delta + frontend · test-20261120-1003-px-temp-task-group-fields-f8df53cb）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261120-1003-px-temp-task-group-fields-f8df53cb`，previous = `test-20261120-0955-px-temp-task-owner-group-3b28c6f1`；staging = `/srv/data/deploy-test-20261120-1003-px-temp-task-group-fields-f8df53cb/staging`，备份 = `/srv/data/backups/before-test-20261120-1003-px-temp-task-group-fields-f8df53cb`。代码来源 px `f8df53cb`（含 `45d2cc77`）；GitHub 当前 TLS 握手失败，提交暂留本地待推送。
 >
 > **改动 / 验收**：新建临时任务群通知正文调整为任务名称、项目编号、项目名称、原项目经理、当前项目经理、任务负责人；原项目经理取创建时 `projects.manager_ids` 姓名，当前项目经理取临时任务所选 `managerIds` 姓名，负责人空数组仍显示「待定」。前端「同步到项目群」只保留标题，删除「机器人将发送任务名称、项目经理和任务负责人」说明。server typecheck / build、任务服务测试 85 / 85、边界检查与 frontend typecheck / build 通过；公开主包不含该说明文案。

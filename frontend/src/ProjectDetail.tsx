@@ -21,7 +21,7 @@ import type { StagePlacement } from "./components/StageAddCard";
 import { PROJECT_STAGES } from "./data/projects";
 import { memberNameOf, type Member } from "./data/members";
 import { lockBodyScroll } from "./scrollLock";
-import { TEMP_TASK_STAGE, VIEW_ONLY_TASK_CAPABILITIES, hasOutputDeliverables, isTaskDone, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "./data/tasks";
+import { TEMP_TASK_STAGE, VIEW_ONLY_TASK_CAPABILITIES, hasOutputDeliverables, isOpenTemporaryTask, isTaskDone, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "./data/tasks";
 import type { TemplatePresetNode } from "./data/templatePresets";
 import { fetchTaskFiles, recycleFile, renameFile, uploadFiles, type TaskFileRef } from "./fileApi";
 import { exportProjectOverviewPdfHtml } from "./exportOverviewPdf";
@@ -398,12 +398,16 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
    */
   const tasks = useMemo(
     () => {
-      const visible = projectArchived ? rawTasks.map((task) => ({
-        ...task,
-        capabilities: task.stageKey === null && task.nodeId === null && task.sourceNodeId === null && !isTaskDone(task)
-          ? { ...taskCapabilitiesOf(task), canDelete: false, canFinalize: false }
-          : VIEW_ONLY_TASK_CAPABILITIES,
-      })) : rawTasks;
+      const visible = projectArchived ? rawTasks.map((task) => {
+        const archiveLocked = !isOpenTemporaryTask(task);
+        return {
+          ...task,
+          archiveLocked,
+          capabilities: archiveLocked
+            ? VIEW_ONLY_TASK_CAPABILITIES
+            : { ...taskCapabilitiesOf(task), canDelete: false, canFinalize: false },
+        };
+      }) : rawTasks;
       return preserveTaskOrder ? visible : [...visible].sort((left, right) => stageRankOf(left.stage) - stageRankOf(right.stage) || left.sortIndex - right.sortIndex);
     },
     [rawTasks, preserveTaskOrder, projectArchived],

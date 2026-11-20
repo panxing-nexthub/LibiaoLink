@@ -440,7 +440,8 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
    *  2026-10-10 业务追订「项目经理也不可以修改」——「项目经理」列随行一并锁定；「文件」列仍走既有 taskFinalized 门控（修改走变更）。 */
   const taskFinalized = task.finalizedAt !== null;
   const capabilities = taskCapabilitiesOf(task);
-  const viewOnlyHint = t("board.viewOnlyHint");
+  const archiveLocked = task.archiveLocked === true;
+  const viewOnlyHint = archiveLocked ? t("board.archivedHint") : t("board.viewOnlyHint");
   const editLocked = !capabilities.canEditFields || taskFinalized;
   const editLockedHint = taskFinalized ? t("board.finalizedHint") : viewOnlyHint;
   const progressLocked = !capabilities.canUpdateProgress || taskFinalized;
@@ -457,12 +458,14 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
   const managerTitle = managerLabel;
   const managersEditable = canEditManagers ?? onChangeManagers !== undefined;
   const managerChoices = memberOptionsWithExisting(managerMembers, managerIds, members);
-  const managersLocked = !managersEditable || taskFinalized;
+  const managersLocked = archiveLocked || !managersEditable || taskFinalized;
   const managersLockedHint = taskFinalized
     ? t("board.finalizedHint")
-    : managersEditable
-      ? undefined
-      : t("board.managerLockedHint");
+    : archiveLocked
+      ? t("board.archivedHint")
+      : managersEditable
+        ? undefined
+        : t("board.managerLockedHint");
   const completionLocked = !capabilities.canComplete || taskFinalized;
   const completionLockedHint = taskFinalized ? t("board.finalizedHint") : viewOnlyHint;
   const canManageFiles = capabilities.canUpload && !taskFinalized;

@@ -1697,6 +1697,12 @@ const PM_GANTT_SCALES: Record<
   year: { labelKey: "pm.gantt.scale.year", dayWidth: 4.5, minDays: 365, paddingDays: 30, gridDays: 30.44 },
 };
 const PM_GANTT_SCALE_KEYS: readonly PmGanttScale[] = ["week", "month", "quarter", "year"];
+const PM_GANTT_BACK_TO_KEYS: Record<PmGanttScale, TextKey> = {
+  week: "pm.gantt.backTo.week",
+  month: "pm.gantt.backTo.month",
+  quarter: "pm.gantt.backTo.quarter",
+  year: "pm.gantt.backTo.year",
+};
 const PM_GANTT_HEADER_HEIGHT = 46;
 const PM_GANTT_GROUP_HEIGHT = 30;
 const PM_GANTT_ROW_HEIGHT = 30;
@@ -1839,35 +1845,6 @@ const pmGanttIsoOf = (time: number): string => new Date(time).toISOString().slic
 
 const pmGanttAddDays = (iso: string, days: number): string => pmGanttIsoOf(pmGanttTimeOf(iso) + days * PM_GANTT_DAY_MS);
 
-const pmGanttAddMonths = (iso: string, months: number): string => {
-  const date = new Date(pmGanttTimeOf(iso));
-  const day = date.getUTCDate();
-  date.setUTCDate(1);
-  date.setUTCMonth(date.getUTCMonth() + months);
-  const daysInTargetMonth = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0),
-  ).getUTCDate();
-  date.setUTCDate(Math.min(day, daysInTargetMonth));
-  return pmGanttIsoOf(date.getTime());
-};
-
-const pmGanttShiftByScale = (
-  iso: string,
-  scale: PmGanttScale,
-  direction: -1 | 1,
-): string => {
-  if (scale === "week") {
-    return pmGanttAddDays(iso, direction * 7);
-  }
-  if (scale === "month") {
-    return pmGanttAddMonths(iso, direction);
-  }
-  if (scale === "quarter") {
-    return pmGanttAddMonths(iso, direction * 3);
-  }
-  return pmGanttAddMonths(iso, direction * 12);
-};
-
 const pmGanttTodayIso = (): string => {
   const now = new Date();
   return (
@@ -1899,6 +1876,11 @@ const pmGanttShortDate = (iso: string | null): string | null => {
   const match = /^\d{4}-(\d{2})-(\d{2})/.exec(iso);
   return match === null ? iso : match[1] + "-" + match[2];
 };
+
+const pmGanttVisibleRangeLabel = (startIso: string, endIso: string): string =>
+  startIso.slice(0, 4) === endIso.slice(0, 4)
+    ? startIso.slice(5) + " – " + endIso.slice(5)
+    : startIso + " – " + endIso;
 
 const pmGanttDateRangeOf = (row: PmRow): {
   start: string | null;
@@ -2533,6 +2515,14 @@ function PmImplementationGantt({
   const ganttScrollShellRef = useRef<HTMLDivElement | null>(null);
   const ganttScrollViewportRef = useRef<HTMLDivElement | null>(null);
   const [ganttScrollLeft, setGanttScrollLeft] = useState(0);
+  const [ganttPanActive, setGanttPanActive] = useState(false);
+  const ganttPanRef = useRef<{
+    pointerId: number;
+    originX: number;
+    baseLeft: number;
+    moved: boolean;
+  } | null>(null);
+  const ganttPanJustEndedRef = useRef(false);
 
   const [selectedGanttKey, setSelectedGanttKey] = useState<string | null>(null);
   const [selectedGanttColumnKey, setSelectedGanttColumnKey] = useState<string | null>(null);
@@ -2574,10 +2564,22 @@ function PmImplementationGantt({
       return next;
     });
   };
-  const goToGanttToday = (): void => {
+  const goToGanttCurrent = (): void => {
     const today = pmGanttTodayIso();
     setGanttAnchorIso(today);
-    requestGanttScroll(today, "auto");
+    requestGanttScroll(today, "smooth");
+  };
+  const scrollGanttByPage = (direction: -1 | 1): void => {
+    const viewport = ganttScrollViewportRef.current;
+    if (viewport === null || ganttTimelineViewportWidth <= 0) {
+      return;
+    }
+    const step = Math.max(ganttDayWidth * 7, ganttTimelineViewportWidth * 0.85);
+    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    viewport.scrollTo({
+      left: pmGanttClampWidth(viewport.scrollLeft + direction * step, 0, maxScroll),
+      behavior: "smooth",
+    });
   };
 
   useEffect(() => {
@@ -2606,10 +2608,107 @@ function PmImplementationGantt({
     };
     sync();
     viewport.addEventListener("scroll", sync, { passive: true });
+
+    const panThreshold = 4;
+    const handlePointerDown = (event: PointerEvent): void => {
+      ganttPanJustEndedRef.current = false;
+      if (event.pointerType === "touch" || event.button !== 0) {
+        return;
+      }
+      if (
+        event.target instanceof Element &&
+        event.target.closest("input, textarea, select, [contenteditable='true']") !== null
+      ) {
+        return;
+      }
+      ganttPanRef.current = {
+        pointerId: event.pointerId,
+        originX: event.clientX,
+        baseLeft: viewport.scrollLeft,
+        moved: false,
+      };
+    };
+    const handlePointerMove = (event: PointerEvent): void => {
+      const session = ganttPanRef.current;
+      if (session === null || session.pointerId !== event.pointerId) {
+        return;
+      }
+      const deltaX = event.clientX - session.originX;
+      if (!session.moved) {
+        if (Math.abs(deltaX) < panThreshold) {
+          return;
+        }
+        session.moved = true;
+        event.preventDefault();
+        window.getSelection()?.removeAllRanges();
+        try {
+          viewport.setPointerCapture(event.pointerId);
+        } catch {}
+        setGanttPanActive(true);
+      }
+      event.preventDefault();
+      viewport.scrollLeft = session.baseLeft - deltaX;
+    };
+    const finishPan = (event: PointerEvent, suppressClick: boolean): void => {
+      const session = ganttPanRef.current;
+      if (session === null || session.pointerId !== event.pointerId) {
+        return;
+      }
+      ganttPanRef.current = null;
+      if (!session.moved) {
+        return;
+      }
+      ganttPanJustEndedRef.current = suppressClick;
+      setGanttPanActive(false);
+      try {
+        viewport.releasePointerCapture(event.pointerId);
+      } catch {}
+    };
+    const handlePointerUp = (event: PointerEvent): void => {
+      finishPan(event, true);
+    };
+    const handlePointerCancel = (event: PointerEvent): void => {
+      finishPan(event, false);
+    };
+    const handleClickCapture = (event: MouseEvent): void => {
+      if (!ganttPanJustEndedRef.current) {
+        return;
+      }
+      ganttPanJustEndedRef.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const handleWheel = (event: WheelEvent): void => {
+      const horizontalDelta =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+          ? event.deltaX
+          : event.shiftKey
+            ? event.deltaY
+            : 0;
+      if (horizontalDelta === 0) {
+        return;
+      }
+      event.preventDefault();
+      viewport.scrollLeft += horizontalDelta;
+    };
+
+    viewport.addEventListener("pointerdown", handlePointerDown);
+    viewport.addEventListener("pointermove", handlePointerMove);
+    viewport.addEventListener("pointerup", handlePointerUp);
+    viewport.addEventListener("pointercancel", handlePointerCancel);
+    viewport.addEventListener("click", handleClickCapture, true);
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+
     const observer = new ResizeObserver(sync);
     observer.observe(viewport);
     return () => {
       viewport.removeEventListener("scroll", sync);
+      viewport.removeEventListener("pointerdown", handlePointerDown);
+      viewport.removeEventListener("pointermove", handlePointerMove);
+      viewport.removeEventListener("pointerup", handlePointerUp);
+      viewport.removeEventListener("pointercancel", handlePointerCancel);
+      viewport.removeEventListener("click", handleClickCapture, true);
+      viewport.removeEventListener("wheel", handleWheel);
       observer.disconnect();
       if (frame !== 0) {
         window.cancelAnimationFrame(frame);
@@ -2974,6 +3073,42 @@ function PmImplementationGantt({
     };
   }, [ganttAnchorIso, ganttDayWidth, ganttScale, groups, intlLocale]);
 
+  const ganttVisibleRange = useMemo(() => {
+    const lastIndex = Math.max(0, timeline.days.length - 1);
+    const dayWidth = Math.max(ganttDayWidth, 1);
+    const startIndex = Math.min(
+      lastIndex,
+      Math.max(0, Math.floor(ganttScrollLeft / dayWidth)),
+    );
+    const endIndex = Math.min(
+      lastIndex,
+      Math.max(
+        startIndex,
+        Math.ceil(
+          (ganttScrollLeft + Math.max(ganttTimelineViewportWidth, dayWidth)) / dayWidth,
+        ) - 1,
+      ),
+    );
+    return {
+      startIso: timeline.days[startIndex]?.iso ?? timeline.startIso,
+      endIso: timeline.days[endIndex]?.iso ?? timeline.startIso,
+      startIndex,
+      endIndex,
+    };
+  }, [ganttDayWidth, ganttScrollLeft, ganttTimelineViewportWidth, timeline.days, timeline.startIso]);
+  const ganttVisibleRangeText = pmGanttVisibleRangeLabel(
+    ganttVisibleRange.startIso,
+    ganttVisibleRange.endIso,
+  );
+  const ganttMaxScroll = Math.max(0, timeline.width - ganttTimelineViewportWidth);
+  const ganttCanPagePrevious = ganttScrollLeft > 1;
+  const ganttCanPageNext = ganttScrollLeft < ganttMaxScroll - 1;
+  const ganttBackToCurrentLabel = t(PM_GANTT_BACK_TO_KEYS[ganttScale]);
+  const ganttVisibleRangeAriaLabel = t("pm.gantt.visibleRange", {
+    start: ganttVisibleRange.startIso,
+    end: ganttVisibleRange.endIso,
+  });
+
   const ganttViewportReferenceIndex =
     timeline.days.length === 0
       ? -1
@@ -2991,32 +3126,12 @@ function PmImplementationGantt({
     ganttViewportReferenceIndex < 0
       ? ganttAnchorIso
       : timeline.days[ganttViewportReferenceIndex].iso;
-  const ganttAnchorLabels = useMemo(() => {
-    const date = new Date(pmGanttTimeOf(ganttViewportReferenceIso));
-    return {
-      year: new Intl.DateTimeFormat(intlLocale, {
-        year: "numeric",
-        timeZone: "UTC",
-      }).format(date),
-      date: new Intl.DateTimeFormat(intlLocale, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        timeZone: "UTC",
-      }).format(date),
-    };
-  }, [ganttViewportReferenceIso, intlLocale]);
   const selectGanttScale = (nextScale: PmGanttScale): void => {
     const referenceIso = ganttViewportReferenceIso;
     setGanttScale(nextScale);
     setGanttAnchorIso(referenceIso);
     setSelectedGanttColumnKey(null);
     requestGanttScroll(referenceIso, "auto");
-  };
-  const shiftGanttAnchor = (direction: -1 | 1): void => {
-    const nextIso = pmGanttShiftByScale(ganttViewportReferenceIso, ganttScale, direction);
-    setGanttAnchorIso(nextIso);
-    requestGanttScroll(nextIso, "auto");
   };
 
   const selectedGanttColumn = useMemo(() => {
@@ -3155,6 +3270,10 @@ function PmImplementationGantt({
       data-project-management-gantt="implementation"
       data-project-management-gantt-scale={ganttScale}
       data-project-management-gantt-ui-scale={ganttMetrics.scale.toFixed(2)}
+      data-project-management-gantt-visible-start={ganttVisibleRange.startIso}
+      data-project-management-gantt-visible-end={ganttVisibleRange.endIso}
+      data-project-management-gantt-timeline-start={timeline.startIso}
+      data-project-management-gantt-timeline-end={timeline.days[timeline.days.length - 1]?.iso ?? timeline.startIso}
       className="min-w-0"
       style={ganttCssVariables}
     >
@@ -3167,27 +3286,72 @@ function PmImplementationGantt({
           padding: `${ganttMetrics.toolbarPaddingY}px ${ganttMetrics.toolbarPaddingX}px`,
         }}
       >
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+          <div
+            role="group"
+            aria-label={ganttVisibleRangeAriaLabel}
+            data-project-management-gantt-window-nav="true"
+            className="flex items-center rounded-lg border border-zinc-200 bg-white p-0.5"
+          >
+            <button
+              type="button"
+              data-project-management-gantt-page-previous="true"
+              aria-label={t("pm.gantt.previousWindow")}
+              title={t("pm.gantt.previousWindow")}
+              disabled={!ganttCanPagePrevious}
+              onClick={() => scrollGanttByPage(-1)}
+              className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
+              style={{ width: ganttMetrics.toolbarControlHeight, height: ganttMetrics.toolbarControlHeight }}
+            >
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+                style={{ width: ganttMetrics.toolbarControlHeight / 2, height: ganttMetrics.toolbarControlHeight / 2 }}
+              >
+                <path d="m10 4-4 4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <span
+              data-project-management-gantt-visible-range="true"
+              aria-live="polite"
+              title={ganttVisibleRangeAriaLabel}
+              className="flex min-w-[132px] items-center justify-center whitespace-nowrap px-2 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium tabular-nums text-zinc-600"
+              style={{ height: ganttMetrics.toolbarControlHeight }}
+            >
+              {ganttVisibleRangeText}
+            </span>
+            <button
+              type="button"
+              data-project-management-gantt-page-next="true"
+              aria-label={t("pm.gantt.nextWindow")}
+              title={t("pm.gantt.nextWindow")}
+              disabled={!ganttCanPageNext}
+              onClick={() => scrollGanttByPage(1)}
+              className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
+              style={{ width: ganttMetrics.toolbarControlHeight, height: ganttMetrics.toolbarControlHeight }}
+            >
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+                style={{ width: ganttMetrics.toolbarControlHeight / 2, height: ganttMetrics.toolbarControlHeight / 2 }}
+              >
+                <path d="m6 4 4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
           <button
             type="button"
-            aria-label={t("pm.gantt.previousPeriod")}
-            title={t("pm.gantt.previousPeriod")}
-            onClick={() => shiftGanttAnchor(-1)}
-            className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-            style={{ width: ganttMetrics.toolbarIconButtonSize, height: ganttMetrics.toolbarIconButtonSize }}
+            data-project-management-gantt-today-button="true"
+            data-project-management-gantt-back-to-current="true"
+            onClick={goToGanttCurrent}
+            className="rounded-md border border-zinc-200 bg-white px-2.5 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium text-zinc-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+            style={{ height: ganttMetrics.toolbarControlHeight }}
           >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden="true"
-              style={{ width: ganttMetrics.toolbarIconButtonSize / 2, height: ganttMetrics.toolbarIconButtonSize / 2 }}
-            >
-              <path d="m7.5 4-4 4 4 4M12.5 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            {ganttBackToCurrentLabel}
           </button>
-          <span className="whitespace-nowrap text-[length:var(--pm-gantt-toolbar-title-size,14px)] font-medium text-zinc-700">
-            {ganttAnchorLabels.year}
-          </span>
+
           <button
             type="button"
             data-project-management-gantt-toggle-all="true"
@@ -3203,57 +3367,6 @@ function PmImplementationGantt({
           </button>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2.5">
-          <span
-            data-project-management-gantt-date-label="true"
-            className="shrink-0 whitespace-nowrap text-[length:var(--pm-gantt-toolbar-control-size,12px)] tabular-nums text-zinc-400"
-          >
-            {ganttAnchorLabels.date}
-          </span>
-          <div className="flex items-center rounded-lg border border-zinc-200 bg-white p-0.5">
-            <button
-              type="button"
-              aria-label={t("pm.gantt.previousPeriod")}
-              title={t("pm.gantt.previousPeriod")}
-              onClick={() => shiftGanttAnchor(-1)}
-              className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-              style={{ width: ganttMetrics.toolbarControlHeight, height: ganttMetrics.toolbarControlHeight }}
-            >
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-                style={{ width: ganttMetrics.toolbarControlHeight / 2, height: ganttMetrics.toolbarControlHeight / 2 }}
-              >
-                <path d="m10 4-4 4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              data-project-management-gantt-today-button="true"
-              onClick={goToGanttToday}
-              className="rounded-md px-2.5 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium text-zinc-700 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-              style={{ height: ganttMetrics.toolbarControlHeight }}
-            >
-              {t("pm.gantt.today")}
-            </button>
-            <button
-              type="button"
-              aria-label={t("pm.gantt.nextPeriod")}
-              title={t("pm.gantt.nextPeriod")}
-              onClick={() => shiftGanttAnchor(1)}
-              className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-              style={{ width: ganttMetrics.toolbarControlHeight, height: ganttMetrics.toolbarControlHeight }}
-            >
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-                style={{ width: ganttMetrics.toolbarControlHeight / 2, height: ganttMetrics.toolbarControlHeight / 2 }}
-              >
-                <path d="m6 4 4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </div>
           <div
             role="group"
             aria-label={t("pm.gantt.scale.aria")}
@@ -3466,7 +3579,7 @@ function PmImplementationGantt({
         fixedHorizontalScrollbar
         ariaLabel={t("pm.gantt.aria")}
         viewportClassName="min-h-0"
-        className="min-w-full pb-3"
+        className={"min-w-full pb-3 " + (ganttPanActive ? "cursor-grabbing select-none" : "cursor-grab")}
       >
         <div className="min-w-max">
           {renderedGroups.map((group) => {

@@ -119,12 +119,12 @@ describe("evaluateEventMessages 事件形态（R02 金标等价 + 冷启动保�
     expect(runtime.skipped).toEqual([]);
   });
 
-  it("project.completed 事件：项目主体命中 R06，产出项目群喜报", () => {
+  it("project.completed 事件：已归档项目命中 R06，产出项目群喜报", () => {
     const project = toProjectSubject({
       projectId: "p-1",
       projectCode: "LBUSA-20261014-002",
       projectName: "美国仓储公司订单",
-      projectStatus: "done",
+      projectStatus: "archived",
       projectVersion: 4,
     });
     const runtime = evaluateEventMessages({ topic: "project.completed", rules: ENABLED_TEST_RULES, subject: project, at: AT });

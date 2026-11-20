@@ -10,7 +10,7 @@
 ## 本切片交付
 
 - **当前启用集（2026-10-20）**：代码默认集仍为 R02 / R03 / R05；R06 已配置为可显式启用，部署示例 `server/.env.example` 置 `AUTOMATION_R06_ENABLED=true`。R04 / R07 / A01 / A02 / A08 / A14 的定义、模板与实现保留但 `enabled: false`，不会产出对应消息。
-- **R06 触发订正（2026-10-20）**：R06 改为 `project.completed` 事件 + 项目主体；只有项目编辑保存 `status=done` 且原状态非 done 时写入事件，不再由 `task.completed` / `project.progress` 触发。
+- **R06 项目完成喜报（2026-11-20）**：已验收归档时在同一事务写入 `project.completed`。规则沿用已有启停设置；迁移 0106 将内置 R06 默认条件切换为已归档。
 
 ### M5-01 内核（Push 161）
 

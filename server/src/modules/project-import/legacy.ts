@@ -139,6 +139,7 @@ export interface LegacyProjectPlacement {
   name: string;
   region: string | null;
   projectType: string | null;
+  projectTypes: string[];
   managerNames: string[];
 }
 
@@ -1165,12 +1166,16 @@ export function convertLegacyWorkbook(workbook: ParsedWorkbook, fileName: string
   }
   const regionHit = REGION_GUESS.find(([key]) => noExt.includes(key));
   const upper = noExt.toUpperCase();
-  const typeHit = TYPE_GUESS.find(([key]) => upper.includes(key));
+  const matches = TYPE_GUESS.map(([key, code]) => ({ code, index: upper.indexOf(key) }))
+    .filter((match) => match.index >= 0)
+    .sort((left, right) => left.index - right.index);
+  const projectTypes = [...new Set(matches.map((match) => match.code))];
   const project: LegacyProjectPlacement = {
     code: code === null || code === "" ? projectName.slice(0, 64) : code,
     name: projectName.slice(0, 200),
     region: regionHit === undefined ? null : regionHit[1],
-    projectType: typeHit === undefined ? null : typeHit[1],
+    projectType: projectTypes[0] ?? null,
+    projectTypes,
     managerNames: majorityManager === null ? [] : [majorityManager],
   };
   if (regionHit === undefined) {

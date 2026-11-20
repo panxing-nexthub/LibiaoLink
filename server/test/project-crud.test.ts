@@ -52,6 +52,8 @@ function projectRow(overrides: Partial<ProjectRow> & { id: string }): ProjectRow
     customer: "XX 客户",
     region: "华东",
     projectType: "分拣",
+    additionalProjectTypes: [],
+    sourceBlueprintType: null,
     managerIds: [UUID_A],
     stageKey: "presale",
     status: "active",
@@ -131,6 +133,7 @@ class FakeProjectRepository {
         name: view.project.name,
         region: view.project.region,
         projectType: view.project.projectType,
+        additionalProjectTypes: view.project.additionalProjectTypes,
         status: view.project.status,
       }));
   }
@@ -177,6 +180,7 @@ class FakeProjectRepository {
       customer: string | null;
       region: string;
       projectType: string;
+      additionalProjectTypes?: string[];
       managerIds: string[];
       stageKey: string;
       description: string | null;
@@ -197,6 +201,7 @@ class FakeProjectRepository {
       customer: input.customer,
       region: input.region,
       projectType: input.projectType,
+      additionalProjectTypes: input.additionalProjectTypes ?? [],
       managerIds: input.managerIds,
       stageKey: input.stageKey,
       status: "active",
@@ -346,7 +351,7 @@ class FakeObjectStorage {
 
 function makeService(
   rows: ProjectRow[] = [],
-  options: { adminIds?: readonly string[]; completionGateError?: AppError } = {},
+  options: { adminIds?: readonly string[] } = {},
 ): {
   service: ProjectService;
   repo: FakeProjectRepository;
@@ -355,7 +360,6 @@ function makeService(
   managerEligibility: FakeProjectManagerEligibilityService;
   members: FakeProjectMemberRepository;
   storage: FakeObjectStorage;
-  outbox: Array<Record<string, unknown>>;
 } {
   const audit = new FakeAuditService();
   const repo = new FakeProjectRepository();
@@ -363,17 +367,9 @@ function makeService(
   const managerEligibility = new FakeProjectManagerEligibilityService();
   const members = new FakeProjectMemberRepository();
   const storage = new FakeObjectStorage();
-  const outbox: Array<Record<string, unknown>> = [];
   repo.rows = rows.map((row) => ({ project: row, managerNames: ["张工"] }));
-  const tx = {
-    insert: (_table: unknown) => ({
-      values: async (value: Record<string, unknown>) => {
-        outbox.push(value);
-      },
-    }),
-  };
   const fakeDb = {
-    db: { transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(tx) },
+    db: { transaction: (callback: (tx: unknown) => Promise<unknown>) => callback({}) },
   };
   const fakeFlow = {
     importSnapshot: (_tx: unknown, input: { requestedStageKey?: string }) =>
@@ -384,9 +380,6 @@ function makeService(
         nodes: 19,
         requirements: 8,
       }),
-    assertProjectCompletionGate: async () => {
-      if (options.completionGateError !== undefined) throw options.completionGateError;
-    },
   };
   return {
     service: new ProjectService(
@@ -405,7 +398,6 @@ function makeService(
     managerEligibility,
     members,
     storage,
-    outbox,
   };
 }
 
@@ -484,6 +476,13 @@ describe("parseProjectSort（白名单 updatedAt / createdAt / seqNo）", () => 
 // ---------- 行 → 契约视图 ----------
 
 describe("toProjectView", () => {
+  it("既有归档视为已验收，显式异常归档保留其类型", () => {
+    const archived = { project: projectRow({ id: UUID_A, status: "archived" }), managerNames: [] };
+    expect(toProjectView(archived).archiveKind).toBe("accepted");
+    expect(toProjectView({ ...archived, archiveKind: "unaccepted", hasOpenPostArchiveTask: true }))
+      .toMatchObject({ status: "archived", archiveKind: "unaccepted", hasOpenPostArchiveTask: true });
+  });
+
   it("camelCase 对齐 + managerNames 随行下发 + ISO 时间 + 回收站字段", () => {
     const view = toProjectView({ project: projectRow({ id: UUID_A, customer: null }), managerNames: [null] });
     expect(view.id).toBe(UUID_A);
@@ -497,6 +496,7 @@ describe("toProjectView", () => {
     expect(view.deletedBy).toBeNull();
     expect(Object.keys(view).sort()).toEqual([
       "accessLevel",
+      "archiveKind",
       "archivedAt",
       "archivedBy",
       "code",
@@ -506,11 +506,13 @@ describe("toProjectView", () => {
       "deletedBy",
       "description",
       "groupAccessLevel",
+      "hasOpenPostArchiveTask",
       "id",
       "managerIds",
       "managerNames",
       "name",
       "projectType",
+      "projectTypes",
       "region",
       "seqNo",
       "stageKey",
@@ -533,6 +535,19 @@ describe("toProjectView", () => {
 // ---------- 用例（M2-01） ----------
 
 describe("ProjectService（M2-01 项目 CRUD + 项目回收站）", () => {
+  it("组合类型保存后可改回单类型，旧客户端仅修改名称时保留组合", async () => {
+    const { service } = makeService();
+    const combo = await service.createProject({
+      code: "MULTI", name: "组合项目", region: "华东", projectType: "未分类",
+      projectTypes: ["T-sort", "飞箱"], managerIds: [UUID_A],
+    }, UUID_A);
+    expect(combo).toMatchObject({ projectType: "T-sort", projectTypes: ["T-sort", "飞箱"] });
+    const renamed = await service.updateProject(combo.id, { name: "新名称", version: combo.version }, UUID_A);
+    expect(renamed.projectTypes).toEqual(["T-sort", "飞箱"]);
+    const single = await service.updateProject(combo.id, { projectTypes: ["飞箱"], version: renamed.version }, UUID_A);
+    expect(single).toMatchObject({ projectType: "飞箱", projectTypes: ["飞箱"] });
+  });
+
   it("创建：缺省 stageKey = presale；seq_no 由仓储分配；返回随行 managerNames", async () => {
     const { service, repo } = makeService();
     const created = await service.createProject(
@@ -654,6 +669,7 @@ describe("ProjectService（M2-01 项目 CRUD + 项目回收站）", () => {
       "id",
       "name",
       "projectType",
+      "projectTypes",
       "region",
       "status",
     ]);
@@ -724,47 +740,6 @@ describe("ProjectService（M2-01 项目 CRUD + 项目回收站）", () => {
     expect(updated.name).toBe("改名");
     expect(updated.version).toBe(4);
     expect(updated.managerNames).toEqual(["张工"]);
-  });
-
-  it("更新为已完成：仅首次进入 done 写 project.completed；保持 done 不重复触发", async () => {
-    const { service, outbox } = makeService([projectRow({ id: UUID_A, version: 3, status: "active" })]);
-
-    const updated = await service.updateProject(UUID_A, { status: "done", version: 3 }, UUID_B);
-    expect(updated.status).toBe("done");
-    expect(outbox).toHaveLength(1);
-    expect(outbox[0]).toEqual({
-      topic: "project.completed",
-      dedupeKey: "project.completed:" + UUID_A + ":4",
-      payload: {
-        projectId: UUID_A,
-        status: "done",
-        previousStatus: "active",
-        version: 4,
-        actorId: UUID_B,
-        at: expect.any(String),
-      },
-      status: "pending",
-    });
-
-    await service.updateProject(UUID_A, { status: "done", version: 4 }, UUID_B);
-    expect(outbox).toHaveLength(1);
-  });
-
-  it("更新为已完成：完成门禁缺交付文件 → 422，项目状态与 outbox 均不写", async () => {
-    const { service, outbox } = makeService(
-      [projectRow({ id: UUID_A, version: 3, status: "active" })],
-      {
-        completionGateError: new AppError(
-          "TASK_REQUIRED_DOC_MISSING",
-          "项目无法标记为已完成 —— 有 1 项已配置成果文件尚未上传：「机械设计」CAD图纸",
-        ),
-      },
-    );
-    await expectAppErrorAsync(
-      () => service.updateProject(UUID_A, { status: "done", version: 3 }, UUID_B),
-      "TASK_REQUIRED_DOC_MISSING",
-    );
-    expect(outbox).toHaveLength(0);
   });
 
   it("更新：version 不匹配 409 VERSION_CONFLICT；期间被删则 404", async () => {

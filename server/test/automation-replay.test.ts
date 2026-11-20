@@ -193,7 +193,7 @@ describe("R05 任务超时提醒（T+1 · 负责人 + 项目经理单聊）", ()
 });
 
 describe("R06 项目完成喜报", () => {
-  function project(status = "done") {
+  function project(status = "archived") {
     return toProjectSubject({
       projectId: "p-1",
       projectCode: "LBUSA-20261014-002",

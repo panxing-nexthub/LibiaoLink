@@ -319,6 +319,7 @@ function createHarness() {
         name: input.name as string,
         region: input.region as string,
         projectType: input.projectType as string,
+        additionalProjectTypes: input.additionalProjectTypes as string[],
         managerIds: input.managerIds as string[],
         stageKey: input.stageKey as string,
       };
@@ -849,6 +850,15 @@ describe("ProjectImportService.preview（导入表解析预览）", () => {
     ]);
   });
 
+  it("组合类型按文件名顺序识别，重复别名只记一次", async () => {
+    const h = createHarness();
+    const preview = await h.service.preview({
+      bytes: sampleWorkbook(), fileName: "[TEST] UK-T-SORT-飞箱-AIRROB.xlsx", actorId: ACTOR_ID, locale: "zh",
+    });
+    expect(preview.project.projectTypes).toEqual(["T-sort", "飞箱"]);
+    expect(preview.project.projectType).toBe("T-sort");
+  });
+
   it("解析口径：条数 / 落位 / 节点匹配 / 账号 / 手动清单 / 提醒", async () => {
     const h = createHarness();
     const preview = await runPreview(h);
@@ -859,6 +869,7 @@ describe("ProjectImportService.preview（导入表解析预览）", () => {
       name: "UK-VANILLA-AIRROB",
       region: "英国",
       projectType: "飞箱",
+      projectTypes: ["飞箱"],
       managerNames: ["贾海洋"],
     });
     expect(preview.file.name).toBe("[LBGW-20260331-1459] UK-VANILLA-AIRROB.xlsx");

@@ -74,6 +74,7 @@ export type ProjectImportPreview = {
     name: string;
     region: string | null;
     projectType: string | null;
+    projectTypes?: string[];
     managerNames: string[];
   };
   counts: {
@@ -103,6 +104,7 @@ export type ProjectImportCommitInput = {
   region: string;
   /** 项目类型（字典 projectType 的码）；空串 = 未指定（解析按源表关键字给默认，如 AIRROB → 飞箱）。 */
   projectType: string;
+  projectTypes?: string[];
   /** 兼容旧服务端，明确关闭节点补库。 */
   addMissingNodes?: false;
   nodeDecisions?: Array<{ groupIndex: number; action: "existing" | "standalone"; nodeId: string | null }>;

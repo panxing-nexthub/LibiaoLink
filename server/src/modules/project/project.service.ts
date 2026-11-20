@@ -59,6 +59,7 @@ export function toProjectView(
     name: row.name,
     customer: row.customer,
     region: row.region,
+    projectTypes: [row.projectType, ...row.additionalProjectTypes],
     projectType: row.projectType,
     managerIds: row.managerIds,
     managerNames: view.managerNames ?? row.managerIds.map(() => null),
@@ -86,7 +87,7 @@ function projectAuditSnapshot(row: ProjectRow): Record<string, unknown> {
     name: row.name,
     customer: row.customer,
     region: row.region,
-    projectType: row.projectType,
+    projectTypes: [row.projectType, ...row.additionalProjectTypes],
     managerIds: row.managerIds,
     stageKey: row.stageKey,
     status: row.status,
@@ -142,6 +143,7 @@ export class ProjectService {
         name: row.name,
         region: row.region,
         projectType: row.projectType,
+        projectTypes: [row.projectType, ...row.additionalProjectTypes],
         status: row.status as ProjectView["status"],
         accessLevel: visibleIds === null || visibleIds.has(row.id) ? levels.get(row.id) ?? "view" : null,
       })),
@@ -186,7 +188,7 @@ export class ProjectService {
   /**
    * 创建（M2-01 + M2-02 导入快照 · 单事务）：
    * 1) code 唯一由数据库唯一约束兜底（23505 → 409）、seq_no 由序列分配；
-   * 2) 取该项目类型已发布蓝图（缺失回落 default 模板；可显式指定 blueprintVersion）→ 生成 stages / nodes / requirements；
+   * 2) 组合类型使用通用蓝图，单类型取对应已发布蓝图（缺失回落 default；可显式指定 blueprintVersion）→ 生成 stages / nodes / requirements；
    * 3) projects.stage_key 前移到蓝图首个阶段（或入参 stageKey 指定阶段）——任一步失败整体回滚。
    */
   async createProject(body: ProjectCreateBody, actorId: string): Promise<ProjectView> {
@@ -209,7 +211,8 @@ export class ProjectService {
       name: body.name,
       customer: body.customer ?? null,
       region: body.region,
-      projectType: body.projectType,
+      projectType: body.projectTypes?.[0] ?? body.projectType,
+      additionalProjectTypes: body.projectTypes?.slice(1) ?? [],
       managerIds,
       stageKey: body.stageKey ?? DEFAULT_STAGE_KEY,
       description: body.description ?? null,
@@ -223,6 +226,7 @@ export class ProjectService {
         projectId: row.id,
         projectType: row.projectType,
         requestedStageKey: body.stageKey,
+        additionalProjectTypes: row.additionalProjectTypes,
         requestedBlueprintVersion: body.blueprintVersion,
         at,
       });
@@ -241,7 +245,7 @@ export class ProjectService {
           { field: "name", from: null, to: row.name },
           { field: "customer", from: null, to: row.customer },
           { field: "region", from: null, to: row.region },
-          { field: "projectType", from: null, to: row.projectType },
+          { field: "projectTypes", from: null, to: [row.projectType, ...row.additionalProjectTypes] },
           { field: "managerIds", from: null, to: row.managerIds },
           { field: "stageKey", from: null, to: imported.activeStageKey },
         ],
@@ -270,7 +274,16 @@ export class ProjectService {
     if (body.name !== undefined) patch.name = body.name;
     if (body.customer !== undefined) patch.customer = body.customer;
     if (body.region !== undefined) patch.region = body.region;
-    if (body.projectType !== undefined) patch.projectType = body.projectType;
+    if (body.projectTypes !== undefined) {
+      patch.projectType = body.projectTypes[0];
+      patch.additionalProjectTypes = body.projectTypes.slice(1);
+    } else if (body.projectType !== undefined && body.projectType !== current.project.projectType) {
+      patch.projectType = body.projectType;
+      patch.additionalProjectTypes = current.project.additionalProjectTypes.filter((code) => code !== body.projectType);
+    }
+    if (current.project.sourceBlueprintType === null && patch.projectType !== undefined && patch.projectType !== current.project.projectType) {
+      patch.sourceBlueprintType = current.project.projectType;
+    }
     if (body.managerIds !== undefined) {
       const eligibleManagerIds = await this.managerEligibility.eligibleUserIds();
       const roster = await this.members.listByProject(id);

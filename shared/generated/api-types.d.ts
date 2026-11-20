@@ -13256,6 +13256,8 @@ export interface components {
             region: string | null;
             /** @description 识别出的项目类型（字典码：AIRROB → 飞箱）；识别不出 = null（可留空） */
             projectType: string | null;
+            /** @description 文件名中识别的全部类型，按首次出现顺序排列 */
+            projectTypes: string[];
             /** @description 源表项目经理原文（按全表多数口径补） */
             managerNames: string[];
         };
@@ -13984,6 +13986,8 @@ export interface components {
             customer: string | null;
             /** @description 项目落地地区（字典 region；缺省「未分类」） */
             region: string;
+            /** @description 按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。 */
+            projectTypes: string[];
             /** @description 项目类型（字典 project_type；主题色随字典元数据下发，前端不硬编码） */
             projectType: string;
             /** @description 项目经理（A22 · Push 136：一位也可、可多位）：至少一位、数组顺序 = 展示顺序（前端按「、」连接展示）；与 managerNames 同下标一一对应 */
@@ -14128,6 +14132,8 @@ export interface components {
              * @default 未分类
              */
             region: string;
+            /** @description 按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。 */
+            projectTypes?: string[];
             /**
              * @description 项目类型（字典 project_type）；未填写归入「未分类」（A1-12 定档）
              * @default 未分类
@@ -14214,6 +14220,8 @@ export interface components {
             previewId: components["schemas"]["Uuid"];
             /** @description 项目地区（region 字典的码 / 标准国家名；必填） */
             region: string;
+            /** @description 按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。 */
+            projectTypes?: string[];
             /**
              * @description 项目类型（projectType 字典的码）；空串 = 未指定（解析按源表关键字给默认，如 AIRROB → 飞箱）
              * @default
@@ -14477,6 +14485,8 @@ export interface components {
             name: string;
             /** @description 项目落地地区（字典 region） */
             region: string;
+            /** @description 按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。 */
+            projectTypes: string[];
             /** @description 项目类型（字典 project_type） */
             projectType: string;
             status: components["schemas"]["ProjectStatus"];
@@ -14603,6 +14613,8 @@ export interface components {
             name?: string;
             customer?: string | null;
             region?: string;
+            /** @description 按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。 */
+            projectTypes?: string[];
             projectType?: string;
             /** @description 项目经理（A22 · Push 136）：至少一位、可多位（≤ 200 位）；不传 = 不改、传空数组或超过上限 = 400；数组顺序 = 展示顺序 */
             managerIds?: components["schemas"]["Uuid"][];

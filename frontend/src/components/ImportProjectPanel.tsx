@@ -296,7 +296,7 @@ export function ImportProjectPanel({ file, dicts, dictTools, canManageDicts, onR
   /** 项目地区：解析给默认（标准国家 / 地区名）；识别不出 = 空串，必须由用户在面板里选。 */
   const [region, setRegion] = useState("");
   /** 项目类型：解析按源表关键字给默认（如 AIRROB → 飞箱）；空串 = 未指定（可留空，导入后也能改）。 */
-  const [projectType, setProjectType] = useState("");
+  const [projectTypes, setProjectTypes] = useState<string[]>([]);
   const [nodeChoices, setNodeChoices] = useState<Record<number, string>>({});
   const [personalTemplateChoices, setPersonalTemplateChoices] = useState<Record<number, string>>({});
   /**
@@ -338,7 +338,7 @@ export function ImportProjectPanel({ file, dicts, dictTools, canManageDicts, onR
     setRegionPopoverOpen(false);
     if (mainChanged) {
       setRegion("");
-      setProjectType("");
+      setProjectTypes([]);
       setNodeChoices({});
       setPersonalTemplateChoices({});
       setNodeRequestChoices({});
@@ -361,7 +361,8 @@ export function ImportProjectPanel({ file, dicts, dictTools, canManageDicts, onR
           return;
         }
         setRegion((current) => (current !== "" ? current : (preview.project.region ?? "")));
-        setProjectType((current) => (current !== "" ? current : (preview.project.projectType ?? "")));
+        const detectedTypes = preview.project.projectTypes ?? (preview.project.projectType ? [preview.project.projectType] : []);
+        setProjectTypes((current) => current.length ? current : detectedTypes);
         setPhase({ kind: "preview", preview });
       })
       .catch((error: unknown) => {
@@ -483,7 +484,11 @@ export function ImportProjectPanel({ file, dicts, dictTools, canManageDicts, onR
     setPhase({ kind: "committing", preview });
     commitProjectImport(
       {
-        previewId: preview.previewId, region, projectType, addMissingNodes: false,
+        previewId: preview.previewId,
+        region,
+        projectType: projectTypes[0] ?? "",
+        projectTypes: projectTypes.length ? projectTypes : ["未分类"],
+        addMissingNodes: false,
         nodeDecisions: preview.nodes.filter((node) => node.inStageScope).map((node) => {
           const choice = nodeChoice(node);
           return {
@@ -960,7 +965,7 @@ export function ImportProjectPanel({ file, dicts, dictTools, canManageDicts, onR
                 </div>
                 <div className="mt-1 flex gap-2">
                   <dt className="text-zinc-400">{t("import.field.type")}</dt>
-                  <dd className="text-zinc-800">{projectType === "" ? t("import.value.none") : dictLabel(dicts, "projectType", projectType)}</dd>
+                  <dd className="text-zinc-800">{projectTypes.length === 0 ? t("import.value.none") : projectTypes.map((code) => projectTypeText(locale, dictLabel(dicts, "projectType", code))).join(" + ")}</dd>
                 </div>
               </dl>
             </div>
@@ -1047,10 +1052,10 @@ export function ImportProjectPanel({ file, dicts, dictTools, canManageDicts, onR
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-zinc-400">{t("import.field.type")}</dt>
+                      <dt className="text-xs text-zinc-400">{t("modal.type.field")}</dt>
                       <dd className="mt-1">
                         <DictSelect
-                          value={projectType}
+                          values={projectTypes}
                           items={dicts.projectType}
                           ariaLabel={t("import.field.type")}
                           placeholder={t("import.type.placeholder")}
@@ -1073,7 +1078,7 @@ export function ImportProjectPanel({ file, dicts, dictTools, canManageDicts, onR
                             label: fieldText(locale, "颜色模板"),
                             options: DICT_ACCENT_PALETTE,
                           }}
-                          onChange={setProjectType}
+                          onChange={setProjectTypes}
                         />
                       </dd>
                     </div>

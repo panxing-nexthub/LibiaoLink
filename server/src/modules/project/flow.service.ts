@@ -7,7 +7,7 @@ import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { appendOutbox } from "../../db/outbox.js";
 import { AuditService } from "../admin/index.js";
-import { BlueprintService } from "../blueprint/index.js";
+import { BlueprintService, DEFAULT_BLUEPRINT_PROJECT_TYPE } from "../blueprint/index.js";
 import {
   GateService,
   type StageGateMissingItem,
@@ -48,21 +48,22 @@ export class FlowService {
   ) {}
 
   /**
-   * 建项目导入快照（M2-02）：取该项目类型已发布蓝图（缺失回落 default 模板）→ 生成 stages / nodes / requirements，
+   * 建项目导入快照（M2-02）：组合类型取通用蓝图，单类型先取对应蓝图、缺失时回落通用模板→ 生成 stages / nodes / requirements，
    * 首个阶段置 active 并把 projects.stage_key 前移到它；全部在同一事务内（调用方传入 tx）。
    */
   async importSnapshot(
     tx: DbClient,
-    input: { projectId: string; projectType: string; requestedStageKey?: string; requestedBlueprintVersion?: number; at: Date },
+    input: { projectId: string; projectType: string; additionalProjectTypes?: readonly string[]; requestedStageKey?: string; requestedBlueprintVersion?: number; at: Date },
   ): Promise<{ activeStageKey: StageKey; blueprintVersion: number; stages: number; nodes: number; requirements: number }> {
+    const templateType = input.additionalProjectTypes?.length ? DEFAULT_BLUEPRINT_PROJECT_TYPE : input.projectType;
     const snapshot =
       input.requestedBlueprintVersion === undefined
-        ? await this.blueprints.getPublishedForProject(input.projectType)
-        : await this.blueprints.getVersionForProject(input.projectType, input.requestedBlueprintVersion);
+        ? await this.blueprints.getPublishedForProject(templateType)
+        : await this.blueprints.getVersionForProject(templateType, input.requestedBlueprintVersion);
     if (snapshot === null) {
       throw new AppError(
         "BLUEPRINT_NOT_PUBLISHED",
-        "项目类型 [" + input.projectType + "] 与 default 模板都没有已发布蓝图，无法导入流程节点",
+        "没有可用的已发布流程模板：" + templateType,
       );
     }
     const ordered = [...snapshot.payload.stages].sort((left, right) => left.seq - right.seq);
@@ -79,6 +80,7 @@ export class FlowService {
     const counts = await this.flow.importSnapshot(tx, {
       projectId: input.projectId,
       blueprintVersion: snapshot.version,
+      sourceBlueprintType: snapshot.projectType,
       activeStageKey,
       stages: ordered,
       at: input.at,
@@ -172,7 +174,7 @@ export class FlowService {
     if (blueprintVersion === 0) {
       throw new AppError("BLUEPRINT_NOT_PUBLISHED", "项目尚未导入蓝图（h3 之前建的项目不支持增补节点）");
     }
-    const template = await this.blueprints.findNodeTemplate(view.project.projectType, blueprintVersion, body.nodeKey);
+    const template = await this.blueprints.findNodeTemplate(view.project.sourceBlueprintType ?? view.project.projectType, blueprintVersion, body.nodeKey);
     if (template === null) {
       throw new AppError("BLUEPRINT_REF_UNKNOWN", "nodeKey 不在项目导入版本的模板节点池：" + body.nodeKey);
     }

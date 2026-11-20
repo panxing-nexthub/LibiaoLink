@@ -898,7 +898,7 @@ export function FileLibraryPage({ me, query, onChangeQuery, directory, dicts }: 
                           tint={cardTintOf(backgroundTier, accent.color)}
                           tintBorder={cardBorderOf(backgroundTier, accent.color)}
                           vividInk={backgroundTier === "vivid"}
-                          typeLabel={projectTypeText(locale, dictLabel(dicts, "projectType", project.projectType))}
+                          typeLabel={(project.projectTypes ?? [project.projectType]).map((code) => projectTypeText(locale, dictLabel(dicts, "projectType", code))).join(" + ")}
                           status={project.status}
                           hasOpenPostArchiveTask={project.hasOpenPostArchiveTask}
                           archiveKind={project.archiveKind}

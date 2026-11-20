@@ -26,6 +26,8 @@ export const projects = pgTable(
     customer: text("customer"),
     region: text("region").notNull(),
     projectType: text("project_type").notNull(),
+    sourceBlueprintType: text("source_blueprint_type"),
+    additionalProjectTypes: text("additional_project_types").array().notNull().default(sql`'{}'::text[]`),
     /** 项目经理（A22 · Push 136）：至少一位、可多位；数组顺序 = 展示顺序（`ck_projects_manager_ids` 判非空）。 */
     managerIds: uuid("manager_ids").array().notNull(),
     stageKey: text("stage_key").notNull(),

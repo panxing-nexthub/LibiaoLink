@@ -56,7 +56,7 @@ export function matchesCriteria(project: Project, criteria: FilterCriteria): boo
   if (criteria.managerIds.length > 0 && !project.managerIds.some((managerId) => criteria.managerIds.includes(managerId))) {
     return false;
   }
-  if (criteria.projectTypes.length > 0 && !criteria.projectTypes.includes(project.projectType)) {
+  if (criteria.projectTypes.length > 0 && !project.projectTypes.some((code) => criteria.projectTypes.includes(code))) {
     return false;
   }
   if (criteria.timeFrom !== null && criteria.timeTo !== null) {

@@ -26,7 +26,7 @@ export type SelectOption = {
 
 type OptionListProps = {
   options: SelectOption[];
-  value: string;
+  value: string | readonly string[];
   onPick: (value: string) => void;
   ariaLabel: string;
   /**
@@ -50,20 +50,21 @@ function TrashIcon() {
   );
 }
 
-/** 选项列表（单选 + 勾选态）：普通下拉、任务表行内编辑与字典下拉共用；可选「行内删除」。 */
+/** 选项列表（单选或多选）：普通下拉、任务表行内编辑与字典下拉共用；可选「行内删除」。 */
 export function OptionList({ options, value, onPick, ariaLabel, onDeleteOption, deleteLabelOf }: OptionListProps) {
   const t = useT();
-  const [activeIndex, setActiveIndex] = useState(() => Math.max(0, options.findIndex((option) => option.value === value)));
+  const isSelected = (code: string) => typeof value === "string" ? value === code : value.includes(code);
+  const [activeIndex, setActiveIndex] = useState(() => Math.max(0, options.findIndex((option) => isSelected(option.value))));
 
   return (
-    <div role="listbox" aria-label={ariaLabel} className="p-1">
+    <div role="listbox" aria-multiselectable={typeof value !== "string" || undefined} aria-label={ariaLabel} className="p-1">
       {options.map((option, index) => {
         const row = (
           <button
             key={option.value}
             type="button"
             role="option"
-            aria-selected={option.value === value}
+            aria-selected={isSelected(option.value)}
             onMouseEnter={() => {
               setActiveIndex(index);
             }}
@@ -77,7 +78,7 @@ export function OptionList({ options, value, onPick, ariaLabel, onDeleteOption, 
             }
           >
             {option.label}
-            {option.value === value ? (
+            {isSelected(option.value) ? (
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-600">
                 <path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>

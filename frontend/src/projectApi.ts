@@ -20,6 +20,7 @@ export type ApiProject = {
   customer: string | null;
   region: string;
   projectType: string;
+  projectTypes?: string[];
   managerIds: string[];
   managerNames: Array<string | null>;
   stageKey: string;
@@ -49,6 +50,7 @@ export type ProjectMapOverviewItem = {
   name: string;
   region: string;
   projectType: string;
+  projectTypes?: string[];
   status: ProjectStatusValue;
   accessLevel: "edit" | "view" | null;
 };
@@ -150,18 +152,18 @@ export type ProjectWriteInput = {
   code: string;
   name: string;
   region: string;
-  projectType: string;
+  projectTypes: string[];
   managerIds: string[];
   /** 备注（契约 description）：undefined = 不发送；空串 = 新建留空不发送 / 编辑发 null 清空。 */
   remark?: string;
 };
 
 export function createProject(input: ProjectWriteInput): Promise<ApiProject> {
-  const body: { code: string; name: string; region: string; projectType: string; managerIds: string[]; description?: string } = {
+  const body: { code: string; name: string; region: string; projectTypes: string[]; managerIds: string[]; description?: string } = {
     code: input.code,
     name: input.name,
     region: input.region,
-    projectType: input.projectType,
+    projectTypes: input.projectTypes,
     managerIds: input.managerIds,
   };
   // 备注（Push 280）：新建留空不发送（契约 description 可选）；有值才带上。
@@ -179,7 +181,7 @@ export function updateProject(id: string, input: ProjectWriteInput, version: num
     code: string;
     name: string;
     region: string;
-    projectType: string;
+    projectTypes: string[];
     managerIds: string[];
     version: number;
     status?: ProjectStatusPatch;
@@ -188,7 +190,7 @@ export function updateProject(id: string, input: ProjectWriteInput, version: num
     code: input.code,
     name: input.name,
     region: input.region,
-    projectType: input.projectType,
+    projectTypes: input.projectTypes,
     managerIds: input.managerIds,
     version,
   };
@@ -289,6 +291,7 @@ export function toUiProject(view: ApiProject): Project {
     remark: view.description ?? "",
     region: view.region,
     projectType: view.projectType,
+    projectTypes: view.projectTypes ?? [view.projectType],
     createdAt: formatDateTime(view.createdAt),
     updatedAt: formatDateTime(view.updatedAt),
     managerIds: view.managerIds,

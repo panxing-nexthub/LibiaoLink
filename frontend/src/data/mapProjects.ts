@@ -293,7 +293,7 @@ export function buildMapDistribution(projects: readonly ProjectMapOverviewItem[]
         status: status,
         statusText: MAP_PROJECT_STATUS_TEXT[status],
         projectType: project.projectType,
-        projectTypeName: dictLabel(dicts, "projectType", project.projectType),
+        projectTypeName: (project.projectTypes ?? [project.projectType]).map((code) => dictLabel(dicts, "projectType", code)).join(" + "),
         accent: accent.color,
         accessLevel: project.accessLevel,
       };

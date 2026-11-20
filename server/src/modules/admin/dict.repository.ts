@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, count, eq, isNull } from "drizzle-orm";
+import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { dictItems, dictTypes } from "../../db/schema/admin.js";
@@ -99,11 +99,12 @@ export class DictRepository {
 
   /**
    * 条目的项目引用计数（A3 删除守卫 · Push 174）：每个字典码 → **未删除项目**数。
-   * 维度：region → projects.region、projectType → projects.project_type；其余字典类型不参与（返回空表 = 恒 0）。
+   * 维度：region → projects.region、projectType → 项目的全部类型；其余字典类型不参与（返回空表 = 恒 0）。
    * 口径：只数 deleted_at is null 的项目（软删项目不在卡片里；归档项目仍占卡片，照数）。
    */
   async usageCounts(type: string, client: DbClient = this.database.db): Promise<Map<string, number>> {
-    const column = type === "region" ? projects.region : type === "projectType" ? projects.projectType : null;
+    const column = type === "region" ? projects.region : type === "projectType"
+      ? sql<string>`unnest(array_prepend(${projects.projectType}, ${projects.additionalProjectTypes}))` : null;
     if (column === null) {
       return new Map();
     }

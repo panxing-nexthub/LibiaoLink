@@ -1266,7 +1266,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "modal.name.field": "プロジェクト名",
   "modal.note.field": "メモ",
   "modal.province": "地域",
-  "modal.type.field": "プロジェクト種別",
+  "modal.type.field": "プロジェクト種別（複数選択可）",
   "modal.status.field": "プロジェクトステータス",
   "ws.tabs.aria": "ワークスペースタブ",
   "ws.openProject": "プロジェクトを開く",

@@ -69,6 +69,7 @@ export interface WorkspaceProjectRow {
   customer: string | null;
   region: string;
   projectType: string;
+  additionalProjectTypes: string[];
   managerIds: string[];
   managerNames: (string | null)[] | null;
   stageKey: string;
@@ -300,6 +301,7 @@ export class WorkspaceRepository {
         customer: projects.customer,
         region: projects.region,
         projectType: projects.projectType,
+        additionalProjectTypes: projects.additionalProjectTypes,
         managerIds: projects.managerIds,
         managerNames: MANAGER_NAMES_SQL,
         stageKey: projects.stageKey,

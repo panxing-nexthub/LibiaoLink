@@ -204,14 +204,15 @@ function errorMessageOf(error: unknown, fallback: string): string {
  */
 function projectFieldsChanged(
   project: Project,
-  fields: { code: string; name: string; region: string; projectType: string; managerIds: string[]; remark: string },
+  fields: { code: string; name: string; region: string; projectTypes: string[]; managerIds: string[]; remark: string },
 ): boolean {
   if (
     fields.code !== project.code ||
     fields.name !== project.description ||
     fields.remark !== project.remark ||
     fields.region !== project.region ||
-    fields.projectType !== project.projectType
+    fields.projectTypes.length !== project.projectTypes.length ||
+    fields.projectTypes.some((code, index) => code !== project.projectTypes[index])
   ) {
     return true;
   }
@@ -479,7 +480,7 @@ export default function App() {
         code: draft.code.trim(),
         name: draft.description.trim(),
         region: draft.region,
-        projectType: draft.projectType,
+        projectTypes: draft.projectTypes,
         managerIds: draft.managerIds,
         remark: draft.note.trim(),
       });
@@ -699,7 +700,7 @@ export default function App() {
       code: draft.code.trim(),
       name: draft.description.trim(),
       region: draft.region,
-      projectType: draft.projectType,
+      projectTypes: draft.projectTypes,
       managerIds: draft.managerIds,
       remark: draft.note.trim(),
     };
@@ -738,7 +739,7 @@ export default function App() {
       if (error instanceof ApiError && error.code === "VERSION_CONFLICT") {
         try {
           const latest = toUiProject(await fetchProject(project.id));
-          return { kind: "conflict", version: latest.version, latest: { code: latest.code, description: latest.description, note: latest.remark, managerIds: latest.managerIds, projectType: latest.projectType, region: latest.region, status: latest.status } };
+          return { kind: "conflict", version: latest.version, latest: { code: latest.code, description: latest.description, note: latest.remark, managerIds: latest.managerIds, projectTypes: latest.projectTypes, region: latest.region, status: latest.status } };
         } catch {
           return { kind: "error", message: t("app.err.projectGone") };
         }
@@ -918,7 +919,7 @@ export default function App() {
           description: editingProject.description,
           note: editingProject.remark,
           managerIds: editingProject.managerIds,
-          projectType: editingProject.projectType,
+          projectTypes: editingProject.projectTypes,
           region: editingProject.region,
           status: editingProject.status,
         }}

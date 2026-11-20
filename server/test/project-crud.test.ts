@@ -52,6 +52,8 @@ function projectRow(overrides: Partial<ProjectRow> & { id: string }): ProjectRow
     customer: "XX 客户",
     region: "华东",
     projectType: "分拣",
+    additionalProjectTypes: [],
+    sourceBlueprintType: null,
     managerIds: [UUID_A],
     stageKey: "presale",
     status: "active",
@@ -131,6 +133,7 @@ class FakeProjectRepository {
         name: view.project.name,
         region: view.project.region,
         projectType: view.project.projectType,
+        additionalProjectTypes: view.project.additionalProjectTypes,
         status: view.project.status,
       }));
   }
@@ -177,6 +180,7 @@ class FakeProjectRepository {
       customer: string | null;
       region: string;
       projectType: string;
+      additionalProjectTypes?: string[];
       managerIds: string[];
       stageKey: string;
       description: string | null;
@@ -197,6 +201,7 @@ class FakeProjectRepository {
       customer: input.customer,
       region: input.region,
       projectType: input.projectType,
+      additionalProjectTypes: input.additionalProjectTypes ?? [],
       managerIds: input.managerIds,
       stageKey: input.stageKey,
       status: "active",
@@ -507,6 +512,7 @@ describe("toProjectView", () => {
       "managerNames",
       "name",
       "projectType",
+      "projectTypes",
       "region",
       "seqNo",
       "stageKey",
@@ -529,6 +535,19 @@ describe("toProjectView", () => {
 // ---------- 用例（M2-01） ----------
 
 describe("ProjectService（M2-01 项目 CRUD + 项目回收站）", () => {
+  it("组合类型保存后可改回单类型，旧客户端仅修改名称时保留组合", async () => {
+    const { service } = makeService();
+    const combo = await service.createProject({
+      code: "MULTI", name: "组合项目", region: "华东", projectType: "未分类",
+      projectTypes: ["T-sort", "飞箱"], managerIds: [UUID_A],
+    }, UUID_A);
+    expect(combo).toMatchObject({ projectType: "T-sort", projectTypes: ["T-sort", "飞箱"] });
+    const renamed = await service.updateProject(combo.id, { name: "新名称", version: combo.version }, UUID_A);
+    expect(renamed.projectTypes).toEqual(["T-sort", "飞箱"]);
+    const single = await service.updateProject(combo.id, { projectTypes: ["飞箱"], version: renamed.version }, UUID_A);
+    expect(single).toMatchObject({ projectType: "飞箱", projectTypes: ["飞箱"] });
+  });
+
   it("创建：缺省 stageKey = presale；seq_no 由仓储分配；返回随行 managerNames", async () => {
     const { service, repo } = makeService();
     const created = await service.createProject(
@@ -650,6 +669,7 @@ describe("ProjectService（M2-01 项目 CRUD + 项目回收站）", () => {
       "id",
       "name",
       "projectType",
+      "projectTypes",
       "region",
       "status",
     ]);

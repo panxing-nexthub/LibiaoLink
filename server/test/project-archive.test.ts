@@ -34,6 +34,8 @@ function projectRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
     customer: null,
     region: "华东",
     projectType: "分拣",
+    additionalProjectTypes: [],
+    sourceBlueprintType: null,
     managerIds: [ACTOR],
     stageKey: "acceptance",
     status: "active",

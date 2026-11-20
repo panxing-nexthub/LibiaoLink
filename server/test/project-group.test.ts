@@ -42,6 +42,8 @@ function projectRow(overrides: Partial<ProjectRow> & { id: string }): ProjectRow
     customer: "XX 客户",
     region: "华东",
     projectType: "分拣",
+    additionalProjectTypes: [],
+    sourceBlueprintType: null,
     managerIds: [UUID_A],
     stageKey: "presale",
     status: "active",

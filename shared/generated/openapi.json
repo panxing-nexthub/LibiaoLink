@@ -6171,6 +6171,13 @@
             "maxLength": 64,
             "description": "识别出的项目类型（字典码：AIRROB → 飞箱）；识别不出 = null（可留空）"
           },
+          "projectTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "文件名中识别的全部类型，按首次出现顺序排列"
+          },
           "managerNames": {
             "type": "array",
             "items": {
@@ -6186,6 +6193,7 @@
           "name",
           "region",
           "projectType",
+          "projectTypes",
           "managerNames"
         ],
         "description": "项目落位（面板左栏「项目落位」块）"
@@ -8848,6 +8856,17 @@
             "type": "string",
             "description": "项目落地地区（字典 region；缺省「未分类」）"
           },
+          "projectTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。"
+          },
           "projectType": {
             "type": "string",
             "description": "项目类型（字典 project_type；主题色随字典元数据下发，前端不硬编码）"
@@ -8984,6 +9003,7 @@
           "name",
           "customer",
           "region",
+          "projectTypes",
           "projectType",
           "managerIds",
           "managerNames",
@@ -9430,6 +9450,17 @@
             "default": "未分类",
             "description": "项目落地地区（字典 region）；未填写归入「未分类」（A1-12 定档）"
           },
+          "projectTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。"
+          },
           "projectType": {
             "type": "string",
             "minLength": 1,
@@ -9705,6 +9736,17 @@
             "minLength": 1,
             "maxLength": 64,
             "description": "项目地区（region 字典的码 / 标准国家名；必填）"
+          },
+          "projectTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。"
           },
           "projectType": {
             "type": "string",
@@ -10672,6 +10714,17 @@
             "type": "string",
             "description": "项目落地地区（字典 region）"
           },
+          "projectTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。"
+          },
           "projectType": {
             "type": "string",
             "description": "项目类型（字典 project_type）"
@@ -10699,6 +10752,7 @@
           "code",
           "name",
           "region",
+          "projectTypes",
           "projectType",
           "status",
           "accessLevel"
@@ -11308,6 +11362,17 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 100
+          },
+          "projectTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。"
           },
           "projectType": {
             "type": "string",

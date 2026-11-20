@@ -133,6 +133,7 @@ function makeProject(overrides: Partial<WorkspaceProjectRow> = {}): WorkspacePro
     customer: null,
     region: "华东",
     projectType: "分拣线",
+    additionalProjectTypes: [],
     managerIds: [ME, OTHER],
     managerNames: ["我", "他人"],
     stageKey: "install",

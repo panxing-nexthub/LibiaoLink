@@ -123,7 +123,7 @@ function mapOverviewMatchesListRequest(project: ProjectMapOverviewItem, filters:
   if (filters.regions.length > 0 && !filters.regions.includes(project.region)) {
     return false;
   }
-  if (filters.projectTypes.length > 0 && !filters.projectTypes.includes(project.projectType)) {
+  if (filters.projectTypes.length > 0 && !(project.projectTypes ?? [project.projectType]).some((code) => filters.projectTypes.includes(code))) {
     return false;
   }
   if (filters.statuses.length > 0 && !filters.statuses.includes(project.status)) {
@@ -868,7 +868,7 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
                   tint={cardTintOf(backgroundTier, accent.color)}
                   tintBorder={cardBorderOf(backgroundTier, accent.color)}
                   vividInk={backgroundTier === "vivid"}
-                  typeLabel={projectTypeText(locale, dictLabel(dicts, "projectType", project.projectType))}
+                  typeLabel={project.projectTypes.map((code) => projectTypeText(locale, dictLabel(dicts, "projectType", code))).join(" + ")}
                   status={project.status}
                   hasOpenPostArchiveTask={project.hasOpenPostArchiveTask}
                   archiveKind={project.archiveKind}

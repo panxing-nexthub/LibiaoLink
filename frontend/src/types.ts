@@ -35,6 +35,7 @@ export type Project = {
   region: string;
   /** 项目类型：契约 projects.projectType 存字典 projectType 的码；主题色由字典 metadata 下发（前端不硬编码）。 */
   projectType: string;
+  projectTypes: string[];
   /** 创建时间（契约 createdAt，展示用「YYYY-MM-DD HH:mm」，Asia/Shanghai）：创建时生成、编辑不修改。 */
   createdAt: string;
   /** 最近活动时间（契约 updatedAt）：主数据变更 / 阶段推进 / 任务变更刷新；「更新时间」排序维度（Push 175 起区间筛选与默认排序都看 createdAt）。 */

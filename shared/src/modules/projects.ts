@@ -6,6 +6,10 @@ import { UserSummarySchema } from "./users.ts";
 
 const PROJECT_MANAGER_IDS_LIMIT = 200;
 
+export const ProjectTypesSchema = z.array(z.string().trim().min(1).max(100)).min(1).max(200)
+  .refine((codes) => new Set(codes).size === codes.length, "项目类型不能重复")
+  .describe("按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。");
+
 export const ProjectArchiveKindSchema = z.enum(["accepted", "unaccepted"]);
 export type ProjectArchiveKind = z.infer<typeof ProjectArchiveKindSchema>;
 
@@ -18,6 +22,7 @@ export const ProjectSchema = z
     name: z.string().openapi({ example: "XX 客户分拣项目" }),
     customer: z.string().nullable(),
     region: z.string().openapi({ description: "项目落地地区（字典 region；缺省「未分类」）" }),
+    projectTypes: ProjectTypesSchema,
     projectType: z.string().openapi({ description: "项目类型（字典 project_type；主题色随字典元数据下发，前端不硬编码）" }),
     managerIds: z.array(UuidSchema).min(1).openapi({
       description: "项目经理（A22 · Push 136：一位也可、可多位）：至少一位、数组顺序 = 展示顺序（前端按「、」连接展示）；与 managerNames 同下标一一对应",
@@ -160,6 +165,7 @@ export const ProjectMapOverviewItemSchema = z
     code: z.string(),
     name: z.string(),
     region: z.string().openapi({ description: "项目落地地区（字典 region）" }),
+    projectTypes: ProjectTypesSchema,
     projectType: z.string().openapi({ description: "项目类型（字典 project_type）" }),
     status: ProjectStatusSchema,
     accessLevel: GroupAccessAccessLevelSchema.nullable().openapi({
@@ -187,6 +193,7 @@ export const ProjectCreateBodySchema = z
       .max(100)
       .default("未分类")
       .openapi({ description: "项目落地地区（字典 region）；未填写归入「未分类」（A1-12 定档）" }),
+    projectTypes: ProjectTypesSchema.optional(),
     projectType: z
       .string()
       .min(1)
@@ -209,6 +216,7 @@ export const ProjectUpdateBodySchema = z
     name: z.string().min(1).max(200).optional(),
     customer: z.string().max(200).nullable().optional(),
     region: z.string().min(1).max(100).optional(),
+    projectTypes: ProjectTypesSchema.optional(),
     projectType: z.string().min(1).max(100).optional(),
     managerIds: z.array(UuidSchema).min(1).max(PROJECT_MANAGER_IDS_LIMIT).optional().openapi({
       description: "项目经理（A22 · Push 136）：至少一位、可多位（≤ 200 位）；不传 = 不改、传空数组或超过上限 = 400；数组顺序 = 展示顺序",

@@ -173,6 +173,7 @@ function toProjectItem(
     customer: row.customer,
     region: row.region,
     projectType: row.projectType,
+    projectTypes: [row.projectType, ...row.additionalProjectTypes],
     managerIds: row.managerIds,
     managerNames: row.managerNames ?? [],
     stageKey: row.stageKey as WorkspaceProject["stageKey"],

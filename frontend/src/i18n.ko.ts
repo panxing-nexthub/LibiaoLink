@@ -1266,7 +1266,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "modal.name.field": "프로젝트 이름",
   "modal.note.field": "메모",
   "modal.province": "지역",
-  "modal.type.field": "프로젝트 유형",
+  "modal.type.field": "프로젝트 유형 (복수 선택 가능)",
   "modal.status.field": "프로젝트 상태",
   "ws.tabs.aria": "워크스페이스 탭",
   "ws.openProject": "프로젝트 열기",

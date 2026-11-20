@@ -3121,7 +3121,7 @@ function PmImplementationGantt({
       className="min-w-0"
       style={ganttCssVariables}
     >
-      <div className="sticky top-[116px] z-[25]">
+      <div className="sticky top-[116px] z-[25] w-full min-w-0">
       <div
         data-project-management-gantt-toolbar="true"
         className="flex flex-wrap items-center justify-between rounded-t-xl border border-zinc-200 bg-white"
@@ -3250,8 +3250,8 @@ function PmImplementationGantt({
           </div>
         </div>
       </div>
-        <div className="flex border-x border-b border-zinc-200 bg-white">
-          <div className="flex" style={{ height: ganttMetrics.headerHeight }}>
+        <div className="border-x border-b border-zinc-200 bg-white">
+          <div className="flex w-full min-w-0" style={{ height: ganttMetrics.headerHeight }}>
             <div
               className="relative z-20 flex shrink-0 bg-zinc-50 shadow-[8px_0_18px_-18px_rgba(15,23,42,0.55)]"
               style={{ width: ganttTableWidth }}

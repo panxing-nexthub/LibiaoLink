@@ -423,7 +423,7 @@ export function buildCaseDataOpenApiDocument() {
         status: "derived: deleted > archived > active release published > reviewing > draft",
         activeReleaseId: "uuid|null, active release lookup", rowVersion: "integer >=1; increments only on actual change",
         archivedAt: "timestamp|null", deletedAt: "timestamp|null", changeSummary: "string 1..1000|null",
-        content: "schemaVersion=1 fields[] using registered text/highlights keys", 
+        content: "schemaVersion=1 fields[] using registered text/highlights keys",
         solutionParameters: "schemaVersion=1 groups[] unique solutionType and registered parameter names",
         outcomes: "schemaVersion=1 metrics[] label/value/unit",
         confidentiality: "schemaVersion=1 mode/customerIdentity/contentVisibility/mediaPermission/internalScope",

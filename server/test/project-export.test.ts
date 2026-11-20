@@ -15,6 +15,7 @@ import {
   type ProjectArchiveAttachmentSource,
 } from "../src/modules/project-export/project-export.archive.js";
 import { ProjectExportService, resolveProjectExportMode, splitChangeReason } from "../src/modules/project-export/project-export.service.js";
+import { stakeholderExportRow, taskExportRow } from "../src/modules/project-export/project-export.mapping.js";
 import {
   ProjectExportWorkbookWriter,
   buildProjectExportWorkbook,
@@ -43,7 +44,7 @@ function payload(): ProjectExportPayload {
     origin: normalizeHttpOrigin("https://test-pm.libiaorobot.com"),
     tasks: [
       {
-        description: "布局定档Layout scheduling",
+        description: "布局定档\nLayout scheduling",
         managers: "贾海洋(haiyang)",
         owners: "朱成荣(Eli)",
         status: "已完成",
@@ -112,12 +113,13 @@ function payload(): ProjectExportPayload {
     stakeholders: [
       {
         name: "Christian Winkler",
-        contact: "+49 123 / wx-1",
+        phone: "+49 123",
+        wechat: "wx-1",
         email: "christian@example.com",
-        position: "项目经理 / 客户接口",
-        company: "客户customer / Vanilla",
+        title: "项目经理",
+        company: "客户 / Vanilla",
         writer: "倪里特(Ni Lite)",
-        submittedAt: "2026年9月15日 17:40",
+        role: "客户接口",
       },
     ],
     images: new Map([["image-1", { bytes: PNG, extension: "png" }]]),
@@ -136,11 +138,24 @@ function headerImages(sheet: ExcelJS.Worksheet) {
   return sheet.getImages().filter((image) => image.range.tl.nativeRow === 0);
 }
 
-function expectHeaderFitted(sheet: ExcelJS.Worksheet): void {
+function expectHeaderFitted(workbook: ExcelJS.Workbook, sheet: ExcelJS.Worksheet): void {
   const images = headerImages(sheet);
   expect(images).toHaveLength(1);
   expect(images[0]!.range.br?.nativeCol).toBe(sheet.columnCount);
   expect(images[0]!.range.br?.nativeRow).toBe(1);
+  const image = workbook.getImage(Number(images[0]!.imageId));
+  expect(image.buffer).toBeDefined();
+  const imageBytes = Buffer.from(image.buffer as unknown as Uint8Array);
+  expect(imageBytes.subarray(1, 4).toString()).toBe("PNG");
+  const imageWidth = imageBytes.readUInt32BE(16);
+  const imageHeight = imageBytes.readUInt32BE(20);
+  const tableWidth = Array.from({ length: sheet.columnCount }, (_value, index) =>
+    Math.max(20, Math.round((sheet.getColumn(index + 1).width ?? 8.43) * 7 + 5))
+  ).reduce((sum, width) => sum + width, 0);
+  const tableHeight = (sheet.getRow(1).height ?? 0) * 4 / 3;
+  const imageRatio = imageWidth / imageHeight;
+  const tableRatio = tableWidth / tableHeight;
+  expect(Math.abs(imageRatio - tableRatio) / tableRatio).toBeLessThan(0.05);
 }
 
 function arrayBufferOf(bytes: Buffer): ArrayBuffer {
@@ -233,7 +248,8 @@ describe("项目数据导出工作簿", () => {
       "开始日期", "预计完成日期", "预计所需施工人数", "预计所需天数", "实际完成日期", "阶段性里程", "紧急重要度",
       "最近变更日期", "文件", "变更关联",
     ]);
-    expect(task.getCell(3, 1).value).toBe("布局定档Layout scheduling");
+    expect(task.getCell(3, 1).value).toBe("布局定档\nLayout scheduling");
+    expect(task.getRow(3).height).toBeGreaterThanOrEqual(43.5);
     expect(task.getCell(3, 5).value).toBe(1);
     expect(task.getCell(3, 16).value).toBe("2026/8/11");
 
@@ -265,7 +281,7 @@ describe("项目数据导出工作簿", () => {
 
     const stakeholder = workbook.getWorksheet("干系人")!;
     for (const sheet of [task, report, issue, change, stakeholder]) {
-      expectHeaderFitted(sheet);
+      expectHeaderFitted(workbook, sheet);
       expect(sheet.getRow(1).height).toBe(60);
       expect(sheet.views[0]).toMatchObject({ state: "frozen", ySplit: 2, topLeftCell: "A3" });
       expect(sheet.getRow(2).height).toBeGreaterThanOrEqual(31.5);
@@ -280,10 +296,50 @@ describe("项目数据导出工作簿", () => {
       expect(sheet.getRow(3).height).toBeGreaterThanOrEqual(28.5);
     }
     expect(headersOf(stakeholder)).toEqual([
-      "干系人姓名/name", "电话或whats app或微信号", "邮箱Email", "职务Position/责任板块",
-      "所属公司company", "填写者", "提交时间",
+      "干系人姓名", "电话 / WhatsApp", "微信", "邮箱 Email",
+      "职务 / 责任板块", "所属公司", "填写者", "干系人角色",
     ]);
-    expect(stakeholder.getCell(3, 5).value).toBe("客户customer / Vanilla");
+    expect(stakeholder.getCell(3, 1).value).toBe("Christian Winkler");
+    expect(stakeholder.getCell(3, 2).value).toBe("+49 123");
+    expect(stakeholder.getCell(3, 3).value).toBe("wx-1");
+    expect(stakeholder.getCell(3, 4).value).toBe("christian@example.com");
+    expect(stakeholder.getCell(3, 5).value).toBe("项目经理");
+    expect(stakeholder.getCell(3, 6).value).toBe("客户 / Vanilla");
+    expect(stakeholder.getCell(3, 7).value).toBe("倪里特(Ni Lite)");
+    expect(stakeholder.getCell(3, 8).value).toBe("客户接口");
+  });
+
+  it("干系人导出独立保留电话、微信与角色", () => {
+    const row = stakeholderExportRow(
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        name: "潘兴",
+        companyType: "libiao",
+        company: null,
+        title: "系统研发",
+        phone: "123456",
+        wechat: "crabajn",
+        email: "panxing@libiaorobot.com",
+        remark: null,
+        role: "研发实习生",
+        createdBy: null,
+        createdByName: "潘兴",
+        projects: [],
+        createdAt: "2026-11-19T10:00:00.000Z",
+        updatedAt: "2026-11-19T10:00:00.000Z",
+      },
+      new Map(),
+    );
+    expect(row).toEqual({
+      name: "潘兴",
+      phone: "123456",
+      wechat: "crabajn",
+      email: "panxing@libiaorobot.com",
+      title: "系统研发",
+      company: "立镖机器人",
+      writer: "潘兴",
+      role: "研发实习生",
+    });
   });
 
   it("文件列只写文件名 / 项目文件链接；多文件逐行展示，链接指向项目文件视图", async () => {
@@ -302,14 +358,40 @@ describe("项目数据导出工作簿", () => {
 
   it("多行任务描述按微软雅黑行距预留行高，避免相邻行重叠", async () => {
     const sample = payload();
-    sample.tasks[0]!.description = "工作站安装及定位弹线Workstation Installation and Positioning Chalk Line and cabinet installation and cable management";
+    sample.tasks[0]!.description = "工作站安装及定位弹线\nWorkstation Installation and Positioning Chalk Line and cabinet installation and cable management";
     const result = await buildProjectExportWorkbook(sample);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(result.buffer as unknown as ArrayBuffer);
     const sheet = workbook.getWorksheet("英国项目")!;
-    expect(sheet.getRow(3).height).toBeGreaterThanOrEqual(43.5);
+    expect(sheet.getCell(3, 1).value).toBe(sample.tasks[0]!.description);
+    expect(sheet.getRow(3).height).toBeGreaterThanOrEqual(57.5);
     expect(sheet.getColumn(1).width).toBeGreaterThan(43);
     expect(sheet.getCell(3, 1).alignment).toMatchObject({ horizontal: "center", vertical: "middle", wrapText: true });
+  });
+
+  it("任务描述中文与英文分行，英文为空时不保留空行", () => {
+    const task = {
+      title: " 布局定档 ",
+      titleEn: " Layout scheduling ",
+      ownerIds: [],
+      ownerNames: [],
+      displayStatus: "active",
+      progress: 0,
+      onTime: null,
+      deliverableTypes: [],
+      note: null,
+      plannedStart: null,
+      plannedEnd: null,
+      headcount: null,
+      estimatedDays: null,
+      actualEnd: null,
+      stageKey: null,
+      priority: null,
+      changeLinks: [],
+    };
+    expect(taskExportRow(task as never, [], new Map(), []).description).toBe("布局定档\nLayout scheduling");
+    expect(taskExportRow({ ...task, titleEn: null } as never, [], new Map(), []).description).toBe("布局定档");
+    expect(taskExportRow({ ...task, titleEn: "   " } as never, [], new Map(), []).description).toBe("布局定档");
   });
 
   it("同一单元格的多个附图按网格排布，图片不重叠", async () => {
@@ -377,7 +459,7 @@ describe("项目数据导出工作簿", () => {
       expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual(result.sheetNames);
       for (const sheetName of result.sheetNames) {
         const sheet = workbook.getWorksheet(sheetName)!;
-        expectHeaderFitted(sheet);
+        expectHeaderFitted(workbook, sheet);
         expect(sheet.getRow(1).height).toBe(60);
         expect(sheet.views[0]).toMatchObject({ state: "frozen", ySplit: 2, topLeftCell: "A3" });
       }

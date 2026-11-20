@@ -3406,10 +3406,15 @@ body {
   }
 
   [data-stakeholder-cell="actions"] {
+    position: static !important;
     display: flex !important;
     justify-content: flex-end !important;
+    padding-right: 0 !important;
     padding-top: 0.55rem;
     border-top: 1px solid rgba(228, 228, 231, 0.72);
+    border-left: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 
   /* ── HTML 宽表统一字段卡：日报 / 问题 / 回收站 / 项目文件 / 操作记录 / 工作台问题 ── */
@@ -3504,7 +3509,11 @@ body {
   [data-issue-table] > table > tbody > tr > td[data-issue-delete-cell],
   [data-file-table] > table > tbody > tr > td:last-child,
   [data-project-files-table] > table > tbody > tr > td:last-child {
+    position: static !important;
     margin-top: 0.35rem;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-left: 0 !important;
     padding-top: 0.6rem !important;
     display: flex !important;
     align-items: center;
@@ -3759,8 +3768,8 @@ body {
     background-color: rgba(255, 255, 255, 0.76);
   }
 
-  [data-row-edit],
-  [data-row-delete] {
+  [data-row-edit]:not([data-row-action-persistent]),
+  [data-row-delete]:not([data-row-action-persistent]) {
     color: #71717a !important;
   }
 

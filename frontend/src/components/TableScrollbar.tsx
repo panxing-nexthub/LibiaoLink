@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { useT } from "../i18n";
 
 /**
- * 表格底部滑块（Push 221）：项目总览 / 干系人宽表共用的横向滚动条 —— 吸附在视口底部（外层 `#table-scrollbar-bar`），
+ * 表格底部滑块（Push 221）：项目总览宽表的横向滚动条 —— 吸附在视口底部（外层 `#table-scrollbar-bar`），
  * 拖块即拖横向滚动，聚焦后可用方向键步进。
  * 2026-10-10 修「浮动滑块盖住末行 / 遮挡行内按钮点击」（业务反馈）：整条不再铺白底、不拦截指针（外层容器
  * pointer-events-none），轨道只作视觉（本组件根节点 pointer-events-none）—— 吸附在视口底时不再遮字、点击穿透到

@@ -21,7 +21,7 @@ import type { StagePlacement } from "./components/StageAddCard";
 import { PROJECT_STAGES } from "./data/projects";
 import { memberNameOf, type Member } from "./data/members";
 import { lockBodyScroll } from "./scrollLock";
-import { TEMP_TASK_STAGE, VIEW_ONLY_TASK_CAPABILITIES, hasOutputDeliverables, isTaskDone, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "./data/tasks";
+import { TEMP_TASK_STAGE, VIEW_ONLY_TASK_CAPABILITIES, hasOutputDeliverables, isOpenTemporaryTask, isTaskDone, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "./data/tasks";
 import type { TemplatePresetNode } from "./data/templatePresets";
 import { fetchTaskFiles, recycleFile, renameFile, uploadFiles, type TaskFileRef } from "./fileApi";
 import { exportProjectOverviewPdfHtml } from "./exportOverviewPdf";
@@ -398,12 +398,16 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
    */
   const tasks = useMemo(
     () => {
-      const visible = projectArchived ? rawTasks.map((task) => ({
-        ...task,
-        capabilities: task.stageKey === null && task.nodeId === null && task.sourceNodeId === null && !isTaskDone(task)
-          ? { ...taskCapabilitiesOf(task), canDelete: false, canFinalize: false }
-          : VIEW_ONLY_TASK_CAPABILITIES,
-      })) : rawTasks;
+      const visible = projectArchived ? rawTasks.map((task) => {
+        const archiveLocked = !isOpenTemporaryTask(task);
+        return {
+          ...task,
+          archiveLocked,
+          capabilities: archiveLocked
+            ? VIEW_ONLY_TASK_CAPABILITIES
+            : { ...taskCapabilitiesOf(task), canDelete: false, canFinalize: false },
+        };
+      }) : rawTasks;
       return preserveTaskOrder ? visible : [...visible].sort((left, right) => stageRankOf(left.stage) - stageRankOf(right.stage) || left.sortIndex - right.sortIndex);
     },
     [rawTasks, preserveTaskOrder, projectArchived],
@@ -865,12 +869,21 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   };
 
   /**
-   * 手工填写名称、选择项目经理。看板入口的负责人和状态取自所在列，阶段留空。
+   * 手工填写名称、项目经理和负责人。看板入口的负责人默认取所在列，状态取所在列；负责人可在表单中改选或清空为待定。
+   * 「同步到项目群」仅在项目群已绑定且机器人已激活时出现在表单中，勾选后由创建事务原子写入群消息。
    * 返回新任务 id（Push 196）—— 看板拿到后直接打开它的详情抽屉（确认时间等细节）；失败 = null。
    */
   const handleQuickAdd = async (context: KanbanAddContext, values: TempTaskCreateValues): Promise<string | null> => {
     const created = await createOne(
-      { stageKey: null, title: values.title, titleEn: values.titleEn === "" ? null : values.titleEn, managerIds: values.managerIds, ownerIds: context.ownerIds, priority: "中" },
+      {
+        stageKey: null,
+        title: values.title,
+        titleEn: values.titleEn === "" ? null : values.titleEn,
+        managerIds: values.managerIds,
+        ownerIds: values.ownerIds,
+        syncToGroup: values.syncToGroup,
+        priority: "中",
+      },
       context.status,
     );
     if (created === null) {
@@ -1077,7 +1090,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
       setExportOverlayVisible(true);
     }, 250);
     try {
-      await exportProjectOverviewPdfHtml(previewHtml, { project, tasks, summary }, options.primary);
+      await exportProjectOverviewPdfHtml(previewHtml, { project, tasks, summary }, options.exportName);
     } catch {
       setToolError(t("export.error"));
     } finally {
@@ -1259,7 +1272,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             // Push 290：背景档位「适中」透传给「问题追踪」做表格呈现（原醒目模式挂点，随功能下架改吃档位）；失败提示沿用同一条 toolError
             <ReportIssuePanel key={project.id} project={project} me={me} members={members} tierTint={tintRows} sub={dailySub} dateFilter={dailyDate} focusReportId={focus?.kind === "report" ? focus.id : null} focusIssueId={focus?.kind === "issue" ? focus.id : null} onFocusClosed={onClearFocus} onClearDateFilter={onClearDailyDate} readOnly={!projectWritable} canFill={projectEditable && (!projectArchived || (summary?.projectId === project.id && summary.hasUnfinishedTemporaryTask === true))} onChangeSub={(next) => { replaceProjectSubView(project.id, next); }} />
           ) : activeView === "干系人" ? (
-            // 干系人（Push 221 · A27 前端接线）：表格形态与「项目总览」同一套（表头固定 + CSS grid 行 + 共用底部滑块）
+            // 干系人（Push 221 · A27 前端接线）：表格形态与「项目总览」同一套（表头固定 + CSS grid 行 + 表格自身横向滚动）
             <StakeholderPanel projectId={project.id} projectCode={project.code} projectName={project.description} canManage={canManageStakeholders && projectWritable} scrollRef={tableScrollRef} />
           ) : activeView === "项目文件" ? (
             // 项目文件（2026-10-29）：阶段任务文件 + 变更记录关联文件的并集；日报 / 问题附图不进入。
@@ -1299,12 +1312,8 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
           )}
         </div>
 
-        {/* 底部滑块（Push 221 起）：项目总览与干系人两个表格共用同一枚 —— 两视图互斥，scrollRef / 溢出态复用；
-            滚动容器 id 由 controlsId 按当前视图切换（task-board-scroll / stakeholder-board-scroll）。
-            2026-10-10 修「浮动滑块盖住末行 / 遮挡行内按钮点击」（业务反馈）：吸附条不再铺白底分隔、整条
-            pointer-events-none —— 吸附在视口底时不再遮字、点击穿透到行内按钮；可交互面只剩滑块本体
-            （pointer-events-auto，见 TableScrollbar 组件注释）。 */}
-        {activeView === "项目总览" || activeView === "干系人" ? (
+        {/* 底部滑块（Push 221）：仅项目总览使用；干系人保留表格自身下方的原生横向滚动条，不再额外渲染页面底部滑块。 */}
+        {activeView === "项目总览" ? (
         <div
           id="table-scrollbar-bar"
           className={
@@ -1312,7 +1321,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             (tableOverflow ? "mt-4 py-2.5" : "h-0 overflow-hidden")
           }
         >
-          <TableScrollbar scrollRef={tableScrollRef} onOverflowChange={setTableOverflow} controlsId={activeView === "干系人" ? "stakeholder-board-scroll" : "task-board-scroll"} />
+          <TableScrollbar scrollRef={tableScrollRef} onOverflowChange={setTableOverflow} />
         </div>
         ) : null}
       </main>

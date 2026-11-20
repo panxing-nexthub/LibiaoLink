@@ -29,7 +29,6 @@ export function OverviewColumnSelector({ columns, onChange }: OverviewColumnSele
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-xs font-semibold text-zinc-700">{t("export.columns.title")}</div>
-          <p className="mt-1 text-[11px] leading-4 text-zinc-400">{t("export.columns.hint")}</p>
         </div>
         <button
           type="button"

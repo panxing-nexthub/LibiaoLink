@@ -68,7 +68,7 @@ export const TABLE_COLUMNS: ColumnDef[] = [
   { key: "onTime", label: "是否按时交付", width: "0.86fr", min: 86 },
   { key: "deliverable", label: "输出成果文件", width: "0.86fr", min: 86 },
   { key: "files", label: "文件", width: "0.96fr", min: 96 },
-  { key: "note", label: "项目描述", width: "0.9fr", min: 90 },
+  { key: "note", label: "任务描述", width: "0.9fr", min: 90 },
   { key: "start", label: "开始日期", width: "0.7fr", min: 86 }, // 行内日期按钮左右内衬约 14px；两位数日期「12月17日」在 70px 下会截成省略号：抬到与预计完成日期同宽
   { key: "days", label: "预计所需天数", width: "56px", min: 56, header: "" },
   { key: "due", label: "预计完成日期", width: "0.86fr", min: 86 },
@@ -440,7 +440,8 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
    *  2026-10-10 业务追订「项目经理也不可以修改」——「项目经理」列随行一并锁定；「文件」列仍走既有 taskFinalized 门控（修改走变更）。 */
   const taskFinalized = task.finalizedAt !== null;
   const capabilities = taskCapabilitiesOf(task);
-  const viewOnlyHint = t("board.viewOnlyHint");
+  const archiveLocked = task.archiveLocked === true;
+  const viewOnlyHint = archiveLocked ? t("board.archivedHint") : t("board.viewOnlyHint");
   const editLocked = !capabilities.canEditFields || taskFinalized;
   const editLockedHint = taskFinalized ? t("board.finalizedHint") : viewOnlyHint;
   const progressLocked = !capabilities.canUpdateProgress || taskFinalized;
@@ -457,12 +458,14 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
   const managerTitle = managerLabel;
   const managersEditable = canEditManagers ?? onChangeManagers !== undefined;
   const managerChoices = memberOptionsWithExisting(managerMembers, managerIds, members);
-  const managersLocked = !managersEditable || taskFinalized;
+  const managersLocked = archiveLocked || !managersEditable || taskFinalized;
   const managersLockedHint = taskFinalized
     ? t("board.finalizedHint")
-    : managersEditable
-      ? undefined
-      : t("board.managerLockedHint");
+    : archiveLocked
+      ? t("board.archivedHint")
+      : managersEditable
+        ? undefined
+        : t("board.managerLockedHint");
   const completionLocked = !capabilities.canComplete || taskFinalized;
   const completionLockedHint = taskFinalized ? t("board.finalizedHint") : viewOnlyHint;
   const canManageFiles = capabilities.canUpload && !taskFinalized;
@@ -730,7 +733,7 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
         ) : (
           <InlineTextCell
             value={task.note}
-            ariaLabel={t("board.edit.aria", { field: fieldText(locale, "项目描述") })}
+            ariaLabel={t("board.edit.aria", { field: fieldText(locale, "任务描述") })}
             disabled={editLocked}
             disabledHint={editLockedHint}
             display={task.note === "" ? <span className="text-zinc-300">—</span> : <span className="text-zinc-600" title={task.note}>{localizedNote}</span>}
@@ -1305,7 +1308,9 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
       ))}
       {tempFormOpen && onCreateTempTask !== undefined ? (
         <TempTaskCreateForm
+          projectId={projectId}
           managerOptions={managerMembers}
+          ownerOptions={members}
           onCreate={async (values) => {
             const createdId = await onCreateTempTask(values);
             if (createdId !== null) setSelectedTaskId(createdId);

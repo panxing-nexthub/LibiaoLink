@@ -459,7 +459,7 @@ const ISSUE_TABLE_COLUMNS: readonly { key: string; label: string }[] = [
   { key: "date", label: "日期" },
   { key: "title", label: "问题描述" },
   { key: "category", label: "问题归类" },
-  { key: "owner", label: "问题处理人 / 责任人" },
+  { key: "owner", label: "责任人" },
   { key: "solution", label: "解决方案或建议" },
   { key: "photos", label: "问题附图" },
   { key: "state", label: "问题是否处理" },
@@ -558,6 +558,11 @@ function renumberLines(text: string): string {
   return lines.map((line, index) => String(index + 1) + ": " + line).join("\n");
 }
 
+/** 问题描述是否含有效内容：旧版自动序号草稿里的「1: 」占位仍视为空；用户填写的实际文本原样保留。 */
+function issueTitleHasContent(text: string): boolean {
+  return renumberLines(text) !== "";
+}
+
 /** 光标前**内容行**数（剥掉行首序号、忽略空行）—— 回车「自动序号」的续号基准（Push 242）：
  *  序号按内容行数编、不按物理换行数 —— 删掉旧序号 / 把框删空后再回车仍从「1: 」起（原按 `before.split("\n").length`
  *  算，空串也算一行 → 删空后回车跳成「2: 」—— 业务反馈「用户删除了再回车就生成2：了 用户觉得这个是bug」）。 */
@@ -581,7 +586,7 @@ const BTN_SECONDARY =
  *  每条 = 问题描述 / 问题归类 / 问题处理人 / 该问题附图 / 解决方案或建议 —— 提交时逐条生成独立问题记录；
  *  原单问题四件套（foundIssue / issueCategories / suggestion / issuePhotos）整体下线（旧数据照旧在列表 / 抽屉只读展示）。 */
 type ReportIssueDraftUi = {
-  /** 问题描述（自动序号文本；提交前统一重排） */
+  /** 问题描述（一块只填一条问题；旧版行首序号在内容判定时兼容为空） */
   title: string;
   /** 问题归类（C9 字典十项；可多选，≥1 项） */
   categories: string[];
@@ -1412,9 +1417,7 @@ function ReportList({ reports, focusReportId = null, onEdit, onPatch, onDelete }
             {/* Push 213（业务口径「日报记录 和 问题追随都要有删除按钮 … 请你看看有没有合适的位置」）：行尾动作列 ——
                 Push 223 再补一枚「编辑」（干系人同款 RowEditButton）—— 两枚共用一枚预留槽位（78px = 悬停展开 48 + 间距 6 + 静止 24），
                 哪一枚展开都只吃槽内空间 ⇒ 列宽 / 表宽一格不动（业务反馈「鼠标触碰表格会动」的修法照旧）。 */}
-            <th className="w-[110px] border-b border-zinc-200 px-4 py-3.5 font-medium">
-              <span className="sr-only">{t("rp.actions")}</span>
-            </th>
+            <th data-report-actions-head="" aria-label={t("rp.actions")} className="sticky right-0 z-20 w-[110px] border-b border-l border-zinc-200 bg-zinc-50 px-4 py-3.5 font-medium shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]" />
           </tr>
         </thead>
         <tbody>
@@ -1503,7 +1506,7 @@ function ReportList({ reports, focusReportId = null, onEdit, onPatch, onDelete }
                   {/* 展示only（Push 223）：现场工作附图的增删 / 改名改由行尾「编辑」弹窗（AttachmentPicker）做（点图仍可看大图）。 */}
                   {report.photos.length === 0 ? <span className="text-zinc-400">—</span> : <PhotoStrip items={report.photos} size="lg" />}
                 </td>
-                <td data-mobile-label={t("rp.actions")} className="w-[110px] border-b border-zinc-100 px-4 py-4 align-top" data-report-delete-cell="">
+                <td data-mobile-label={t("rp.actions")} className={"sticky right-0 z-10 w-[110px] border-b border-l border-zinc-100 px-4 py-4 align-top shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)] transition-colors " + (report.id === focusReportId ? "bg-amber-50" : "bg-white group-hover:bg-zinc-50")} data-report-delete-cell="">
                   {/* 行尾动作槽位（Push 223 · 干系人同款两枚：编辑 + 删除）——
                       幽灵态 24px → 悬停 48px **只在槽内长大**；槽容器固定 78px（48 展开 + 6 间距 + 24 静止），
                       单元格内容宽不变 ⇒ 表格列宽 / 表宽一格不动（业务反馈「鼠标触碰表格会动」）。
@@ -1513,6 +1516,7 @@ function ReportList({ reports, focusReportId = null, onEdit, onPatch, onDelete }
                       {onEdit === undefined ? null : <span data-report-edit-slot="">
                         <RowEditButton
                           label={t("report.row.editReport", { date: report.date })}
+                          persistent
                           onEdit={() => {
                             onEdit(report);
                           }}
@@ -1521,6 +1525,7 @@ function ReportList({ reports, focusReportId = null, onEdit, onPatch, onDelete }
                       {onDelete === undefined ? null : <span data-report-delete-slot="">
                         <RowDeleteButton
                           label={t("report.row.deleteReport", { date: report.date })}
+                          persistent
                           onDelete={() => {
                             onDelete(report.id);
                           }}
@@ -1580,7 +1585,7 @@ function IssueCard({ issue, onOpen, onPointerDownDrag, dragging = false, ghost =
         <Field label={fieldText(locale, "问题归类")}>
           <CategoryTags values={issue.categories} />
         </Field>
-        <Field label={fieldText(locale, "问题处理人 / 责任人")}>
+        <Field label={fieldText(locale, "责任人")}>
           {issue.owner === "" ? (
             <p data-issue-card-owner="" className="text-sm leading-5 text-zinc-300">—</p>
           ) : (
@@ -1929,9 +1934,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
             {/* Push 213（业务口径「日报记录 和 问题追随都要有删除按钮 … 请你看看有没有合适的位置」）：行尾动作列 ——
                 Push 223 再补一枚「编辑」（干系人同款 RowEditButton）—— 两枚共用同一枚预留槽位
                 （78px = 悬停展开 48 + 间距 6 + 静止 24）；删问题 = 连它来源的那篇日报一起删（同一篇日报整组）。 */}
-            <th className="w-[110px] border-b border-zinc-200 px-4 py-3.5 font-medium">
-              <span className="sr-only">{t("rp.actions")}</span>
-            </th>
+            <th data-issue-actions-head="" aria-label={t("rp.actions")} className="sticky right-0 z-20 w-[110px] border-b border-l border-zinc-200 bg-zinc-50 px-4 py-3.5 font-medium shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]" />
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-100">
@@ -1966,7 +1969,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
                   />
                 )}
               </td>
-              <td data-mobile-label={fieldText(locale, "问题处理人 / 责任人")} className="min-w-[110px] whitespace-nowrap px-4 py-4 text-zinc-700">
+              <td data-mobile-label={fieldText(locale, "责任人")} className="min-w-[110px] whitespace-nowrap px-4 py-4 text-zinc-700">
                 {/* Push 243（业务口径「图三图四增加列 问题处理人 / 责任人」）：展示only —— 问题记录生成时随内联问题
                     清单的处理人 ownerId 落库；空（旧数据 / 无人）出灰杠，与看板卡 / 抽屉同一口径。 */}
                 <span data-issue-owner="">{issue.owner === "" ? <span className="text-zinc-300">—</span> : issue.owner}</span>
@@ -1995,7 +1998,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
                   }}
                 />
               </td>
-              <td data-mobile-label={t("rp.actions")} className="w-[110px] px-4 py-4" data-issue-delete-cell="">
+              <td data-mobile-label={t("rp.actions")} className={"sticky right-0 z-10 w-[110px] border-l border-zinc-100 px-4 py-4 shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)] transition-colors " + (tierTint ? "issue-row-tint group-hover:bg-[var(--row-tint-hover)]" + (tierTint === "vivid" ? " tint-vivid" : "") : "bg-white group-hover:bg-zinc-50")} data-issue-delete-cell="">
                 {/* 行尾动作槽位（Push 223 · 干系人同款两枚：编辑 + 删除）—— 槽容器固定 78px（48 展开 + 6 间距 + 24 静止），
                     幽灵态 24px → 悬停 48px 只在槽内长大，不推挤左侧列（业务反馈「问题追踪的没做好 鼠标触碰表格会动」）。
                     px-4(16×2) + 78 = 110 = w-[110px]（与「日报记录」同槽位）。 */}
@@ -2004,6 +2007,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
                     {onEdit === undefined ? null : <span data-issue-edit-slot="">
                       <RowEditButton
                         label={t("report.row.editIssue", { date: issue.raisedAt })}
+                        persistent
                         onEdit={() => {
                           onEdit(issue);
                         }}
@@ -2012,6 +2016,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
                     {onDelete === undefined ? null : <span data-issue-delete-slot="">
                       <RowDeleteButton
                         label={t("report.row.deleteIssue", { date: issue.raisedAt })}
+                        persistent
                         onDelete={() => {
                           onDelete(issue);
                         }}
@@ -2431,7 +2436,7 @@ function IssueEditModal({ projectId, members, row, onClose, onSubmit }: {
         </div>
       </div>
       <div className="block">
-        <span className="mb-1.5 block text-sm font-medium text-zinc-700">{fieldText(locale, "问题处理人 / 责任人")}</span>
+        <span className="mb-1.5 block text-sm font-medium text-zinc-700">{fieldText(locale, "责任人")}</span>
         <div data-record-field="owner">
           <SearchSelect
             value={ownerId}
@@ -2526,8 +2531,9 @@ function StageChecklist({
   );
 }
 /** 「日报填写」表单（字段按 A3-01；校验口径 A3-04：日期 + 当日完成工作 + 明日计划必填）；
- *  自动序号（Push 206 续 / Push 242 修）：「当日完成工作 / 明日计划 / 问题描述 / 解决方案或建议」四个多行框 ——
- *  空框聚焦预置 1: 、回车按光标前**内容行数**续下一行序号、失焦 / 提交前重排；四个多行框均自动下扩。
+ *  自动序号（Push 206 续 / Push 242 修）：「当日完成工作 / 明日计划 / 解决方案或建议」三个多行框 ——
+ *  空框聚焦预置 1: 、回车按光标前**内容行数**续下一行序号、失焦 / 提交前重排；问题描述不自动编号，
+ *  每个「问题 N」块只对应一条问题记录，不同类型的问题通过「+ 添加问题」另起一块填写。
  *  Push 217（业务口径 2026-09-29「现场工作附图放在明日计划填写下面」）：块序调整 —— 「现场工作附图」移到
  *  「明日计划」正下方。
  *  Push 243（业务口径 2026-10-08）：原「现场发现问题 + 问题归类 + 当前问题附图 + 解决方案或建议」单问题四件套
@@ -2546,6 +2552,7 @@ function ReportFillForm({
   onSubmit,
   onSaveDraft,
   dateLocked = false,
+  locked = false,
   groupSync,
 }: {
   project: Project;
@@ -2566,6 +2573,8 @@ function ReportFillForm({
   onSaveDraft: () => void;
   /** 已载入服务端草稿：填报日期与草稿绑定，PATCH 不可改日期，表单同步锁只读。 */
   dateLocked?: boolean;
+  /** 归档且无未完成临时任务：保留表单结构与内容，但整体锁定，不能填写或提交。 */
+  locked?: boolean;
   /** 项目群同步复选框：仅项目经理 + 已绑定群时传入，默认不勾选。 */
   groupSync?: {
     checked: boolean;
@@ -2587,14 +2596,14 @@ function ReportFillForm({
     missing.push(t("report.missing.plan"));
   }
   // 问题块校验（Push 243）：动过的问题块（描述 / 归类 / 处理人 / 附图 / 解决方案任一有内容）必须齐「描述 + 归类」；
-  // 全空块 = 没填，提交时忽略（不拦提交）。内容判定先剥行首序号（只剩「1: 」不算填）—— 与自动序号同一口径。
+  // 全空块 = 没填，提交时忽略（不拦提交）。内容按去首尾空白后的文本判定（纯空白块不算填）。
   draft.issues.forEach((item, index) => {
-    const title = renumberLines(item.title);
-    const touched = title !== "" || item.categories.length > 0 || item.ownerId !== "" || item.suggestion.trim() !== "" || item.photos.length > 0;
+    const hasTitle = issueTitleHasContent(item.title);
+    const touched = hasTitle || item.categories.length > 0 || item.ownerId !== "" || item.suggestion.trim() !== "" || item.photos.length > 0;
     if (!touched) {
       return;
     }
-    if (title === "") {
+    if (!hasTitle) {
       missing.push(t("report.missing.issueTitle", { n: index + 1 }));
     } else if (item.categories.length === 0) {
       missing.push(t("report.missing.issueCategory", { n: index + 1 }));
@@ -2641,7 +2650,8 @@ function ReportFillForm({
     requestAnimationFrame(() => target.setSelectionRange(nextCaret, nextCaret));
   };
 
-  /** 问题块里的多行框（Push 243）：与「当日完成工作 / 明日计划」同一套自动序号（空框聚焦预置 1: · 回车续号 · 失焦重排）+ 自动下扩。 */
+  /** 问题块里的解决方案多行框（Push 243）：与「当日完成工作 / 明日计划」同一套自动序号（空框聚焦预置 1: · 回车续号 · 失焦重排）+ 自动下扩。
+   *  问题描述不走这套 —— 一块对应一条问题，避免再出现「1: / 2:」把多条问题塞进同一条记录。 */
   const numberedTextarea = (value: string, applyValue: (next: string) => void, dataField: string, rows: number, placeholder?: string) => (
     <GrowingTextarea
       data-field={dataField}
@@ -2670,14 +2680,21 @@ function ReportFillForm({
   return (
     <form
       data-fill-form="true"
+      aria-disabled={locked ? "true" : undefined}
       onSubmit={(event) => {
         event.preventDefault();
-        if (missing.length === 0) {
+        if (!locked && missing.length === 0) {
           onSubmit();
         }
       }}
       className="scroll-mt-[140px] space-y-4 rounded-xl border border-zinc-200 bg-white p-5"
     >
+      {locked ? (
+        <div data-report-archived-readonly="" role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {t("report.archived.readOnly")}
+        </div>
+      ) : null}
+      <fieldset disabled={locked} className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-60">
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block">
           <span className={FORM_LABEL}>{fieldText(locale, "项目名称")}</span>
@@ -2844,7 +2861,14 @@ function ReportFillForm({
               <span className={FORM_LABEL}>
                 {fieldText(locale, "问题描述")}<span className="ml-1 text-rose-500">*</span>
               </span>
-              {numberedTextarea(item.title, (next) => { onPatchIssue(index, { title: next }); }, "issueTitle", 2, t("report.placeholder.issueTitle"))}
+              <GrowingTextarea
+                data-field="issueTitle"
+                value={item.title}
+                onChange={(event) => { onPatchIssue(index, { title: event.target.value }); }}
+                rows={2}
+                placeholder={t("report.placeholder.issueTitle")}
+                className={FORM_INPUT + " mt-1 resize-y"}
+              />
             </label>
             <div className="mt-3 grid gap-4 md:grid-cols-3">
               <label className="block">
@@ -2863,7 +2887,7 @@ function ReportFillForm({
                 </div>
               </label>
               <div className="block">
-                <span className={FORM_LABEL}>{fieldText(locale, "问题处理人 / 责任人")}</span>
+                <span className={FORM_LABEL}>{fieldText(locale, "责任人")}</span>
                 <div data-field="issueOwner" className="mt-1">
                   <SearchSelect
                     value={item.ownerId}
@@ -2920,10 +2944,13 @@ function ReportFillForm({
             <span>{t("report.groupSync.button")}</span>
           </label>
         )}
-        <span data-fill-hint className={"text-xs " + (missing.length === 0 ? "text-zinc-400" : "text-rose-500")}>
-          {missing.length === 0 ? t("report.form.footer") : t("report.form.missing", { list: missing.join(isLocalizedLocale(locale) ? ", " : "、") })}
-        </span>
+        {locked ? null : (
+          <span data-fill-hint className={"text-xs " + (missing.length === 0 ? "text-zinc-400" : "text-rose-500")}>
+            {missing.length === 0 ? t("report.form.footer") : t("report.form.missing", { list: missing.join(isLocalizedLocale(locale) ? ", " : "、") })}
+          </span>
+        )}
       </div>
+      </fieldset>
     </form>
   );
 }
@@ -3118,7 +3145,7 @@ function IssueDrawer({ projectId, members, issue, report, readOnly, onPatchIssue
     },
     {
       key: "owner",
-      label: fieldText(locale, "问题处理人 / 责任人"),
+      label: fieldText(locale, "责任人"),
       // Push 243（业务口径「图三图四增加列 问题处理人 / 责任人」）：生成问题记录时随内联问题清单的处理人落库；
       // 空（旧数据 / 无人）出灰杠（与「施工人数」空态同一枚样式）。
       // Push 244（业务口径「这个负责人要可以编辑」）：改**行内单选**（成员搜索列表 + 首行「待分派」清空），落值走 patchIssue({ ownerId })。
@@ -3849,14 +3876,14 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
     const headcount = Number.parseInt(draft.headcount, 10);
     const plan = renumberLines(draft.plan);
     const issues = draft.issues
+      .filter((item) => issueTitleHasContent(item.title))
       .map((item) => ({
-        title: renumberLines(item.title),
+        title: item.title.trim(),
         categories: item.categories,
         ownerId: item.ownerId === "" ? null : item.ownerId,
         solution: renumberLines(item.suggestion),
         photoFileIds: readyFileIds(item.photos),
       }))
-      .filter((item) => item.title !== "")
       .map((item) => {
         const next: ReportIssueWriteDraft = { title: item.title, categories: item.categories, ownerId: item.ownerId };
         if (item.solution !== "") {
@@ -4059,17 +4086,15 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
 
       {subTab === "日报填写" ? (
         /* 日报填写 = 左侧草稿列表 + 右侧填写表单；表单仍保持舒适窄栏，其他三块子视图全宽 */
-        !canFill ? (
-          project.status === "archived" && project.accessLevel === "edit"
-            ? <EmptyCard text={t("report.archived.closed")} hint={t("report.archived.hint")} />
-            : <EmptyCard text={t("access.readOnlyTitle")} hint={t("access.readOnlyHint")} />
+        !canFill && !(project.status === "archived" && project.accessLevel === "edit") ? (
+          <EmptyCard text={t("access.readOnlyTitle")} hint={t("access.readOnlyHint")} />
         ) : (
         <div className="mx-auto grid w-full max-w-6xl gap-5 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
           <ReportDraftSidebar
             drafts={draftReports}
             selectedId={draftId}
             locale={locale}
-            disabled={saving}
+            disabled={saving || !canFill}
             onSelect={handleLoadDraft}
             onNew={handleNewReport}
             onDelete={readOnly ? undefined : (report) => { requestDeleteReport(report.id); }}
@@ -4088,6 +4113,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
               onSubmit={handleSubmit}
               onSaveDraft={handleSaveDraft}
               dateLocked={draftId !== null}
+              locked={!canFill}
               groupSync={groupSyncOption}
             />
             {draftChanged ? (

@@ -309,7 +309,7 @@ export function AppHeader({ me, project }: AppHeaderProps) {
   }, []);
 
   const header = (
-    <header data-app-header="" className="app-header sticky top-0 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur">
+    <header data-app-header="" className="app-header sticky top-0 z-[35] border-b border-zinc-200 bg-white/90 backdrop-blur">
       <div className="app-header__inner flex h-16 items-center gap-3 px-6">
         <a href={upHref} onClick={interceptNav(goUp)} title={t("header.up")} className="app-header__brand flex shrink-0 items-center gap-3">
           <img src="/libiaolink-logo.svg" alt="LibiaoLink" className="app-header__logo h-11 w-auto" />

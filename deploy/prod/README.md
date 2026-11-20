@@ -6,6 +6,8 @@
 >
 > **验收 / 运行态**：两站 api / worker 已重启，api / worker / web / postgres healthy，RestartCount 0、OOM false，近 10 分钟 api / worker 部署窗口错误 0；`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true，未登录项目 API 401。测试机 manifest `24adb559…`、备份 17,010 B；正式机 manifest `238003c1…`、备份 18,698 B；各 3 个文件，2 / 2 SHA-256 校验通过。无前端 / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。
 
+> **PR / 合并**：PR [#939](https://github.com/panxing-nexthub/LibiaoLink/pull/939)；CI [44665137774](https://github.com/panxing-nexthub/LibiaoLink/actions/runs/44665137774) 6 / 6；squash 合并到 `main` `16f02b7b`。本次按要求先完成两站部署，再补 PR / 合并；px 常驻分支保留。
+
 > **2026-11-20 10:13–10:21 归档只读提示区分与日报表单保留禁用（测试机 frontend-only · test-20261120-1013-px-archive-readonly-report-lock-28e314ac）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261120-1013-px-archive-readonly-report-lock-28e314ac`，previous = `test-20261120-1003-px-temp-task-group-fields-f8df53cb`；staging = `/srv/data/deploy-test-20261120-1013-px-archive-readonly-report-lock-28e314ac/staging`，备份 = `/srv/data/backups/before-test-20261120-1013-px-archive-readonly-report-lock-28e314ac`。代码来源 px `28e314ac`，随 Push 850 进入常驻分支。
 
 > **根因 / 改动**：归档项目此前把任务能力统一收敛为只读，但任务行仍提示「当前账号仅可查看该任务，不能编辑」；日报页则把整块表单替换为「日报填写已关闭」空态。现由项目详情标记 `archiveLocked`：归档项目内仅保留未完成手工临时任务的编辑例外，其余任务统一提示「当前项目已归档，无法编辑」；日报填写页不再关闭，保留草稿栏与完整表单，通过 `fieldset disabled` 锁定填报日期、施工人数、阶段、当日工作、明日计划、附件、问题块及提交 / 暂存，并在表单顶部显示「当前项目已归档，日报不能填写」。中 / 英 / 日 / 韩文案同步，删除旧 `report.archived.closed` / `report.archived.hint`。

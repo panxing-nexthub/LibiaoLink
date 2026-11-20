@@ -76,6 +76,17 @@ class FakeTaskRepository {
   task: TaskRow | null = makeRow();
   /** 变更关联（A1-07 多条）：列表 / 详情随行下发，测试按需替换。 */
   changeLinks: TaskChangeLinkRow[] = [];
+  /** 群消息姓名解析（真实仓储由 users 联表给出；测试按需替换）。 */
+  ownerNames: (string | null)[] = ["张三"];
+  managerNames: (string | null)[] = ["经理"];
+  /** 群通知的项目编号 / 名称 / 创建时的项目经理姓名。 */
+  projectNotice: { code: string; name: string; managerNames: (string | null)[] | null } = {
+    code: "P-2026-001",
+    name: "上海仓储项目",
+    managerNames: ["原经理"],
+  };
+  /** 项目群绑定窄读面；群同步用例按需置 null / 未激活。 */
+  groupBinding: { activatedAt: Date | null } | null = { activatedAt: new Date("2026-09-01T00:00:00Z") };
   /** listChangeLinks 收到的 change_refs（追加序）。 */
   changeLinkQueries: string[][] = [];
   inserted: TaskRow | null = null;
@@ -108,10 +119,16 @@ class FakeTaskRepository {
       ? null
       : {
           task: this.task,
-          ownerNames: ["张三"],
-          managerNames: ["经理"],
+          ownerNames: this.task.ownerIds.length === 0 ? [] : this.ownerNames,
+          managerNames: this.managerNames,
           changeLinks: this.changeLinks,
         };
+  }
+  async findGroupBinding(): Promise<{ activatedAt: Date | null } | null> {
+    return this.groupBinding;
+  }
+  async findProjectNotificationContext(): Promise<{ code: string; name: string; managerNames: (string | null)[] | null }> {
+    return this.projectNotice;
   }
   async listFiles(): Promise<never[]> {
     return [];
@@ -429,6 +446,101 @@ describe("TaskService.create（A10 / A1-13）", () => {
     await expect(makeService(repo).create(PROJECT, { title: "现场复查", managerIds }, ACTOR))
       .rejects.toMatchObject({ code: "VALIDATION_FAILED", httpStatus: 400 });
     expect(repo.inserted).toBeNull();
+  });
+
+  it("临时任务选择负责人并同步项目群：outbox 含项目、原/当前项目经理和任务负责人", async () => {
+    const repo = new FakeTaskRepository();
+    repo.project = { id: PROJECT, managerIds: [ACTOR], stageKey: "acceptance", status: "active" };
+    repo.ownerNames = ["李四"];
+    repo.managerNames = ["王经理"];
+    const database = new FakeDatabase();
+    const service = makeService(repo, undefined, undefined, undefined, database);
+
+    const created = await service.create(
+      PROJECT,
+      { title: "现场巡检", managerIds: [MANAGER], ownerIds: [MANAGER_2], syncToGroup: true },
+      ACTOR,
+    );
+
+    const groupEvent = database.outbox.find(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        (item as { topic?: string }).topic === "notify.group",
+    ) as { topic: string; dedupeKey: string; payload: Record<string, unknown> } | undefined;
+    expect(groupEvent).toMatchObject({
+      topic: "notify.group",
+      dedupeKey: "temp-task.created:" + created.id,
+      payload: {
+        projectId: PROJECT,
+        title: "新建临时任务",
+        body: "任务名称：现场巡检\n项目编号：P-2026-001\n项目名称：上海仓储项目\n原项目经理：原经理\n当前项目经理：王经理\n任务负责人：李四",
+        refType: "task",
+        refId: created.id,
+        templateCode: "TEMP_TASK_CREATED_GROUP",
+      },
+    });
+  });
+
+  it("临时任务负责人留空并同步项目群：群消息显示「待定」", async () => {
+    const repo = new FakeTaskRepository();
+    repo.project = { id: PROJECT, managerIds: [ACTOR], stageKey: "acceptance", status: "active" };
+    repo.managerNames = ["王经理"];
+    const database = new FakeDatabase();
+    const service = makeService(repo, undefined, undefined, undefined, database);
+
+    await service.create(PROJECT, { title: "现场巡检", managerIds: [MANAGER], ownerIds: [], syncToGroup: true }, ACTOR);
+
+    const groupEvent = database.outbox.find(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        (item as { topic?: string }).topic === "notify.group",
+    ) as { payload: Record<string, unknown> } | undefined;
+    expect(groupEvent?.payload.body).toBe("任务名称：现场巡检\n项目编号：P-2026-001\n项目名称：上海仓储项目\n原项目经理：原经理\n当前项目经理：王经理\n任务负责人：待定");
+  });
+
+  it("临时任务未勾选群同步：不写 notify.group", async () => {
+    const repo = new FakeTaskRepository();
+    repo.project = { id: PROJECT, managerIds: [ACTOR], stageKey: "acceptance", status: "active" };
+    const database = new FakeDatabase();
+    const service = makeService(repo, undefined, undefined, undefined, database);
+
+    await service.create(PROJECT, { title: "现场巡检", managerIds: [MANAGER] }, ACTOR);
+
+    expect(database.outbox.some((item) => (item as { topic?: string }).topic === "notify.group")).toBe(false);
+  });
+
+  it("非临时任务请求同步项目群：400，且不落任务", async () => {
+    const repo = new FakeTaskRepository();
+    repo.node = { id: NODE, stageKey: "install", status: "active" };
+    const database = new FakeDatabase();
+    const service = makeService(repo, undefined, undefined, undefined, database);
+
+    await expect(
+      service.create(PROJECT, { taskNodeId: NODE, title: "货架组装", syncToGroup: true }, ACTOR),
+    ).rejects.toMatchObject({ code: "VALIDATION_FAILED", httpStatus: 400 });
+
+    expect(repo.inserted).toBeNull();
+    expect(database.outbox.some((item) => (item as { topic?: string }).topic === "notify.group")).toBe(false);
+  });
+
+  it.each([
+    ["未绑定", null],
+    ["未激活", { activatedAt: null }],
+  ] as const)("临时任务同步项目群但群%s：400，且任务整体回滚", async (_label, binding) => {
+    const repo = new FakeTaskRepository();
+    repo.project = { id: PROJECT, managerIds: [ACTOR], stageKey: "acceptance", status: "active" };
+    repo.groupBinding = binding;
+    const database = new FakeDatabase();
+    const service = makeService(repo, undefined, undefined, undefined, database);
+
+    await expect(
+      service.create(PROJECT, { title: "现场巡检", managerIds: [MANAGER], syncToGroup: true }, ACTOR),
+    ).rejects.toMatchObject({ code: "VALIDATION_FAILED", httpStatus: 400 });
+
+    expect(repo.inserted).toBeNull();
+    expect(database.outbox.some((item) => (item as { topic?: string }).topic === "notify.group")).toBe(false);
   });
 
   it("临时任务的新经理须符合资格，现有项目经理身份不能作为新任务的资格兜底", async () => {

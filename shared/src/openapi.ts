@@ -819,7 +819,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "post",
     path: "/api/v1/projects/{id}/tasks",
     tags: ["tasks"],
-    summary: "创建任务（从任务节点库 / 任务模板生成或手工创建；headcount / priority 可空）",
+    summary: "创建任务（从任务节点库 / 任务模板生成或手工创建；headcount / priority 可空；临时任务可带 syncToGroup 同步项目群，群未绑定 / 未激活返回 400）",
     request: { params: idParams, headers: idempotencyHeader, body: json(TaskCreateBodySchema) },
     responses: {
       201: { description: "创建成功", ...json(TaskSchema) },

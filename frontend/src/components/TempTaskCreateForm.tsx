@@ -1,7 +1,8 @@
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Member } from "../data/members";
 import { useT } from "../i18n";
+import { fetchProjectGroup } from "../projectGroupApi";
 import { MemberMultiSelect } from "./MemberSelect";
 import { useFocusTrap } from "./useFocusTrap";
 
@@ -12,31 +13,68 @@ export type TempTaskCreateValues = {
   title: string;
   titleEn: string;
   managerIds: string[];
+  ownerIds: string[];
+  syncToGroup: boolean;
 };
 
 type TempTaskCreateFormProps = {
+  /** 项目群绑定查询用；缺省 = 不显示群同步入口。 */
+  projectId?: string;
   managerOptions: readonly Member[];
+  ownerOptions: readonly Member[];
+  /** 看板负责人列新建时预填该列负责人；仍可在表单里改选或清空为待定。 */
+  initialOwnerIds?: readonly string[];
   onCreate: (values: TempTaskCreateValues) => Promise<string | null>;
   onClose: () => void;
 };
 
 /** 项目总览和看板共用的新建面板，固定在视口内。 */
-export function TempTaskCreateForm({ managerOptions, onCreate, onClose }: TempTaskCreateFormProps) {
+export function TempTaskCreateForm({ projectId, managerOptions, ownerOptions, initialOwnerIds = [], onCreate, onClose }: TempTaskCreateFormProps) {
   const t = useT();
   const headingId = useId();
   const dialogRef = useFocusTrap<HTMLDivElement>();
   const [title, setTitle] = useState("");
   const [titleEn, setTitleEn] = useState("");
   const [managerIds, setManagerIds] = useState<string[]>([]);
+  const [ownerIds, setOwnerIds] = useState<string[]>(() => [...initialOwnerIds]);
+  const [syncToGroup, setSyncToGroup] = useState(false);
+  const [groupSyncAvailable, setGroupSyncAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const invalid = title.trim() === "" || managerIds.length === 0;
+
+  useEffect(() => {
+    if (projectId === undefined || projectId === "") {
+      return;
+    }
+    const controller = new AbortController();
+    void fetchProjectGroup(projectId, controller.signal)
+      .then((binding) => {
+        if (!controller.signal.aborted) {
+          setGroupSyncAvailable(binding.bound && binding.activated);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setGroupSyncAvailable(false);
+        }
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [projectId]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (invalid || busy) return;
     setBusy(true);
     try {
-      const createdId = await onCreate({ title: title.trim(), titleEn: titleEn.trim(), managerIds });
+      const createdId = await onCreate({
+        title: title.trim(),
+        titleEn: titleEn.trim(),
+        managerIds,
+        ownerIds,
+        syncToGroup: syncToGroup && groupSyncAvailable,
+      });
       if (createdId !== null) onClose();
     } finally {
       setBusy(false);
@@ -52,7 +90,7 @@ export function TempTaskCreateForm({ managerOptions, onCreate, onClose }: TempTa
       }}
       onKeyDown={(event) => {
         if (event.key !== "Escape") return;
-        const openPicker = dialogRef.current?.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"][aria-expanded="true"]');
+        const openPicker = dialogRef.current?.querySelector<HTMLButtonElement>("[aria-haspopup=\"listbox\"][aria-expanded=\"true\"]");
         if (openPicker) {
           openPicker.focus({ preventScroll: true });
           return;
@@ -98,6 +136,30 @@ export function TempTaskCreateForm({ managerOptions, onCreate, onClose }: TempTa
                 ariaLabel={t("tt.managerRequired")}
               />
             </div>
+            <div data-temp-task-owner="true">
+              <p className="mb-1 text-xs font-medium text-zinc-700">{t("tt.ownerOptional")}</p>
+              <MemberMultiSelect
+                values={ownerIds}
+                onChange={setOwnerIds}
+                options={ownerOptions}
+                placeholder={t("tt.ownerPending")}
+                ariaLabel={t("tt.ownerOptional")}
+              />
+            </div>
+            {groupSyncAvailable ? (
+              <label
+                data-temp-task-group-sync="true"
+                className="mt-1 flex cursor-pointer items-start gap-2 rounded-lg border border-sky-100 bg-sky-50/60 px-2.5 py-2 text-xs text-zinc-700"
+              >
+                <input
+                  type="checkbox"
+                  checked={syncToGroup}
+                  onChange={(event) => { setSyncToGroup(event.target.checked); }}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-zinc-900"
+                />
+                <span className="min-w-0 font-medium">{t("tt.syncToGroup")}</span>
+              </label>
+            ) : null}
             <div className="mt-1 flex items-center justify-end gap-2">
               <button
                 type="button"

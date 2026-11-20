@@ -576,7 +576,7 @@ function IssueTable({ issues, tierTint, overrides, onChangeState }: { issues: re
             <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-2.5 font-medium">{fieldText(locale, "日期")}</th>
             <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-2.5 font-medium">{fieldText(locale, "问题描述")}</th>
             <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-2.5 font-medium">{fieldText(locale, "问题归类")}</th>
-            <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-2.5 font-medium">{fieldText(locale, "问题处理人 / 责任人")}</th>
+            <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-2.5 font-medium">{fieldText(locale, "责任人")}</th>
             <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-2.5 font-medium">{fieldText(locale, "解决方案或建议")}</th>
             <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-2.5 font-medium">{fieldText(locale, "问题附图")}</th>
             <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-2.5 text-center font-medium">{fieldText(locale, "问题是否处理")}</th>
@@ -594,7 +594,7 @@ function IssueTable({ issues, tierTint, overrides, onChangeState }: { issues: re
                 <td data-mobile-label={fieldText(locale, "问题归类")} className="px-4 py-3">
                   <CategoryTags values={issue.categories} />
                 </td>
-                <td data-mobile-label={fieldText(locale, "问题处理人 / 责任人")} className="px-4 py-3 text-zinc-700">
+                <td data-mobile-label={fieldText(locale, "责任人")} className="px-4 py-3 text-zinc-700">
                   {/* Push 260：问题处理人 / 责任人（ownerName；空 = 灰杠「—」，与「问题追踪」同列） */}
                   <span data-workspace-issue-owner="" className="block break-words">
                     {issue.ownerName === null || issue.ownerName === "" ? <span className="text-zinc-300">—</span> : issue.ownerName}

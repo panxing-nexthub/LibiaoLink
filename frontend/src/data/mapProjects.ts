@@ -10,10 +10,10 @@
  *   就在同一包围盒里按网格采样、取「在国界内且离中心最近」的点（凹形状也站得住）；微国取生成物里的形心点位。
  * - 对不上国家的地区（例如「华东」「海外」）→ 计入「未落到图上」，只报数、不画立柱，面板脚注里列出。
  * - 立柱高度 = 项目数（0.6 次幂折算，18 ~ 92 视口单位，且顶不过锚点上方 8 个单位，免得顶出画布）；
- *   立柱分段 = 项目状态（active / paused / done / archived），段高按条数占比分。
+ *   立柱分段 = 项目状态（active / paused / archived），段高按条数占比分。
  */
 import { WORLD_MAP_COUNTRIES, WORLD_MAP_MICRO_STATES, type WorldMapCountry, type WorldMapMicroState } from "./worldMap";
-import { accentOfItem, dictLabel, type Dicts } from "../dicts";
+import { projectAccent, dictLabel, type Dicts } from "../dicts";
 import { PROJECT_STATUS_TEXT, PROJECT_STATUS_VALUES, type ProjectStatusValue } from "../types";
 import type { ProjectMapOverviewItem } from "../projectApi";
 
@@ -76,11 +76,6 @@ export type HubMapDistribution = {
 const PILLAR_MIN_HEIGHT = 18;
 const PILLAR_MAX_HEIGHT = 92;
 const PILLAR_TOP_MARGIN = 8;
-
-/** 契约外的状态一律按 archived 计（图上不会凭空冒出一个状态）。 */
-function toStatus(value: string): MapProjectStatus {
-  return value === "active" || value === "paused" || value === "done" ? value : "archived";
-}
 
 type Ring = { readonly points: readonly number[]; readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number };
 
@@ -282,15 +277,15 @@ export function buildMapDistribution(projects: readonly ProjectMapOverviewItem[]
   for (const bucket of buckets.values()) {
     const segments: MapProjectStatusCount[] = [];
     for (const status of MAP_PROJECT_STATUS_ORDER) {
-      const count = bucket.projects.filter((project) => toStatus(project.status) === status).length;
+      const count = bucket.projects.filter((project) => project.status === status).length;
       if (count > 0) {
         segments.push({ status: status, count: count });
         seen.add(status);
       }
     }
     const items: MapProjectItem[] = bucket.projects.map((project) => {
-      const status = toStatus(project.status);
-      const accent = accentOfItem(dicts.projectType.find((entry) => entry.code === project.projectType));
+      const status = project.status;
+      const accent = projectAccent(dicts, project);
       return {
         id: project.id,
         code: project.code,
@@ -298,7 +293,7 @@ export function buildMapDistribution(projects: readonly ProjectMapOverviewItem[]
         status: status,
         statusText: MAP_PROJECT_STATUS_TEXT[status],
         projectType: project.projectType,
-        projectTypeName: dictLabel(dicts, "projectType", project.projectType),
+        projectTypeName: (project.projectTypes ?? [project.projectType]).map((code) => dictLabel(dicts, "projectType", code)).join(" + "),
         accent: accent.color,
         accessLevel: project.accessLevel,
       };

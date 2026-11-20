@@ -191,7 +191,7 @@ function drawHeader(ctx: SKRSContext2D, logo: CanvasImage, status: string): void
   const logoHeight = logoWidth * (logo.height / logo.width);
   ctx.drawImage(logo, 53, 31, logoWidth, logoHeight);
 
-  const isDone = status === "done";
+  const isDone = status === "archived";
   setSans(ctx, 700, 9);
   ctx.fillStyle = rgba(BLACK, 0.92);
   drawSpaced(ctx, isDone ? "PROJECT COMPLETE" : "PROJECT IN PROGRESS", 847, 42, 2.6, "right");
@@ -206,7 +206,7 @@ function drawHeader(ctx: SKRSContext2D, logo: CanvasImage, status: string): void
 }
 
 function drawOutcome(ctx: SKRSContext2D, view: R06PosterView, metrics: R06PosterMetrics): void {
-  const isDone = view.status === "done";
+  const isDone = view.status === "archived";
   ctx.fillStyle = YELLOW;
   ctx.fillRect(53, 138, 7, 7);
   setSans(ctx, 700, 9);
@@ -312,7 +312,7 @@ function drawPhoto(ctx: SKRSContext2D, view: R06PosterView, metrics: R06PosterMe
   ctx.fillStyle = "rgba(255,255,255,0.74)";
   drawSpaced(ctx, "SMART SORTING SYSTEM / 智能分拣系统", 82, 480, 2.3);
 
-  const statusText = view.status === "done" ? "ACCEPTANCE PASSED" : "EXECUTION ACTIVE";
+  const statusText = view.status === "archived" ? "ACCEPTANCE PASSED" : "EXECUTION ACTIVE";
   setSans(ctx, 700, 8);
   const statusWidth = spacedWidth(ctx, statusText, 2.2) + 38;
   const statusX = WIDTH - 53 - statusWidth;
@@ -413,7 +413,7 @@ function drawProject(ctx: SKRSContext2D, view: R06PosterView, metrics: R06Poster
   ctx.fillRect(351, top, 30, 3);
   ctx.fillRect(556, top, 30, 3);
 
-  const labels = ["PROJECT MANAGER / 项目经理", "TEAM / 参与成员", view.status === "done" ? "DELIVERY DATE / 交付日期" : "PLANNED DELIVERY / 计划交付"];
+  const labels = ["PROJECT MANAGER / 项目经理", "TEAM / 参与成员", view.status === "archived" ? "DELIVERY DATE / 交付日期" : "PLANNED DELIVERY / 计划交付"];
   const labelX = [53, 351, 556];
   for (let index = 0; index < labels.length; index += 1) {
     setSans(ctx, 600, 7);
@@ -436,7 +436,7 @@ function drawProject(ctx: SKRSContext2D, view: R06PosterView, metrics: R06Poster
   ctx.fillStyle = MUTED;
   ctx.fillText("人", 351 + teamWidth + 5, 1018);
 
-  const dateText = view.status === "done" ? formatDot(view.completedAt) : formatDate(view.plannedEnd);
+  const dateText = view.status === "archived" ? formatDot(view.completedAt) : formatDate(view.plannedEnd);
   const dateSize = fitSansSize(ctx, dateText, 286, 27, 17, 700);
   setSans(ctx, 700, dateSize);
   ctx.fillStyle = BLACK;
@@ -446,12 +446,12 @@ function drawProject(ctx: SKRSContext2D, view: R06PosterView, metrics: R06Poster
   ctx.fillStyle = "rgba(160,160,156,0.92)";
   drawSpaced(ctx, "DELIVERY OWNER", 53, 1037, 1.35);
   drawSpaced(ctx, "CROSS-FUNCTIONAL TEAM", 351, 1037, 1.35);
-  drawSpaced(ctx, view.status === "done" ? "FINAL HANDOVER" : "PLANNED / ON TRACK", 556, 1037, 1.35);
+  drawSpaced(ctx, view.status === "archived" ? "FINAL HANDOVER" : "PLANNED / ON TRACK", 556, 1037, 1.35);
 
   setSans(ctx, 700, 7.5);
   ctx.fillStyle = "rgba(138,138,135,0.92)";
   drawSpaced(ctx, "EXECUTION TRACE / 项目执行轨迹", 53, 1094, 1.9);
-  const completion = view.status === "done" && metrics.allTasksDone ? 100 : view.taskTotal > 0 ? Math.round((view.taskDone / view.taskTotal) * 100) : 0;
+  const completion = view.status === "archived" && metrics.allTasksDone ? 100 : view.taskTotal > 0 ? Math.round((view.taskDone / view.taskTotal) * 100) : 0;
   setSans(ctx, 700, 9);
   ctx.fillStyle = BLACK;
   drawSpaced(ctx, String(completion) + "% COMPLETE", 847, 1094, 1.2, "right");

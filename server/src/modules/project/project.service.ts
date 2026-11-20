@@ -13,7 +13,6 @@ import {
 } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import { DatabaseService } from "../../db/database.service.js";
-import { appendOutbox } from "../../db/outbox.js";
 import { AuditService, diffRecords } from "../admin/index.js";
 import { PermissionService, ProjectManagerEligibilityService } from "../permission/index.js";
 import type { ProjectScopeFilter } from "../permission/index.js";
@@ -60,6 +59,7 @@ export function toProjectView(
     name: row.name,
     customer: row.customer,
     region: row.region,
+    projectTypes: [row.projectType, ...row.additionalProjectTypes],
     projectType: row.projectType,
     managerIds: row.managerIds,
     managerNames: view.managerNames ?? row.managerIds.map(() => null),
@@ -71,6 +71,8 @@ export function toProjectView(
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    hasOpenPostArchiveTask: view.hasOpenPostArchiveTask ?? false,
+    archiveKind: row.status === "archived" ? view.archiveKind ?? "accepted" : null,
     archivedAt: row.archivedAt === null ? null : row.archivedAt.toISOString(),
     archivedBy: row.archivedBy,
     deletedAt: row.deletedAt === null ? null : row.deletedAt.toISOString(),
@@ -85,7 +87,7 @@ function projectAuditSnapshot(row: ProjectRow): Record<string, unknown> {
     name: row.name,
     customer: row.customer,
     region: row.region,
-    projectType: row.projectType,
+    projectTypes: [row.projectType, ...row.additionalProjectTypes],
     managerIds: row.managerIds,
     stageKey: row.stageKey,
     status: row.status,
@@ -141,6 +143,7 @@ export class ProjectService {
         name: row.name,
         region: row.region,
         projectType: row.projectType,
+        projectTypes: [row.projectType, ...row.additionalProjectTypes],
         status: row.status as ProjectView["status"],
         accessLevel: visibleIds === null || visibleIds.has(row.id) ? levels.get(row.id) ?? "view" : null,
       })),
@@ -185,7 +188,7 @@ export class ProjectService {
   /**
    * 创建（M2-01 + M2-02 导入快照 · 单事务）：
    * 1) code 唯一由数据库唯一约束兜底（23505 → 409）、seq_no 由序列分配；
-   * 2) 取该项目类型已发布蓝图（缺失回落 default 模板；可显式指定 blueprintVersion）→ 生成 stages / nodes / requirements；
+   * 2) 组合类型使用通用蓝图，单类型取对应已发布蓝图（缺失回落 default；可显式指定 blueprintVersion）→ 生成 stages / nodes / requirements；
    * 3) projects.stage_key 前移到蓝图首个阶段（或入参 stageKey 指定阶段）——任一步失败整体回滚。
    */
   async createProject(body: ProjectCreateBody, actorId: string): Promise<ProjectView> {
@@ -208,7 +211,8 @@ export class ProjectService {
       name: body.name,
       customer: body.customer ?? null,
       region: body.region,
-      projectType: body.projectType,
+      projectType: body.projectTypes?.[0] ?? body.projectType,
+      additionalProjectTypes: body.projectTypes?.slice(1) ?? [],
       managerIds,
       stageKey: body.stageKey ?? DEFAULT_STAGE_KEY,
       description: body.description ?? null,
@@ -222,6 +226,7 @@ export class ProjectService {
         projectId: row.id,
         projectType: row.projectType,
         requestedStageKey: body.stageKey,
+        additionalProjectTypes: row.additionalProjectTypes,
         requestedBlueprintVersion: body.blueprintVersion,
         at,
       });
@@ -240,7 +245,7 @@ export class ProjectService {
           { field: "name", from: null, to: row.name },
           { field: "customer", from: null, to: row.customer },
           { field: "region", from: null, to: row.region },
-          { field: "projectType", from: null, to: row.projectType },
+          { field: "projectTypes", from: null, to: [row.projectType, ...row.additionalProjectTypes] },
           { field: "managerIds", from: null, to: row.managerIds },
           { field: "stageKey", from: null, to: imported.activeStageKey },
         ],
@@ -255,7 +260,6 @@ export class ProjectService {
 
   /**
    * 更新（M2-01）：乐观锁（version 必须回传）；归档写保护（ADR-027）；code 变更同样校验唯一性；变更写审计（字段级）。
-   * 首次改为 done 时先过项目完成门禁：任务全部完成，且已配置成果类型的任务均有上传文件。
    */
   async updateProject(id: string, body: ProjectUpdateBody, actorId: string): Promise<ProjectView> {
     const current = await this.projects.findViewById(id);
@@ -270,7 +274,16 @@ export class ProjectService {
     if (body.name !== undefined) patch.name = body.name;
     if (body.customer !== undefined) patch.customer = body.customer;
     if (body.region !== undefined) patch.region = body.region;
-    if (body.projectType !== undefined) patch.projectType = body.projectType;
+    if (body.projectTypes !== undefined) {
+      patch.projectType = body.projectTypes[0];
+      patch.additionalProjectTypes = body.projectTypes.slice(1);
+    } else if (body.projectType !== undefined && body.projectType !== current.project.projectType) {
+      patch.projectType = body.projectType;
+      patch.additionalProjectTypes = current.project.additionalProjectTypes.filter((code) => code !== body.projectType);
+    }
+    if (current.project.sourceBlueprintType === null && patch.projectType !== undefined && patch.projectType !== current.project.projectType) {
+      patch.sourceBlueprintType = current.project.projectType;
+    }
     if (body.managerIds !== undefined) {
       const eligibleManagerIds = await this.managerEligibility.eligibleUserIds();
       const roster = await this.members.listByProject(id);
@@ -288,9 +301,6 @@ export class ProjectService {
     if (body.description !== undefined) patch.description = body.description;
     const at = new Date();
     const updated = await this.database.db.transaction(async (tx) => {
-      if (body.status === "done" && current.project.status !== "done") {
-        await this.flow.assertProjectCompletionGate(tx, id);
-      }
       const row = await this.projects.updateWithVersion(id, patch, body.version, at, tx);
       if (row === null) {
         const again = await this.projects.findViewById(id);
@@ -313,20 +323,6 @@ export class ProjectService {
         summary: "修改项目：" + row.code + "（" + row.name + "）",
         changes: changes.length > 0 ? changes : null,
       });
-      if (body.status === "done" && current.project.status !== "done") {
-        await appendOutbox(tx, {
-          topic: "project.completed",
-          dedupeKey: "project.completed:" + id + ":" + row.version,
-          payload: {
-            projectId: id,
-            status: row.status,
-            previousStatus: current.project.status,
-            version: row.version,
-            actorId,
-            at: at.toISOString(),
-          },
-        });
-      }
       return row;
     });
     const view = await this.projects.findViewById(id);

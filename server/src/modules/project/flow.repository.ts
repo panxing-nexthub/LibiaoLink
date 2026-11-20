@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { nodeRequirements, projectNodes } from "../../db/schema/flow.js";
-import { projectStages } from "../../db/schema/projects.js";
+import { projects, projectStages } from "../../db/schema/projects.js";
 import type { Blueprint } from "../blueprint/index.js";
 
 export type ProjectStageRow = typeof projectStages.$inferSelect;
@@ -20,6 +20,7 @@ export interface ImportSnapshotStage {
 export interface ImportSnapshotInput {
   projectId: string;
   blueprintVersion: number;
+  sourceBlueprintType: string;
   activeStageKey: string;
   stages: readonly ImportSnapshotStage[];
   at: Date;
@@ -40,6 +41,7 @@ export class FlowRepository {
    * 幂等：project_nodes (project_id, node_key) 唯一，重复 node_key 跳过（v0.2 §3.5）。
    */
   async importSnapshot(tx: DbClient, input: ImportSnapshotInput): Promise<{ stages: number; nodes: number; requirements: number }> {
+    await tx.update(projects).set({ sourceBlueprintType: input.sourceBlueprintType }).where(eq(projects.id, input.projectId));
     let nodeCount = 0;
     let requirementCount = 0;
     for (const stage of input.stages) {

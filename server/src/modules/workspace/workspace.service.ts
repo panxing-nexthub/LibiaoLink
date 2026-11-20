@@ -173,6 +173,7 @@ function toProjectItem(
     customer: row.customer,
     region: row.region,
     projectType: row.projectType,
+    projectTypes: [row.projectType, ...row.additionalProjectTypes],
     managerIds: row.managerIds,
     managerNames: row.managerNames ?? [],
     stageKey: row.stageKey as WorkspaceProject["stageKey"],
@@ -183,6 +184,8 @@ function toProjectItem(
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    hasOpenPostArchiveTask: row.hasOpenPostArchiveTask,
+    archiveKind: row.status === "archived" ? row.archiveKind ?? "accepted" : null,
     archivedAt: row.archivedAt === null ? null : row.archivedAt.toISOString(),
     archivedBy: row.archivedBy,
     // 工作台只读未删除项目；契约统一携带回收站字段。

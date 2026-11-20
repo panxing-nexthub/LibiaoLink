@@ -61,7 +61,7 @@ index.ts                      # 唯一公开出口（跨模块只允许 import �
 - 导入并发准入（P1）：preview 预算缺省 `IMPORT_CONCURRENCY_BUDGET=3`，按请求体大小计权（≤32 MiB=1 / ≤128 MiB=2 / 更大或 `Content-Length` 缺失·非法=3），小文件最多 3 个并行、重型文件独占；预算为 1 时全部按 1 处理 = 完整串行回退。commit 缺省 `IMPORT_COMMIT_CONCURRENCY=1`，第一期仍只允许单提交，同一 `previewId` 额外 singleflight 防重入。额度不足立即 429，不排队；成功 / 失败 / 取消均由 `finally` 幂等归还。该闸门是**单 API 进程内**护栏，不是跨实例分布式锁。生产 Nginx 的 `/api/v1/project-imports/preview` 专用 location 关闭 `proxy_request_buffering`，使请求头先到 API 并在整包上传前尽早返回 429；`client_max_body_size 257m` 与 300s 超时不变。压测入口 `npm run memory:smoke`：本地 200 万单元格 / 58.24 MiB 工作簿解析峰值 RSS 约 307 MiB（384 MiB V8 堆），2 GiB × 2 并发预览（4 GiB 总量）峰值 RSS 约 294 MiB（128 MiB V8 堆）；测试机仍应按真实文件复跑并看 cgroup 峰值。
 - 写入取消（Push 321）：`commit` 收 AbortSignal（controller 把「响应连接在写完前断开」—— 取消写入 / 刷新 / 关页 / 断网 —— 转 abort）；检查点（读源文件前 / 图片上传每轮 / 事务首行 / 各批量写入（任务 / 日报 / 问题 / 变更 / 文件）/ 审计记录前 / 票据落定前）命中即抛 400 `IMPORT_CANCELLED`：**单事务回滚 + 丢弃本次已上传图片对象**；票据保持 pending、源文件保留（可再次提交）；响应已正常写回时不触发。
 - 账号：只对账不建号（登录名 = 拼音、显示名 = 中文名 + `-test`、初始口令 123456 属账号体系口径；**自动建号仅测试环境需要** —— 正式环境用户目录完整、不需要自动创建）；缺号 → `ACCOUNT_MISSING`，项目经理 / 负责人 / 日报作者缺号回落导入人并提醒（`MANAGER_FALLBACK` / `OWNER_MISSING` / `AUTHOR_MISSING`）。项目经理在源表命中账号时直接保留，不套用「有效项目部成员 / 系统管理员」资格；该例外只作用于 Excel 导入，新建 / 编辑项目仍校验。
-- 地区：`commit.region` 必填（面板选，201 国口径）；项目类型按源表关键字识别（AIRROB → 飞箱）可留空。
+- 地区：`commit.region` 必填（面板选，201 国口径）；项目类型按文件名关键字识别（如 AIRROB → 飞箱），支持多个类型，面板可调整组合，留空归入未分类。
 - 提醒文案按 `Accept-Language` 出中 / 英（zh 缺省）。
 
 ## 上游（直接复用，不重复造）

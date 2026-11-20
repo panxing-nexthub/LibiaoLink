@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ProjectArchiveBodySchema, ProjectUpdateBodySchema } from "@libiaolink/contracts";
+import { ProjectArchiveBodySchema, ProjectStatusSchema, ProjectUpdateBodySchema } from "@libiaolink/contracts";
 import { AppError } from "../src/common/errors/app-error.js";
 import { convertLegacyWorkbook } from "../src/modules/project-import/legacy.js";
 import { DatabaseService } from "../src/db/database.service.js";
@@ -34,6 +34,8 @@ function projectRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
     customer: null,
     region: "华东",
     projectType: "分拣",
+    additionalProjectTypes: [],
+    sourceBlueprintType: null,
     managerIds: [ACTOR],
     stageKey: "acceptance",
     status: "active",
@@ -50,8 +52,8 @@ function projectRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
 }
 
 interface ArchiveInserted {
+  archiveKind: "accepted" | "unaccepted";
   projectId: string;
-  archivedAt: Date;
   archivedBy: string;
   snapshot: Record<string, unknown>;
   acknowledgedMissing: unknown[];
@@ -79,6 +81,9 @@ class FakeArchiveRepository {
     return this.stage;
   }
 
+  hasAcceptance = true;
+  async hasCompletedAcceptanceTask() { return this.hasAcceptance; }
+
   async listUnfinishedTasks(): Promise<{ id: string; title: string; stageKey: string | null; status: string }[]> {
     return this.unfinished;
   }
@@ -103,7 +108,8 @@ class FakeArchiveRepository {
     return this.issueCounts;
   }
 
-  async updateProjectArchived(_tx: unknown, _projectId: string, at: Date, actorId: string, expectedVersion: number): Promise<ProjectRow | null> {
+  async updateProjectArchived(_tx: unknown, _projectId: string, actorId: string, expectedVersion: number): Promise<ProjectRow | null> {
+    const at = AT;
     this.lastExpectedVersion = expectedVersion;
     if (this.project === null || this.project.version !== expectedVersion || this.project.deletedAt !== null) return null;
     this.project = { ...this.project, status: "archived", archivedAt: at, archivedBy: actorId, version: expectedVersion + 1, updatedAt: at };
@@ -123,7 +129,8 @@ class FakeArchiveRepository {
       archive: {
         id: "archive-1",
         projectId: input.projectId,
-        archivedAt: input.archivedAt,
+        archiveKind: input.archiveKind,
+        archivedAt: this.project?.archivedAt,
         archivedBy: input.archivedBy,
         snapshot: input.snapshot,
         acknowledgedMissing: input.acknowledgedMissing,
@@ -171,7 +178,9 @@ function makeService() {
   const projects = new FakeProjectRepository();
   const flow = new FakeFlowService();
   const audit = new FakeAuditService();
-  const fakeDb = { db: { transaction: (callback: (tx: unknown) => Promise<unknown>) => callback({}) } };
+  const outbox: unknown[] = [];
+  const tx = { insert: () => ({ values: (event: unknown) => outbox.push(event) }) };
+  const fakeDb = { db: { transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(tx) } };
   const service = new ArchiveService(
     fakeDb as unknown as DatabaseService,
     repo as unknown as ArchiveRepository,
@@ -179,7 +188,7 @@ function makeService() {
     flow as unknown as FlowService,
     audit as unknown as AuditService,
   );
-  return { service, repo, projects, flow, audit };
+  return { service, repo, projects, flow, audit, outbox };
 }
 
 describe("项目归档（任务全部完成口径）", () => {
@@ -197,45 +206,74 @@ describe("项目归档（任务全部完成口径）", () => {
     repo.unfinished = importedTask.baseStatus === "done" ? [] : [{
       id: "imported-task", title: importedTask.title, stageKey: importedTask.stageKey, status: importedTask.baseStatus,
     }];
-    await expectAppErrorAsync(() => service.archiveProject(PROJECT_ID, { version: 3, confirm: true }, ACTOR), "ARCHIVE_NOT_READY");
+    await expectAppErrorAsync(() => service.archiveProject(PROJECT_ID, { version: 3, confirm: true, archiveKind: "accepted" }, ACTOR), "ARCHIVE_NOT_READY");
     expect(repo.inserted).toBeNull();
   });
 
-  it("契约：confirm 缺省 false；PATCH 更新体不接受 status=archived", () => {
-    expect(ProjectArchiveBodySchema.parse({ version: 3 })).toEqual({ version: 3, confirm: false });
+  it("契约：confirm 缺省 false；PATCH 更新体拒绝新写 done 和 archived", () => {
+    expect(ProjectArchiveBodySchema.parse({ version: 3 })).toEqual({ version: 3, confirm: false, archiveKind: "accepted" });
+    expect(ProjectArchiveBodySchema.safeParse({ version: 3, archiveKind: "other" }).success).toBe(false);
     expect(ProjectArchiveBodySchema.parse({ version: 3, confirm: true }).confirm).toBe(true);
+    expect(ProjectStatusSchema.options).toEqual(["active", "paused", "archived"]);
+    expect(ProjectUpdateBodySchema.safeParse({ version: 3, status: "done" }).success).toBe(false);
     expect(ProjectUpdateBodySchema.safeParse({ version: 3, status: "archived" }).success).toBe(false);
     expect(ProjectUpdateBodySchema.safeParse({ version: 3, status: "paused" }).success).toBe(true);
   });
 
   it("有未完成任务时 409 ARCHIVE_NOT_READY，confirm=true 也不能越过", async () => {
-    const { service, repo, audit } = makeService();
+    const { service, repo, audit, outbox } = makeService();
     repo.unfinished = [
       { id: "t1", title: "装配工装", stageKey: null, status: "active" },
       { id: "t2", title: "现场验收", stageKey: "acceptance", status: "pending" },
     ];
-    const error = await expectAppErrorAsync(() => service.archiveProject(PROJECT_ID, { version: 3, confirm: true }, ACTOR), "ARCHIVE_NOT_READY");
+    const error = await expectAppErrorAsync(() => service.archiveProject(PROJECT_ID, { version: 3, confirm: true, archiveKind: "accepted" }, ACTOR), "ARCHIVE_NOT_READY");
     expect(error.httpStatus).toBe(409);
     expect(error.details).toHaveLength(2);
     expect(error.details.every((item) => item.code === "task_not_done" && item.path === "missing")).toBe(true);
     expect(repo.project?.status).toBe("active");
     expect(repo.inserted).toBeNull();
     expect(repo.aborted).toBe(0);
+    expect(outbox).toHaveLength(0);
     expect(audit.entries).toHaveLength(0);
   });
 
+  it("全部普通任务完成但没有已完成的验收任务时，不能按已验收归档", async () => {
+    const { service, repo, outbox } = makeService();
+    repo.hasAcceptance = false;
+    const error = await expectAppErrorAsync(() => service.archiveProject(PROJECT_ID, { version: 3, confirm: true, archiveKind: "accepted" }, ACTOR), "ARCHIVE_NOT_READY");
+    expect(error.details[0]?.code).toBe("acceptance_missing");
+    expect(repo.inserted).toBeNull();
+    expect(outbox).toEqual([]);
+  });
+
+  it.each([false, true])("异常归档保留清单与任务状态且不产生喜报（有未完成任务 %s）", async (unfinished) => {
+    const { service, repo, audit, outbox } = makeService();
+    repo.hasAcceptance = !unfinished;
+    if (unfinished) repo.unfinished = [{ id: "t1", title: "实施", stageKey: "install", status: "active" }];
+    const view = await service.archiveProject(PROJECT_ID, { version: 3, confirm: false, archiveKind: "unaccepted" }, ACTOR);
+    expect(repo.project?.status).toBe("archived");
+    expect(view.archiveKind).toBe("unaccepted");
+    expect(repo.inserted?.archiveKind).toBe("unaccepted");
+    expect(repo.unfinished).toHaveLength(unfinished ? 1 : 0);
+    expect(audit.entries[0]?.metadata?.archiveKind).toBe("unaccepted");
+    expect(outbox).toHaveLength(0);
+  });
+
   it("全部任务完成即可归档：阶段未推进、存在 draft 文件也不阻断，confirm=false 同样成功", async () => {
-    const { service, repo, audit } = makeService();
+    const { service, repo, audit, outbox } = makeService();
     repo.fileRows = [
       { id: "f1", name: "未定档图纸", docType: "图纸", status: "draft", nodeId: null, versionCount: 1, latestSeq: 1, latestUploadedAt: AT },
     ];
     repo.changeRows = [{ id: "c1", reason: "设计变更", stageKey: "design", appliedAt: AT }];
-    const view = await service.archiveProject(PROJECT_ID, { version: 3, confirm: false }, ACTOR);
+    const view = await service.archiveProject(PROJECT_ID, { version: 3, confirm: false, archiveKind: "accepted" }, ACTOR);
     expect(repo.project?.status).toBe("archived");
+    expect(view.archiveKind).toBe("accepted");
     expect(repo.project?.archivedBy).toBe(ACTOR);
     expect(repo.project?.version).toBe(4);
     expect(repo.inserted?.acknowledgedMissing).toEqual([]);
     expect(repo.aborted).toBe(1);
+    expect(outbox).toMatchObject([{ topic: "project.completed", dedupeKey: "project.completed:" + PROJECT_ID + ":4",
+      payload: { projectId: PROJECT_ID, status: "archived", previousStatus: "active", version: 4, actorId: ACTOR } }]);
     expect(audit.entries[0]?.action).toBe("archive");
     expect(audit.entries[0]?.result).toBeUndefined();
     expect(view.projectId).toBe(PROJECT_ID);
@@ -256,6 +294,7 @@ describe("项目归档（任务全部完成口径）", () => {
       archive: {
         id: "archive-1",
         projectId: PROJECT_ID,
+        archiveKind: "accepted",
         archivedAt: AT,
         archivedBy: ACTOR,
         snapshot: {},
@@ -296,17 +335,17 @@ describe("项目归档（任务全部完成口径）", () => {
   it("幂等与并发：已归档 409 PROJECT_ARCHIVED；版本不匹配 409 VERSION_CONFLICT", async () => {
     const archivedCase = makeService();
     archivedCase.repo.project = projectRow({ status: "archived", archivedAt: AT, archivedBy: ACTOR });
-    await expectAppErrorAsync(() => archivedCase.service.archiveProject(PROJECT_ID, { version: 3, confirm: true }, ACTOR), "PROJECT_ARCHIVED");
+    await expectAppErrorAsync(() => archivedCase.service.archiveProject(PROJECT_ID, { version: 3, confirm: true, archiveKind: "accepted" }, ACTOR), "PROJECT_ARCHIVED");
     const conflictCase = makeService();
-    await expectAppErrorAsync(() => conflictCase.service.archiveProject(PROJECT_ID, { version: 2, confirm: true }, ACTOR), "VERSION_CONFLICT");
+    await expectAppErrorAsync(() => conflictCase.service.archiveProject(PROJECT_ID, { version: 2, confirm: true, archiveKind: "accepted" }, ACTOR), "VERSION_CONFLICT");
   });
 
   it("权限：项目编辑者判定拒绝 403 FORBIDDEN；通过时断言带上动作名", async () => {
     const rejected = makeService();
     rejected.flow.reject = true;
-    await expectAppErrorAsync(() => rejected.service.archiveProject(PROJECT_ID, { version: 3, confirm: true }, ACTOR), "FORBIDDEN");
+    await expectAppErrorAsync(() => rejected.service.archiveProject(PROJECT_ID, { version: 3, confirm: true, archiveKind: "accepted" }, ACTOR), "FORBIDDEN");
     const passed = makeService();
-    await passed.service.archiveProject(PROJECT_ID, { version: 3, confirm: false }, ACTOR);
+    await passed.service.archiveProject(PROJECT_ID, { version: 3, confirm: false, archiveKind: "accepted" }, ACTOR);
     expect(passed.flow.calls).toEqual(["项目归档"]);
   });
 
@@ -319,6 +358,7 @@ describe("项目归档（任务全部完成口径）", () => {
       archive: {
         id: "archive-1",
         projectId: PROJECT_ID,
+        archiveKind: "accepted",
         archivedAt: AT,
         archivedBy: ACTOR,
         snapshot: {},
@@ -328,6 +368,7 @@ describe("项目归档（任务全部完成口径）", () => {
     } as unknown as ArchiveViewRow;
     const view = await service.getArchive(PROJECT_ID);
     expect(view.archivedByName).toBe("张工");
+    expect(view.archiveKind).toBe("accepted");
     expect(view.projectId).toBe(PROJECT_ID);
   });
 

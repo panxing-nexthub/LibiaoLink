@@ -1,6 +1,6 @@
 # 案例数据面迁移
 
-迁移只在独立 PostgreSQL 实例的 `libiaolink_case` 数据库执行。首条迁移创建 `project_read.project_summary`，供项目投影任务写入；`0012` 新增本地项目、跨来源编号占用和合并目录视图，`0013` 修正本地项目写入触发器的字段读取。迁移记录保存在案例库的 `"case".case_schema_migrations`。
+迁移只在独立 PostgreSQL 实例的 `libiaolink_case` 数据库执行。首条迁移创建 `project_read.project_summary`，供项目投影任务写入；`0012` 新增本地项目、跨来源编号占用和合并目录视图，`0013` 修正本地项目写入触发器的字段读取，`0014` 补齐远端主存项目软删除、案例版本与语言分组、项目级素材、素材版本和跨案例挂接。迁移记录保存在案例库的 `"case".case_schema_migrations`。
 
 ## 角色与权限
 
@@ -100,7 +100,7 @@ node server/case-data/gateway.mjs
 
 `externalProjectId` 可省略，由案例库生成 UUIDv7；若提供则同时参与全局唯一校验。项目 ID 在所有核心历史摘要与本地项目之间永久唯一；项目编号在目录可用项范围内跨来源唯一，即软删除或 `source_missing_at` 的历史摘要不占编号，核心在册/归档项目与全部本地项目（含归档）占编号。若源缺失的核心项目带同号重新出现，约束会让投影失败并保留冲突供人工处理，不会静默产生重号。冲突返回 409 `PROJECT_CODE_EXISTS`，项目 ID 冲突返回 409 `PROJECT_ID_EXISTS`。创建成功后返回 201 与目录项；核心 `project_summary` 不增加任何本地行。
 
-`PATCH /api/v1/projects/{projectId}` 只更新本地项目；`externalProjectId` 不可变，可更新项目编号、名称、客户、区域、类型、经理和状态。请求必须带 `expectedVersion`（即目录项的 `sourceVersion`），命中后原子递增版本并更新 `updatedAt`/`syncedAt`；版本不一致返回 409 `PROJECT_VERSION_CONFLICT`。`status: "archived"` 会设置 `archivedAt`，改回其它状态会清空 `archivedAt`。核心投影项目返回 409 `PROJECT_SOURCE_READ_ONLY`；更新项目编号仍执行跨来源唯一校验，并沿用 `operationId` 幂等。
+`PATCH /api/v1/projects/{projectId}` 只更新本地项目；`externalProjectId` 不可变，可更新项目编号、名称、客户、区域、类型、经理和状态。请求必须带 `expectedVersion`（即目录项的 `sourceVersion`），命中后原子递增版本并更新 `updatedAt`/`syncedAt`；版本不一致返回 409 `PROJECT_VERSION_CONFLICT`。`status: "archived"` 会设置 `archivedAt`，改回其它状态会清空 `archivedAt`。核心投影项目返回 409 `PROJECT_SOURCE_READ_ONLY`；更新项目编号仍执行跨来源唯一校验，并沿用 `operationId` 幂等。`deleted: true` 软删除后按 ID 返回 404，`deleted: false` 恢复；归档仍占编号，软删除释放编号，恢复时若编号已被占用返回 409 `PROJECT_CODE_EXISTS`。
 
 ```json
 {
@@ -111,6 +111,37 @@ node server/case-data/gateway.mjs
   "status": "archived"
 }
 ```
+
+## 远端主存 P0 接口（OpenAPI 1.8.0）
+
+`0014` 之后，项目、案例和素材均以 `libiaolink_case` 与案例版本化对象桶为主存。接口成功响应均表示业务事务已提交；随后按资源 ID 立即读取使用同一案例库，不依赖项目投影周期。核心项目摘要仍由常驻 `watch` 以 1 秒默认间隔进入 `project_summary`，300 秒只是晚提交事务回看窗口。
+
+| 能力 | 接口 |
+|---|---|
+| 合并目录分页 | `GET /api/v1/projects` |
+| 本地项目注册（仅创建） | `POST /api/v1/projects` |
+| 按 ID 读取目录项 | `GET /api/v1/projects/{projectId}` |
+| 更新、归档、软删除、恢复 | `PATCH /api/v1/projects/{projectId}` |
+| 项目下案例分页与过滤 | `GET /api/v1/projects/{projectId}/cases` |
+| 创建案例 | `POST /api/v1/projects/{projectId}/cases` |
+| 案例读取与更新 | `GET/PATCH /api/v1/cases/{caseId}` |
+| 案例历史版本 | `GET /api/v1/cases/{caseId}/versions`、`GET /api/v1/cases/{caseId}/versions/{versionId}` |
+| 恢复历史版本 | `POST /api/v1/cases/{caseId}/versions/{versionId}/restore` |
+| 同语言翻译组 | `GET /api/v1/cases/{caseId}/translations` |
+| 项目级素材上传 | `POST /api/v1/projects/{projectId}/uploads` |
+| 案例素材上传 | `POST /api/v1/cases/{caseId}/uploads` |
+| 项目或案例素材列表 | `GET /api/v1/projects/{projectId}/assets`、`GET /api/v1/cases/{caseId}/assets` |
+| 素材详情与版本 | `GET /api/v1/assets/{assetId}`、`GET /api/v1/assets/{assetId}/versions` |
+| 素材元数据更新 | `PATCH /api/v1/assets/{assetId}` |
+| 跨案例挂接与解除 | `PUT/DELETE /api/v1/assets/{assetId}/cases/{caseId}` |
+| 作者预览与下载票据 | `GET /api/v1/assets/{assetId}/versions/{assetVersionId}/preview-ticket`、`.../download-ticket` |
+
+- `POST /api/v1/projects` 仅创建，不承担更新或归档；更新、归档、软删除和恢复统一使用 `PATCH /api/v1/projects/{projectId}`。
+- 项目目录没有独立 `rowVersion`；PATCH 的 `expectedVersion` 使用目录项 `sourceVersion`。项目 profile 有独立 `rowVersion`，首次保存传 `expectedVersion: 0`，成功返回 201，读取或冲突均不再返回 201。
+- `externalProjectId` 在所有核心历史摘要与本地项目间永久唯一；`projectCode` 在目录可用项间跨来源唯一。`project_directory` 是唯一合并读取口径，`project_summary` 只保存核心只读投影。
+- 案例调用方可预生成 `caseId`；`translationGroupId` 关联独立编辑、审核和发布的语言版本，一语言一案例。每次真实变更保存 `case_versions`，无实际变化的 PATCH 不递增 `rowVersion`、不新增历史版本。
+- 素材是项目级稳定资产；同一 `assetId` 重新上传生成新 `assetVersionId`，可挂接同项目多个案例。历史 release 固定精确 `assetVersionId` 与 `objectVersionId`，后续编辑、归档、删除或解挂不改写历史快照。
+- 图片、PDF 和 AVIF 可取得短时预览票据；票据不暴露桶名、`object_key` 或永久凭据。被 release 引用的素材删除返回 409 `ASSET_REFERENCED`，归档仍允许。
 
 ## 案例侧项目补充资料
 
@@ -160,7 +191,7 @@ node server/case-data/operation-cleanup.mjs /path/to/settled-outbox.json
 
 先应用 `0008_case_assets.sql` 和 `0011_case_asset_processing.sql`。配置 `CASE_GATEWAY_ASSET_BUCKET` 和 `CASE_GATEWAY_S3_ENDPOINT`，并在 `CASE_GATEWAY_SECRET_DIR` 挂载仅所有者可读的 `case_s3_access_key`、`case_s3_secret_key`。桶须独立、私有并启用版本控制。S3 地址须使用 HTTPS，开发环境允许 `127.0.0.1` 的 HTTP。区域由 `CASE_GATEWAY_S3_REGION` 指定，默认 `us-east-1`。配置后 `/readyz` 额外校验桶可访问且版本控制已开启。
 
-网关凭据使用该桶的 `GetBucketVersioning`，以及 `cases/*` 的 `PutObject`、`GetObjectVersion`、`ListMultipartUploadParts`。`ListBucketVersions` 只授予 `s3:prefix` 匹配 `cases/*` 的请求，用于找回会话的原始对象版本。本地 MinIO 给 `GetObjectVersion` 加 `StringNotEquals` 条件 `{"s3:versionid":""}`。运行角色缺省拒绝无版本 GET、跨桶访问和删除对象版本。
+网关凭据使用该桶的 `GetBucketVersioning`；`GetObjectVersion` 可读取历史 `cases/*` 和新 `projects/*`；`PutObject`、`ListMultipartUploadParts`、`AbortMultipartUpload` 只允许 `projects/*`；`ListBucketVersions` 的 `s3:prefix` 限制为 `cases/*` 与 `projects/*`。旧 `cases/*` 只保留读取，新的项目级与案例素材统一写入 `projects/{projectId}/assets/{assetId}/{assetVersionId}`。运行角色缺省拒绝无版本 GET、跨桶访问和删除对象版本。测试机 MinIO 策略 `libiaolink-case-gateway-v2` 已实测：`projects/*` 经网关上传成功，使用同一网关凭据写 `cases/*` 被拒绝。
 
 | 顺序 | 本地接口 | Scope |
 |---|---|---|
@@ -200,9 +231,19 @@ node server/case-data/operation-cleanup.mjs /path/to/settled-outbox.json
 
 公开服务的分享授权、缓存键和失效由案例小组后端负责。实际媒体作业、外部缓存失效和生产读链路待联调验证。
 
+## 存量迁移与故障语义
+
+当前没有虚构的“批量单接口”。存量迁移使用稳定 ID 和稳定 `operationId` 分批调用现有单资源接口，顺序为项目 → 案例与语言版本 → 素材与版本 → 案例挂接 → release。项目保留原 `externalProjectId` 与 `projectCode`，案例保留调用方预生成 `caseId`；每批对账使用按 ID 读取、项目案例分页、素材版本和 `GET /api/v1/operations/{operationId}`，不依赖定时投影或人工猜测。
+
+单服务身份默认每分钟 120 次请求，总并发 16、单身份并发 6；单次 PUT 上限 32 MiB，分片每片 8 MiB，单素材总上限 256 MiB。迁移应在限流范围内串行使用同一 `operationId` 重试，收到 429/503 时读取 `Retry-After`，收到 409 时先读回当前版本或业务码，不得用新键覆盖。
+
+远端是唯一主存。网关不可用、数据库提交失败或对象存储不可用时，请求返回明确的 401/403/404/409/429/503 或超时；案例小组必须把本地 outbox 保持为 `pending`，不得在远端未确认时展示为成功或发布。查询原 `operationId` 再决定收敛或重试；没有本地业务兜底。
+
+LocalStack 社区版 4.8.1 未执行部分 IAM 拒绝断言，因此本地素材测试可用 `CASE_DATA_ASSETS_TEST_ENFORCE_IAM=false` 跳过该环境能力检查；该开关不适用于正式环境，也不改变 MinIO 生产策略。测试机已用真实 MinIO 策略做 `projects/*` 成功写入和 `cases/*` 写入拒绝验收。
+
 ## C10 本地端到端联调
 
-`server/test/case-data-gateway.integration.test.ts` 的 C10 用例从项目目录读取来源版本，经案例创建及更新、真实素材上传、staging、本地审批、outbox 激活、公开读取和撤回。案例库应用 `0001–0013`。另起仅监听回环地址的 PostgreSQL 实例，在 `case_partner_fixture` 库初始化案例小组 v0.2 的 `03-local-schema/001_local_schema_up.sql`。使用独立的作者、公开与媒体服务令牌，通过测试桶 `libiaolink-case-proof` 验证实际对象版本。媒体夹具通过 HTTP 回传合成结果，故障代理独立注入丢请求或丢响应。
+`server/test/case-data-gateway.integration.test.ts` 的 C10 用例从项目目录读取来源版本，经案例创建及更新、真实素材上传、staging、本地审批、outbox 激活、公开读取和撤回。案例库应用 `0001–0014`。另起仅监听回环地址的 PostgreSQL 实例，在 `case_partner_fixture` 库初始化案例小组 v0.2 的 `03-local-schema/001_local_schema_up.sql`。使用独立的作者、公开与媒体服务令牌，通过测试桶 `libiaolink-case-proof` 验证实际对象版本。媒体夹具通过 HTTP 回传合成结果，故障代理独立注入丢请求或丢响应。
 
 测试沿用网关的 `CASE_DATA_GATEWAY_TEST_ADMIN_URL`、`CASE_DATA_GATEWAY_TEST_DATABASE_URL`、`CASE_DATA_PUBLIC_TEST_DATABASE_URL` 及 `CASE_DATA_ASSETS_TEST_ENDPOINT`、`CASE_DATA_ASSETS_TEST_BUCKET`、`CASE_DATA_ASSETS_TEST_ACCESS_KEY`、`CASE_DATA_ASSETS_TEST_SECRET_KEY`。新增 `CASE_DATA_PARTNER_TEST_DATABASE_URL` 用于夹具写业务决定，`CASE_DATA_PARTNER_OUTBOX_TEST_DATABASE_URL` 用于独立 worker 进程。worker 只接收后者、网关 HTTP 地址和作者服务令牌。worker 角色读审批记录，对本地 outbox、案例状态和分享链接拥有查询与更新权限。
 

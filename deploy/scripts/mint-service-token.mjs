@@ -17,6 +17,7 @@ const identities = {
     "case-data:operations:read",
     "case-data:assets:read",
     "case-data:assets:write",
+    "case-data:releases:read",
     "case-data:releases:write",
     "case-data:releases:history:read"
   ],

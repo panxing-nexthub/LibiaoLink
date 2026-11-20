@@ -1,3 +1,23 @@
+> **2026-11-20 17:41–17:45 项目卡片状态徽标移至左上角并取消图标（正式机 frontend-only · prod-20261120-1741-px-card-status-topleft-38d7bf28）**：代码来源 PR [#957](https://github.com/panxing-nexthub/LibiaoLink/pull/957) / main `38d7bf28`；正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261120-1741-px-card-status-topleft-38d7bf28`，previous = `prod-20261120-1736-px-pm-gantt-availability-e9f1ca73`；staging = `/srv/data/deploy-prod-20261120-1741-px-card-status-topleft-38d7bf28/staging`，备份 = `/srv/data/backups/before-prod-20261120-1741-px-card-status-topleft-38d7bf28`。PR CI 6 / 6，squash 合入 main。
+
+> **改动 / 验收**：项目卡片状态徽标从编号行右侧移回卡片左上角，紧跟项目类型标签；取消播放 / 暂停 / 对勾图标，仅保留文字与原有底色。公网 `index.html` / 主包 / CSS 与构建逐字节一致；生产首卡 DOM 确认徽标距卡片左 71px、上 1px、编号上方，徽标内 `svg` 0 个；主包含 `data-card-status` 1 次、旧播放图标路径 0 次。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,592,276 B / SHA-256 `9d84ccd9…`、692 归档条目、678 文件；`build-info.json` 1,527 B / `e3f71bfb…`；`frontend-files.sha256` 91,081 B / `d3459585…`；`release-files.sha256` 257 B / `b178ebf2…`。按内容哈希替换 `assets/es-Cnt25In2.js`、`assets/index-057p0PJn.js`、`assets/index-Bq4XQ70h.css` 并原子替换 `index.html`；线上 1,441 → 1,444 文件，旧 hashed 资源全部保留。staging 与 live 均 678 / 678 哈希通过，发布件 3 / 3 通过；`index.html` `1c36fd65…`、主包 2,486,845 B / `a5dde687…`、CSS 234,337 B / `372207a6…`，上一版主包 `assets/index-C6kZ2rgL.js` 与 CSS 仍 200。
+
+> **验证 / 备份 / 清单**：正式机 `/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；api / worker / web / postgres / minio / CAD / SVG preview / OnlyOffice 均 healthy，RestartCount 0、OOM false，近 10 分钟错误 0；项目管理三账号白名单保持 `panxing@ / lixiawei@ / yangm@libiaorobot.com`。备份 89,015,872 B / SHA256SUMS `7889efb0…`，3 / 3 校验通过；新 `RELEASE_MANIFEST.json` 6,584 B / `87337f77…`，`root:root 644` 原子替换。
+
+> **边界 / 回滚**：仅正式机 `10.1.103.44` 前端 dist 与 release manifest；测试机同步部署同版本。无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更，未重启后端。回滚：恢复 backup 的 `frontend-dist-before.tar.gz` 到 `/opt/libiaolink/frontend`，并恢复 `RELEASE_MANIFEST.json.before`；静态资源无需重启 web。
+
+> **2026-11-20 17:41–17:44 项目卡片状态徽标移至左上角并取消图标（测试机 frontend-only · test-20261120-1741-px-card-status-topleft-38d7bf28）**：代码来源 PR [#957](https://github.com/panxing-nexthub/LibiaoLink/pull/957) / main `38d7bf28`；测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261120-1741-px-card-status-topleft-38d7bf28`，previous = `test-20261120-1732-px-pm-gantt-availability-e9f1ca73`；staging = `/srv/data/deploy-test-20261120-1741-px-card-status-topleft-38d7bf28/staging`，备份 = `/srv/data/backups/before-test-20261120-1741-px-card-status-topleft-38d7bf28`。
+
+> **改动 / 验收**：状态徽标移至卡片左上角并取消图标；`index.html` / 主包 / CSS 哈希与构建一致，浏览器首卡 DOM 确认徽标位于左上角、编号上方，徽标内 `svg` 0 个；主包含 `data-card-status` 1 次、旧播放图标路径 0 次。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,592,276 B / `9d84ccd9…`、692 归档条目、678 文件；`build-info.json` 1,532 B / `b34af587…`；`frontend-files.sha256` 91,081 B / `d3459585…`；`release-files.sha256` 257 B / `0af618ef…`。按内容哈希替换 3 个 hashed 资源并原子替换 `index.html`；线上 958 → 961 文件，旧 hashed 资源全部保留。staging 与 live 均 678 / 678 哈希通过，发布件 3 / 3 通过。
+
+> **验证 / 备份 / 清单**：测试机 `/`、`/healthz`、`/readyz` 均 200，未登录 API 401，readyz 四项全 true；核心容器均 healthy，RestartCount 0、OOM false，近 10 分钟错误 0。备份 115,819,016 B / `f9a2f8f8…`，3 / 3 校验通过；新 manifest 6,482 B / `cacb6102…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机前端 dist 与 release manifest；随后正式机部署同版本。无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更，未重启后端。回滚：恢复 backup 的 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-20 17:36 项目管理甘特-可用区间清理（正式机 frontend-only · prod-20261120-1736-px-pm-gantt-availability-e9f1ca73）**：代码来源 PR [#955](https://github.com/panxing-nexthub/LibiaoLink/pull/955) / main `e9f1ca73892f83f8166161ec5f2681c08c7d1ef5`；正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261120-1736-px-pm-gantt-availability-e9f1ca73`，previous = `prod-20261120-1710-px-pm-gantt-inline-status-ad792b08`；staging = `/srv/data/deploy-prod-20261120-1736-px-pm-gantt-availability-e9f1ca73/staging`。PR CI 6 / 6，squash 合入 main。
 
 > **改动 / 验收**：甘特「可用」底色与文字仅从今天起显示，跨今天的可用区间裁剪到今天；全部收起后人员组时间轴保留清晰边界。UI QA 全通过：可用区间均不早于 2026-11-20，收起态行边界可见；截图 `inline-status-gantt-1440.png`、`inline-status-gantt-collapsed-1440.png`、`inline-status-960.png`。公网 `index.html` / 主包 / CSS 与构建逐字节一致，主包含 `bg-zinc-50/80` 7 次、旧 `statusLane` 0 次。

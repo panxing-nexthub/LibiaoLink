@@ -423,7 +423,6 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
                     aria-label={t("export.name.title")}
                     className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200"
                   />
-                  <p className="mt-1.5 px-0.5 text-[11px] leading-4 text-zinc-400">{t("export.name.hint")}</p>
                 </div>
                 <div className="mb-1.5 px-0.5 text-xs font-medium text-zinc-500">{t("export.primary.title")}</div>
                 <div role="radiogroup" aria-label={t("export.primary.title")} className="grid grid-cols-2 gap-1.5">
@@ -455,7 +454,6 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
 
                 <div className="my-4 h-px bg-zinc-100" />
                 <div className="mb-1 px-0.5 text-xs font-medium text-zinc-500">{t("export.content.title")}</div>
-                <p className="mb-2 px-0.5 text-[11px] leading-4 text-zinc-400">{t("export.content.hint")}</p>
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <button
                     type="button"

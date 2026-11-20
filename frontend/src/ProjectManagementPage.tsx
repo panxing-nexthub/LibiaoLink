@@ -4143,7 +4143,7 @@ export default function ProjectManagementPage({
             role="tablist"
             aria-label={t("pm.view.tabsAria")}
             data-project-management-view-tabs=""
-            className="sticky top-16 z-40 flex min-h-[52px] items-center gap-1 overflow-x-auto rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5"
+            className="sticky top-16 z-30 flex min-h-[52px] items-center gap-1 overflow-x-auto rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5"
           >
             {PM_VIEW_TABS.map((tab) => {
               const active = tab.key === activeViewTab;

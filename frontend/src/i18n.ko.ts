@@ -14,7 +14,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "pm.count": "총 {n}개 기록",
   "pm.table.aria": "프로젝트 준비 정보",
   "pm.view.tabsAria": "프로젝트 관리 보기 전환",
-  "pm.view.table": "표 보기",
+  "pm.view.table": "프로젝트 개요",
   "pm.view.ownerKanban": "보드 · 프로젝트 관리자",
   "pm.view.implementationKanban": "보드 · 시행",
   "pm.view.implementationGantt": "간트 · 시행",

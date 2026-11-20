@@ -14,7 +14,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "pm.count": "全 {n} 件の記録",
   "pm.table.aria": "プロジェクト準備情報",
   "pm.view.tabsAria": "プロジェクト管理ビューの切り替え",
-  "pm.view.table": "テーブル表示",
+  "pm.view.table": "プロジェクト概要",
   "pm.view.ownerKanban": "ボード・プロジェクトマネージャー",
   "pm.view.implementationKanban": "ボード・実施",
   "pm.view.implementationGantt": "ガント・実施",

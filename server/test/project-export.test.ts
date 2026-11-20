@@ -138,11 +138,24 @@ function headerImages(sheet: ExcelJS.Worksheet) {
   return sheet.getImages().filter((image) => image.range.tl.nativeRow === 0);
 }
 
-function expectHeaderFitted(sheet: ExcelJS.Worksheet): void {
+function expectHeaderFitted(workbook: ExcelJS.Workbook, sheet: ExcelJS.Worksheet): void {
   const images = headerImages(sheet);
   expect(images).toHaveLength(1);
   expect(images[0]!.range.br?.nativeCol).toBe(sheet.columnCount);
   expect(images[0]!.range.br?.nativeRow).toBe(1);
+  const image = workbook.getImage(Number(images[0]!.imageId));
+  expect(image.buffer).toBeDefined();
+  const imageBytes = Buffer.from(image.buffer as unknown as Uint8Array);
+  expect(imageBytes.subarray(1, 4).toString()).toBe("PNG");
+  const imageWidth = imageBytes.readUInt32BE(16);
+  const imageHeight = imageBytes.readUInt32BE(20);
+  const tableWidth = Array.from({ length: sheet.columnCount }, (_value, index) =>
+    Math.max(20, Math.round((sheet.getColumn(index + 1).width ?? 8.43) * 7 + 5))
+  ).reduce((sum, width) => sum + width, 0);
+  const tableHeight = (sheet.getRow(1).height ?? 0) * 4 / 3;
+  const imageRatio = imageWidth / imageHeight;
+  const tableRatio = tableWidth / tableHeight;
+  expect(Math.abs(imageRatio - tableRatio) / tableRatio).toBeLessThan(0.05);
 }
 
 function arrayBufferOf(bytes: Buffer): ArrayBuffer {
@@ -268,7 +281,7 @@ describe("项目数据导出工作簿", () => {
 
     const stakeholder = workbook.getWorksheet("干系人")!;
     for (const sheet of [task, report, issue, change, stakeholder]) {
-      expectHeaderFitted(sheet);
+      expectHeaderFitted(workbook, sheet);
       expect(sheet.getRow(1).height).toBe(60);
       expect(sheet.views[0]).toMatchObject({ state: "frozen", ySplit: 2, topLeftCell: "A3" });
       expect(sheet.getRow(2).height).toBeGreaterThanOrEqual(31.5);
@@ -446,7 +459,7 @@ describe("项目数据导出工作簿", () => {
       expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual(result.sheetNames);
       for (const sheetName of result.sheetNames) {
         const sheet = workbook.getWorksheet(sheetName)!;
-        expectHeaderFitted(sheet);
+        expectHeaderFitted(workbook, sheet);
         expect(sheet.getRow(1).height).toBe(60);
         expect(sheet.views[0]).toMatchObject({ state: "frozen", ySplit: 2, topLeftCell: "A3" });
       }

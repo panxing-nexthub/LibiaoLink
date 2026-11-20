@@ -2941,6 +2941,7 @@ function PmImplementationGantt({
         }}
       />
     );
+  const currentGanttIso = timeline.days[timeline.todayIndex]?.iso ?? pmGanttTodayIso();
   const todayMarker =
     timeline.todayIndex < 0 ? null : (
       <span
@@ -3330,14 +3331,27 @@ function PmImplementationGantt({
                     ) : null}
                   </div>
                   <div
-                    className={"relative shrink-0 border-b border-zinc-200 " + (isPersonGroup ? "bg-emerald-50/60" : "bg-white")}
+                    className={"relative shrink-0 border-b border-zinc-300 " + (isPersonGroup ? "bg-zinc-50/80" : "bg-white")}
                     style={{ width: timeline.width, height: PM_GANTT_GROUP_HEIGHT, ...pmGanttGridStyle(ganttDayWidth, timeline.gridDays) }}
                   >
                     {selectedColumnMarker}
                     {isPersonGroup
                       ? group.occupancy.availableSegments.map((segment) => {
-                          const segmentWidth = Math.max(2, (segment.endIndex - segment.startIndex + 1) * ganttDayWidth - 2);
-                          const segmentStartIso = timeline.days[segment.startIndex]?.iso ?? "";
+                          let availableStartIndex = segment.startIndex;
+                          while (
+                            availableStartIndex <= segment.endIndex &&
+                            (timeline.days[availableStartIndex]?.iso ?? "") < currentGanttIso
+                          ) {
+                            availableStartIndex += 1;
+                          }
+                          if (availableStartIndex > segment.endIndex) {
+                            return null;
+                          }
+                          const segmentWidth = Math.max(
+                            2,
+                            (segment.endIndex - availableStartIndex + 1) * ganttDayWidth - 2,
+                          );
+                          const segmentStartIso = timeline.days[availableStartIndex]?.iso ?? "";
                           const segmentEndIso = timeline.days[segment.endIndex]?.iso ?? "";
                           const segmentTitle =
                             t("pm.gantt.available") +
@@ -3351,7 +3365,7 @@ function PmImplementationGantt({
                               aria-hidden="true"
                               title={segmentTitle}
                               className="pointer-events-none absolute inset-y-0 z-[1] flex items-center justify-center border-r border-emerald-100/80 text-[11px] font-medium text-emerald-700/75"
-                              style={{ left: segment.startIndex * ganttDayWidth + 1, width: segmentWidth }}
+                              style={{ left: availableStartIndex * ganttDayWidth + 1, width: segmentWidth }}
                             >
                               {segmentWidth >= 42 ? t("pm.gantt.available") : null}
                             </span>

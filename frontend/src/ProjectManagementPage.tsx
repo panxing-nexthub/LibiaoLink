@@ -704,10 +704,33 @@ function TextCell({
         document.execCommand("insertText", false, text);
       }}
       onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-        if (event.key === "Enter") {
+        if (event.key !== "Enter") {
+          return;
+        }
+        if (!multilineOnFocus) {
           event.preventDefault();
           event.currentTarget.blur();
+          return;
         }
+        event.preventDefault();
+        const selection = window.getSelection();
+        if (selection === null || selection.rangeCount === 0) {
+          return;
+        }
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        const lineBreak = document.createTextNode("\n");
+        range.insertNode(lineBreak);
+        range.setStartAfter(lineBreak);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        const raw = event.currentTarget.textContent ?? "";
+        const text = maxLength === undefined ? raw : raw.slice(0, maxLength);
+        if (text !== raw) {
+          event.currentTarget.textContent = text;
+        }
+        onInput(text);
       }}
       className={
         "min-h-11 truncate px-2 py-3 text-xs leading-5 outline-none transition focus:absolute focus:left-0 focus:right-0 focus:top-0 focus:z-20 focus:min-h-full focus:overflow-visible focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500 " +

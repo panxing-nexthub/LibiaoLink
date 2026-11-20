@@ -3121,9 +3121,10 @@ function PmImplementationGantt({
       className="min-w-0"
       style={ganttCssVariables}
     >
+      <div className="sticky top-[116px] z-[25]">
       <div
         data-project-management-gantt-toolbar="true"
-        className="sticky top-[116px] z-20 flex flex-wrap items-center justify-between rounded-t-xl border border-zinc-200 bg-white"
+        className="flex flex-wrap items-center justify-between rounded-t-xl border border-zinc-200 bg-white"
         style={{
           gap: ganttMetrics.toolbarGap,
           padding: `${ganttMetrics.toolbarPaddingY}px ${ganttMetrics.toolbarPaddingX}px`,
@@ -3249,18 +3250,10 @@ function PmImplementationGantt({
           </div>
         </div>
       </div>
-      <div className="overflow-hidden rounded-b-xl border border-t-0 border-zinc-200 bg-white">
-      <ScrollArea
-        axis="horizontal"
-        fixedHorizontalScrollbar
-        ariaLabel={t("pm.gantt.aria")}
-        viewportClassName="min-h-0"
-        className="min-w-full pb-3"
-      >
-        <div className="min-w-max">
+        <div className="flex border-x border-b border-zinc-200 bg-white">
           <div className="flex" style={{ height: ganttMetrics.headerHeight }}>
             <div
-              className="sticky left-0 z-20 flex shrink-0 border-b border-zinc-300 bg-zinc-50 shadow-[8px_0_18px_-18px_rgba(15,23,42,0.55)]"
+              className="relative z-20 flex shrink-0 bg-zinc-50 shadow-[8px_0_18px_-18px_rgba(15,23,42,0.55)]"
               style={{ width: ganttTableWidth }}
             >
               {ganttColumnLayout.visible.map(({ column, width }, columnIndex) => (
@@ -3315,10 +3308,11 @@ function PmImplementationGantt({
                 </span>
               ) : null}
             </div>
-            <div
-              className="relative shrink-0 border-b border-zinc-300 bg-zinc-50"
-              style={{ width: timeline.width }}
-            >
+            <div className="relative min-w-0 flex-1 overflow-hidden bg-white">
+              <div
+                className="h-full bg-zinc-50"
+                style={{ width: timeline.width, transform: `translateX(-${ganttScrollLeft}px)` }}
+              >
               <div className="flex border-b border-zinc-200" style={{ height: ganttMetrics.headerRowHeight }}>
                 {timeline.primarySegments.map((segment, index) => {
                   const hasToday =
@@ -3424,8 +3418,20 @@ function PmImplementationGantt({
                     })}
               </div>
             </div>
+            </div>
           </div>
 
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-b-xl border border-t-0 border-zinc-200 bg-white">
+      <ScrollArea
+        axis="horizontal"
+        fixedHorizontalScrollbar
+        ariaLabel={t("pm.gantt.aria")}
+        viewportClassName="min-h-0"
+        className="min-w-full pb-3"
+      >
+        <div className="min-w-max">
           {renderedGroups.map((group) => {
             const groupStartIndex =
               group.groupStart === null ? null : indexOfIso(group.groupStart, -1);

@@ -348,8 +348,8 @@ try {
   });
   check("② 卡面状态和归档类型与数据库逐卡一致", mismatch.length === 0, JSON.stringify(mismatch.slice(0, 2)));
   check("③ 状态标签紧邻编号或换行，完整显示", cards.every((c) => c.besideOrBelow));
-  check("④ 状态具备图标，文字与标签底色对比度至少 4.5:1",
-    cards.every((c) => c.icon && contrastRatio(c.foreground, c.background) >= 4.5));
+  check("④ 状态具备图标、统一白字，文字与标签底色对比度至少 4.5:1",
+    cards.every((c) => c.icon && c.foreground === "rgb(255, 255, 255)" && contrastRatio(c.foreground, c.background) >= 4.5));
 
   // ---------- ② 新建弹窗回归（不含状态区） ----------
   await clickByText("button", "新建项目");

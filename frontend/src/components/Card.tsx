@@ -7,7 +7,7 @@ import { RowDeleteButton } from "./RowDeleteButton";
 import { usePopover } from "./usePopover";
 
 /**
- * 项目卡片（首页）：类型标签、底色和描边共用项目类型的字典主题色。
+ * 项目卡片（首页）：类型标签、底色和描边共用 projectAccent 给出的项目主题色。
  * 底部动作条（Push 172）：编辑与删除都是**隐式**的 —— 静止不显示，鼠标悬停卡片 / 键盘聚焦才浮现；
  * 删除 = 任务表行内同款（RowDeleteButton，红底胶囊），排在编辑右侧，占固定 48px 槽位、展开不挤动右侧时间。
  * 背景档位（Push 289 · 同日「用 c 试试」；Push 293 加炫彩）：tint 传值 = 该色铺满整卡（适中 = 「我的任务」便签同款淡彩；炫彩 = 同色相高饱和浓彩），
@@ -32,11 +32,11 @@ function glowOf(color: string): string {
 }
 
 const statusBadges = {
-  active: { colors: "bg-[#08634c] text-white", icon: "M5.5 3.5 12 8l-6.5 4.5z" },
-  temporary: { colors: "bg-[#ece7fa] text-[#523491]", icon: "M8 2v6l3 2 M14 8a6 6 0 1 1-6-6" },
-  accepted: { colors: "bg-[#e4edf9] text-[#244776]", icon: "M2 8l4 4 8-8" },
-  unaccepted: { colors: "bg-[#ffeadc] text-[#813916]", icon: "M4 4h8v8H4z" },
-  paused: { colors: "bg-[#fff1bf] text-[#694b09]", icon: "M5.5 3v10 M10.5 3v10" },
+  active: { background: "bg-[#08634c]", icon: "M5.5 3.5 12 8l-6.5 4.5z" },
+  temporary: { background: "bg-[#383877]", icon: "M8 2v6l3 2 M14 8a6 6 0 1 1-6-6" },
+  accepted: { background: "bg-[#194c78]", icon: "M2 8l4 4 8-8" },
+  unaccepted: { background: "bg-[#8c2d35]", icon: "M4 4h8v8H4z" },
+  paused: { background: "bg-[#714907]", icon: "M5.5 3v10 M10.5 3v10" },
 };
 
 type CardProps = {
@@ -179,7 +179,7 @@ export function Card({
           id={statusId}
           data-card-status={status}
           data-archive-kind={status === "archived" ? displayStatus : undefined}
-          className={"inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold leading-4 " + badge.colors}
+          className={"inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold leading-4 text-white " + badge.background}
         >
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-3.5 shrink-0">
             <path d={badge.icon} />

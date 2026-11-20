@@ -646,6 +646,10 @@ body {
 }
 
 
+.project-card.tint-vivid [data-card-status] {
+  outline: 1px solid white;
+}
+
 /* 炫彩档文字加深（Push 293 追订「炫彩模式文字不明显 看不出来」）：高饱和彩底上的次要灰字整体提深一档
    —— 只动深浅、不动色相（口径同档位）：zinc-300 → 500 / zinc-400 → 700 / zinc-500 → 800 / zinc-600 → 900。
    作用域 = 行 / 卡根上挂 .tint-vivid（TaskRow / 问题行 / Card 按「炫彩」档挂），不波及白底区域与浮层。 */

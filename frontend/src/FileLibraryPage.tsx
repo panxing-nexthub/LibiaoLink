@@ -11,7 +11,7 @@ import { SearchInput } from "./components/SearchInput";
 import { SearchSelect } from "./components/SearchSelect";
 import { Toast, ToastConfirm } from "./components/Toast";
 import { regionNameEn } from "./data/regionPicker";
-import { dictLabel, typeAccent, type Dicts } from "./dicts";
+import { dictLabel, projectAccent, type Dicts } from "./dicts";
 import type { DirectoryUser } from "./directory";
 import { keepLiveOrder } from "./liveSync";
 import { useLiveRefresh } from "./useLiveRefresh";
@@ -886,7 +886,7 @@ export function FileLibraryPage({ me, query, onChangeQuery, directory, dicts }: 
               {projectRecycleState.kind === "ready" && recycledProjects.length > 0 ? (
                 <div data-project-recycle="" className="grid grid-cols-1 gap-6 @md:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
                   {recycledProjects.map((project) => {
-                    const accent = typeAccent(dicts, project.projectType);
+                    const accent = projectAccent(dicts, project);
                     return (
                       <div key={project.id} data-project-recycle-card={project.id} className="w-full">
                         <Card

@@ -13,7 +13,7 @@
  *   立柱分段 = 项目状态（active / paused / archived），段高按条数占比分。
  */
 import { WORLD_MAP_COUNTRIES, WORLD_MAP_MICRO_STATES, type WorldMapCountry, type WorldMapMicroState } from "./worldMap";
-import { accentOfItem, dictLabel, type Dicts } from "../dicts";
+import { projectAccent, dictLabel, type Dicts } from "../dicts";
 import { PROJECT_STATUS_TEXT, PROJECT_STATUS_VALUES, type ProjectStatusValue } from "../types";
 import type { ProjectMapOverviewItem } from "../projectApi";
 
@@ -285,7 +285,7 @@ export function buildMapDistribution(projects: readonly ProjectMapOverviewItem[]
     }
     const items: MapProjectItem[] = bucket.projects.map((project) => {
       const status = project.status;
-      const accent = accentOfItem(dicts.projectType.find((entry) => entry.code === project.projectType));
+      const accent = projectAccent(dicts, project);
       return {
         id: project.id,
         code: project.code,

@@ -17,7 +17,7 @@ import { ProjectModal, type ProjectDraft } from "./components/ProjectModal";
 import { SearchInput } from "./components/SearchInput";
 import { Toast, ToastConfirm } from "./components/Toast";
 import { useFocusTrap } from "./components/useFocusTrap";
-import { dictLabel, typeAccent, type Dicts } from "./dicts";
+import { dictLabel, projectAccent, type Dicts } from "./dicts";
 import { directoryMemberOptions, directoryName, type DirectoryUser } from "./directory";
 import { readStoredSidebarOpen, saveFiltersPref, saveSidebarPref } from "./homePrefs";
 import { EMPTY_FACETS, buildListQuery, fetchProjectFacets, fetchProjectList, fetchProjectMapOverview, toUiProject, type ProjectExportFormat, type ProjectFacets, type ProjectMapOverviewItem } from "./projectApi";
@@ -841,7 +841,7 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
 
         <div className="grid grid-cols-1 gap-6 @md:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
           {items.map((project) => {
-            const accent = typeAccent(dicts, project.projectType);
+            const accent = projectAccent(dicts, project);
             return (
               <div
                 key={project.id}

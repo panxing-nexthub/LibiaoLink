@@ -20,7 +20,7 @@ export type ProjectArchiveKind = "accepted" | "unaccepted";
 /**
  * 项目（M2-07 起为服务端数据，映射见 projectApi.ts 的 toUiProject）：
  * 编号、序号与人员字段命名对齐 shared 契约（code / seqNo / managerIds / managerNames）。
- * 主题色不再挂在这里 —— 取字典 projectType 条目的 metadata.accent（dicts.ts 的 typeAccent）。
+ * 主题色不再挂在这里 —— 由 dicts.ts 的 projectAccent 根据类型组合取色。
  */
 export type Project = {
   id: string;

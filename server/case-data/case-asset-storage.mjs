@@ -18,11 +18,24 @@ const mismatch = () => new CaseAssetError(422, "ASSET_OBJECT_MISMATCH", "实际�
 const putLifetimeSeconds = 120;
 const maxDownloadLifetimeSeconds = 60;
 
+function avifMatches(prefix) {
+  if (prefix.length < 16 || prefix.toString("ascii", 4, 8) !== "ftyp") return false;
+  const boxSize = prefix.readUInt32BE(0);
+  if (boxSize < 16) return false;
+  const end = Math.min(boxSize, prefix.length);
+  for (let offset = 8; offset + 4 <= end; offset += 4) {
+    const brand = prefix.toString("ascii", offset, offset + 4);
+    if (brand === "avif" || brand === "avis") return true;
+  }
+  return false;
+}
+
 function mimeMatches(prefix, mimeType) {
   switch (mimeType) {
     case "image/png": return prefix.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"));
     case "image/jpeg": return prefix.subarray(0, 3).equals(Buffer.from("ffd8ff", "hex"));
     case "image/webp": return prefix.toString("ascii", 0, 4) === "RIFF" && prefix.toString("ascii", 8, 12) === "WEBP";
+    case "image/avif": return avifMatches(prefix);
     case "video/mp4": return prefix.length >= 12 && prefix.toString("ascii", 4, 8) === "ftyp";
     case "application/pdf": return prefix.toString("ascii", 0, 5) === "%PDF-";
     default: return false;
@@ -183,7 +196,7 @@ function createCaseAssetStorage(client, bucket, downloadLifetimeSeconds) {
             signal.throwIfAborted();
             size += chunk.length;
             if (size > upload.sizeBytes) throw mismatch();
-            if (prefix.length < 16) prefix = Buffer.concat([prefix, chunk.subarray(0, 16 - prefix.length)]);
+            if (prefix.length < 64) prefix = Buffer.concat([prefix, chunk.subarray(0, 64 - prefix.length)]);
             hash.update(chunk);
           }
           if (size !== upload.sizeBytes || hash.digest("hex") !== upload.sha256 || !mimeMatches(prefix, upload.mimeType)) {
@@ -210,7 +223,19 @@ function createCaseAssetStorage(client, bucket, downloadLifetimeSeconds) {
         ...key, ResponseContentDisposition: downloadName(asset.fileName),
         ResponseContentType: "application/octet-stream", ResponseCacheControl: "private, no-store",
       }), timing);
-      return { method: "GET", url, expiresAt, objectVersionId: asset.objectVersionId };
+      return { method: "GET", url, expiresAt, objectVersionId: asset.objectVersionId, contentType: asset.mimeType };
+    },
+    async previewTicket(asset) {
+      const key = { Bucket: bucket, Key: asset.objectKey, VersionId: asset.objectVersionId };
+      const found = await send(new HeadObjectCommand(key), AbortSignal.timeout(2000));
+      if (!found) throw new CaseAssetError(404, "NOT_FOUND", "素材对象版本不存在");
+      if (!objectMatches(found, asset, asset.objectVersionId)) throw mismatch();
+      const { expiresAt, ...timing } = signedTime(downloadLifetimeSeconds);
+      const url = await getSignedUrl(client, new GetObjectCommand({
+        ...key, ResponseContentDisposition: "inline", ResponseContentType: asset.mimeType,
+        ResponseCacheControl: "private, no-store",
+      }), timing);
+      return { method: "GET", url, expiresAt, objectVersionId: asset.objectVersionId, contentType: asset.mimeType };
     },
   };
 }

@@ -20,8 +20,18 @@ const member = z.strictObject({
   leftAt: timestamp.nullable().default(null).transform((value) => value === null ? null : new Date(value).toISOString()),
 });
 const attributes = z.strictObject({
+  deliveryYear: z.number().int().min(2000).max(2100).optional(),
+  customerSubjectId: CaseUuidSchema.optional(), customerDisplayName: text(256).optional(),
+  customerAliases: distinct(z.array(text(256)).max(100), (alias) => alias).optional(),
+  customerLogoAssetId: CaseUuidSchema.optional(),
+  partnerType: text(64).optional(), partnerKey: text(128).optional(), partnerDisplayName: text(256).optional(),
+  threePlKey: text(128).optional(), threePlDisplayName: text(256).optional(),
+  relationshipType: text(64).optional(),
   regions: distinct(z.array(text(100)).max(50), (region) => region).optional(),
-  country: text(100).optional(), industry: text(100).optional(), businessScenario: text(200).optional(),
+  regionCodes: distinct(z.array(text(32)).max(50), (regionCode) => regionCode).optional(),
+  country: text(100).optional(), countryCode: z.string().trim().regex(/^[A-Z]{2}$/).optional(),
+  industry: text(100).optional(), industryCode: text(64).optional(),
+  scenarioCode: text(64).optional(), businessScenario: text(200).optional(),
   solutionTypes: distinct(z.array(CaseSolutionTypeSchema).max(7), (type) => type).optional(),
   canVisit: z.boolean().optional(),
 });

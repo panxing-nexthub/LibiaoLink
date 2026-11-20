@@ -65,7 +65,7 @@ async function writeGatewayCredentials(dir: string, dbUrl: string, publicKey: Ke
 async function startGateway(dir: string, settings: NodeJS.ProcessEnv = {}) {
   const gateway = spawn(process.execPath, [gatewayScript], {
     env: { ...process.env, CASE_GATEWAY_SECRET_DIR: dir, CASE_GATEWAY_TOKEN_ISSUER: issuer,
-      CASE_GATEWAY_TOKEN_AUDIENCE: audience, CASE_GATEWAY_PORT: "0", CASE_GATEWAY_PROJECTS_PER_MINUTE: "25", ...settings },
+      CASE_GATEWAY_TOKEN_AUDIENCE: audience, CASE_GATEWAY_PORT: "0", CASE_GATEWAY_PROJECTS_PER_MINUTE: "100", ...settings },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const exit = once(gateway, "exit");
@@ -171,7 +171,7 @@ async function verifyCaseRequests(db: Client, base: string, token: (claims?: Rec
   }
   const response = await request(collection, "POST", create);
   expect(response.status).toBe(201);
-  const created = await response.json() as { caseId: string; updatedAt: string };
+  const created = await response.json() as { caseId: string; translationGroupId: string; updatedAt: string };
   expect(created.caseId).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   expect(created).toMatchObject({
     sourceProjectId: projectId, locale: "zh-CN", createdBy: "usr_case_001", rowVersion: 1,
@@ -240,10 +240,94 @@ async function verifyCaseRequests(db: Client, base: string, token: (claims?: Rec
   expect(restricted.status).toBe(200);
   expect(await restricted.json()).toMatchObject({ rowVersion: 3,
     confidentiality: { ...privatePolicy, internalScope: "案例组；销售负责人；法务" } });
+
+  const keywordPage = await request(`${collection}?status=draft&keyword=${encodeURIComponent("拣选吞吐")}`, "GET");
+  expect(keywordPage.status).toBe(200);
+  expect(await keywordPage.json()).toMatchObject({ items: [{
+    caseId: created.caseId, sourceProjectId: projectId, translationGroupId: created.translationGroupId,
+    locale: "zh-CN", title: "某零售仓 AirRob 拣选升级", status: "draft", reviewStatus: "not_submitted",
+    activeReleaseId: null, rowVersion: 3,
+  }], nextCursor: null });
+
+  const versionsResponse = await request(`${item}/versions?limit=10`, "GET");
+  expect(versionsResponse.status).toBe(200);
+  const versions = await versionsResponse.json() as { items: Array<{
+    caseVersionId: string; caseId: string; versionNo: number; restoredFromVersionId: string | null;
+    snapshot: { title: string; summary: string | null; translationGroupId: string };
+  }> };
+  expect(versions.items.map(({ versionNo }) => versionNo)).toEqual([3, 2, 1]);
+  const firstVersion = versions.items.find(({ versionNo }) => versionNo === 1)!;
+  expect(firstVersion.snapshot).toMatchObject({
+    title: "某零售仓 AirRob 拣选升级", summary: create.summary, translationGroupId: created.translationGroupId,
+  });
+  const firstVersionRead = await request(`${item}/versions/${firstVersion.caseVersionId}`, "GET");
+  expect(firstVersionRead.status).toBe(200);
+  expect(await firstVersionRead.json()).toEqual(firstVersion);
+
+  const restoredResponse = await request(`${item}/versions/${firstVersion.caseVersionId}/restore`, "POST", {
+    operationId: operation(10), expectedVersion: 3, operatorUserKey: "usr_case_restore", changeSummary: "恢复首次创建内容",
+  });
+  expect(restoredResponse.status).toBe(200);
+  const restoredCase = await restoredResponse.json() as { rowVersion: number; title: string; translationGroupId: string };
+  expect(restoredCase).toMatchObject({
+    rowVersion: 4, title: "某零售仓 AirRob 拣选升级", summary: create.summary, locale: "zh-CN",
+    translationGroupId: created.translationGroupId, status: "draft", content: { schemaVersion: 1, fields: [] },
+  });
+  const restoredVersions = await (await request(`${item}/versions?limit=1`, "GET")).json() as { items: Array<Record<string, unknown>> };
+  expect(restoredVersions.items[0]).toMatchObject({
+    versionNo: 4, restoredFromVersionId: firstVersion.caseVersionId, changeSummary: "恢复首次创建内容",
+  });
+
+  const archivedCaseResponse = await request(item, "PATCH", {
+    operationId: operation(11), expectedVersion: 4, operatorUserKey: "usr_case_lifecycle", archived: true,
+  });
+  expect(archivedCaseResponse.status).toBe(200);
+  expect(await archivedCaseResponse.json()).toMatchObject({ rowVersion: 5, status: "archived", archivedAt: expect.any(String) });
+  const deletedCaseResponse = await request(item, "PATCH", {
+    operationId: operation(12), expectedVersion: 5, operatorUserKey: "usr_case_lifecycle", deleted: true,
+  });
+  expect(deletedCaseResponse.status).toBe(200);
+  expect(await deletedCaseResponse.json()).toMatchObject({ rowVersion: 6, status: "deleted", deletedAt: expect.any(String) });
+  expect(await (await request(item, "GET")).json()).toMatchObject({ status: "deleted", rowVersion: 6 });
+  expect(await (await request(`${collection}?limit=20`, "GET")).json()).toEqual({ items: [], nextCursor: null });
+  expect(await (await request(`${collection}?status=deleted`, "GET")).json()).toMatchObject({ items: [{
+    caseId: created.caseId, status: "deleted", rowVersion: 6,
+  }] });
+  const restoredCaseResponse = await request(item, "PATCH", {
+    operationId: operation(13), expectedVersion: 6, operatorUserKey: "usr_case_lifecycle", archived: false, deleted: false,
+  });
+  expect(restoredCaseResponse.status).toBe(200);
+  expect(await restoredCaseResponse.json()).toMatchObject({
+    rowVersion: 7, status: "draft", archivedAt: null, deletedAt: null,
+  });
+
   const replay = await request(collection, "POST", { ...create, traceId: "create-replay" });
   expect(replay.status).toBe(201);
   expect(await replay.json()).toEqual(created);
   expect((await db.query(`select count(*)::int as count from "case".cases`)).rows[0].count).toBe(1);
+
+  const englishCaseId = randomUUID();
+  const englishResponse = await request(collection, "POST", {
+    ...create, operationId: operation(14), caseId: englishCaseId, translationGroupId: created.translationGroupId,
+    traceId: "trace-case-20261120-english", locale: "en-US", title: "Retail warehouse picking upgrade",
+    summary: "English case summary", changeSummary: "English draft",
+  });
+  expect(englishResponse.status).toBe(201);
+  expect(await englishResponse.json()).toMatchObject({
+    caseId: englishCaseId, translationGroupId: created.translationGroupId, locale: "en-US", rowVersion: 1, status: "draft",
+  });
+  const translations = await (await request(`${item}/translations`, "GET")).json() as {
+    translationGroupId: string; items: Array<Record<string, unknown>>;
+  };
+  expect(translations).toMatchObject({ translationGroupId: created.translationGroupId, items: expect.arrayContaining([
+    expect.objectContaining({ caseId: created.caseId, locale: "zh-CN", status: "draft", rowVersion: 7 }),
+    expect.objectContaining({ caseId: englishCaseId, locale: "en-US", status: "draft", rowVersion: 1 }),
+  ]) });
+  expect(translations.items).toHaveLength(2);
+  expect(await (await request(`${collection}?keyword=English`, "GET")).json()).toMatchObject({ items: [{
+    caseId: englishCaseId, locale: "en-US", title: "Retail warehouse picking upgrade", status: "draft",
+  }] });
+  expect((await db.query(`select count(*)::int as count from "case".cases`)).rows[0].count).toBe(2);
 }
 
 it.skipIf(!adminUrl || !gatewayUrl)("authenticates and scopes project catalog and case requests in the isolated gateway", async () => {
@@ -308,7 +392,7 @@ it.skipIf(!adminUrl || !gatewayUrl)("authenticates and scopes project catalog an
       const page = await firstPage.json() as { items: unknown[]; nextCursor: string };
       expect(page.items).toEqual([{
         externalProjectId: "10000000-0000-4000-8000-000000000001", projectCode: "P-1", projectName: "目录项目 1",
-        customerText: null, region: "华东", projectType: "分拣", managerIds: [manager], managerNames: [null],
+        customerText: null, region: "华东", projectType: "分拣", managerIds: [manager], managerNames: [null], sourceKind: "core",
         status: "active", sourceVersion: 1, updatedAt: expect.any(String), archivedAt: null, deletedAt: null,
         syncedAt: expect.any(String),
       }]);
@@ -336,7 +420,7 @@ it.skipIf(!adminUrl || !gatewayUrl)("authenticates and scopes project catalog an
       }
 
       let limited: Response | undefined;
-      for (let attempt = 0; attempt < 30; attempt += 1) {
+      for (let attempt = 0; attempt < 130; attempt += 1) {
         const response = await request("", authorized);
         if (response.status === 429) { limited = response; break; }
         expect(response.status).toBe(200);
@@ -442,7 +526,7 @@ it.skipIf(!adminUrl || !gatewayUrl)("registers local projects in the case catalo
     const gateway = await startGateway(dir);
     try {
       const { base } = gateway;
-      const writeScopes = "case-data:projects:write case-data:projects:read case-data:cases:write";
+      const writeScopes = "case-data:projects:write case-data:projects:read case-data:cases:write case-data:cases:read case-data:project-data:read case-data:project-data:write";
       const author = token({ sub: "local-project-author", client_id: "local-project-author", scope: writeScopes });
       const reader = token({ sub: "local-project-reader", client_id: "local-project-reader", scope: readScope });
       const jsonHeaders = { Authorization: `Bearer ${author}`, "Content-Type": "application/json" };
@@ -476,7 +560,7 @@ it.skipIf(!adminUrl || !gatewayUrl)("registers local projects in the case catalo
       expect(created).toMatchObject({
         externalProjectId: localProjectId, projectCode: "LOCAL-PROJECT-001", projectName: "本地案例项目",
         customerText: "本地客户", region: "华南", projectType: "分拣", managerIds: [], managerNames: [],
-        status: "active", sourceVersion: 1, archivedAt: null, deletedAt: null,
+        status: "active", sourceKind: "local", sourceVersion: 1, archivedAt: null, deletedAt: null,
       });
       expect(created.updatedAt).toEqual(expect.any(String));
       expect(created.syncedAt).toEqual(expect.any(String));
@@ -484,6 +568,46 @@ it.skipIf(!adminUrl || !gatewayUrl)("registers local projects in the case catalo
       const replay = await register();
       expect(replay.status).toBe(201);
       expect(await replay.json()).toEqual(created);
+
+      const byId = await fetch(`${base}/api/v1/projects/${localProjectId}`, {
+        headers: { Authorization: `Bearer ${reader}` }, signal: AbortSignal.timeout(4000),
+      });
+      expect(byId.status).toBe(200);
+      expect(await byId.json()).toEqual(created);
+
+      const profilePath = `/api/v1/projects/${localProjectId}/profile`;
+      const profileInput = {
+        operationId: "0190d2e4-a020-7000-8000-000000000020", operatorUserKey: "local_project_author",
+        expectedVersion: 0, sourceVersion: 1,
+        attributes: {
+          deliveryYear: 2026, customerSubjectId: randomUUID(), customerDisplayName: "本地客户",
+          customerAliases: ["本地客户甲"], customerLogoAssetId: randomUUID(), partnerType: "integrator",
+          partnerKey: "P-INT", partnerDisplayName: "合作方", threePlKey: "3PL-A", threePlDisplayName: "三方物流",
+          relationshipType: "end_customer", regions: ["华南"], regionCodes: ["CN-GD"], country: "中国",
+          countryCode: "CN", industry: "零售", industryCode: "RETAIL", scenarioCode: "WAREHOUSE",
+          businessScenario: "履约仓", solutionTypes: ["airrob"], canVisit: true,
+        },
+        subjects: [], members: [],
+      };
+      const putProfile = (body: Record<string, unknown>, bearer = author) => fetch(base + profilePath, {
+        method: "PUT", headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body), signal: AbortSignal.timeout(4000),
+      });
+      const profileCreatedResponse = await putProfile(profileInput);
+      expect(profileCreatedResponse.status).toBe(201);
+      const profileCreated = await profileCreatedResponse.json() as Record<string, unknown>;
+      expect(profileCreated).toMatchObject({ externalProjectId: localProjectId, sourceVersion: 1,
+        rowVersion: 1, attributes: profileInput.attributes, subjects: [], members: [] });
+      expect(await (await putProfile(profileInput)).json()).toEqual(profileCreated);
+      const profileRead = await fetch(base + profilePath, {
+        headers: { Authorization: `Bearer ${author}` }, signal: AbortSignal.timeout(4000),
+      });
+      expect(profileRead.status).toBe(200);
+      expect(await profileRead.json()).toEqual(profileCreated);
+      const staleProfile = await putProfile({ ...profileInput,
+        operationId: "0190d2e4-a020-7000-8000-000000000021", expectedVersion: 0 });
+      expect(staleProfile.status).toBe(409);
+      expect(await staleProfile.json()).toMatchObject({ code: "VERSION_CONFLICT" });
 
       await db.query(`
         insert into project_read.project_summary
@@ -551,6 +675,14 @@ it.skipIf(!adminUrl || !gatewayUrl)("registers local projects in the case catalo
         expect.objectContaining({ externalProjectId: localProjectId, projectCode: "LOCAL-PROJECT-001" }),
         expect.objectContaining({ externalProjectId: coreProjectId, projectCode: "CORE-PROJECT-001" }),
       ]));
+      for (const projectId of [localProjectId, coreProjectId]) {
+        const listedItem = listed.items.find((item) => item.externalProjectId === projectId);
+        const itemById = await fetch(`${base}/api/v1/projects/${projectId}`, {
+          headers: { Authorization: `Bearer ${reader}` }, signal: AbortSignal.timeout(4000),
+        });
+        expect(itemById.status).toBe(200);
+        expect(await itemById.json()).toEqual(listedItem);
+      }
 
       const duplicateLocal = await register({
         ...input, operationId: "0190d2e4-a020-7000-8000-000000000002",
@@ -584,7 +716,21 @@ it.skipIf(!adminUrl || !gatewayUrl)("registers local projects in the case catalo
         signal: AbortSignal.timeout(4000),
       });
       expect(caseResponse.status).toBe(201);
-      expect(await caseResponse.json()).toMatchObject({ sourceProjectId: localProjectId, title: "本地项目案例" });
+      const localCase = await caseResponse.json() as { caseId: string };
+      expect(localCase).toMatchObject({ sourceProjectId: localProjectId, title: "本地项目案例", status: "draft" });
+      const localCases = await fetch(base + `/api/v1/projects/${localProjectId}/cases?status=draft&keyword=${encodeURIComponent("本地项目案例")}`, {
+        headers: { Authorization: `Bearer ${author}` }, signal: AbortSignal.timeout(4000),
+      });
+      expect(localCases.status).toBe(200);
+      expect(await localCases.json()).toMatchObject({ items: [{
+        caseId: localCase.caseId, sourceProjectId: localProjectId, locale: "zh-CN", title: "本地项目案例",
+        status: "draft", reviewStatus: "not_submitted", rowVersion: 1, activeReleaseId: null,
+      }], nextCursor: null });
+      const localCaseRead = await fetch(base + `/api/v1/cases/${localCase.caseId}`, {
+        headers: { Authorization: `Bearer ${author}` }, signal: AbortSignal.timeout(4000),
+      });
+      expect(localCaseRead.status).toBe(200);
+      expect(await localCaseRead.json()).toEqual(localCase);
 
       const localCount = await db.query("select count(*)::int as count from project_read.local_projects where project_id = $1", [localProjectId]);
       expect(localCount.rows).toEqual([{ count: 1 }]);
@@ -656,6 +802,11 @@ it.skipIf(!adminUrl || !gatewayUrl)("registers local projects in the case catalo
       expect(archiveReplay.status).toBe(200);
       expect(await archiveReplay.json()).toEqual(archived);
 
+      const staleProfileAfterArchive = await putProfile({ ...profileInput,
+        operationId: "0190d2e4-a020-7000-8000-000000000022", expectedVersion: 1, sourceVersion: 1 });
+      expect(staleProfileAfterArchive.status).toBe(409);
+      expect(await staleProfileAfterArchive.json()).toMatchObject({ code: "PROJECT_VERSION_CONFLICT" });
+
       const idempotencyConflict = await patch(localProjectId, {
         ...archiveBody, projectName: "同一操作标识的另一请求",
       });
@@ -681,8 +832,51 @@ it.skipIf(!adminUrl || !gatewayUrl)("registers local projects in the case catalo
       expect(await renamedCode.json()).toMatchObject({
         projectCode: "LOCAL-PROJECT-001-UPDATED", status: "active", sourceVersion: 4,
       });
+
+      const deletedResponse = await patch(localProjectId, writeContext(
+        "0190d2e4-a020-7000-8000-000000000023", 4, { deleted: true },
+      ));
+      expect(deletedResponse.status).toBe(200);
+      expect(await deletedResponse.json()).toMatchObject({
+        status: "active", sourceVersion: 5, deletedAt: expect.any(String),
+      });
+      expect((await fetch(`${base}/api/v1/projects/${localProjectId}`, {
+        headers: { Authorization: `Bearer ${reader}` },
+      })).status).toBe(404);
+      const deletedClaim = await db.query(
+        "select is_available from project_read.project_code_claim where project_id = $1", [localProjectId],
+      );
+      expect(deletedClaim.rows).toEqual([{ is_available: false }]);
+
+      const reusedId = "10000000-0000-4000-8000-00000000a021";
+      const reused = await register({
+        ...input, operationId: "0190d2e4-a020-7000-8000-000000000024", externalProjectId: reusedId,
+        projectCode: "LOCAL-PROJECT-001-UPDATED", projectName: "复用已释放编号的本地项目",
+      });
+      expect(reused.status).toBe(201);
+      expect(await reused.json()).toMatchObject({
+        externalProjectId: reusedId, projectCode: "LOCAL-PROJECT-001-UPDATED", sourceKind: "local",
+      });
+      const conflictingRestore = await patch(localProjectId, writeContext(
+        "0190d2e4-a020-7000-8000-000000000025", 5, { deleted: false },
+      ));
+      expect(conflictingRestore.status).toBe(409);
+      expect(await conflictingRestore.json()).toMatchObject({ code: "PROJECT_CODE_EXISTS" });
+      const deleteReused = await patch(reusedId, writeContext(
+        "0190d2e4-a020-7000-8000-000000000026", 1, { deleted: true },
+      ));
+      expect(deleteReused.status).toBe(200);
+      const restored = await patch(localProjectId, writeContext(
+        "0190d2e4-a020-7000-8000-000000000027", 5, { deleted: false },
+      ));
+      expect(restored.status).toBe(200);
+      expect(await restored.json()).toMatchObject({
+        externalProjectId: localProjectId, projectCode: "LOCAL-PROJECT-001-UPDATED", status: "active",
+        sourceVersion: 6, deletedAt: null,
+      });
       const updatedClaim = await db.query(
-        "select source_kind from project_read.project_code_claim where project_code = $1", ["LOCAL-PROJECT-001-UPDATED"],
+        "select source_kind from project_read.project_code_claim where project_code = $1 and is_available",
+        ["LOCAL-PROJECT-001-UPDATED"],
       );
       expect(updatedClaim.rows).toEqual([{ source_kind: "local" }]);
       const oldClaim = await db.query(
@@ -794,16 +988,17 @@ it.skipIf(!adminUrl || !gatewayUrl || !s3Endpoint || !s3Bucket || !s3Access || !
       ]);
       const ticketSeconds = 3;
       const gateway = await startGateway(dir, { CASE_GATEWAY_ASSET_BUCKET: s3Bucket, CASE_GATEWAY_S3_ENDPOINT: s3Endpoint,
-        CASE_GATEWAY_ASSET_DOWNLOAD_SECONDS: String(ticketSeconds), CASE_GATEWAY_PROJECTS_PER_MINUTE: "60" });
+        CASE_GATEWAY_ASSET_DOWNLOAD_SECONDS: String(ticketSeconds), CASE_GATEWAY_PROJECTS_PER_MINUTE: "300" });
       try {
         const scope = "case-data:assets:read case-data:assets:write case-data:operations:read";
         const owner = serviceToken(privateKey, { scope });
         const other = serviceToken(privateKey, { scope, sub: "another-asset-service", client_id: "another-asset-service" });
         await verifyCaseAssetRequests({
-          db, base: gateway.base, caseId: id,
+          db, base: gateway.base, caseId: id, projectId: fixtureProjectId,
           ownerToken: owner, anotherToken: other,
           unauthorizedToken: serviceToken(privateKey, { scope: "case-data:releases:read" }),
           endpoint: s3Endpoint!, bucket: s3Bucket!, ticketSeconds,
+          iamEnforced: process.env.CASE_DATA_ASSETS_TEST_ENFORCE_IAM !== "false",
           credentials: { accessKeyId: s3Access!, secretAccessKey: s3Secret! },
           adminCredentials: { accessKeyId: s3AdminAccess!, secretAccessKey: s3AdminSecret! },
         });

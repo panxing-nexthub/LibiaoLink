@@ -34,7 +34,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 按 ID 读取可选项目目录项
+         * @description 本地 Scope 为 case-data:projects:read。返回项与 GET /api/v1/projects 列表项逐字段一致；核心投影和本地项目走同一合并口径，删除或源缺失项目返回 404。
+         */
+        get: operations["getCaseProject"];
         put?: never;
         post?: never;
         delete?: never;
@@ -45,6 +49,30 @@ export interface paths {
          * @description 本地 Scope 为 case-data:projects:write。仅能更新 libiaolink_case 中的本地项目，核心投影项目只读。expectedVersion 必须匹配当前 sourceVersion；status=archived 时归档，改回其它状态时解档。
          */
         patch: operations["patchLocalCaseProject"];
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 分页查询项目下案例
+         * @description 本地 Scope 为 case-data:cases:read。支持 status、keyword、updatedAfter 和 limit/cursor；默认排除已软删除案例，状态由删除、归档、active release 与 reviewStatus 依次派生。
+         */
+        get: operations["listCaseProjectCases"];
+        put?: never;
+        /**
+         * 创建案例
+         * @description 本地 Scope 为 case-data:cases:write。可预生成 caseId；同一语言的多个案例通过 translationGroupId 聚合，每个 locale 独立编辑、审核和发布。请求必须匹配项目当前 sourceVersion，创建时写入不可变 v1 版本快照。
+         */
+        post: operations["createCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/projects/{projectId}/profile": {
@@ -111,26 +139,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{projectId}/cases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 创建案例
-         * @description 本地 Scope 为 case-data:cases:write。业务 operationId 通过请求体传递。
-         */
-        post: operations["createCase"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/cases/{caseId}": {
         parameters: {
             query?: never;
@@ -140,7 +148,7 @@ export interface paths {
         };
         /**
          * 读取案例
-         * @description 本地 Scope 为 case-data:cases:read。
+         * @description 本地 Scope 为 case-data:cases:read。返回当前可编辑正文、版本号、语言组、审核镜像字段、派生状态和 active release ID。
          */
         get: operations["getCase"];
         put?: never;
@@ -149,10 +157,90 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * 更新案例
-         * @description 本地 Scope 为 case-data:cases:write。JSON 对象整列替换。
+         * 更新、归档、软删除或恢复案例
+         * @description 本地 Scope 为 case-data:cases:write。content/solutionParameters/outcomes/confidentiality 为整列替换；archived/deleted 切换软状态，删除不影响历史 release。仅实际变化时 rowVersion 递增并写入新版本；locale 和 translationGroupId 不可改。
          */
         patch: operations["patchCase"];
+        trace?: never;
+    };
+    "/api/v1/cases/{caseId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 分页读取案例版本历史
+         * @description 本地 Scope 为 case-data:cases:read。每项包含不可变标题、摘要、正文、方案参数、成果、保密设置和变更摘要；按 versionNo 倒序分页。
+         */
+        get: operations["listCaseVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{caseId}/versions/{versionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 读取指定案例版本
+         * @description 本地 Scope 为 case-data:cases:read。按案例和版本双主键读取，不能跨案例取版本。
+         */
+        get: operations["getCaseVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{caseId}/versions/{versionId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 从历史版本恢复案例
+         * @description 本地 Scope 为 case-data:cases:write。以 expectedVersion 做乐观并发控制，把历史快照写回当前正文并生成新的 rowVersion/版本，不修改历史版本；locale 与 translationGroupId 保持不变。
+         */
+        post: operations["restoreCaseVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{caseId}/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 读取同语言组案例
+         * @description 本地 Scope 为 case-data:cases:read。translationGroupId 相同、locale 不同的案例仍各自拥有独立 caseId、rowVersion、审核与发布状态。
+         */
+        get: operations["listCaseTranslations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/operations/{operationId}": {
@@ -175,6 +263,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{projectId}/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 创建项目级素材上传会话
+         * @description 本地 Scope 为 case-data:assets:write。素材先归属项目，可完成上传后挂接到同项目多个案例；提供 assetId 时创建该素材的新版本。上传格式支持 PNG、JPEG、WebP、AVIF、MP4 和 PDF。
+         */
+        post: operations["createProjectUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 分页查询项目素材库
+         * @description 本地 Scope 为 case-data:assets:read。返回项目素材、caseIds 挂接关系和当前版本；默认排除归档与软删除素材，可显式包含归档。
+         */
+        get: operations["listCaseProjectAssets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{caseId}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查询案例已挂接素材
+         * @description 本地 Scope 为 case-data:assets:read。素材仍以项目为归属；同一素材版本可同时服务同项目多个案例。
+         */
+        get: operations["listCaseAssets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assets/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 读取素材详情
+         * @description 本地 Scope 为 case-data:assets:read。返回业务元数据、挂接案例、当前版本与处理状态。
+         */
+        get: operations["getCaseAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 更新、归档、软删除或恢复素材
+         * @description 本地 Scope 为 case-data:assets:write。expectedVersion 匹配素材 rowVersion；archived/deleted 可逆。已被任何 release 引用的素材禁止删除（409 ASSET_REFERENCED），但可归档。
+         */
+        patch: operations["patchCaseAsset"];
+        trace?: never;
+    };
+    "/api/v1/assets/{assetId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 读取素材全部版本
+         * @description 本地 Scope 为 case-data:assets:read。版本按 versionNo 倒序；每项绑定唯一 objectVersionId 和处理状态。
+         */
+        get: operations["listCaseAssetVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assets/{assetId}/cases/{caseId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 把素材挂接到案例
+         * @description 本地 Scope 为 case-data:assets:write。素材与案例必须属于同一项目；归档或删除对象不可挂接。重复挂接幂等。
+         */
+        put: operations["linkCaseAsset"];
+        post?: never;
+        /**
+         * 解除素材与案例挂接
+         * @description 本地 Scope 为 case-data:assets:write。解除挂接不删除素材版本，也不改写已有 release 的冻结素材引用。
+         */
+        delete: operations["unlinkCaseAsset"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{caseId}/uploads": {
         parameters: {
             query?: never;
@@ -186,7 +402,7 @@ export interface paths {
         put?: never;
         /**
          * 创建素材上传会话
-         * @description 本地 Scope 为 case-data:assets:write。提供 assetId 时创建同一素材的新版本。大于 32 MiB 自动进入分片模式。
+         * @description 本地 Scope 为 case-data:assets:write。提供 assetId 时创建同一素材的新版本。大于 32 MiB 自动进入分片模式；完成上传后自动挂接当前案例。
          */
         post: operations["createCaseUpload"];
         delete?: never;
@@ -266,9 +482,29 @@ export interface paths {
         put?: never;
         /**
          * 校验实际对象版本并完成上传
-         * @description 本地 Scope 为 case-data:assets:write。单次 PUT 可提交对象版本 ID，丢失 PUT 回执时可省略，由网关按会话键查验唯一版本。分片模式省略该字段，由网关检查与合并分片。两种模式均校验精确版本的大小、MIME 和 SHA-256。
+         * @description 本地 Scope 为 case-data:assets:write。单次 PUT 可提交对象版本 ID，丢失 PUT 回执时可省略，由网关按会话键查验唯一版本。分片模式省略该字段，由网关检查与合并分片。两种模式均校验精确版本的大小、MIME 和 SHA-256。支持 image/png、image/jpeg、image/webp、image/avif、video/mp4、application/pdf，完成响应含 scanStatus、transcodeStatus、previewStatus 与 objectVersionId。
          */
         post: operations["completeCaseUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assets/{assetId}/versions/{assetVersionId}/preview-ticket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 签发作者侧素材内联预览票据
+         * @description 本地 Scope 为 case-data:assets:read。图片与 PDF 返回最长 60 秒 inline URL 和 contentType；不暴露对象 key、桶名或永久凭据。扫描失败的素材返回 409 PREVIEW_NOT_AVAILABLE。
+         */
+        get: operations["getCaseAssetPreviewTicket"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -284,7 +520,7 @@ export interface paths {
         };
         /**
          * 签发作者素材下载票据
-         * @description 本地 Scope 为 case-data:assets:read。票据绑定已登记的对象版本，供当前服务调用方下载。
+         * @description 本地 Scope 为 case-data:assets:read。下载票据绑定已登记的对象版本，使用 attachment 和 octet-stream，返回 objectVersionId 与 contentType。
          */
         get: operations["getCaseAssetDownloadTicket"];
         put?: never;
@@ -479,12 +715,15 @@ export interface components {
             managerNames: (string | null)[];
             /** @enum {string} */
             status: "active" | "paused" | "done" | "archived";
+            /** @enum {string} */
+            sourceKind: "core" | "local";
             sourceVersion: number;
             /** Format: date-time */
             updatedAt: string;
             /** Format: date-time */
             archivedAt: string | null;
-            deletedAt: null;
+            /** Format: date-time */
+            deletedAt: string | null;
             /** Format: date-time */
             syncedAt: string;
         };
@@ -543,6 +782,37 @@ export interface components {
             managerNames?: (string | null)[];
             /** @enum {string} */
             status?: "active" | "paused" | "done" | "archived";
+            deleted?: boolean;
+        };
+        CaseListPage: {
+            items: components["schemas"]["CaseListItem"][];
+            nextCursor: string | null;
+        };
+        CaseListItem: {
+            /** Format: uuid */
+            caseId: string;
+            /** Format: uuid */
+            sourceProjectId: string;
+            /** Format: uuid */
+            translationGroupId: string;
+            locale: string;
+            title: string;
+            /** @enum {string} */
+            status: "draft" | "reviewing" | "published" | "archived" | "deleted";
+            /** @enum {string} */
+            reviewStatus: "not_submitted" | "reviewing" | "approved" | "rejected";
+            /** Format: uuid */
+            activeReleaseId: string | null;
+            changeSummary: string | null;
+            rowVersion: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            archivedAt: string | null;
+            /** Format: date-time */
+            deletedAt: string | null;
         };
         CaseProjectProfileView: {
             /** Format: uuid */
@@ -584,9 +854,26 @@ export interface components {
             expectedVersion: number;
             sourceVersion: number;
             attributes: {
+                deliveryYear?: number;
+                /** Format: uuid */
+                customerSubjectId?: string;
+                customerDisplayName?: string;
+                customerAliases?: string[];
+                /** Format: uuid */
+                customerLogoAssetId?: string;
+                partnerType?: string;
+                partnerKey?: string;
+                partnerDisplayName?: string;
+                threePlKey?: string;
+                threePlDisplayName?: string;
+                relationshipType?: string;
                 regions?: string[];
+                regionCodes?: string[];
                 country?: string;
+                countryCode?: string;
                 industry?: string;
+                industryCode?: string;
+                scenarioCode?: string;
                 businessScenario?: string;
                 solutionTypes?: ("airrob" | "airrob_pro" | "airrob_plus" | "t_sort" | "t_carry" | "3d" | "grabot")[];
                 canVisit?: boolean;
@@ -672,6 +959,8 @@ export interface components {
             caseId: string;
             /** Format: uuid */
             sourceProjectId: string;
+            /** Format: uuid */
+            translationGroupId: string;
             locale: string;
             title: string;
             summary: string | null;
@@ -688,6 +977,17 @@ export interface components {
             confidentiality: {
                 [key: string]: unknown;
             };
+            /** @enum {string} */
+            reviewStatus: "not_submitted" | "reviewing" | "approved" | "rejected";
+            reviewRef: string | null;
+            /** @enum {string} */
+            status: "draft" | "reviewing" | "published" | "archived" | "deleted";
+            /** Format: uuid */
+            activeReleaseId: string | null;
+            /** Format: date-time */
+            archivedAt: string | null;
+            /** Format: date-time */
+            deletedAt: string | null;
             createdBy: string;
             /** Format: date-time */
             createdAt: string;
@@ -704,11 +1004,22 @@ export interface components {
             caseId?: string;
             /** Format: uuid */
             externalProjectId: string;
+            /**
+             * Format: uuid
+             * @description 同组案例共享此 ID；省略时使用案例 ID，服务端生成案例时使用新的 UUIDv7
+             */
+            translationGroupId?: string;
             sourceVersion: number;
             locale: string;
             title: string;
             summary?: string | null;
             changeSummary?: string | null;
+            /**
+             * @default not_submitted
+             * @enum {string}
+             */
+            reviewStatus: "not_submitted" | "reviewing" | "approved" | "rejected";
+            reviewRef?: string | null;
             /**
              * @default {
              *       "schemaVersion": 1,
@@ -879,6 +1190,77 @@ export interface components {
                 mediaPermission: "secret" | "internal" | "public";
                 internalScope?: string | null;
             };
+            /** @enum {string} */
+            reviewStatus?: "not_submitted" | "reviewing" | "approved" | "rejected";
+            reviewRef?: string | null;
+            archived?: boolean;
+            deleted?: boolean;
+        };
+        CaseVersionPage: {
+            items: components["schemas"]["CaseVersion"][];
+            nextCursor: string | null;
+        };
+        CaseVersion: {
+            /** Format: uuid */
+            caseId: string;
+            /** Format: uuid */
+            caseVersionId: string;
+            versionNo: number;
+            changeSummary: string | null;
+            /** Format: uuid */
+            restoredFromVersionId: string | null;
+            createdBy: string;
+            /** Format: date-time */
+            createdAt: string;
+            snapshot: components["schemas"]["CaseVersionSnapshot"];
+        };
+        CaseVersionSnapshot: {
+            locale: string;
+            /** Format: uuid */
+            translationGroupId: string;
+            title: string;
+            summary: string | null;
+            changeSummary: string | null;
+            content: {
+                [key: string]: unknown;
+            };
+            solutionParameters: {
+                [key: string]: unknown;
+            };
+            outcomes: {
+                [key: string]: unknown;
+            };
+            confidentiality: {
+                [key: string]: unknown;
+            };
+        };
+        CaseRestoreVersionBody: {
+            /** Format: uuid */
+            operationId: string;
+            traceId?: string;
+            operatorUserKey: string;
+            expectedVersion: number;
+            changeSummary?: string | null;
+        };
+        CaseTranslations: {
+            /** Format: uuid */
+            translationGroupId: string;
+            items: components["schemas"]["CaseTranslationSummary"][];
+        };
+        CaseTranslationSummary: {
+            /** Format: uuid */
+            caseId: string;
+            /** Format: uuid */
+            translationGroupId: string;
+            locale: string;
+            title: string;
+            /** @enum {string} */
+            status: "draft" | "reviewing" | "published" | "archived" | "deleted";
+            rowVersion: number;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: uuid */
+            activeReleaseId: string | null;
         };
         CaseOperationResult: {
             /** Format: uuid */
@@ -918,9 +1300,149 @@ export interface components {
             assetId?: string;
             fileName: string;
             /** @enum {string} */
-            mimeType: "image/png" | "image/jpeg" | "image/webp" | "video/mp4" | "application/pdf";
+            mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/avif" | "video/mp4" | "application/pdf";
             sizeBytes: number;
             sha256: string;
+            /**
+             * @default other
+             * @enum {string}
+             */
+            assetType: "logo" | "cover" | "image" | "video" | "document" | "other";
+            title?: string | null;
+            description?: string | null;
+            locale?: string | null;
+            /** @default [] */
+            tags: string[];
+            /**
+             * @default L1
+             * @enum {string}
+             */
+            classification: "L1" | "L2" | "L3";
+            /** @default false */
+            customerVisible: boolean;
+            /** @default false */
+            customerPresentationAllowed: boolean;
+            /** @default false */
+            shareAllowed: boolean;
+        };
+        CaseAssetList: {
+            items: components["schemas"]["CaseAssetSummary"][];
+            nextCursor: string | null;
+        };
+        CaseAssetSummary: {
+            /** Format: uuid */
+            assetId: string;
+            /** Format: uuid */
+            projectId: string;
+            caseIds: string[];
+            /** @enum {string} */
+            assetType: "logo" | "cover" | "image" | "video" | "document" | "other";
+            title: string | null;
+            description: string | null;
+            locale: string | null;
+            tags: string[];
+            /** @enum {string} */
+            classification: "L1" | "L2" | "L3";
+            customerVisible: boolean;
+            customerPresentationAllowed: boolean;
+            shareAllowed: boolean;
+            rowVersion: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            archivedAt: string | null;
+            /** Format: date-time */
+            deletedAt: string | null;
+            currentVersion: components["schemas"]["CaseAssetVersionView"];
+        };
+        CaseAssetVersionView: {
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            caseId: string | null;
+            /** Format: uuid */
+            assetId: string;
+            /** Format: uuid */
+            assetVersionId: string;
+            versionNo: number;
+            objectVersionId: string;
+            /** @enum {string} */
+            assetType: "logo" | "cover" | "image" | "video" | "document" | "other";
+            title: string | null;
+            description: string | null;
+            locale: string | null;
+            tags: string[];
+            /** @enum {string} */
+            classification: "L1" | "L2" | "L3";
+            customerVisible: boolean;
+            customerPresentationAllowed: boolean;
+            shareAllowed: boolean;
+            fileName: string;
+            /** @enum {string} */
+            mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/avif" | "video/mp4" | "application/pdf";
+            sizeBytes: number;
+            sha256: string;
+            /** @enum {string} */
+            scanStatus: "pending" | "passed" | "failed";
+            /** @enum {string} */
+            transcodeStatus: "not_required" | "pending" | "ready" | "failed";
+            /** @enum {string} */
+            previewStatus: "pending" | "ready" | "failed";
+            dimensions: {
+                width: number;
+                height: number;
+            } | null;
+            durationMs: number | null;
+            mediaVersion: number;
+            thumbnailAvailable: boolean;
+            createdBy: string;
+            /** Format: date-time */
+            createdAt: string;
+            rowVersion: number;
+            /** Format: date-time */
+            archivedAt: string | null;
+            /** Format: date-time */
+            deletedAt: string | null;
+        };
+        CaseAssetPatchBody: {
+            /** Format: uuid */
+            operationId: string;
+            traceId?: string;
+            operatorUserKey: string;
+            expectedVersion: number;
+            /** @enum {string} */
+            assetType?: "logo" | "cover" | "image" | "video" | "document" | "other";
+            title?: string | null;
+            description?: string | null;
+            locale?: string | null;
+            tags?: string[];
+            /** @enum {string} */
+            classification?: "L1" | "L2" | "L3";
+            customerVisible?: boolean;
+            customerPresentationAllowed?: boolean;
+            shareAllowed?: boolean;
+            archived?: boolean;
+            deleted?: boolean;
+        };
+        CaseAssetVersionList: {
+            /** Format: uuid */
+            assetId: string;
+            items: components["schemas"]["CaseAssetVersionView"][];
+        };
+        CaseAssetLinkView: {
+            /** Format: uuid */
+            assetId: string;
+            /** Format: uuid */
+            caseId: string;
+            linked: boolean;
+        };
+        CaseAssetLinkBody: {
+            /** Format: uuid */
+            operationId: string;
+            traceId?: string;
+            operatorUserKey: string;
         };
         CaseUploadTarget: {
             /** Format: uri */
@@ -943,30 +1465,22 @@ export interface components {
             }[];
             merged: boolean;
         };
-        CaseAssetVersion: {
-            /** Format: uuid */
-            caseId: string;
-            /** Format: uuid */
-            assetId: string;
-            /** Format: uuid */
-            assetVersionId: string;
-            objectVersionId: string;
-            fileName: string;
-            /** @enum {string} */
-            mimeType: "image/png" | "image/jpeg" | "image/webp" | "video/mp4" | "application/pdf";
-            sizeBytes: number;
-            sha256: string;
-            /** @enum {string} */
-            scanStatus: "pending" | "passed" | "failed";
-            /** @enum {string} */
-            transcodeStatus: "not_required" | "pending" | "ready" | "failed";
-        };
         CaseCompleteUploadBody: {
             /** Format: uuid */
             operationId: string;
             traceId?: string;
             operatorUserKey: string;
             objectVersionId?: string;
+        };
+        CaseAssetPreviewTicket: {
+            /** @enum {string} */
+            method: "GET";
+            /** Format: uri */
+            url: string;
+            /** Format: date-time */
+            expiresAt: string;
+            objectVersionId: string;
+            contentType: string;
         };
         CaseAssetDownloadTicket: {
             /** @enum {string} */
@@ -976,6 +1490,7 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
             objectVersionId: string;
+            contentType: string;
         };
         CaseAssetMediaState: {
             /** Format: uuid */
@@ -1323,6 +1838,82 @@ export interface operations {
             };
         };
     };
+    getCaseProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 与项目目录列表完全一致的项目项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseProjectCatalogItem"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例或可选项目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
     patchLocalCaseProject: {
         parameters: {
             query?: never;
@@ -1375,6 +1966,195 @@ export interface operations {
                 };
             };
             /** @description 项目版本冲突、项目编号冲突、幂等冲突或核心项目只读 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求体过大 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    listCaseProjectCases: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                status?: "draft" | "reviewing" | "published" | "archived" | "deleted";
+                keyword?: string;
+                updatedAfter?: string;
+            };
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 项目案例分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseListPage"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例或可选项目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 路径、筛选或游标无效 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    createCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseCreateBody"];
+            };
+        };
+        responses: {
+            /** @description 案例作者视图 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAuthoringView"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例或可选项目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 操作标识、项目版本或案例版本冲突 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1830,113 +2610,6 @@ export interface operations {
             };
         };
     };
-    createCase: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                projectId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CaseCreateBody"];
-            };
-        };
-        responses: {
-            /** @description 案例作者视图 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseAuthoringView"];
-                };
-            };
-            /** @description 服务令牌无效 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseDataGatewayError"];
-                };
-            };
-            /** @description 缺少所需 Scope */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseDataGatewayError"];
-                };
-            };
-            /** @description 案例或可选项目不存在 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseDataGatewayError"];
-                };
-            };
-            /** @description 操作标识、项目版本或案例版本冲突 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseDataGatewayError"];
-                };
-            };
-            /** @description 请求体过大 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseDataGatewayError"];
-                };
-            };
-            /** @description 请求参数或案例字段非法 */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseDataGatewayError"];
-                };
-            };
-            /** @description 超过本地请求频率或并发限额 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseDataGatewayError"];
-                };
-            };
-            /** @description 案例请求处理失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseDataGatewayError"];
-                };
-            };
-            /** @description 网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseDataGatewayError"];
-                };
-            };
-        };
-    };
     getCase: {
         parameters: {
             query?: never;
@@ -2129,6 +2802,346 @@ export interface operations {
             };
         };
     };
+    listCaseVersions: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 案例版本快照分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseVersionPage"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例或可选项目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 游标无效 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    getCaseVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+                versionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 不可变版本快照 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseVersion"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例或可选项目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    restoreCaseVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+                versionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseRestoreVersionBody"];
+            };
+        };
+        responses: {
+            /** @description 案例作者视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAuthoringView"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例或可选项目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 操作标识、项目版本或案例版本冲突 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求体过大 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    listCaseTranslations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 语言组和组内案例摘要 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTranslations"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例或可选项目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
     getOperationResult: {
         parameters: {
             query?: never;
@@ -2204,6 +3217,840 @@ export interface operations {
                 };
             };
             /** @description 网关、案例数据库或其他依赖暂不可用，或案例写入受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    createProjectUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseCreateUploadBody"];
+            };
+        };
+        responses: {
+            /** @description 新建的项目级上传会话 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseUploadSession"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 当前调用方没有此资源或对象版本不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 操作冲突、上传尚未就绪或会话已完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 上传会话已过期 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求体过大 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或对象存储暂不可用，或素材处理受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    listCaseProjectAssets: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                assetType?: "logo" | "cover" | "image" | "video" | "document" | "other";
+                includeArchived?: "true" | "false";
+            };
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 项目级素材及每项当前版本 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAssetList"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例或可选项目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 筛选或游标无效 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或对象存储暂不可用，或素材处理受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    listCaseAssets: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                assetType?: "logo" | "cover" | "image" | "video" | "document" | "other";
+                includeArchived?: "true" | "false";
+            };
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 项目级素材及每项当前版本 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAssetList"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例或可选项目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 筛选或游标无效 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或对象存储暂不可用，或素材处理受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    getCaseAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 项目级素材视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAssetSummary"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 当前调用方没有此资源或对象版本不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 操作冲突、上传尚未就绪或会话已完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 上传会话已过期 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或对象存储暂不可用，或素材处理受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    patchCaseAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseAssetPatchBody"];
+            };
+        };
+        responses: {
+            /** @description 更新后的素材视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAssetSummary"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 当前调用方没有此资源或对象版本不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 操作冲突、上传尚未就绪或会话已完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 上传会话已过期 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求体过大 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或对象存储暂不可用，或素材处理受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    listCaseAssetVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 素材版本列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAssetVersionList"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 当前调用方没有此资源或对象版本不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 操作冲突、上传尚未就绪或会话已完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 上传会话已过期 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或对象存储暂不可用，或素材处理受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    linkCaseAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseAssetLinkBody"];
+            };
+        };
+        responses: {
+            /** @description 挂接结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAssetLinkView"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 当前调用方没有此资源或对象版本不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 操作冲突、上传尚未就绪或会话已完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 上传会话已过期 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求体过大 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或对象存储暂不可用，或素材处理受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    unlinkCaseAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseAssetLinkBody"];
+            };
+        };
+        responses: {
+            /** @description 解除挂接结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAssetLinkView"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 当前调用方没有此资源或对象版本不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 操作冲突、上传尚未就绪或会话已完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 上传会话已过期 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求体过大 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或对象存储暂不可用，或素材处理受容量限制 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2661,7 +4508,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CaseAssetVersion"];
+                    "application/json": components["schemas"]["CaseAssetVersionView"];
                 };
             };
             /** @description 服务令牌无效 */
@@ -2711,6 +4558,110 @@ export interface operations {
             };
             /** @description 请求体过大 */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、案例数据库或对象存储暂不可用，或素材处理受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
+    getCaseAssetPreviewTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+                assetVersionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 最长 60 秒的内联预览票据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAssetPreviewTicket"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 当前调用方没有此资源或对象版本不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 操作冲突、上传尚未就绪或会话已完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 上传会话已过期 */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };

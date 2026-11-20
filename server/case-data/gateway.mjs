@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import pg from "pg";
 import { readCaseAssetStorage } from "./case-asset-storage.mjs";
+import { CaseAggregateError, CaseQueryError } from "./case-aggregate.mjs";
 import { CaseRequestError, createCaseHttp, matchCaseDataRoute, parse, readBody } from "./case-http.mjs";
 import { createCaseReleaseReads } from "./case-releases.mjs";
 import { CaseDataError, errorCode, readCredential, readDatabaseUrl } from "./database-credentials.mjs";
@@ -12,6 +13,7 @@ import { createServiceAuthenticator } from "./gateway-auth.mjs";
 import { createCapacityGuard, createRequestAdmission } from "./gateway-controls.mjs";
 import { CatalogQueryError, createProjectCatalog, parseCatalogQuery } from "./project-catalog.mjs";
 import { createProjectCatalogHttp } from "./project-catalog-http.mjs";
+import { caseErrorResponse } from "./case-write.mjs";
 
 const directoryVariable = "CASE_GATEWAY_SECRET_DIR";
 const publicDirectoryVariable = "CASE_GATEWAY_PUBLIC_SECRET_DIR";
@@ -20,7 +22,7 @@ const projectItemPattern = /^\/api\/v1\/projects\/([^/]+)$/;
 const projectReadScope = "case-data:projects:read";
 const projectWriteScope = "case-data:projects:write";
 const rateWindowMs = 60_000;
-const uploadActions = new Set(["create", "target", "part", "complete", "media-input"]);
+const uploadActions = new Set(["create", "createProject", "target", "part", "complete", "media-input"]);
 const retryableDatabaseErrors = new Set(["55P03", "57014", "53300", "57P03"]);
 
 function readInteger(name, fallback, min, max) {
@@ -94,7 +96,7 @@ function makeHandler({ authenticate, catalog, projectCatalog, cases, assetStorag
         return fail(404, "NOT_FOUND", "资源不存在");
       }
       route = caseRoute?.path ?? (projectItem ? "/api/v1/projects/{projectId}" : url.pathname);
-      const allowed = caseRoute ? Object.keys(caseRoute.scopes) : projectItem ? ["PATCH"] :
+      const allowed = caseRoute ? Object.keys(caseRoute.scopes) : projectItem ? ["GET", "PATCH"] :
         route === projectPath ? ["GET", "POST"] : ["GET"];
       if (!allowed.includes(request.method)) {
         return fail(405, "METHOD_NOT_ALLOWED", "请求方法无效", [], { Allow: allowed.join(", ") });
@@ -130,7 +132,7 @@ function makeHandler({ authenticate, catalog, projectCatalog, cases, assetStorag
       }
 
       if (caseRoute) {
-        if (url.searchParams.size !== 0) throw new CaseRequestError("案例接口不接受查询参数");
+        if (url.searchParams.size !== 0 && !caseRoute.allowQuery) throw new CaseRequestError("案例接口不接受查询参数");
         const effect = caseRoute.releaseAction === "deactivate" ? "withdraw" : uploadActions.has(caseRoute.assetAction) ?
           "upload" : request.method === "GET" ? "read" : "write";
         const capacityCode = await checkCapacity(effect);
@@ -148,6 +150,15 @@ function makeHandler({ authenticate, catalog, projectCatalog, cases, assetStorag
           });
           return;
         }
+        return result.status >= 400
+          ? fail(result.status, result.body.code, result.body.message, result.body.details, result.headers)
+          : send(result.status, result.body, result.headers);
+      }
+
+      if (projectItem && request.method === "GET") {
+        if (url.searchParams.size !== 0) throw new CaseRequestError("项目读取不接受查询参数");
+        const result = await projectCatalog.get(projectItem[1]);
+        resourceId = result.resourceId ?? result.body?.externalProjectId;
         return result.status >= 400
           ? fail(result.status, result.body.code, result.body.message, result.body.details, result.headers)
           : send(result.status, result.body, result.headers);
@@ -211,10 +222,14 @@ function makeHandler({ authenticate, catalog, projectCatalog, cases, assetStorag
         return fail(error.status, oversized ? "PAYLOAD_TOO_LARGE" : "VALIDATION_FAILED", error.message, error.details,
           oversized ? { Connection: "close" } : undefined);
       }
-      if (error instanceof CatalogQueryError) {
+      if (error instanceof CatalogQueryError || error instanceof CaseQueryError) {
         return fail(422, "VALIDATION_FAILED", "查询参数无效", [
           { code: "invalid_query", message: error.message, path: error.path },
         ]);
+      }
+      if (error instanceof CaseAggregateError) {
+        const result = caseErrorResponse(error);
+        return fail(result.status, result.body.code, result.body.message, result.body.details);
       }
       console.error(JSON.stringify({ event: "gateway_request_failed", traceId, code: errorCode(error) }));
       if (retryableDatabaseErrors.has(error?.code)) {
@@ -268,7 +283,7 @@ async function main() {
   }) : null;
   publicPool?.on("error", (error) => console.error(JSON.stringify({ event: "published_release_connection_failed", code: errorCode(error) })));
   const releaseReads = createCaseReleaseReads(pool, publicPool);
-  const cases = createCaseHttp(pool, assetStorage, releaseReads, Boolean(publicPool));
+  const cases = createCaseHttp(pool, assetStorage, releaseReads, Boolean(publicPool), cursorKey);
   const server = createServer({ maxHeaderSize: 16_384, requestTimeout: 10_000, headersTimeout: 5_000,
     connectionsCheckingInterval: 1_000 },
     makeHandler({ authenticate, catalog, projectCatalog, cases, assetStorage,

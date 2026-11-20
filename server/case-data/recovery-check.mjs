@@ -23,8 +23,9 @@ async function main() {
         where ($1::uuid is null or a.asset_version_id > $1)
           and exists (
             select 1 from "case".case_release_assets r
-            where (r.case_id, r.asset_id, r.asset_version_id, r.object_version_id) =
-                  (a.case_id, a.id, a.asset_version_id, a.object_version_id)
+            join "case".case_asset_links l on l.asset_id = r.asset_id and l.case_id = r.case_id
+            where (r.asset_id, r.asset_version_id, r.object_version_id) =
+                  (a.id, a.asset_version_id, a.object_version_id)
           )
         order by a.asset_version_id
         limit 50

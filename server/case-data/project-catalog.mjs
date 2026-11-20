@@ -9,13 +9,13 @@ const selectAvailableProjects = `
   select project_id as "externalProjectId", project_code as "projectCode", project_name as "projectName",
          customer_text as "customerText", region, project_type as "projectType", manager_ids as "managerIds",
          manager_names as "managerNames", status, source_version as "sourceVersion", source_updated_at as "updatedAt",
-         archived_at as "archivedAt", deleted_at as "deletedAt", synced_at as "syncedAt"
+         archived_at as "archivedAt", deleted_at as "deletedAt", synced_at as "syncedAt", source_kind as "sourceKind"
   from project_read.project_directory where deleted_at is null and source_missing_at is null
 `;
 const localProjectColumns = `project_id as "externalProjectId", project_code as "projectCode", project_name as "projectName",
   customer_text as "customerText", region, project_type as "projectType", manager_ids as "managerIds",
   manager_names as "managerNames", status, source_version as "sourceVersion", source_updated_at as "updatedAt",
-  archived_at as "archivedAt", null::timestamptz as "deletedAt", synced_at as "syncedAt"`;
+  archived_at as "archivedAt", deleted_at as "deletedAt", synced_at as "syncedAt", 'local'::text as "sourceKind"`;
 const localProjectConflicts = new Map([
   ["ux_project_code_claim_code", ["PROJECT_CODE_EXISTS", "项目编号已存在"]],
   ["ux_local_projects_code", ["PROJECT_CODE_EXISTS", "项目编号已存在"]],
@@ -32,6 +32,7 @@ const localProjectPatchColumns = {
   managerIds: ["manager_ids", "uuid[]"],
   managerNames: ["manager_names", "text[]"],
   status: ["status", "text"],
+  deleted: ["deleted_at", "boolean"],
 };
 
 function rethrowProjectConflict(error) {
@@ -132,18 +133,25 @@ export async function patchLocalProject(client, projectId, expectedVersion, patc
     throw new CaseAggregateError("PROJECT_VERSION_CONFLICT", "项目版本已变化");
   }
 
-  const assignments = fields.map((field, index) => {
+  const assignments = [];
+  const values = [];
+  for (const field of fields) {
     const [column, type] = localProjectPatchColumns[field];
-    return `${column} = $${index + 2}::${type}`;
-  });
-  const statusIndex = fields.indexOf("status");
-  if (statusIndex >= 0) {
-    assignments.push(`archived_at = case when $${statusIndex + 2} = 'archived'
-      then coalesce(archived_at, statement_timestamp()) else null end`);
+    const parameter = `$${values.length + 2}`;
+    values.push(patch[field]);
+    if (field === "deleted") {
+      assignments.push(`deleted_at = case when ${parameter}::boolean
+        then coalesce(deleted_at, statement_timestamp()) else null end`);
+    } else if (field === "status") {
+      assignments.push(`${column} = ${parameter}::${type}`);
+      assignments.push(`archived_at = case when ${parameter}::text = 'archived'
+        then coalesce(archived_at, statement_timestamp()) else null end`);
+    } else {
+      assignments.push(`${column} = ${parameter}::${type}`);
+    }
   }
   assignments.push("source_version = source_version + 1", "source_updated_at = statement_timestamp()",
     "updated_at = statement_timestamp()", "synced_at = statement_timestamp()");
-  const values = fields.map((field) => patch[field]);
 
   try {
     const { rows: [project] } = await client.query(`
@@ -167,6 +175,10 @@ export function createProjectCatalog(pool, cursorKey) {
   return {
     async probe() {
       await query(`${selectAvailableProjects} limit 0`);
+    },
+    async get(projectId) {
+      const { rows: [project] } = await query(`${selectAvailableProjects} and project_id = $1 limit 1`, [projectId]);
+      return project ?? null;
     },
     async list({ limit, filters, afterId }) {
       const { rows } = await query(`

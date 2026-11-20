@@ -25,5 +25,12 @@ export function createProjectCatalogHttp(pool, catalog, { parse, readBody }) {
     }, (client) => catalog.updateLocal(client, projectId, expectedVersion, patch));
   }
 
-  return { register, update };
+  async function get(projectIdInput) {
+    const projectId = parse(CaseUuidSchema, projectIdInput, "path.projectId");
+    const body = await catalog.get(projectId);
+    return body ? { status: 200, body, resourceId: projectId } :
+      { status: 404, body: { code: "NOT_FOUND", message: "项目不存在", details: [] } };
+  }
+
+  return { get, register, update };
 }

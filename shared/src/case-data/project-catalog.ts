@@ -18,8 +18,8 @@ const timestamp = z.iso.datetime({ offset: true });
 export const CaseProjectCatalogItemSchema = z.strictObject({
   externalProjectId: z.uuid(), projectCode: z.string(), projectName: z.string(), customerText: z.string().nullable(),
   region: z.string(), projectType: z.string(), managerIds: z.array(z.uuid()), managerNames: z.array(z.string().nullable()),
-  status, sourceVersion: z.number().int().min(0), updatedAt: timestamp, archivedAt: timestamp.nullable(),
-  deletedAt: z.null(), syncedAt: timestamp,
+  status, sourceKind: z.enum(["core", "local"]), sourceVersion: z.number().int().min(0), updatedAt: timestamp,
+  archivedAt: timestamp.nullable(), deletedAt: timestamp.nullable(), syncedAt: timestamp,
 }).openapi("CaseProjectCatalogItem");
 
 export const CaseProjectCatalogPageSchema = z.strictObject({
@@ -62,10 +62,10 @@ export const PatchLocalCaseProjectBodySchema = z.strictObject({
   projectType: z.string().trim().min(1).max(100).optional(),
   managerIds: z.array(CaseUuidSchema).max(200).optional(),
   managerNames: z.array(z.string().trim().min(1).max(200).nullable()).max(200).optional(),
-  status: status.optional(),
+  status: status.optional(), deleted: z.boolean().optional(),
 }).superRefine((value, context) => {
   const mutable = ["projectCode", "projectName", "customerText", "region", "projectType",
-    "managerIds", "managerNames", "status"] as const;
+    "managerIds", "managerNames", "status", "deleted"] as const;
   if (!mutable.some((key) => value[key] !== undefined)) {
     context.addIssue({ code: "custom", message: "至少提供一个可更新字段" });
   }

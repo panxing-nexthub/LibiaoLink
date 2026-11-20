@@ -90,10 +90,29 @@ export const CaseLocaleSchema = z.string().min(2).max(20).regex(/^[A-Za-z]{2,3}(
   try { new Intl.Locale(value); return true; } catch { return false; }
 }, "须为有效语言标签");
 
+export const CaseReviewStatusSchema = z.enum(["not_submitted", "reviewing", "approved", "rejected"]);
+export const CaseLifecycleStatusSchema = z.enum(["draft", "reviewing", "published", "archived", "deleted"]);
+export const caseListCursorPattern = /^([A-Za-z0-9_-]{1,4096})\.([A-Za-z0-9_-]{43})$/;
+const listCursor = z.string().regex(caseListCursorPattern, "游标无效");
+const caseKeyword = z.string().trim().min(1).max(100).refine(
+  (value) => !value.includes("\0") && !/[\ud800-\udfff]/u.test(value), "关键词含不支持的字符",
+);
+export const CaseListQuerySchema = z.strictObject({
+  limit: z.coerce.number({ error: "limit 必须是 1–200 的整数" }).int().min(1).max(200).default(50),
+  cursor: listCursor.optional(), status: CaseLifecycleStatusSchema.optional(), keyword: caseKeyword.optional(),
+  updatedAfter: z.iso.datetime({ offset: true }).optional(),
+}).openapi("CaseListQuery");
+export const CaseVersionListQuerySchema = z.strictObject({
+  limit: z.coerce.number({ error: "limit 必须是 1–200 的整数" }).int().min(1).max(200).default(50),
+  cursor: listCursor.optional(),
+}).openapi("CaseVersionListQuery");
+
 export const CaseCreateBodySchema = z.strictObject({
   ...caseWriteContext, caseId: CaseUuidSchema.optional(), externalProjectId: CaseUuidSchema,
+  translationGroupId: CaseUuidSchema.optional().openapi({ description: "同组案例共享此 ID；省略时使用案例 ID，服务端生成案例时使用新的 UUIDv7" }),
   sourceVersion: z.number().int().min(0).max(2_147_483_647), locale: CaseLocaleSchema, title, summary: summary.optional(),
-  changeSummary: changeSummary.optional(),
+  changeSummary: changeSummary.optional(), reviewStatus: CaseReviewStatusSchema.default("not_submitted"),
+  reviewRef: z.string().trim().max(256).nullable().optional().transform((value) => value || null),
   content: content.default({ schemaVersion: 1, fields: [] }),
   solutionParameters: solutionParameters.default({ schemaVersion: 1, groups: [] }),
   outcomes: outcomes.default({ schemaVersion: 1, metrics: [] }),
@@ -104,19 +123,64 @@ export const CasePatchBodySchema = z.strictObject({
   ...caseWriteContext, expectedVersion: z.number().int().min(1).max(2_147_483_647), title: title.optional(),
   summary: summary.optional(), changeSummary: changeSummary.optional(), content: content.optional(),
   solutionParameters: solutionParameters.optional(), outcomes: outcomes.optional(), confidentiality: confidentiality.optional(),
-}).openapi("CasePatchBody");
+  reviewStatus: CaseReviewStatusSchema.optional(),
+  reviewRef: z.union([z.string().trim().max(256).transform((value) => value || null), z.null()]).optional(),
+  archived: z.boolean().optional(), deleted: z.boolean().optional(),
+}).refine((value) => ["title", "summary", "changeSummary", "content", "solutionParameters", "outcomes", "confidentiality",
+  "reviewStatus", "reviewRef", "archived", "deleted"].some((key) => (value as Record<string, unknown>)[key] !== undefined),
+"至少提供一个可更新字段").openapi("CasePatchBody");
 
-// 读面保留既有 JSON 内容，包含早期只读的正文键。
+export const CaseRestoreVersionBodySchema = z.strictObject({
+  ...caseWriteContext, expectedVersion: z.number().int().min(1).max(2_147_483_647),
+  changeSummary: changeSummary.optional(),
+}).openapi("CaseRestoreVersionBody");
+
 const storedObject = z.record(z.string(), z.unknown());
+const timestamp = z.iso.datetime({ offset: true });
 export const CaseAuthoringViewSchema = z.strictObject({
-  caseId: z.uuid(), sourceProjectId: z.uuid(), locale: z.string(), title: z.string(), summary: z.string().nullable(),
+  caseId: z.uuid(), sourceProjectId: z.uuid(), translationGroupId: z.uuid(),
+  locale: z.string(), title: z.string(), summary: z.string().nullable(),
   changeSummary: z.string().nullable(), content: storedObject, solutionParameters: storedObject, outcomes: storedObject,
-  confidentiality: storedObject, createdBy: z.string(), createdAt: z.iso.datetime({ offset: true }),
-  updatedAt: z.iso.datetime({ offset: true }), rowVersion: z.number().int().min(1),
+  confidentiality: storedObject, reviewStatus: CaseReviewStatusSchema, reviewRef: z.string().nullable(),
+  status: CaseLifecycleStatusSchema, activeReleaseId: z.uuid().nullable(),
+  archivedAt: timestamp.nullable(), deletedAt: timestamp.nullable(),
+  createdBy: z.string(), createdAt: timestamp, updatedAt: timestamp, rowVersion: z.number().int().min(1),
 }).openapi("CaseAuthoringView");
+
+export const CaseListItemSchema = z.strictObject({
+  caseId: z.uuid(), sourceProjectId: z.uuid(), translationGroupId: z.uuid(), locale: z.string(), title: z.string(),
+  status: CaseLifecycleStatusSchema, reviewStatus: CaseReviewStatusSchema, activeReleaseId: z.uuid().nullable(),
+  changeSummary: z.string().nullable(), rowVersion: z.number().int().min(1), createdAt: timestamp, updatedAt: timestamp,
+  archivedAt: timestamp.nullable(), deletedAt: timestamp.nullable(),
+}).openapi("CaseListItem");
+export const CaseListPageSchema = z.strictObject({
+  items: z.array(CaseListItemSchema).max(200), nextCursor: z.string().nullable(),
+}).openapi("CaseListPage");
+
+export const CaseVersionSnapshotSchema = z.strictObject({
+  locale: CaseLocaleSchema, translationGroupId: z.uuid(), title, summary: z.string().nullable(),
+  changeSummary: z.string().nullable(), content: storedObject, solutionParameters: storedObject, outcomes: storedObject,
+  confidentiality: storedObject,
+}).openapi("CaseVersionSnapshot");
+export const CaseVersionSchema = z.strictObject({
+  caseId: z.uuid(), caseVersionId: z.uuid(), versionNo: z.number().int().min(1),
+  changeSummary: z.string().nullable(), restoredFromVersionId: z.uuid().nullable(),
+  createdBy: z.string(), createdAt: timestamp, snapshot: CaseVersionSnapshotSchema,
+}).openapi("CaseVersion");
+export const CaseVersionPageSchema = z.strictObject({
+  items: z.array(CaseVersionSchema).max(200), nextCursor: z.string().nullable(),
+}).openapi("CaseVersionPage");
+export const CaseTranslationSummarySchema = z.strictObject({
+  caseId: z.uuid(), translationGroupId: z.uuid(), locale: z.string(), title: z.string(),
+  status: CaseLifecycleStatusSchema, rowVersion: z.number().int().min(1), updatedAt: timestamp,
+  activeReleaseId: z.uuid().nullable(),
+}).openapi("CaseTranslationSummary");
+export const CaseTranslationsSchema = z.strictObject({
+  translationGroupId: z.uuid(), items: z.array(CaseTranslationSummarySchema).max(100),
+}).openapi("CaseTranslations");
 
 export const CaseOperationResultSchema = z.strictObject({
   operationId: CaseOperationIdSchema, statusCode: z.number().int().min(200).max(599),
   response: storedObject, resourceId: z.uuid().nullable(),
-  createdAt: z.iso.datetime({ offset: true }), expiresAt: z.iso.datetime({ offset: true }),
+  createdAt: timestamp, expiresAt: timestamp,
 }).openapi("CaseOperationResult");

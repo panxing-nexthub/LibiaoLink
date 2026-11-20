@@ -28,6 +28,10 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
     headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
     body: body && JSON.stringify(body), signal: AbortSignal.timeout(7000),
   });
+  const sendMethod = (method: string, path: string, body: object) => fetch(base + path, {
+    method, headers: { Authorization: `Bearer ${authorToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body), signal: AbortSignal.timeout(7000),
+  });
   const publicGet = (path: string) => send(path, undefined, publicToken);
   async function expectCode(response: Response, status: number, code: string) {
     expect(response.status).toBe(status);
@@ -72,7 +76,7 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
   const activate = (release: Release, body: ReturnType<typeof activation>) => send(`${authorPath(release)}/activate`, body);
   async function protect(asset: Asset) {
     await expect(db.query('delete from "case".case_assets where asset_version_id = $1', [asset.assetVersionId]))
-      .rejects.toMatchObject({ code: "23001", constraint: "case_release_assets_object_version_fk" });
+      .rejects.toMatchObject({ code: "23001", constraint: "case_release_assets_asset_version_fk" });
   }
 
   expect((await fetch(base + "/readyz")).status).toBe(200);
@@ -89,6 +93,11 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
   const first = await stage(firstInput, 1);
   expect(await (await send(collection, firstInput)).json()).toEqual(first);
   await protect(before);
+  const protectedDelete = await sendMethod("PATCH", `/api/v1/assets/${before.assetId}`, {
+    operationId: write().operationId, operatorUserKey: "release-fixture", expectedVersion: 1, deleted: true,
+  });
+  expect(protectedDelete.status).toBe(409);
+  expect(await protectedDelete.json()).toMatchObject({ code: "ASSET_REFERENCED" });
   expect((await publicGet(publicPath(first))).status).toBe(404);
   expect((await publicGet(mediaPath(first, before))).status).toBe(404);
   await expectCode(await activate(first, activation(null)), 409, "RELEASE_ASSET_NOT_READY");
@@ -123,13 +132,41 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
     approvalRef: firstActivation.approvalRef, projectSnapshot: { projectName: "项目原名", sourceVersion: 4 }, assets: [before],
   });
 
+  const archivedAsset = await sendMethod("PATCH", `/api/v1/assets/${before.assetId}`, {
+    operationId: write().operationId, operatorUserKey: "release-fixture", expectedVersion: 1, archived: true,
+  });
+  expect(archivedAsset.status).toBe(200);
+  await expectCode(await send(collection, stageInput("归档素材不可发布", 5, [before])), 409, "RELEASE_ASSET_MISMATCH");
+  const unarchivedAsset = await sendMethod("PATCH", `/api/v1/assets/${before.assetId}`, {
+    operationId: write().operationId, operatorUserKey: "release-fixture", expectedVersion: 2, archived: false,
+  });
+  expect(unarchivedAsset.status).toBe(200);
+
   const { rows: [missingAsset] } = await db.query(`
-    insert into "case".case_assets (id, case_id, client_id, asset_version_id, object_version_id, object_key, asset_kind,
-      original_filename, mime_type, size_bytes, sha256, scan_status, transcode_status, created_by)
-    values (uuidv7(), $1, 'case-author', uuidv7(), gen_random_uuid()::text, 'cases/' || $1::uuid || '/' || uuidv7(),
-      'image', 'missing.png', 'image/png', 10, repeat('a', 64), 'passed', 'not_required', 'fixture')
-    returning id as "assetId", asset_version_id as "assetVersionId", object_version_id as "objectVersionId"
-  `, [caseId]);
+    with ids as (
+      select uuidv7() as asset_id, uuidv7() as asset_version_id
+    ), metadata as (
+      insert into "case".case_asset_metadata
+        (asset_id, project_id, client_id, asset_type, title, created_by)
+      select asset_id, $2, 'case-author', 'image', 'missing.png', 'fixture' from ids
+      returning asset_id
+    ), asset as (
+      insert into "case".case_assets
+        (id, case_id, client_id, asset_version_id, object_version_id, object_key, asset_kind,
+         original_filename, mime_type, size_bytes, sha256, scan_status, transcode_status, created_by,
+         project_id, asset_version_no)
+      select i.asset_id, $1, 'case-author', i.asset_version_id, gen_random_uuid()::text,
+        'projects/' || $2::uuid || '/assets/' || i.asset_id || '/' || i.asset_version_id,
+        'image', 'missing.png', 'image/png', 10, repeat('a', 64), 'passed', 'not_required',
+        'fixture', $2, 1
+      from ids i join metadata m on m.asset_id = i.asset_id
+      returning id, asset_version_id, object_version_id
+    ), linked as (
+      insert into "case".case_asset_links (asset_id, case_id, project_id, created_by)
+      select id, $1, $2, 'fixture' from asset
+    )
+    select id as "assetId", asset_version_id as "assetVersionId", object_version_id as "objectVersionId" from asset
+  `, [caseId, projectId]);
   const missing = await stage(stageInput("缺少锁定对象", 5, [missingAsset]), 2);
   await expectCode(await activate(missing, activation(first.releaseId)), 409, "RELEASE_ASSET_NOT_READY");
   expect((await publicGet(publicPath(first))).status).toBe(200);
@@ -197,9 +234,12 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
 
   const admin = new S3Client({ endpoint: fixture.endpoint, region: "us-east-1", forcePathStyle: true,
     credentials: fixture.adminCredentials });
+  const { rows: [{ objectKey }] } = await db.query(
+    'select object_key as "objectKey" from "case".case_assets where asset_version_id = $1', [before.assetVersionId],
+  );
   try {
-    // Simulate a newer current object at the old key in the disposable proof bucket.
-    await admin.send(new PutObjectCommand({ Bucket: fixture.bucket, Key: `cases/${caseId}/${before.assetVersionId}`,
+    // Simulate a newer current object at the same stable key in the disposable proof bucket.
+    await admin.send(new PutObjectCommand({ Bucket: fixture.bucket, Key: objectKey,
       Body: replacement, ContentType: "image/png" }));
   } finally {
     admin.destroy();

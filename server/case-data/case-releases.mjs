@@ -57,9 +57,12 @@ export async function stageCaseRelease(client, caseId, clientId, input) {
 
   const assets = JSON.stringify(input.assets.map((asset, sortOrder) => ({ ...asset, sortOrder })));
   const verified = await client.query(`
-    select 1 from ${suppliedAssets} join "case".case_assets a
+    select 1 from ${suppliedAssets}
+    join "case".case_assets a
       on (a.id, a.asset_version_id, a.object_version_id) = (supplied."assetId", supplied."assetVersionId", supplied."objectVersionId")
-    where a.case_id = $1 and a.client_id = $3
+    join "case".case_asset_metadata m on m.asset_id = a.id and m.client_id = a.client_id
+    join "case".case_asset_links l on l.asset_id = a.id and l.project_id = a.project_id
+    where l.case_id = $1 and a.client_id = $3 and m.archived_at is null and m.deleted_at is null
   `, [caseId, assets, clientId]);
   if (verified.rowCount !== input.assets.length) {
     throw new CaseAggregateError("RELEASE_ASSET_MISMATCH", "素材版本与当前案例、对象版本或调用方不匹配");
@@ -102,10 +105,14 @@ async function verifyReleaseAssets(client, releaseId, storage) {
   const { rows: assets } = await client.query(`
     select a.object_key as "objectKey", a.object_version_id as "objectVersionId", a.mime_type as "mimeType",
       a.size_bytes as "sizeBytes", a.sha256, a.scan_status = 'passed'
-        and a.transcode_status in ('not_required', 'ready') as ready
-    from "case".case_release_assets r join "case".case_assets a
-      on (a.case_id, a.id, a.asset_version_id, a.object_version_id) =
-         (r.case_id, r.asset_id, r.asset_version_id, r.object_version_id)
+        and a.transcode_status in ('not_required', 'ready')
+        and m.archived_at is null and m.deleted_at is null as ready
+    from "case".case_release_assets r
+    join "case".case_assets a
+      on (a.id, a.asset_version_id, a.object_version_id) =
+         (r.asset_id, r.asset_version_id, r.object_version_id)
+    join "case".case_asset_metadata m on m.asset_id = a.id and m.client_id = a.client_id
+    join "case".case_asset_links l on l.asset_id = a.id and l.case_id = r.case_id
     where r.release_id = $1 order by r.sort_order
   `, [releaseId]);
   if (!assets.every((asset) => asset.ready)) throw unready();

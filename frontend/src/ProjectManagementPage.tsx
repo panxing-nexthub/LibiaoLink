@@ -1595,6 +1595,12 @@ type PmGanttColumnLayoutEntry = {
 const pmGanttClampWidth = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, value));
 
+const pmGanttSetScrollLeft = (viewport: HTMLDivElement, value: number): number => {
+  const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+  viewport.scrollLeft = pmGanttClampWidth(value, 0, maxScroll);
+  return viewport.scrollLeft;
+};
+
 const pmGanttReadStoredTableWidth = (): number | null => {
   if (typeof window === "undefined") {
     return null;
@@ -2515,6 +2521,7 @@ function PmImplementationGantt({
   const ganttScrollShellRef = useRef<HTMLDivElement | null>(null);
   const ganttScrollViewportRef = useRef<HTMLDivElement | null>(null);
   const [ganttScrollLeft, setGanttScrollLeft] = useState(0);
+  const [ganttScrollMax, setGanttScrollMax] = useState(0);
   const [ganttPanActive, setGanttPanActive] = useState(false);
   const ganttPanRef = useRef<{
     pointerId: number;
@@ -2534,19 +2541,17 @@ function PmImplementationGantt({
   const [ganttAnchorIso, setGanttAnchorIso] = useState<string>(pmGanttTodayIso);
   const [ganttScrollRequest, setGanttScrollRequest] = useState<{
     iso: string;
-    behavior: ScrollBehavior;
     id: number;
-  }>(() => ({ iso: pmGanttTodayIso(), behavior: "auto", id: 0 }));
+  }>(() => ({ iso: pmGanttTodayIso(), id: 0 }));
   const ganttScrollRequestIdRef = useRef(0);
   const ganttScaleConfig = PM_GANTT_SCALES[ganttScale];
   const ganttDayWidth = pmGanttScaledPx(ganttScaleConfig.dayWidth, ganttUiScale);
   const ganttOverflowWidth = ganttMetrics.overflowWidth;
   const ganttMinOverflowWidth = pmGanttScaledPx(24, ganttUiScale);
-  const requestGanttScroll = (iso: string, behavior: ScrollBehavior): void => {
+  const requestGanttScroll = (iso: string): void => {
     ganttScrollRequestIdRef.current += 1;
     setGanttScrollRequest({
       iso,
-      behavior,
       id: ganttScrollRequestIdRef.current,
     });
   };
@@ -2567,19 +2572,18 @@ function PmImplementationGantt({
   const goToGanttCurrent = (): void => {
     const today = pmGanttTodayIso();
     setGanttAnchorIso(today);
-    requestGanttScroll(today, "smooth");
+    requestGanttScroll(today);
   };
   const scrollGanttByPage = (direction: -1 | 1): void => {
     const viewport = ganttScrollViewportRef.current;
-    if (viewport === null || ganttTimelineViewportWidth <= 0) {
+    if (viewport === null || viewport.clientWidth <= 0) {
       return;
     }
-    const step = Math.max(ganttDayWidth * 7, ganttTimelineViewportWidth * 0.85);
-    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-    viewport.scrollTo({
-      left: pmGanttClampWidth(viewport.scrollLeft + direction * step, 0, maxScroll),
-      behavior: "smooth",
-    });
+    const visibleTimelineWidth = Math.max(0, viewport.clientWidth - ganttTableWidth);
+    const step = Math.max(ganttDayWidth * 7, visibleTimelineWidth * 0.85);
+    setGanttScrollLeft(
+      pmGanttSetScrollLeft(viewport, viewport.scrollLeft + direction * step),
+    );
   };
 
   useEffect(() => {
@@ -2604,6 +2608,7 @@ function PmImplementationGantt({
         }
         setGanttScrollLeft(viewport.scrollLeft);
         setGanttViewportWidth(viewport.clientWidth);
+        setGanttScrollMax(Math.max(0, viewport.scrollWidth - viewport.clientWidth));
       });
     };
     sync();
@@ -2701,6 +2706,9 @@ function PmImplementationGantt({
 
     const observer = new ResizeObserver(sync);
     observer.observe(viewport);
+    for (const child of Array.from(viewport.children)) {
+      observer.observe(child);
+    }
     return () => {
       viewport.removeEventListener("scroll", sync);
       viewport.removeEventListener("pointerdown", handlePointerDown);
@@ -2829,7 +2837,7 @@ function PmImplementationGantt({
     if (viewport === null) {
       return;
     }
-    viewport.scrollTo({ left: Math.max(0, barLeft), behavior: "smooth" });
+    setGanttScrollLeft(pmGanttSetScrollLeft(viewport, Math.max(0, barLeft)));
   };
 
   const handleGanttJumpKeyDown = (
@@ -3100,7 +3108,7 @@ function PmImplementationGantt({
     ganttVisibleRange.startIso,
     ganttVisibleRange.endIso,
   );
-  const ganttMaxScroll = Math.max(0, timeline.width - ganttTimelineViewportWidth);
+  const ganttMaxScroll = ganttScrollMax;
   const ganttCanPagePrevious = ganttScrollLeft > 1;
   const ganttCanPageNext = ganttScrollLeft < ganttMaxScroll - 1;
   const ganttBackToCurrentLabel = t(PM_GANTT_BACK_TO_KEYS[ganttScale]);
@@ -3131,7 +3139,7 @@ function PmImplementationGantt({
     setGanttScale(nextScale);
     setGanttAnchorIso(referenceIso);
     setSelectedGanttColumnKey(null);
-    requestGanttScroll(referenceIso, "auto");
+    requestGanttScroll(referenceIso);
   };
 
   const selectedGanttColumn = useMemo(() => {
@@ -3158,11 +3166,11 @@ function PmImplementationGantt({
 
   useEffect(() => {
     const viewport = ganttScrollViewportRef.current;
-    if (
-      viewport === null ||
-      ganttTimelineViewportWidth <= 0 ||
-      timeline.todayIndex < 0
-    ) {
+    if (viewport === null || timeline.todayIndex < 0) {
+      return;
+    }
+    const visibleTimelineWidth = Math.max(0, viewport.clientWidth - ganttTableWidth);
+    if (visibleTimelineWidth <= 0) {
       return;
     }
     const targetIndex = Math.round(
@@ -3174,18 +3182,13 @@ function PmImplementationGantt({
     }
     const targetLeft =
       targetIndex * ganttDayWidth + ganttDayWidth / 2;
-    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-    viewport.scrollTo({
-      left: Math.max(
-        0,
-        Math.min(maxScroll, targetLeft - ganttTimelineViewportWidth / 3),
-      ),
-      behavior: ganttScrollRequest.behavior,
-    });
+    setGanttScrollLeft(
+      pmGanttSetScrollLeft(viewport, targetLeft - visibleTimelineWidth / 3),
+    );
   }, [
     ganttDayWidth,
     ganttScrollRequest,
-    ganttTimelineViewportWidth,
+    ganttTableWidth,
     timeline.days.length,
     timeline.startIso,
     timeline.todayIndex,

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ApiError } from "./api";
 import { AppHeader } from "./components/AppHeader";
@@ -383,7 +383,7 @@ const MEMBER_FILTER_TONES = [
   "bg-blue-100 text-blue-700",
 ];
 const PM_TABLE_TAG_CLASS = "inline-block max-w-full truncate whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-medium";
-const PM_GANTT_TAG_CLASS = "inline-block max-w-full truncate whitespace-nowrap rounded-full px-1 py-0 text-[9px] leading-4 font-normal";
+const PM_GANTT_TAG_CLASS = "inline-block max-w-full truncate whitespace-nowrap rounded-full px-1 py-0 text-[length:var(--pm-gantt-tag-size,9px)] leading-[var(--pm-gantt-tag-leading,16px)] font-normal";
 
 const memberFilterToneOf = (value: string): string => {
   let hash = 0;
@@ -1547,6 +1547,7 @@ const PM_GANTT_COLUMNS: readonly PmGanttColumn[] = [
 
 const PM_GANTT_MIN_TABLE_WIDTH = 320;
 const PM_GANTT_OVERFLOW_WIDTH = 32;
+/** 持久化的是 1 倍档位下的表宽基准值，渲染时按当前屏幕的甘特缩放倍率换算。 */
 const PM_GANTT_TABLE_WIDTH_STORAGE_KEY = "libiaolink.pm.gantt.tableWidth";
 
 type PmGanttColumnLayoutEntry = {
@@ -1588,9 +1589,11 @@ const PM_GANTT_CELL_PADDING = 8;
 const PM_GANTT_CELL_SAFETY = 2;
 const PM_GANTT_CHIP_PADDING = 8;
 const PM_GANTT_CHIP_GAP = 2;
-const PM_GANTT_TEXT_FONT = "400 10px Noto Sans SC, Microsoft YaHei, sans-serif";
-const PM_GANTT_HEADER_FONT = "500 9px Noto Sans SC, Microsoft YaHei, sans-serif";
-const PM_GANTT_CHIP_FONT = "400 9px Noto Sans SC, Microsoft YaHei, sans-serif";
+const PM_GANTT_FONT_FAMILY = "Noto Sans SC, Microsoft YaHei, sans-serif";
+const PM_GANTT_TEXT_FONT = `400 10px ${PM_GANTT_FONT_FAMILY}`;
+const PM_GANTT_CHIP_FONT = `400 9px ${PM_GANTT_FONT_FAMILY}`;
+const pmGanttScaledPx = (value: number, scale: number): number => Math.round(value * scale * 10) / 10;
+const pmGanttFont = (weight: number, size: number): string => `${weight} ${size}px ${PM_GANTT_FONT_FAMILY}`;
 let pmGanttMeasureContext: CanvasRenderingContext2D | null | undefined;
 
 const pmGanttTextWidth = (text: string, font: string = PM_GANTT_TEXT_FONT): number => {
@@ -1608,25 +1611,36 @@ const pmGanttTextWidth = (text: string, font: string = PM_GANTT_TEXT_FONT): numb
   return pmGanttMeasureContext.measureText(normalized).width;
 };
 
-const pmGanttTextCellWidth = (text: string, font: string = PM_GANTT_TEXT_FONT): number =>
-  Math.ceil(pmGanttTextWidth(text, font)) + PM_GANTT_CELL_PADDING + PM_GANTT_CELL_SAFETY;
+const pmGanttTextCellWidth = (
+  text: string,
+  font: string = PM_GANTT_TEXT_FONT,
+  scale = 1,
+): number =>
+  Math.ceil(pmGanttTextWidth(text, font)) +
+  pmGanttScaledPx(PM_GANTT_CELL_PADDING + PM_GANTT_CELL_SAFETY, scale);
 
-const pmGanttChipTextWidth = (text: string, font: string = PM_GANTT_CHIP_FONT): number =>
-  Math.ceil(pmGanttTextWidth(text, font)) + PM_GANTT_CHIP_PADDING + PM_GANTT_CELL_SAFETY;
+const pmGanttChipTextWidth = (
+  text: string,
+  font: string = PM_GANTT_CHIP_FONT,
+  scale = 1,
+): number =>
+  Math.ceil(pmGanttTextWidth(text, font)) +
+  pmGanttScaledPx(PM_GANTT_CHIP_PADDING + PM_GANTT_CELL_SAFETY, scale);
 
-const pmGanttMembersCellWidth = (names: readonly string[]): number => {
+const pmGanttMembersCellWidth = (names: readonly string[], scale = 1): number => {
+  const chipFont = pmGanttFont(400, pmGanttScaledPx(9, scale));
   if (names.length === 0) {
-    return pmGanttTextCellWidth("—");
+    return pmGanttTextCellWidth("—", pmGanttFont(400, pmGanttScaledPx(10, scale)), scale);
   }
   const visible = names.slice(0, 2);
   const rest = names.length - visible.length;
-  const chipWidths = visible.map((name) => pmGanttChipTextWidth(name));
+  const chipWidths = visible.map((name) => pmGanttChipTextWidth(name, chipFont, scale));
   if (rest > 0) {
-    chipWidths.push(pmGanttChipTextWidth("+" + String(rest)));
+    chipWidths.push(pmGanttChipTextWidth("+" + String(rest), chipFont, scale));
   }
   return chipWidths.reduce((total, width) => total + width, 0) +
-    PM_GANTT_CHIP_GAP * Math.max(0, chipWidths.length - 1) +
-    PM_GANTT_CELL_PADDING;
+    pmGanttScaledPx(PM_GANTT_CHIP_GAP, scale) * Math.max(0, chipWidths.length - 1) +
+    pmGanttScaledPx(PM_GANTT_CELL_PADDING, scale);
 };
 type PmGanttScale = "week" | "month" | "quarter" | "year";
 
@@ -1653,6 +1667,76 @@ const PM_GANTT_GROUP_BAR_HEIGHT = 24;
 const PM_GANTT_DAY_MS = 86_400_000;
 const PM_GANTT_BAR_LABEL_GAP = 6;
 const PM_GANTT_BAR_LABEL_MAX_WIDTH = 260;
+const PM_GANTT_UI_BASE_WIDTH = 1600;
+const PM_GANTT_UI_MAX_SCALE = 1.6;
+
+const pmGanttResponsiveScale = (viewportWidth: number): number => {
+  const width =
+    viewportWidth > 0
+      ? viewportWidth
+      : typeof window === "undefined"
+        ? PM_GANTT_UI_BASE_WIDTH
+        : window.innerWidth;
+  return Math.round(pmGanttClampWidth(width / PM_GANTT_UI_BASE_WIDTH, 1, PM_GANTT_UI_MAX_SCALE) * 20) / 20;
+};
+
+const pmGanttVisualMetricsOf = (scale: number) => {
+  const px = (value: number): number => pmGanttScaledPx(value, scale);
+  const cellSize = px(10);
+  const tagSize = px(9);
+  const headerSize = px(9);
+  const groupNameSize = px(11);
+  const groupMetaSize = px(10);
+  const timelinePrimarySize = px(13);
+  const timelineWeekDaySize = px(12);
+  const timelineDaySize = px(10);
+  const availableSize = px(11);
+  const barSize = px(10);
+  const barMetaSize = px(9);
+  return {
+    scale,
+    cellSize,
+    tagSize,
+    headerSize,
+    groupNameSize,
+    groupMetaSize,
+    timelinePrimarySize,
+    timelineWeekDaySize,
+    timelineDaySize,
+    availableSize,
+    barSize,
+    barMetaSize,
+    tagLeading: px(16),
+    groupNameLeading: px(16),
+    headerHeight: px(PM_GANTT_HEADER_HEIGHT),
+    headerRowHeight: px(PM_GANTT_HEADER_HEIGHT / 2),
+    groupHeight: px(PM_GANTT_GROUP_HEIGHT),
+    rowHeight: px(PM_GANTT_ROW_HEIGHT),
+    groupBarHeight: px(PM_GANTT_GROUP_BAR_HEIGHT),
+    taskBarHeight: px(24),
+    groupStatusHeight: px(18),
+    groupLabelMaxWidth: px(160),
+    memberMaxWidth: px(180),
+    availableLabelMinWidth: px(42),
+    cellPaddingX: px(4),
+    chipGap: px(2),
+    barLabelHeight: px(20),
+    minTableWidth: px(PM_GANTT_MIN_TABLE_WIDTH),
+    overflowWidth: px(PM_GANTT_OVERFLOW_WIDTH),
+    expandButtonSize: px(20),
+    expandIconSize: px(14),
+    resizerWidth: px(20),
+    resizerHeight: px(36),
+    toolbarTitleSize: px(14),
+    toolbarControlSize: px(12),
+    toolbarIconButtonSize: px(32),
+    toolbarControlHeight: px(28),
+    toolbarScaleButtonMinWidth: px(36),
+    toolbarPaddingX: px(16),
+    toolbarPaddingY: px(10),
+    toolbarGap: px(12),
+  };
+};
 
 const pmGanttGridStyle = (dayWidth: number, gridDays: number): { backgroundImage: string; backgroundSize: string } => ({
   backgroundImage: "linear-gradient(to right, rgba(228,228,231,0.9) 1px, transparent 1px)",
@@ -1670,38 +1754,38 @@ const pmGanttBarLabelPlacement = (
   barWidth: number,
   scrollLeft: number,
   viewportWidth: number,
+  scale = 1,
 ): PmGanttBarLabelPlacement | null => {
-  if (barWidth <= 0 || viewportWidth <= PM_GANTT_BAR_LABEL_GAP * 2) {
+  const gap = pmGanttScaledPx(PM_GANTT_BAR_LABEL_GAP, scale);
+  const maxLabelWidth = pmGanttScaledPx(PM_GANTT_BAR_LABEL_MAX_WIDTH, scale);
+  if (barWidth <= 0 || viewportWidth <= gap * 2) {
     return null;
   }
   const visibleStart = Math.max(0, scrollLeft);
   const visibleEnd = visibleStart + viewportWidth;
   const barEnd = barLeft + barWidth;
-  const edgeMaxWidth = Math.min(
-    PM_GANTT_BAR_LABEL_MAX_WIDTH,
-    Math.max(0, viewportWidth - PM_GANTT_BAR_LABEL_GAP * 2),
-  );
-  if (edgeMaxWidth < 72) {
+  const edgeMaxWidth = Math.min(maxLabelWidth, Math.max(0, viewportWidth - gap * 2));
+  if (edgeMaxWidth < pmGanttScaledPx(72, scale)) {
     return null;
   }
   if (barEnd <= visibleStart) {
     return {
       edge: "left",
-      left: visibleStart + PM_GANTT_BAR_LABEL_GAP,
+      left: visibleStart + gap,
       maxWidth: edgeMaxWidth,
     };
   }
   if (barLeft >= visibleEnd) {
     return {
       edge: "right",
-      left: visibleEnd - edgeMaxWidth - PM_GANTT_BAR_LABEL_GAP,
+      left: visibleEnd - edgeMaxWidth - gap,
       maxWidth: edgeMaxWidth,
     };
   }
   const visibleBarStart = Math.max(barLeft, visibleStart);
   return {
     edge: null,
-    left: visibleBarStart + PM_GANTT_BAR_LABEL_GAP,
+    left: visibleBarStart + gap,
     maxWidth: edgeMaxWidth,
   };
 };
@@ -2074,12 +2158,23 @@ function PmMemberChips({
   const rest = names.length - visible.length;
   const chipClass = compact ? PM_GANTT_TAG_CLASS : PM_TABLE_TAG_CLASS;
   return (
-    <span className={"flex min-w-0 items-center overflow-hidden " + (compact ? "gap-0.5" : "gap-1")}>
+    <span
+      className={
+        "flex min-w-0 items-center overflow-hidden " +
+        (compact ? "gap-[var(--pm-gantt-chip-gap,2px)]" : "gap-1")
+      }
+    >
       {visible.map((name, index) => (
         <span
           key={name + "-" + String(index)}
           title={name}
-          className={chipClass + " max-w-[180px] shrink-0 " + memberFilterToneOf(name)}
+          className={
+            chipClass +
+            (compact
+              ? " max-w-[var(--pm-gantt-member-max-width,180px)] shrink-0 "
+              : " max-w-[180px] shrink-0 ") +
+            memberFilterToneOf(name)
+          }
         >
           {name}
         </span>
@@ -2089,7 +2184,7 @@ function PmMemberChips({
           title={names.join(", ")}
           className={
             compact
-              ? "shrink-0 rounded-full bg-zinc-100 px-1.5 py-0 text-[10px] font-medium leading-4 text-zinc-500"
+              ? "shrink-0 rounded-full bg-zinc-100 px-1.5 py-0 text-[length:var(--pm-gantt-cell-size,10px)] font-medium leading-[var(--pm-gantt-tag-leading,16px)] text-zinc-500"
               : "shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[12px] font-medium text-zinc-500"
           }
         >
@@ -2109,6 +2204,7 @@ function PmGanttProjectCells({
   hiddenColumnCount,
   hiddenColumnsLabel,
   overflowWidth,
+  cellPaddingX,
 }: {
   row: PmRow;
   sequence: number;
@@ -2118,6 +2214,7 @@ function PmGanttProjectCells({
   hiddenColumnCount: number;
   hiddenColumnsLabel: string;
   overflowWidth: number;
+  cellPaddingX: number;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2137,14 +2234,14 @@ function PmGanttProjectCells({
   const dateStartLabel = pmGanttShortDate(dateRange.start);
   const dateEndLabel = pmGanttShortDate(dateRange.end);
   const cellClass =
-    "flex min-w-0 items-center overflow-hidden whitespace-nowrap border-r border-zinc-200 px-1 text-[10px] text-zinc-700";
+    "flex min-w-0 items-center overflow-hidden whitespace-nowrap border-r border-zinc-200 text-[length:var(--pm-gantt-cell-size,10px)] text-zinc-700";
 
   return (
     <>
       {columns.map(({ column, width }, columnIndex) => {
         let content: ReactNode = null;
         if (column.key === "rowNo") {
-          content = <span className="text-[10px] tabular-nums text-zinc-400">{sequence}</span>;
+          content = <span className="text-[length:var(--pm-gantt-cell-size,10px)] tabular-nums text-zinc-400">{sequence}</span>;
         } else if (column.key === "code") {
           content = (
             <span className="block truncate font-medium tabular-nums text-zinc-800" title={row.code.trim() === "" ? undefined : row.code}>
@@ -2162,7 +2259,7 @@ function PmGanttProjectCells({
           content = <PmMemberChips names={managerNames} compact />;
         } else if (column.key === "engineer") {
           content = row.implementationHandedOver ? (
-            <span className="rounded bg-[#f02b2b] px-1.5 py-0 text-[9px] font-medium leading-4 text-white">
+            <span className="rounded bg-[#f02b2b] px-1.5 py-0 text-[length:var(--pm-gantt-tag-size,9px)] font-medium leading-[var(--pm-gantt-tag-leading,16px)] text-white">
               {t("pm.engineer.handedOver")}
             </span>
           ) : (
@@ -2183,7 +2280,7 @@ function PmGanttProjectCells({
               <span className="text-zinc-400">—</span>
             ) : (
               <span
-                className="flex min-w-0 items-center gap-0.5 overflow-hidden whitespace-nowrap text-[9px] font-normal tabular-nums"
+                className="flex min-w-0 items-center gap-0.5 overflow-hidden whitespace-nowrap text-[length:var(--pm-gantt-tag-size,9px)] font-normal tabular-nums"
                 title={dateRange.title === "" ? undefined : dateRange.title}
               >
                 <span className="text-sky-700">{dateStartLabel ?? "—"}</span>
@@ -2222,7 +2319,7 @@ function PmGanttProjectCells({
         return (
           <div
             key={column.key}
-            style={{ width }}
+            style={{ width, paddingLeft: cellPaddingX, paddingRight: cellPaddingX }}
             className={
               cellClass +
               (column.key === "rowNo" ? " justify-center border-l-0" : "") +
@@ -2237,7 +2334,7 @@ function PmGanttProjectCells({
         <div
           style={{ width: overflowWidth }}
           title={hiddenColumnsLabel}
-          className="flex min-w-0 items-center justify-center border-r-0 border-zinc-200 text-[9px] font-normal tabular-nums text-zinc-400"
+          className="flex min-w-0 items-center justify-center border-r-0 border-zinc-200 text-[length:var(--pm-gantt-tag-size,9px)] font-normal tabular-nums text-zinc-400"
         >
           +{hiddenColumnCount}
         </div>
@@ -2264,37 +2361,69 @@ function PmImplementationGantt({
     () => buildPmGanttGroups(rows, directory, locale, handedOverLabel, unassignedLabel),
     [rows, directory, locale, handedOverLabel, unassignedLabel],
   );
+  const [ganttViewportWidth, setGanttViewportWidth] = useState(0);
+  const ganttUiScale = pmGanttResponsiveScale(ganttViewportWidth);
+  const ganttMetrics = pmGanttVisualMetricsOf(ganttUiScale);
+  const ganttCssVariables = {
+    "--pm-gantt-cell-size": `${ganttMetrics.cellSize}px`,
+    "--pm-gantt-tag-size": `${ganttMetrics.tagSize}px`,
+    "--pm-gantt-header-size": `${ganttMetrics.headerSize}px`,
+    "--pm-gantt-group-name-size": `${ganttMetrics.groupNameSize}px`,
+    "--pm-gantt-group-meta-size": `${ganttMetrics.groupMetaSize}px`,
+    "--pm-gantt-timeline-primary-size": `${ganttMetrics.timelinePrimarySize}px`,
+    "--pm-gantt-timeline-week-day-size": `${ganttMetrics.timelineWeekDaySize}px`,
+    "--pm-gantt-timeline-day-size": `${ganttMetrics.timelineDaySize}px`,
+    "--pm-gantt-available-size": `${ganttMetrics.availableSize}px`,
+    "--pm-gantt-bar-size": `${ganttMetrics.barSize}px`,
+    "--pm-gantt-bar-meta-size": `${ganttMetrics.barMetaSize}px`,
+    "--pm-gantt-tag-leading": `${ganttMetrics.tagLeading}px`,
+    "--pm-gantt-group-name-leading": `${ganttMetrics.groupNameLeading}px`,
+    "--pm-gantt-member-max-width": `${ganttMetrics.memberMaxWidth}px`,
+    "--pm-gantt-chip-gap": `${ganttMetrics.chipGap}px`,
+    "--pm-gantt-group-label-max-width": `${ganttMetrics.groupLabelMaxWidth}px`,
+    "--pm-gantt-toolbar-title-size": `${ganttMetrics.toolbarTitleSize}px`,
+    "--pm-gantt-toolbar-control-size": `${ganttMetrics.toolbarControlSize}px`,
+  } as CSSProperties;
   const ganttColumnWidths = useMemo(() => {
+    const scaledMinWidth = (column: PmGanttColumn): number =>
+      Math.round(column.minWidth * ganttUiScale);
+    const scaledMaxWidth = (column: PmGanttColumn): number =>
+      Math.round(column.maxWidth * ganttUiScale);
     const widths = new Map<PmGanttColumn["key"], number>(
-      PM_GANTT_COLUMNS.map((column) => [column.key, column.minWidth]),
+      PM_GANTT_COLUMNS.map((column) => [column.key, scaledMinWidth(column)]),
     );
     const bump = (key: PmGanttColumn["key"], width: number): void => {
       widths.set(key, Math.max(widths.get(key) ?? 0, Math.ceil(width)));
     };
+    const textFont = pmGanttFont(400, pmGanttScaledPx(10, ganttUiScale));
+    const headerFont = pmGanttFont(500, pmGanttScaledPx(9, ganttUiScale));
+    const chipFont = pmGanttFont(400, pmGanttScaledPx(9, ganttUiScale));
+    const handedOverFont = pmGanttFont(500, pmGanttScaledPx(9, ganttUiScale));
     PM_GANTT_COLUMNS.forEach((column) => {
       if (column.labelKey !== null) {
-        bump(column.key, pmGanttTextCellWidth(t(column.labelKey), PM_GANTT_HEADER_FONT));
+        bump(column.key, pmGanttTextCellWidth(t(column.labelKey), headerFont, ganttUiScale));
       }
     });
     groups.forEach((group) => {
       group.items.forEach((item) => {
         const row = item.row;
-        bump("code", pmGanttTextCellWidth(row.code.trim() === "" ? "—" : row.code));
-        bump("name", pmGanttTextCellWidth(row.name.trim() === "" ? t("pm.board.untitled") : row.name));
+        bump("code", pmGanttTextCellWidth(row.code.trim() === "" ? "—" : row.code, textFont, ganttUiScale));
+        bump("name", pmGanttTextCellWidth(row.name.trim() === "" ? t("pm.board.untitled") : row.name, textFont, ganttUiScale));
         bump(
           "manager",
-          pmGanttMembersCellWidth(memberDisplayNames(row.managerIds, row.managerNames, directory)),
+          pmGanttMembersCellWidth(memberDisplayNames(row.managerIds, row.managerNames, directory), ganttUiScale),
         );
         if (row.implementationHandedOver) {
           bump(
             "engineer",
-            pmGanttChipTextWidth(t("pm.engineer.handedOver"), "500 9px Noto Sans SC, Microsoft YaHei, sans-serif"),
+            pmGanttChipTextWidth(t("pm.engineer.handedOver"), handedOverFont, ganttUiScale),
           );
         } else {
           bump(
             "engineer",
             pmGanttMembersCellWidth(
               memberDisplayNames(row.implementationEngineerIds, row.implementationEngineerNames, directory),
+              ganttUiScale,
             ),
           );
         }
@@ -2302,8 +2431,9 @@ function PmImplementationGantt({
         bump(
           "method",
           method === ""
-            ? pmGanttTextCellWidth("—")
-            : pmGanttChipTextWidth(t(METHOD_META[method].labelKey)) + PM_GANTT_CELL_PADDING,
+            ? pmGanttTextCellWidth("—", textFont, ganttUiScale)
+            : pmGanttChipTextWidth(t(METHOD_META[method].labelKey), chipFont, ganttUiScale) +
+              pmGanttScaledPx(PM_GANTT_CELL_PADDING, ganttUiScale),
         );
         const dateRange = pmGanttDateRangeOf(row);
         bump(
@@ -2312,6 +2442,8 @@ function PmImplementationGantt({
             (pmGanttShortDate(dateRange.start) ?? "—") +
               " → " +
               (pmGanttShortDate(dateRange.end) ?? "—"),
+            textFont,
+            ganttUiScale,
           ),
         );
         const stage = effectiveStageOf(row);
@@ -2320,39 +2452,45 @@ function PmImplementationGantt({
         bump(
           "stage",
           stageLabel === ""
-            ? pmGanttTextCellWidth("—")
-            : pmGanttChipTextWidth(stageLabel) + PM_GANTT_CELL_PADDING,
+            ? pmGanttTextCellWidth("—", textFont, ganttUiScale)
+            : pmGanttChipTextWidth(stageLabel, chipFont, ganttUiScale) +
+              pmGanttScaledPx(PM_GANTT_CELL_PADDING, ganttUiScale),
         );
         const locationLabel =
           row.region === "" || row.region === "未分类" ? "" : dictLabel(dicts, "region", row.region);
         bump(
           "location",
           locationLabel === ""
-            ? pmGanttTextCellWidth("—")
-            : pmGanttChipTextWidth(locationLabel) + PM_GANTT_CELL_PADDING,
+            ? pmGanttTextCellWidth("—", textFont, ganttUiScale)
+            : pmGanttChipTextWidth(locationLabel, chipFont, ganttUiScale) +
+              pmGanttScaledPx(PM_GANTT_CELL_PADDING, ganttUiScale),
         );
       });
     });
-    return PM_GANTT_COLUMNS.map((column) =>
-      Math.max(
-        column.minWidth,
-        Math.min(column.maxWidth, widths.get(column.key) ?? column.minWidth),
-      ),
-    );
-  }, [dicts, directory, groups, locale, t]);
+    return PM_GANTT_COLUMNS.map((column) => {
+      const minWidth = scaledMinWidth(column);
+      const maxWidth = scaledMaxWidth(column);
+      return Math.max(
+        minWidth,
+        Math.min(maxWidth, widths.get(column.key) ?? minWidth),
+      );
+    });
+  }, [dicts, directory, groups, locale, t, ganttUiScale]);
   const ganttNaturalWidth = ganttColumnWidths.reduce((total, width) => total + width, 0);
   const [ganttWidthOverride, setGanttWidthOverride] = useState<number | null>(pmGanttReadStoredTableWidth);
   const [ganttResizing, setGanttResizing] = useState(false);
   const [ganttResizeHovered, setGanttResizeHovered] = useState(false);
   const ganttResizeStartRef = useRef<{ x: number; width: number } | null>(null);
-  const ganttMinWidth = Math.min(PM_GANTT_MIN_TABLE_WIDTH, ganttNaturalWidth);
+  const ganttMinWidth = Math.min(ganttMetrics.minTableWidth, ganttNaturalWidth);
+  const ganttWidthOverrideAtScale =
+    ganttWidthOverride === null ? null : Math.round(ganttWidthOverride * ganttUiScale);
   const ganttTableWidth = Math.round(
-    pmGanttClampWidth(ganttWidthOverride ?? ganttNaturalWidth, ganttMinWidth, ganttNaturalWidth),
+    pmGanttClampWidth(ganttWidthOverrideAtScale ?? ganttNaturalWidth, ganttMinWidth, ganttNaturalWidth),
   );
   const ganttScrollShellRef = useRef<HTMLDivElement | null>(null);
   const ganttScrollViewportRef = useRef<HTMLDivElement | null>(null);
   const [ganttScrollLeft, setGanttScrollLeft] = useState(0);
-  const [ganttViewportWidth, setGanttViewportWidth] = useState(0);
+
   const [selectedGanttKey, setSelectedGanttKey] = useState<string | null>(null);
   const [selectedGanttColumnKey, setSelectedGanttColumnKey] = useState<string | null>(null);
   const [collapsedGanttGroupKeys, setCollapsedGanttGroupKeys] = useState<Set<string>>(() => new Set());
@@ -2368,7 +2506,9 @@ function PmImplementationGantt({
   }>(() => ({ iso: pmGanttTodayIso(), behavior: "auto", id: 0 }));
   const ganttScrollRequestIdRef = useRef(0);
   const ganttScaleConfig = PM_GANTT_SCALES[ganttScale];
-  const ganttDayWidth = ganttScaleConfig.dayWidth;
+  const ganttDayWidth = pmGanttScaledPx(ganttScaleConfig.dayWidth, ganttUiScale);
+  const ganttOverflowWidth = ganttMetrics.overflowWidth;
+  const ganttMinOverflowWidth = pmGanttScaledPx(24, ganttUiScale);
   const requestGanttScroll = (iso: string, behavior: ScrollBehavior): void => {
     ganttScrollRequestIdRef.current += 1;
     setGanttScrollRequest({
@@ -2453,7 +2593,7 @@ function PmImplementationGantt({
     const handleMove = (event: PointerEvent): void => {
       const nextWidth = widthForPointer(event);
       if (nextWidth !== null) {
-        setGanttWidthOverride(nextWidth);
+        setGanttWidthOverride(Math.round(nextWidth / ganttUiScale));
       }
     };
     const handleEnd = (event: PointerEvent): void => {
@@ -2461,8 +2601,9 @@ function PmImplementationGantt({
       setGanttResizing(false);
       ganttResizeStartRef.current = null;
       if (finalWidth !== null) {
-        setGanttWidthOverride(finalWidth);
-        pmGanttStoreTableWidth(finalWidth);
+        const storedWidth = Math.round(finalWidth / ganttUiScale);
+        setGanttWidthOverride(storedWidth);
+        pmGanttStoreTableWidth(storedWidth);
       }
     };
     const previousCursor = document.body.style.cursor;
@@ -2479,19 +2620,19 @@ function PmImplementationGantt({
       document.body.style.cursor = previousCursor;
       document.body.style.userSelect = previousUserSelect;
     };
-  }, [ganttMinWidth, ganttNaturalWidth, ganttResizing]);
+  }, [ganttMinWidth, ganttNaturalWidth, ganttResizing, ganttUiScale]);
 
   const ganttColumnLayout = useMemo(() => {
     const allColumns: PmGanttColumnLayoutEntry[] = PM_GANTT_COLUMNS.map((column, index) => ({
       column,
-      width: ganttColumnWidths[index] ?? column.minWidth,
+      width: ganttColumnWidths[index] ?? Math.round(column.minWidth * ganttUiScale),
     }));
     const visible: PmGanttColumnLayoutEntry[] = [];
     let usedWidth = 0;
     for (let index = 0; index < allColumns.length; index += 1) {
       const entry = allColumns[index];
       const hasMore = index < allColumns.length - 1;
-      const reserve = hasMore ? PM_GANTT_OVERFLOW_WIDTH : 0;
+      const reserve = hasMore ? ganttOverflowWidth : 0;
       if (visible.length > 0 && usedWidth + entry.width + reserve > ganttTableWidth) {
         break;
       }
@@ -2503,7 +2644,7 @@ function PmImplementationGantt({
       return { visible, hiddenColumnCount, overflowWidth: 0 };
     }
     let remainingWidth = ganttTableWidth - usedWidth;
-    if (remainingWidth < 24 && visible.length > 1) {
+    if (remainingWidth < ganttMinOverflowWidth && visible.length > 1) {
       const removed = visible.pop();
       if (removed !== undefined) {
         usedWidth -= removed.width;
@@ -2511,7 +2652,7 @@ function PmImplementationGantt({
         remainingWidth = ganttTableWidth - usedWidth;
       }
     }
-    const extraWidth = Math.max(0, remainingWidth - PM_GANTT_OVERFLOW_WIDTH);
+    const extraWidth = Math.max(0, remainingWidth - ganttOverflowWidth);
     if (extraWidth > 0) {
       const lastIndex = visible.length - 1;
       visible[lastIndex] = { ...visible[lastIndex], width: visible[lastIndex].width + extraWidth };
@@ -2520,9 +2661,9 @@ function PmImplementationGantt({
     return {
       visible,
       hiddenColumnCount,
-      overflowWidth: Math.max(24, ganttTableWidth - usedWidth),
+      overflowWidth: Math.max(ganttMinOverflowWidth, ganttTableWidth - usedWidth),
     };
-  }, [ganttColumnWidths, ganttTableWidth]);
+  }, [ganttColumnWidths, ganttMinOverflowWidth, ganttOverflowWidth, ganttTableWidth, ganttUiScale]);
 
   const hiddenColumnsLabel = useMemo(() => {
     if (ganttColumnLayout.hiddenColumnCount === 0) {
@@ -2576,14 +2717,15 @@ function PmImplementationGantt({
   const handleGanttResizeKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       event.preventDefault();
-      const step = event.shiftKey ? 32 : 12;
+      const step = pmGanttScaledPx(event.shiftKey ? 32 : 12, ganttUiScale);
       const next = pmGanttClampWidth(
         ganttTableWidth + (event.key === "ArrowLeft" ? -step : step),
         ganttMinWidth,
         ganttNaturalWidth,
       );
-      setGanttWidthOverride(next);
-      pmGanttStoreTableWidth(next);
+      const storedWidth = Math.round(next / ganttUiScale);
+      setGanttWidthOverride(storedWidth);
+      pmGanttStoreTableWidth(storedWidth);
     } else if (event.key === "Home") {
       event.preventDefault();
       resetGanttWidth();
@@ -2782,12 +2924,12 @@ function PmImplementationGantt({
       primarySegments,
       secondarySegments,
       headerMode,
-      width: days.length * scaleConfig.dayWidth,
-      dayWidth: scaleConfig.dayWidth,
+      width: days.length * ganttDayWidth,
+      dayWidth: ganttDayWidth,
       gridDays: scaleConfig.gridDays,
       todayIndex: findTodayIndex(),
     };
-  }, [ganttAnchorIso, ganttScale, groups, intlLocale]);
+  }, [ganttAnchorIso, ganttDayWidth, ganttScale, groups, intlLocale]);
 
   const ganttViewportReferenceIndex =
     timeline.days.length === 0
@@ -2969,11 +3111,17 @@ function PmImplementationGantt({
       ref={ganttScrollShellRef}
       data-project-management-gantt="implementation"
       data-project-management-gantt-scale={ganttScale}
+      data-project-management-gantt-ui-scale={ganttMetrics.scale.toFixed(2)}
       className="overflow-hidden rounded-xl border border-zinc-200 bg-white"
+      style={ganttCssVariables}
     >
       <div
         data-project-management-gantt-toolbar="true"
-        className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-2.5"
+        className="flex flex-wrap items-center justify-between border-b border-zinc-200 bg-white"
+        style={{
+          gap: ganttMetrics.toolbarGap,
+          padding: `${ganttMetrics.toolbarPaddingY}px ${ganttMetrics.toolbarPaddingX}px`,
+        }}
       >
         <div className="flex min-w-0 items-center gap-2">
           <button
@@ -2981,13 +3129,19 @@ function PmImplementationGantt({
             aria-label={t("pm.gantt.previousPeriod")}
             title={t("pm.gantt.previousPeriod")}
             onClick={() => shiftGanttAnchor(-1)}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+            className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+            style={{ width: ganttMetrics.toolbarIconButtonSize, height: ganttMetrics.toolbarIconButtonSize }}
           >
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-4 w-4">
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+              style={{ width: ganttMetrics.toolbarIconButtonSize / 2, height: ganttMetrics.toolbarIconButtonSize / 2 }}
+            >
               <path d="m7.5 4-4 4 4 4M12.5 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <span className="whitespace-nowrap text-[14px] font-medium text-zinc-700">
+          <span className="whitespace-nowrap text-[length:var(--pm-gantt-toolbar-title-size,14px)] font-medium text-zinc-700">
             {ganttAnchorLabels.year}
           </span>
           <button
@@ -2998,7 +3152,8 @@ function PmImplementationGantt({
                 allGanttGroupsCollapsed ? new Set<string>() : new Set(groups.map((group) => group.key)),
               );
             }}
-            className="h-7 rounded-md border border-zinc-200 bg-white px-2.5 text-[12px] font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+            className="rounded-md border border-zinc-200 bg-white px-2.5 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+            style={{ height: ganttMetrics.toolbarControlHeight }}
           >
             {allGanttGroupsCollapsed ? t("pm.gantt.expandAll") : t("pm.gantt.collapseAll")}
           </button>
@@ -3006,7 +3161,7 @@ function PmImplementationGantt({
         <div className="flex flex-wrap items-center justify-end gap-2.5">
           <span
             data-project-management-gantt-date-label="true"
-            className="shrink-0 whitespace-nowrap text-[12px] tabular-nums text-zinc-400"
+            className="shrink-0 whitespace-nowrap text-[length:var(--pm-gantt-toolbar-control-size,12px)] tabular-nums text-zinc-400"
           >
             {ganttAnchorLabels.date}
           </span>
@@ -3016,9 +3171,15 @@ function PmImplementationGantt({
               aria-label={t("pm.gantt.previousPeriod")}
               title={t("pm.gantt.previousPeriod")}
               onClick={() => shiftGanttAnchor(-1)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              style={{ width: ganttMetrics.toolbarControlHeight, height: ganttMetrics.toolbarControlHeight }}
             >
-              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+                style={{ width: ganttMetrics.toolbarControlHeight / 2, height: ganttMetrics.toolbarControlHeight / 2 }}
+              >
                 <path d="m10 4-4 4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
@@ -3026,7 +3187,8 @@ function PmImplementationGantt({
               type="button"
               data-project-management-gantt-today-button="true"
               onClick={goToGanttToday}
-              className="h-7 rounded-md px-2.5 text-[12px] font-medium text-zinc-700 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              className="rounded-md px-2.5 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium text-zinc-700 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              style={{ height: ganttMetrics.toolbarControlHeight }}
             >
               {t("pm.gantt.today")}
             </button>
@@ -3035,9 +3197,15 @@ function PmImplementationGantt({
               aria-label={t("pm.gantt.nextPeriod")}
               title={t("pm.gantt.nextPeriod")}
               onClick={() => shiftGanttAnchor(1)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              style={{ width: ganttMetrics.toolbarControlHeight, height: ganttMetrics.toolbarControlHeight }}
             >
-              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+                style={{ width: ganttMetrics.toolbarControlHeight / 2, height: ganttMetrics.toolbarControlHeight / 2 }}
+              >
                 <path d="m6 4 4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
@@ -3058,11 +3226,15 @@ function PmImplementationGantt({
                   data-project-management-gantt-scale-option={scaleKey}
                   onClick={() => selectGanttScale(scaleKey)}
                   className={
-                    "h-7 min-w-9 rounded-md px-2.5 text-[12px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " +
+                    "rounded-md px-2.5 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " +
                     (active
                       ? "bg-white text-zinc-900 shadow-sm"
                       : "text-zinc-500 hover:text-zinc-800")
                   }
+                  style={{
+                    height: ganttMetrics.toolbarControlHeight,
+                    minWidth: ganttMetrics.toolbarScaleButtonMinWidth,
+                  }}
                 >
                   {label}
                 </button>
@@ -3079,9 +3251,9 @@ function PmImplementationGantt({
         className="min-w-full pb-3"
       >
         <div className="min-w-max">
-          <div className="flex" style={{ height: PM_GANTT_HEADER_HEIGHT }}>
+          <div className="flex" style={{ height: ganttMetrics.headerHeight }}>
             <div
-              className="sticky left-0 z-30 flex shrink-0 border-b border-zinc-300 bg-zinc-50 shadow-[8px_0_18px_-18px_rgba(15,23,42,0.55)]"
+              className="sticky left-0 z-20 flex shrink-0 border-b border-zinc-300 bg-zinc-50 shadow-[8px_0_18px_-18px_rgba(15,23,42,0.55)]"
               style={{ width: ganttTableWidth }}
             >
               {ganttColumnLayout.visible.map(({ column, width }, columnIndex) => (
@@ -3089,7 +3261,7 @@ function PmImplementationGantt({
                   key={column.key}
                   style={{ width }}
                   className={
-                    "flex h-full min-w-0 items-center justify-center overflow-hidden border-r border-zinc-300 px-0.5 text-center text-[9px] font-medium text-zinc-600 " +
+                    "flex h-full min-w-0 items-center justify-center overflow-hidden border-r border-zinc-300 px-0.5 text-center text-[length:var(--pm-gantt-header-size,9px)] font-medium text-zinc-600 " +
                     (columnIndex === ganttColumnLayout.visible.length - 1 && ganttColumnLayout.hiddenColumnCount === 0
                       ? " border-r-0"
                       : "")
@@ -3106,7 +3278,7 @@ function PmImplementationGantt({
                 <div
                   style={{ width: ganttColumnLayout.overflowWidth }}
                   title={hiddenColumnsLabel}
-                  className="flex h-full min-w-0 items-center justify-center border-r-0 border-zinc-300 text-[10px] font-medium tabular-nums text-zinc-400"
+                  className="flex h-full min-w-0 items-center justify-center border-r-0 border-zinc-300 text-[length:var(--pm-gantt-cell-size,10px)] font-medium tabular-nums text-zinc-400"
                 >
                   +{ganttColumnLayout.hiddenColumnCount}
                 </div>
@@ -3123,14 +3295,15 @@ function PmImplementationGantt({
                 onMouseLeave={() => setGanttResizeHovered(false)}
                 onFocus={() => setGanttResizeHovered(true)}
                 onBlur={() => setGanttResizeHovered(false)}
-                className="absolute -right-2 top-1/2 z-40 flex h-9 w-5 -translate-y-1/2 cursor-col-resize items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-400 shadow-sm transition hover:border-blue-300 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                className="absolute -right-2 top-1/2 z-40 flex -translate-y-1/2 cursor-col-resize items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-400 shadow-sm transition hover:border-blue-300 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                style={{ width: ganttMetrics.resizerWidth, height: ganttMetrics.resizerHeight }}
               >
                 <svg viewBox="0 0 12 16" fill="none" aria-hidden="true" className="h-4 w-3">
                   <path d="M4.5 4.5 2 8l2.5 3.5M7.5 4.5 10 8l-2.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
               {ganttResizing || ganttResizeHovered ? (
-                <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg border border-zinc-200 bg-white/95 px-2.5 py-1 text-[12px] font-medium text-zinc-600 shadow-md">
+                <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg border border-zinc-200 bg-white/95 px-2.5 py-1 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium text-zinc-600 shadow-md">
                   {t("pm.gantt.tableWidth", { n: ganttTableWidth })}
                 </span>
               ) : null}
@@ -3139,7 +3312,7 @@ function PmImplementationGantt({
               className="relative shrink-0 border-b border-zinc-300 bg-zinc-50"
               style={{ width: timeline.width }}
             >
-              <div className="flex h-[23px] border-b border-zinc-200">
+              <div className="flex border-b border-zinc-200" style={{ height: ganttMetrics.headerRowHeight }}>
                 {timeline.primarySegments.map((segment, index) => {
                   const hasToday =
                     timeline.todayIndex >= segment.startIndex &&
@@ -3154,7 +3327,7 @@ function PmImplementationGantt({
                       data-project-management-gantt-column={segment.key}
                       onClick={() => toggleGanttColumn(segment.key)}
                       className={
-                        "flex min-w-0 items-center justify-center border-r border-zinc-200 px-2 text-[13px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 " +
+                        "flex min-w-0 items-center justify-center border-r border-zinc-200 px-2 text-[length:var(--pm-gantt-timeline-primary-size,13px)] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 " +
                         (selectedGanttColumnKey === segment.key
                           ? "bg-amber-100 text-amber-900 ring-2 ring-inset ring-amber-400 "
                           : hasToday
@@ -3171,7 +3344,7 @@ function PmImplementationGantt({
                   );
                 })}
               </div>
-              <div className="flex h-[23px]">
+              <div className="flex" style={{ height: ganttMetrics.headerRowHeight }}>
                 {timeline.headerMode !== "daily"
                   ? timeline.secondarySegments.map((segment, index) => {
                       const hasToday =
@@ -3189,7 +3362,9 @@ function PmImplementationGantt({
                           onClick={() => toggleGanttColumn(segment.key)}
                           className={
                             "flex min-w-0 items-center justify-center overflow-hidden border-r border-zinc-200 font-medium tabular-nums whitespace-nowrap transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 " +
-                            (timeline.headerMode === "month-week" ? "text-[10px] " : "text-[12px] ") +
+                            (timeline.headerMode === "month-week"
+                              ? "text-[length:var(--pm-gantt-timeline-day-size,10px)] "
+                              : "text-[length:var(--pm-gantt-timeline-week-day-size,12px)] ") +
                             (selectedGanttColumnKey === segment.key
                               ? "bg-amber-100 text-amber-900 ring-2 ring-inset ring-amber-400 "
                               : hasToday
@@ -3218,7 +3393,9 @@ function PmImplementationGantt({
                           onClick={() => toggleGanttColumn(day.iso)}
                           className={
                             "flex h-full min-w-0 items-center justify-center border-r border-zinc-200 tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 " +
-                            (ganttScale === "week" ? "gap-1 text-[12px] " : "text-[10px] ") +
+                            (ganttScale === "week"
+                              ? "gap-1 text-[length:var(--pm-gantt-timeline-week-day-size,12px)] "
+                              : "text-[length:var(--pm-gantt-timeline-day-size,10px)] ") +
                             (selected
                               ? "bg-amber-100 font-semibold text-amber-900 ring-2 ring-inset ring-amber-400 "
                               : day.today
@@ -3271,7 +3448,7 @@ function PmImplementationGantt({
                 data-project-management-gantt-group={group.key}
                 data-project-management-gantt-group-collapsed={groupCollapsed ? "true" : "false"}
               >
-                <div className="flex" style={{ height: PM_GANTT_GROUP_HEIGHT }}>
+                <div className="flex" style={{ height: ganttMetrics.groupHeight }}>
                   <div
                     className={
                       "sticky left-0 z-20 flex shrink-0 items-center gap-1.5 border-b border-zinc-300 px-1.5 shadow-[8px_0_18px_-18px_rgba(15,23,42,0.55)] " +
@@ -3285,9 +3462,16 @@ function PmImplementationGantt({
                       aria-label={t(groupCollapsed ? "pm.gantt.expandPerson" : "pm.gantt.collapsePerson", { name: group.label })}
                       title={t(groupCollapsed ? "pm.gantt.expandPerson" : "pm.gantt.collapsePerson", { name: group.label })}
                       onClick={() => toggleGanttGroup(group.key)}
-                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-500 transition hover:bg-white hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                      className="flex shrink-0 items-center justify-center rounded text-zinc-500 transition hover:bg-white hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                      style={{ width: ganttMetrics.expandButtonSize, height: ganttMetrics.expandButtonSize }}
                     >
-                      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className={"h-3.5 w-3.5 transition-transform " + (groupCollapsed ? "" : "rotate-90")}>
+                      <svg
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        aria-hidden="true"
+                        className={"transition-transform " + (groupCollapsed ? "" : "rotate-90")}
+                        style={{ width: ganttMetrics.expandIconSize, height: ganttMetrics.expandIconSize }}
+                      >
                         <path d="m6 3.5 4.5 4.5L6 12.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </button>
@@ -3298,17 +3482,17 @@ function PmImplementationGantt({
                           aria-label={t("pm.gantt.jumpToDates") + " · " + groupTitle}
                           title={groupTitle}
                           onClick={() => revealGanttEntry(group.key, groupBarLeft)}
-                          className={"min-w-0 max-w-[160px] shrink truncate rounded-[2px] px-0.5 py-0 text-left text-[11px] font-semibold leading-4 tracking-[0.01em] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " + pmGanttGroupTextTone(group)}
+                          className={"min-w-0 max-w-[var(--pm-gantt-group-label-max-width,160px)] shrink truncate rounded-[2px] px-0.5 py-0 text-left text-[length:var(--pm-gantt-group-name-size,11px)] font-semibold leading-[var(--pm-gantt-group-name-leading,16px)] tracking-[0.01em] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " + pmGanttGroupTextTone(group)}
                         >
                           {group.label}
                         </button>
                       ) : (
-                        <span className={"min-w-0 max-w-[160px] shrink truncate rounded-[2px] px-0.5 py-0 text-[11px] font-semibold leading-4 tracking-[0.01em] " + pmGanttGroupTextTone(group)} title={group.label}>
+                        <span className={"min-w-0 max-w-[var(--pm-gantt-group-label-max-width,160px)] shrink truncate rounded-[2px] px-0.5 py-0 text-[length:var(--pm-gantt-group-name-size,11px)] font-semibold leading-[var(--pm-gantt-group-name-leading,16px)] tracking-[0.01em] " + pmGanttGroupTextTone(group)} title={group.label}>
                           {group.label}
                         </span>
                       )}
                       <span
-                        className="min-w-0 truncate text-[10px] font-normal leading-4 tracking-[0.01em] tabular-nums text-zinc-500"
+                        className="min-w-0 truncate text-[length:var(--pm-gantt-group-meta-size,10px)] font-normal leading-[var(--pm-gantt-group-name-leading,16px)] tracking-[0.01em] tabular-nums text-zinc-500"
                         title={(t("pm.gantt.totalCount", { n: group.items.length }) + (isPersonGroup ? " · " + groupCapacityLabel : ""))}
                       >
                         {t("pm.gantt.totalCount", { n: group.items.length })}
@@ -3319,8 +3503,9 @@ function PmImplementationGantt({
                       <span
                         data-project-management-gantt-group-status={group.hasConflict ? "conflict" : "normal"}
                         title={groupStatusLabel}
+                        style={{ height: ganttMetrics.groupStatusHeight }}
                         className={
-                          "inline-flex h-[18px] shrink-0 items-center rounded-full px-2 text-[10px] font-normal leading-4 tracking-[0.01em] ring-1 ring-inset " +
+                          "inline-flex shrink-0 items-center rounded-full px-2 text-[length:var(--pm-gantt-group-meta-size,10px)] font-normal leading-[var(--pm-gantt-group-name-leading,16px)] tracking-[0.01em] ring-1 ring-inset " +
                           (group.hasConflict
                             ? "bg-rose-50 text-rose-700 ring-rose-200"
                             : "bg-emerald-100 text-emerald-700 ring-emerald-200")
@@ -3332,7 +3517,7 @@ function PmImplementationGantt({
                   </div>
                   <div
                     className={"relative shrink-0 border-b border-zinc-300 " + (isPersonGroup ? "bg-zinc-50/80" : "bg-white")}
-                    style={{ width: timeline.width, height: PM_GANTT_GROUP_HEIGHT, ...pmGanttGridStyle(ganttDayWidth, timeline.gridDays) }}
+                    style={{ width: timeline.width, height: ganttMetrics.groupHeight, ...pmGanttGridStyle(ganttDayWidth, timeline.gridDays) }}
                   >
                     {selectedColumnMarker}
                     {isPersonGroup
@@ -3365,10 +3550,10 @@ function PmImplementationGantt({
                               data-project-management-gantt-available={group.key + "-" + String(availableStartIndex)}
                               aria-hidden="true"
                               title={segmentTitle}
-                              className="pointer-events-none absolute inset-y-0 z-[1] flex items-center justify-center border-r border-emerald-200/70 bg-emerald-50/80 text-[11px] font-medium text-emerald-700/80"
+                              className="pointer-events-none absolute inset-y-0 z-[1] flex items-center justify-center border-r border-emerald-200/70 bg-emerald-50/80 text-[length:var(--pm-gantt-available-size,11px)] font-medium text-emerald-700/80"
                               style={{ left: availableStartIndex * ganttDayWidth + 1, width: segmentWidth }}
                             >
-                              {segmentWidth >= 42 ? t("pm.gantt.available") : null}
+                              {segmentWidth >= ganttMetrics.availableLabelMinWidth ? t("pm.gantt.available") : null}
                             </span>
                           );
                         })
@@ -3443,7 +3628,7 @@ function PmImplementationGantt({
                           title={segmentTitle}
                           onClick={() => revealGanttEntry(group.key + "-segment-" + String(segment.startIndex), segmentLeft)}
                           className="group absolute top-1/2 z-[2] flex -translate-y-1/2 items-start overflow-hidden text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-                          style={{ left: segmentLeft, width: segmentWidth, height: PM_GANTT_GROUP_BAR_HEIGHT }}
+                          style={{ left: segmentLeft, width: segmentWidth, height: ganttMetrics.groupBarHeight }}
                         >
                           <span
                             aria-hidden="true"
@@ -3456,7 +3641,7 @@ function PmImplementationGantt({
                           />
                           <span
                             className={
-                              "relative min-w-0 truncate px-0.5 pt-px text-[10px] font-medium leading-[14px] " +
+                              "relative min-w-0 truncate px-0.5 pt-px text-[length:var(--pm-gantt-bar-size,10px)] font-medium leading-[var(--pm-gantt-group-name-leading,16px)] " +
                               (segmentConflict ? "text-rose-700" : "text-zinc-600")
                             }
                           >
@@ -3489,6 +3674,7 @@ function PmImplementationGantt({
                     barWidth,
                     ganttScrollLeft,
                     ganttTimelineViewportWidth,
+                    ganttUiScale,
                   );
                   const methodTitle =
                     item.row.implementationMethod === ""
@@ -3508,7 +3694,7 @@ function PmImplementationGantt({
                       key={taskKey}
                       data-project-management-gantt-row={taskKey}
                       className="flex"
-                      style={{ height: PM_GANTT_ROW_HEIGHT }}
+                      style={{ height: ganttMetrics.rowHeight }}
                     >
                       <div
                         role={rowCanJump ? "button" : undefined}
@@ -3532,16 +3718,17 @@ function PmImplementationGantt({
                           hiddenColumnCount={ganttColumnLayout.hiddenColumnCount}
                           hiddenColumnsLabel={hiddenColumnsLabel}
                           overflowWidth={ganttColumnLayout.overflowWidth}
+                          cellPaddingX={ganttMetrics.cellPaddingX}
                         />
                       </div>
                       <div
                         className="relative shrink-0 border-b border-zinc-200 bg-white"
-                        style={{ width: timeline.width, height: PM_GANTT_ROW_HEIGHT, ...pmGanttGridStyle(ganttDayWidth, timeline.gridDays) }}
+                        style={{ width: timeline.width, height: ganttMetrics.rowHeight, ...pmGanttGridStyle(ganttDayWidth, timeline.gridDays) }}
                       >
                         {selectedColumnMarker}
                         {todayMarker}
                         {barWidth === 0 ? (
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[length:var(--pm-gantt-bar-size,10px)] text-zinc-400">
                             {t("pm.gantt.noDates")}
                           </span>
                         ) : (
@@ -3550,7 +3737,7 @@ function PmImplementationGantt({
                               aria-hidden="true"
                               data-project-management-gantt-bar={taskKey}
                               className={
-                                "absolute top-1/2 z-[2] h-6 -translate-y-1/2 rounded-[2px] border transition-colors " +
+                                "absolute top-1/2 z-[2] -translate-y-1/2 rounded-[2px] border transition-colors " +
                                 (taskSelected
                                   ? taskIsParallel
                                     ? "border-amber-500 bg-amber-200 ring-2 ring-amber-400/70"
@@ -3559,7 +3746,7 @@ function PmImplementationGantt({
                                     ? "border-amber-300 bg-amber-100"
                                     : "border-sky-300 bg-sky-100")
                               }
-                              style={{ left: barLeft, width: barWidth }}
+                              style={{ left: barLeft, width: barWidth, height: ganttMetrics.taskBarHeight }}
                             />
                             {barLabelPlacement === null ? null : (
                               <div
@@ -3580,13 +3767,13 @@ function PmImplementationGantt({
                                   title={barTitle}
                                   onClick={() => revealGanttEntry(taskKey, barLeft)}
                                   className={
-                                    "pointer-events-auto flex h-5 min-w-0 items-center gap-1 text-left text-[10px] font-medium transition " +
+                                    "pointer-events-auto flex min-w-0 items-center gap-1 text-left text-[length:var(--pm-gantt-bar-size,10px)] font-medium transition " +
                                     (taskSelected ? "text-zinc-900" : "text-zinc-600 hover:text-zinc-900")
                                   }
-                                  style={{ maxWidth: "100%" }}
+                                  style={{ maxWidth: "100%", height: ganttMetrics.barLabelHeight }}
                                 >
                                   <span className="min-w-0 truncate">{title}</span>
-                                  <span className="shrink-0 text-[9px] font-normal text-zinc-400">
+                                  <span className="shrink-0 text-[length:var(--pm-gantt-bar-meta-size,9px)] font-normal text-zinc-400">
                                     · {t("pm.gantt.days", { n: days })}
                                   </span>
                                 </button>

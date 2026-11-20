@@ -2924,6 +2924,18 @@ function PmImplementationGantt({
           <span className="whitespace-nowrap text-[14px] font-medium text-zinc-700">
             {ganttAnchorLabels.year}
           </span>
+          <button
+            type="button"
+            data-project-management-gantt-toggle-all="true"
+            onClick={() => {
+              setCollapsedGanttGroupKeys(
+                allGanttGroupsCollapsed ? new Set<string>() : new Set(groups.map((group) => group.key)),
+              );
+            }}
+            className="h-7 rounded-md border border-zinc-200 bg-white px-2.5 text-[12px] font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+          >
+            {allGanttGroupsCollapsed ? t("pm.gantt.expandAll") : t("pm.gantt.collapseAll")}
+          </button>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2.5">
           <span
@@ -2964,18 +2976,6 @@ function PmImplementationGantt({
               </svg>
             </button>
           </div>
-          <button
-            type="button"
-            data-project-management-gantt-toggle-all="true"
-            onClick={() => {
-              setCollapsedGanttGroupKeys(
-                allGanttGroupsCollapsed ? new Set<string>() : new Set(groups.map((group) => group.key)),
-              );
-            }}
-            className="h-7 rounded-md border border-zinc-200 bg-white px-2.5 text-[12px] font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-          >
-            {allGanttGroupsCollapsed ? t("pm.gantt.expandAll") : t("pm.gantt.collapseAll")}
-          </button>
           <div
             role="group"
             aria-label={t("pm.gantt.scale.aria")}

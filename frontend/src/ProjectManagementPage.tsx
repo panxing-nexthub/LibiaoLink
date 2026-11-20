@@ -539,13 +539,12 @@ type TextCellProps = {
   onBlur: () => void;
 };
 
-const pmReadEditableText = (node: HTMLElement, multiline: boolean): string => {
-  if (!multiline) {
-    return node.textContent ?? "";
-  }
-  const text = node.innerText;
-  return text === "" ? node.textContent ?? "" : text;
-};
+const PM_EDITABLE_CARET_ANCHOR = "\u200b";
+
+const pmStripEditableAnchor = (text: string): string => text.replaceAll(PM_EDITABLE_CARET_ANCHOR, "");
+
+const pmReadEditableText = (node: HTMLElement, multiline: boolean): string =>
+  pmStripEditableAnchor(multiline ? node.innerText : node.textContent ?? "");
 
 function TextCell({
   value,
@@ -733,7 +732,7 @@ function TextCell({
         const range = selection.getRangeAt(0);
         range.deleteContents();
         const lineBreak = document.createElement("br");
-        const caretAnchor = document.createTextNode("");
+        const caretAnchor = document.createTextNode(PM_EDITABLE_CARET_ANCHOR);
         range.insertNode(lineBreak);
         lineBreak.parentNode?.insertBefore(caretAnchor, lineBreak.nextSibling);
         range.setStart(caretAnchor, 0);

@@ -14318,10 +14318,10 @@ export interface components {
             /** @description 项目地点字典值；清空时回落为未分类 */
             region: string;
             /**
-             * @description 项目当前阶段人工覆盖值；null = 使用只读自动识别值
+             * @description 项目当前阶段人工覆盖值（项目管理十二阶段）；null = 使用只读自动识别值
              * @enum {string|null}
              */
-            currentStageOverride: "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | null;
+            currentStageOverride: "not_started" | "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | "archived" | "terminated" | null;
             /**
              * Format: date
              * @description 启动时间人工覆盖值；null = 使用只读自动识别值
@@ -14348,7 +14348,7 @@ export interface components {
              * @description 项目当前阶段（只读派生）：按 code 匹配项目空间后，取已动工任务里阶段序最靠后的「最新阶段」；无匹配项目 = null
              * @enum {string|null}
              */
-            currentStage: "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | null;
+            currentStage: "not_started" | "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | "archived" | "terminated" | null;
             /**
              * Format: date
              * @description 启动时间（只读派生）：项目空间「项目启动 / Project Startup」任务的实际完成日期；无匹配任务 = null
@@ -14392,7 +14392,7 @@ export interface components {
             implementationEngineerIds?: components["schemas"]["Uuid"][];
             implementationHandedOver?: boolean;
             /** @enum {string|null} */
-            currentStageOverride?: "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | null;
+            currentStageOverride?: "not_started" | "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | "archived" | "terminated" | null;
             /** Format: date */
             startupCompletedAtOverride?: string | null;
             /** Format: date */
@@ -14425,7 +14425,7 @@ export interface components {
             implementationEngineerIds?: components["schemas"]["Uuid"][];
             implementationHandedOver?: boolean;
             /** @enum {string|null} */
-            currentStageOverride?: "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | null;
+            currentStageOverride?: "not_started" | "presale" | "design" | "purchase" | "assembly" | "install" | "deploy" | "trial" | "production" | "acceptance" | "archived" | "terminated" | null;
             /** Format: date */
             startupCompletedAtOverride?: string | null;
             /** Format: date */

@@ -10158,6 +10158,7 @@
               "null"
             ],
             "enum": [
+              "not_started",
               "presale",
               "design",
               "purchase",
@@ -10167,9 +10168,11 @@
               "trial",
               "production",
               "acceptance",
+              "archived",
+              "terminated",
               null
             ],
-            "description": "项目当前阶段人工覆盖值；null = 使用只读自动识别值"
+            "description": "项目当前阶段人工覆盖值（项目管理十二阶段）；null = 使用只读自动识别值"
           },
           "startupCompletedAtOverride": {
             "type": [
@@ -10217,6 +10220,7 @@
               "null"
             ],
             "enum": [
+              "not_started",
               "presale",
               "design",
               "purchase",
@@ -10226,6 +10230,8 @@
               "trial",
               "production",
               "acceptance",
+              "archived",
+              "terminated",
               null
             ],
             "description": "项目当前阶段（只读派生）：按 code 匹配项目空间后，取已动工任务里阶段序最靠后的「最新阶段」；无匹配项目 = null"
@@ -10351,6 +10357,7 @@
               "null"
             ],
             "enum": [
+              "not_started",
               "presale",
               "design",
               "purchase",
@@ -10360,6 +10367,8 @@
               "trial",
               "production",
               "acceptance",
+              "archived",
+              "terminated",
               null
             ]
           },
@@ -10494,6 +10503,7 @@
               "null"
             ],
             "enum": [
+              "not_started",
               "presale",
               "design",
               "purchase",
@@ -10503,6 +10513,8 @@
               "trial",
               "production",
               "acceptance",
+              "archived",
+              "terminated",
               null
             ]
           },

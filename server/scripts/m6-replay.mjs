@@ -22,7 +22,7 @@
  *           指派我 + 昨天 → overdue、今天 → today、明天与今天 + 400 天 → upcoming（原 7 天窗口取消）；
  *           清空负责人（待分配）+ 无日期仍命中未排期（项目经理口径）。我的问题两栏（我处理 ownerId / 我提出的 reporterId）双命中双列。
  *   证据七（归档 · M7-04 · C4-02 / C4-03 · ADR-027）：任务全部完成门禁 → 有未完成任务 409 ARCHIVE_NOT_READY
- *           （confirm=true 不可越过 + 不置位 + 不写清单）→ 任务全部 done 后 confirm=false 直接归档 200
+ *           （confirm=true 不可越过 + 不置位 + 不写清单）→ 含验收任务在内的全部任务 done 后 confirm=false 直接归档 200
  *           （置 archived + 引用式清单 + 成功留痕）→ 清单读面 GET /archive → PATCH 不再接受 archived（400，契约收紧）
  *           → 归档检索 filter[archivedYear] 命中。
  *   证据八（归档写保护 · ADR-027）：归档项目写保护（G4：日报填报 / 问题处理 / 任务删除均 409 PROJECT_ARCHIVED）
@@ -146,7 +146,7 @@ try {
   cleanup.projectId = created.body?.id ?? null;
   check("P4", "建回放项目（M6RPL-）", "201", created.status + " " + short({ id: cleanup.projectId, code: created.body?.code }, 160), created.status === 201);
 
-  const taskA = await call("POST", "/api/v1/projects/" + cleanup.projectId + "/tasks", { managerIds: [adminId], title: "M6RPL-引用守卫靶子（被问题引用）" });
+  const taskA = await call("POST", "/api/v1/projects/" + cleanup.projectId + "/tasks", { stageKey: "acceptance", title: "M6RPL-验收任务（被问题引用）" });
   const taskB = await call("POST", "/api/v1/projects/" + cleanup.projectId + "/tasks", { managerIds: [adminId], title: "M6RPL-对照任务（无引用）" });
   taskAId = taskA.body?.id ?? null;
   taskBId = taskB.body?.id ?? null;
@@ -440,7 +440,7 @@ try {
   const ackCodes = (archived.body?.acknowledgedMissing ?? []).map((item) => item.code);
   const afterArchive = await call("GET", API);
   const snapshotOk = archivedSnapshot !== undefined && archivedSnapshot !== null && archivedSnapshot.stage?.stageKey === beforeArchive.body?.stageKey && archivedSnapshot.tasks?.total >= 1 && archivedSnapshot.tasks?.byStatus?.done === archivedSnapshot.tasks?.total && Array.isArray(archivedSnapshot.files?.items) && archivedSnapshot.reports?.total >= 1 && archivedSnapshot.issues?.total >= 1 && archivedSnapshot.issues?.byState?.open >= 1 && archivedSnapshot.issues?.byState?.unassigned === undefined;
-  check("A4", "全部任务完成（confirm=false）→ 200：置 archived + 引用式清单落库（acknowledgedMissing=[]；问题三态快照）", "200 projectId/archivedBy 对齐 + status=archived + archivedAt 非空 + snapshot 齐全 + ack=[]", archived.status + " " + short({ id: archived.body?.id, projectId: archived.body?.projectId, archivedBy: archived.body?.archivedBy, ack: ackCodes, tasks: archivedSnapshot?.tasks, files: archivedSnapshot?.files?.total, reports: archivedSnapshot?.reports?.total, issues: archivedSnapshot?.issues?.total, issueStates: archivedSnapshot?.issues?.byState, projectStatus: afterArchive.body?.status }, 320), archived.status === 200 && archived.body?.projectId === cleanup.projectId && typeof archived.body?.id === "string" && archived.body?.archivedBy === adminId && typeof archived.body?.archivedAt === "string" && Array.isArray(archived.body?.acknowledgedMissing) && archived.body.acknowledgedMissing.length === 0 && snapshotOk && afterArchive.status === 200 && afterArchive.body?.status === "archived" && afterArchive.body?.archivedAt !== null);
+  check("A4", "全部任务完成且有已完成的验收任务（confirm=false）→ 200：置 archived + 引用式清单落库（acknowledgedMissing=[]；问题三态快照）", "200 projectId/archivedBy 对齐 + status=archived + archivedAt 非空 + snapshot 齐全 + ack=[]", archived.status + " " + short({ id: archived.body?.id, projectId: archived.body?.projectId, archivedBy: archived.body?.archivedBy, ack: ackCodes, tasks: archivedSnapshot?.tasks, files: archivedSnapshot?.files?.total, reports: archivedSnapshot?.reports?.total, issues: archivedSnapshot?.issues?.total, issueStates: archivedSnapshot?.issues?.byState, projectStatus: afterArchive.body?.status }, 320), archived.status === 200 && archived.body?.archiveKind === "accepted" && archived.body?.projectId === cleanup.projectId && typeof archived.body?.id === "string" && archived.body?.archivedBy === adminId && typeof archived.body?.archivedAt === "string" && Array.isArray(archived.body?.acknowledgedMissing) && archived.body.acknowledgedMissing.length === 0 && snapshotOk && afterArchive.status === 200 && afterArchive.body?.status === "archived" && afterArchive.body?.archivedAt !== null);
 
   const archiveRead = await call("GET", API + "/archive");
   check("A5", "归档清单读面：GET /archive 200（与写面同形；未归档项目 404 见单测）", "200 同 id / 同 projectId / 同任务数", archiveRead.status + " " + short({ id: archiveRead.body?.id, tasks: archiveRead.body?.snapshot?.tasks?.total }, 140), archiveRead.status === 200 && archiveRead.body?.id === archived.body?.id && archiveRead.body?.projectId === cleanup.projectId && archiveRead.body?.snapshot?.tasks?.total === archivedSnapshot?.tasks?.total);
@@ -542,7 +542,7 @@ lines.push("- 成对删除（Push 215）= G1 / G2：DELETE 日报 = 连带派生
 lines.push("- A2-01（删除引用守卫，Push 215 口径）= G3 / G4：被问题引用的任务 409（details[].code = issue_ref）；日报一侧 report_ref 随「关联任务改关联阶段」删除；无引用任务可删、重复删除 404。");
 lines.push("- A7-01（当日汇总）= S1 / S2：只算已提交条目（草稿不计入正文与人数；同一人多条各计一条）+ 人数合计 / 问题计数 + 阶段名与附图随行 + 工作日信息；缺省日期 = 今天。");
 lines.push("- A7-05（应填未填）= S4 ~ S6：名册即应填范围；已提交（submitted / supplement）不进名单、草稿未提交仍计未填；同一人多条取首条已提交；非工作日整列为空（不催报）；未来日期 400。");
-lines.push("- M7-04 归档（C4-02 / C4-03 · ADR-027）= A1 ~ A7：项目内任务全部完成门禁；有未完成任务 409 ARCHIVE_NOT_READY（confirm=true 不可越过 + 不置位 + 不写清单）；任务全部 done 后直接归档 200（置 archived + 引用式清单（问题三态快照）+ acknowledgedMissing 为空 + 成功留痕）；清单读面 GET /archive；PATCH 不再接受 archived（契约收紧）；filter[archivedYear] 归档检索。");
+lines.push("- M7-04 归档（C4-02 / C4-03 · ADR-027）= A1 ~ A7：项目内任务全部完成门禁；有未完成任务 409 ARCHIVE_NOT_READY（confirm=true 不可越过 + 不置位 + 不写清单）；含验收任务在内的全部任务 done 后直接归档 200（置 archived + 引用式清单（问题三态快照）+ acknowledgedMissing 为空 + 成功留痕）；清单读面 GET /archive；PATCH 不再接受 archived（契约收紧）；filter[archivedYear] 归档检索。");
 lines.push("- 归档写保护（ADR-027）= G4b：归档项目上日报填报 / 问题处理 / 任务删除均 409 PROJECT_ARCHIVED（项目由 A4 真实归档端点置位）。");
 lines.push("- A6-01（我的任务四组 · 2026-09-30 复评）= W0 ~ W5：任务负责人含我 或 项目项目经理含我（本回放项目 managerIds = admin）+ 未完成、不限完成日期窗口 —— 默认待分配无日期 → unscheduled；指派我 + 昨天 → overdue / 今天 → today / 明天与今天 + 400 天 → upcoming（无窗口上限）；清空负责人 + 无日期仍命中「未排期」（原「待分配不进」反例失效，供 W7 反证）。");
 lines.push("- A6-03（我的问题两栏）= W6：我处理（ownerId = 我）与我提出的（reporterId = 我）双命中两边都出现（本回放命中 open 未关闭条目，多值归类随行）。");

@@ -236,7 +236,7 @@ try {
   const createdB = await call("POST", "/api/v1/projects", { code: "M2RPL-ARC-" + stamp, name: "M2 回放归档项目", projectType: "default", managerIds: [adminId] });
   const projectB = createdB.body?.id ?? null;
   cleanup.projectIds.push(projectB);
-  const taskB1 = await call("POST", "/api/v1/projects/" + projectB + "/tasks", { managerIds: [adminId], title: "M2RPL-归档项目任务" });
+  const taskB1 = await call("POST", "/api/v1/projects/" + projectB + "/tasks", { stageKey: "acceptance", title: "M2RPL-验收任务" });
   const followB = await call("POST", "/api/v1/follows", { objectType: "project", objectId: projectB });
   const followB1 = await call("POST", "/api/v1/follows", { objectType: "task", objectId: taskB1.body?.id });
   check("F8", "归档前：项目 B + 任务 B1 均可关注（201 x 2）", "201 x 2", followB.status + " / " + followB1.status, createdB.status === 201 && followB.status === 201 && followB1.status === 201);
@@ -244,7 +244,7 @@ try {
   await db.query("update tasks set status = $2, updated_at = now() where id = $1", [taskB1.body?.id, "done"]);
   const beforeArchiveB = await call("GET", "/api/v1/projects/" + projectB);
   const archiveB = await call("POST", "/api/v1/projects/" + projectB + "/archive", { version: beforeArchiveB.body?.version, confirm: false });
-  check("F9", "归档项目 B（真实归档端点：任务全部完成即归档，文件与成果不阻断）", "200 / status=archived", archiveB.status + " " + short({ status: archiveB.body?.status ?? archiveB.body?.project?.status ?? null }, 120), beforeArchiveB.status === 200 && archiveB.status === 200);
+  check("F9", "归档项目 B（真实归档端点：任务全部完成且包含已完成的验收任务，文件与成果不阻断）", "200 / status=archived", archiveB.status + " " + short({ status: archiveB.body?.status ?? archiveB.body?.project?.status ?? null }, 120), beforeArchiveB.status === 200 && archiveB.status === 200 && archiveB.body?.archiveKind === "accepted");
 
   const followArchivedProject = await call("POST", "/api/v1/follows", { objectType: "project", objectId: projectB });
   const followArchivedTask = await call("POST", "/api/v1/follows", { objectType: "task", objectId: taskB1.body?.id });

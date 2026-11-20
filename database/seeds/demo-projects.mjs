@@ -73,13 +73,13 @@ export const PROJECTS = [
   { code: "LBDE-20260924-002", name: "德国展厅", region: "德国", projectType: "3D分拣", stageKey: "presale", status: "active", manager: "wmj" },
   { code: "LBDE-20260924-003", name: "德国不来梅仓配中心", region: "德国", projectType: "飞箱", stageKey: "design", status: "paused", manager: "lan" },
   { code: "LBNL-20260924-001", name: "荷兰鹿特丹分拨中心", region: "荷兰", projectType: "T-sort", stageKey: "install", status: "active", manager: "panxing" },
-  { code: "LBNL-20260924-002", name: "荷兰电商仓", region: "荷兰", projectType: "飞箱", stageKey: "acceptance", status: "done", manager: "lan" },
+  { code: "LBNL-20260924-002", name: "荷兰电商仓", region: "荷兰", projectType: "飞箱", stageKey: "acceptance", status: "archived", manager: "lan" },
   { code: "LBFR-20260924-001", name: "法国巴黎分拣中心", region: "法国", projectType: "3D分拣", stageKey: "trial", status: "active", manager: "wmj" },
-  { code: "LBFR-20260924-002", name: "法国里昂仓配", region: "法国", projectType: "T-sort", stageKey: "acceptance", status: "done", manager: "panxing" },
+  { code: "LBFR-20260924-002", name: "法国里昂仓配", region: "法国", projectType: "T-sort", stageKey: "acceptance", status: "archived", manager: "panxing" },
   { code: "LBES-20260924-001", name: "西班牙马德里分拣中心", region: "西班牙", projectType: "T-sort", stageKey: "deploy", status: "active", manager: "lan" },
   { code: "LBES-20260924-002", name: "西班牙巴塞罗那仓", region: "西班牙", projectType: "3D分拣", stageKey: "design", status: "active", manager: "panxing" },
   { code: "LBIT-20260924-001", name: "意大利米兰分拣中心", region: "意大利", projectType: "飞箱", stageKey: "install", status: "active", manager: "wmj" },
-  { code: "LBIT-20260924-002", name: "意大利罗马仓配", region: "意大利", projectType: "T-sort", stageKey: "acceptance", status: "done", manager: "lan" },
+  { code: "LBIT-20260924-002", name: "意大利罗马仓配", region: "意大利", projectType: "T-sort", stageKey: "acceptance", status: "archived", manager: "lan" },
   { code: "LBBE-20260924-001", name: "比利时安特卫普分拨中心", region: "比利时", projectType: "T-sort", stageKey: "presale", status: "active", manager: "panxing" },
   { code: "LBHU-20260924-001", name: "匈牙利布达佩斯仓配", region: "匈牙利", projectType: "3D分拣", stageKey: "design", status: "active", manager: "lan" },
   { code: "LBRO-20260924-001", name: "罗马尼亚布加勒斯特分拣线", region: "罗马尼亚", projectType: "T-sort", stageKey: "presale", status: "active", manager: "wmj" },
@@ -94,7 +94,7 @@ export const PROJECTS = [
   { code: "LBIL-20260924-001", name: "以色列特拉维夫分拣线", region: "以色列", projectType: "飞箱", stageKey: "deploy", status: "active", manager: "panxing" },
   { code: "LBSA-20260924-001", name: "沙特利雅得分拨中心", region: "沙特阿拉伯", projectType: "T-sort", stageKey: "trial", status: "active", manager: "wmj" },
   { code: "LBAE-20260924-001", name: "阿联酋迪拜分拣中心", region: "阿联酋", projectType: "3D分拣", stageKey: "deploy", status: "active", manager: "lan" },
-  { code: "LBAE-20260924-002", name: "阿联酋阿布扎比仓", region: "阿联酋", projectType: "飞箱", stageKey: "design", status: "done", manager: "panxing" },
+  { code: "LBAE-20260924-002", name: "阿联酋阿布扎比仓", region: "阿联酋", projectType: "飞箱", stageKey: "design", status: "archived", manager: "panxing" },
   { code: "LBQA-20260924-001", name: "卡塔尔多哈分拨中心", region: "卡塔尔", projectType: "T-sort", stageKey: "presale", status: "paused", manager: "wmj" },
   { code: "LBIN-20260924-001", name: "印度孟买分拣中心", region: "印度", projectType: "T-sort", stageKey: "production", status: "active", manager: "lan" },
   { code: "LBIN-20260924-002", name: "印度班加罗尔仓配", region: "印度", projectType: "3D分拣", stageKey: "install", status: "active", manager: "panxing" },
@@ -147,7 +147,7 @@ export const PROJECTS = [
   { code: "LBBR-20260924-101", name: "巴西巴西利亚仓配", region: "巴西", projectType: "飞箱", stageKey: "design", status: "active", manager: "wmj" },
   { code: "LBBR-20260924-102", name: "巴西萨尔瓦多分拣线", region: "巴西", projectType: "T-sort", stageKey: "presale", status: "active", manager: "lan" },
   { code: "LBGB-20260924-101", name: "英国伯明翰仓配", region: "英国", projectType: "T-sort", stageKey: "install", status: "active", manager: "panxing" },
-  { code: "LBGB-20260924-102", name: "英国曼彻斯特分拨中心", region: "英国", projectType: "3D分拣", stageKey: "design", status: "done", manager: "wmj" },
+  { code: "LBGB-20260924-102", name: "英国曼彻斯特分拨中心", region: "英国", projectType: "3D分拣", stageKey: "design", status: "archived", manager: "wmj" },
   { code: "LBJP-20260924-101", name: "日本名古屋仓配", region: "日本", projectType: "T-sort", stageKey: "presale", status: "active", manager: "lan" },
   { code: "LBJP-20260924-102", name: "日本福冈分拨中心", region: "日本", projectType: "飞箱", stageKey: "deploy", status: "active", manager: "panxing" },
   { code: "LBFR-20260924-101", name: "法国马赛仓配", region: "法国", projectType: "3D分拣", stageKey: "install", status: "active", manager: "wmj" },
@@ -167,7 +167,7 @@ export const PROJECTS = [
   { code: "LBUA-20260924-101", name: "乌克兰利沃夫仓配", region: "乌克兰", projectType: "飞箱", stageKey: "presale", status: "active", manager: "panxing" },
   { code: "LBGR-20260924-101", name: "希腊塞萨洛尼基仓配", region: "希腊", projectType: "T-sort", stageKey: "presale", status: "active", manager: "wmj" },
   { code: "LBSA-20260924-101", name: "沙特勒雅得分拨中心", region: "沙特阿拉伯", projectType: "3D分拣", stageKey: "presale", status: "active", manager: "lan" },
-  { code: "LBNZ-20260924-101", name: "新西兰基督城仓配", region: "新西兰", projectType: "T-sort", stageKey: "presale", status: "done", manager: "panxing" },
+  { code: "LBNZ-20260924-101", name: "新西兰基督城仓配", region: "新西兰", projectType: "T-sort", stageKey: "presale", status: "archived", manager: "panxing" },
   { code: "LBPE-20260924-101", name: "秘鲁阿雷基帕分拣线", region: "秘鲁", projectType: "飞箱", stageKey: "presale", status: "active", manager: "wmj" },
 ];
 
@@ -228,7 +228,7 @@ export async function run(client) {
       }
     }
     await client.query(
-      "insert into projects (code, name, region, project_type, stage_key, status, description, manager_ids, created_at, updated_at) values ($1, $2, $3, $4, $5, $6, $7, $8::uuid[], now() - make_interval(mins => $9), now())",
+      "insert into projects (code, name, region, project_type, stage_key, status, description, manager_ids, created_at, updated_at, archived_at, archived_by) values ($1, $2, $3, $4, $5, $6, $7, $8::uuid[], now() - make_interval(mins => $9), now(), case when $6 = 'archived' then now() end, case when $6 = 'archived' then ($8::uuid[])[1] end)",
       [project.code, project.name, project.region, project.projectType, project.stageKey, project.status, DESCRIPTION, managerIds, index * 3],
     );
     summary.projectsInserted += 1;

@@ -1667,8 +1667,9 @@ const PM_GANTT_GROUP_BAR_HEIGHT = 24;
 const PM_GANTT_DAY_MS = 86_400_000;
 const PM_GANTT_BAR_LABEL_GAP = 6;
 const PM_GANTT_BAR_LABEL_MAX_WIDTH = 260;
-const PM_GANTT_UI_BASE_WIDTH = 1600;
-const PM_GANTT_UI_MAX_SCALE = 1.6;
+const PM_GANTT_UI_BASE_WIDTH = 1440;
+const PM_GANTT_UI_WIDE_WIDTH = 2560;
+const PM_GANTT_UI_MAX_SCALE = 1.9;
 
 const pmGanttResponsiveScale = (viewportWidth: number): number => {
   const width =
@@ -1677,7 +1678,12 @@ const pmGanttResponsiveScale = (viewportWidth: number): number => {
       : typeof window === "undefined"
         ? PM_GANTT_UI_BASE_WIDTH
         : window.innerWidth;
-  return Math.round(pmGanttClampWidth(width / PM_GANTT_UI_BASE_WIDTH, 1, PM_GANTT_UI_MAX_SCALE) * 20) / 20;
+  const wideProgress = pmGanttClampWidth(
+    (width - PM_GANTT_UI_BASE_WIDTH) / (PM_GANTT_UI_WIDE_WIDTH - PM_GANTT_UI_BASE_WIDTH),
+    0,
+    1,
+  );
+  return Math.round((1 + (PM_GANTT_UI_MAX_SCALE - 1) * wideProgress) * 20) / 20;
 };
 
 const pmGanttVisualMetricsOf = (scale: number) => {
@@ -3112,12 +3118,12 @@ function PmImplementationGantt({
       data-project-management-gantt="implementation"
       data-project-management-gantt-scale={ganttScale}
       data-project-management-gantt-ui-scale={ganttMetrics.scale.toFixed(2)}
-      className="overflow-hidden rounded-xl border border-zinc-200 bg-white"
+      className="min-w-0"
       style={ganttCssVariables}
     >
       <div
         data-project-management-gantt-toolbar="true"
-        className="flex flex-wrap items-center justify-between border-b border-zinc-200 bg-white"
+        className="sticky top-[116px] z-20 flex flex-wrap items-center justify-between rounded-t-xl border border-zinc-200 bg-white"
         style={{
           gap: ganttMetrics.toolbarGap,
           padding: `${ganttMetrics.toolbarPaddingY}px ${ganttMetrics.toolbarPaddingX}px`,
@@ -3243,6 +3249,7 @@ function PmImplementationGantt({
           </div>
         </div>
       </div>
+      <div className="overflow-hidden rounded-b-xl border border-t-0 border-zinc-200 bg-white">
       <ScrollArea
         axis="horizontal"
         fixedHorizontalScrollbar
@@ -3790,6 +3797,7 @@ function PmImplementationGantt({
           })}
         </div>
       </ScrollArea>
+      </div>
     </div>
   );
 }

@@ -564,6 +564,7 @@ function KanbanColumn({
   stageTasksOf,
   members,
   managerMembers,
+  projectId,
   onSetActualEnd,
   draggingId,
   dropIndex,
@@ -585,6 +586,8 @@ function KanbanColumn({
   /** 人员目录（卡片头像 / 列头头像按负责人 id 取成员）。 */
   members: readonly Member[];
   managerMembers: readonly Member[];
+  /** 临时任务表单查询项目群绑定用。 */
+  projectId?: string;
   /** 正在被拖动的卡片 id（Push 108；null = 没有在拖）。 */
   draggingId: string | null;
   /** 本列是不是当前落点、插到第几格（Push 108；null = 不是落点 —— 高亮与槽位都不出）。 */
@@ -748,7 +751,10 @@ function KanbanColumn({
 
           {panel === "temp" && onAddTask !== undefined ? (
             <TempTaskCreateForm
+              projectId={projectId}
               managerOptions={managerMembers}
+              ownerOptions={members}
+              initialOwnerIds={context.ownerIds}
               onCreate={(values) => onAddTask(context, values)}
               onClose={closePanels}
             />
@@ -1194,6 +1200,7 @@ export function TaskKanban({ mode, tasks, focusTaskId = null, onFocusClosed, can
               stageTasksOf={stageTasksOf}
               members={members}
               managerMembers={managerMembers}
+              projectId={projectId}
               onSetActualEnd={onSetActualEnd}
               draggingId={canDragTasks ? draggingId : null}
               dropIndex={dropTarget !== null && dropTarget.key === group.key ? dropTarget.index : null}

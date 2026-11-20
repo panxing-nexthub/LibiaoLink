@@ -6,6 +6,7 @@ import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
 import { files, uploadSessions } from "../../db/schema/files.js";
 import { projectNodes } from "../../db/schema/flow.js";
+import { wecomGroups } from "../../db/schema/notify.js";
 import { users } from "../../db/schema/identity.js";
 import { projectStages, projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
@@ -57,6 +58,11 @@ export interface TaskProjectNodeRow {
   id: string;
   stageKey: string;
   status: string;
+}
+
+/** 项目群绑定可用性窄读面：任务模块只读激活态，不反向依赖 project 模块。 */
+export interface TaskGroupBindingRow {
+  activatedAt: Date | null;
 }
 
 export interface TaskInsertInput {
@@ -313,6 +319,16 @@ export class TaskRepository {
       result.set(row.taskId, entry);
     }
     return result;
+  }
+
+  /** 临时任务群同步前置校验：项目群绑定行；未绑定 = null。只读 wecom_groups，避免 task → project 的反向模块依赖。 */
+  async findGroupBinding(projectId: string, client: DbClient = this.database.db): Promise<TaskGroupBindingRow | null> {
+    const rows = await client
+      .select({ activatedAt: wecomGroups.activatedAt })
+      .from(wecomGroups)
+      .where(eq(wecomGroups.projectId, projectId))
+      .limit(1);
+    return rows[0] ?? null;
   }
 
   /** 项目读（软删过滤）：任务读写都要先过项目可见性 / 归档写保护。 */

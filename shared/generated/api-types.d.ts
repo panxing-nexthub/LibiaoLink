@@ -2179,7 +2179,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** 创建任务（从任务节点库 / 任务模板生成或手工创建；headcount / priority 可空） */
+        /** 创建任务（从任务节点库 / 任务模板生成或手工创建；headcount / priority 可空；临时任务可带 syncToGroup 同步项目群，群未绑定 / 未激活返回 400） */
         post: {
             parameters: {
                 query?: never;
@@ -14954,6 +14954,8 @@ export interface components {
             ownerIds?: components["schemas"]["Uuid"][];
             /** @description 无阶段、无来源节点的临时任务必填，至少一位有效项目经理。阶段任务使用项目名单，创建时省略此字段 */
             managerIds?: components["schemas"]["Uuid"][];
+            /** @description 仅临时任务可用：true = 创建事务内校验项目群已绑定且机器人已激活，并写入 notify.group 群消息；阶段任务传 true 返回 400 */
+            syncToGroup?: boolean;
             plannedStart?: components["schemas"]["DateOnly"] & (string | null);
             plannedEnd?: components["schemas"]["DateOnly"] & (string | null);
             estimatedDays?: number | null;

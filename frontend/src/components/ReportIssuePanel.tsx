@@ -459,7 +459,7 @@ const ISSUE_TABLE_COLUMNS: readonly { key: string; label: string }[] = [
   { key: "date", label: "日期" },
   { key: "title", label: "问题描述" },
   { key: "category", label: "问题归类" },
-  { key: "owner", label: "问题处理人 / 责任人" },
+  { key: "owner", label: "责任人" },
   { key: "solution", label: "解决方案或建议" },
   { key: "photos", label: "问题附图" },
   { key: "state", label: "问题是否处理" },
@@ -1585,7 +1585,7 @@ function IssueCard({ issue, onOpen, onPointerDownDrag, dragging = false, ghost =
         <Field label={fieldText(locale, "问题归类")}>
           <CategoryTags values={issue.categories} />
         </Field>
-        <Field label={fieldText(locale, "问题处理人 / 责任人")}>
+        <Field label={fieldText(locale, "责任人")}>
           {issue.owner === "" ? (
             <p data-issue-card-owner="" className="text-sm leading-5 text-zinc-300">—</p>
           ) : (
@@ -1969,7 +1969,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
                   />
                 )}
               </td>
-              <td data-mobile-label={fieldText(locale, "问题处理人 / 责任人")} className="min-w-[110px] whitespace-nowrap px-4 py-4 text-zinc-700">
+              <td data-mobile-label={fieldText(locale, "责任人")} className="min-w-[110px] whitespace-nowrap px-4 py-4 text-zinc-700">
                 {/* Push 243（业务口径「图三图四增加列 问题处理人 / 责任人」）：展示only —— 问题记录生成时随内联问题
                     清单的处理人 ownerId 落库；空（旧数据 / 无人）出灰杠，与看板卡 / 抽屉同一口径。 */}
                 <span data-issue-owner="">{issue.owner === "" ? <span className="text-zinc-300">—</span> : issue.owner}</span>
@@ -2436,7 +2436,7 @@ function IssueEditModal({ projectId, members, row, onClose, onSubmit }: {
         </div>
       </div>
       <div className="block">
-        <span className="mb-1.5 block text-sm font-medium text-zinc-700">{fieldText(locale, "问题处理人 / 责任人")}</span>
+        <span className="mb-1.5 block text-sm font-medium text-zinc-700">{fieldText(locale, "责任人")}</span>
         <div data-record-field="owner">
           <SearchSelect
             value={ownerId}
@@ -2877,7 +2877,7 @@ function ReportFillForm({
                 </div>
               </label>
               <div className="block">
-                <span className={FORM_LABEL}>{fieldText(locale, "问题处理人 / 责任人")}</span>
+                <span className={FORM_LABEL}>{fieldText(locale, "责任人")}</span>
                 <div data-field="issueOwner" className="mt-1">
                   <SearchSelect
                     value={item.ownerId}
@@ -3132,7 +3132,7 @@ function IssueDrawer({ projectId, members, issue, report, readOnly, onPatchIssue
     },
     {
       key: "owner",
-      label: fieldText(locale, "问题处理人 / 责任人"),
+      label: fieldText(locale, "责任人"),
       // Push 243（业务口径「图三图四增加列 问题处理人 / 责任人」）：生成问题记录时随内联问题清单的处理人落库；
       // 空（旧数据 / 无人）出灰杠（与「施工人数」空态同一枚样式）。
       // Push 244（业务口径「这个负责人要可以编辑」）：改**行内单选**（成员搜索列表 + 首行「待分派」清空），落值走 patchIssue({ ownerId })。

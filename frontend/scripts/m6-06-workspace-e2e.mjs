@@ -59,7 +59,7 @@
  *      逾期未交付 / 输出成果文件 / 文件 / 进展描述 / 开始·实际日期 / 天数 / 人数 / 变更关联；
  *      命中口径 = 负责人含我 或 项目经理含我、不限完成日期（远期照收 + 未排期单列）；他人项目（我既非负责人也非项目经理）与已完成不进；
  *   ⑤ 切标签：真实鼠标点「我提出的问题」→ 地址写回 `?tab=raised`、aria-current 转移；
- *   ⑥ 「我提出的问题」折叠面板：七列（Push 260 补「问题处理人 / 责任人」）——「问题是否处理」是**行内下拉**
+ *   ⑥ 「我提出的问题」折叠面板：七列（Push 260 补「责任人」）——「问题是否处理」是**行内下拉**
  *      （Push 260：与项目页「问题追踪」共用同一枚 IssueStateCell，点色签改三态、乐观锁 version、失败回滚）；
  *      照「问题追踪」的（日期 / 问题描述 / 问题归类 /
  *      解决方案或建议 / 问题附图 / 问题是否处理；后两列 Push 302 起并入聚合面随行下发（此前按项目向源接口回填），真 PNG 直传夹具保证有值）；
@@ -710,12 +710,12 @@ await clickSelector('[data-workspace-panel="' + projectA + '"] [data-workspace-p
 const photoTileOk = await waitFor("document.querySelector(" + j('[data-workspace-panel="' + projectA + '"] [data-issue-photo]') + ") !== null", 25000);
 check("⑥a0 问题附图瓦片懒取预览签名后出现（真 PNG 直传 → 预览就绪）", photoTileOk === true, String(photoTileOk));
 const rowsIssueA = await ev(issueRowsExpr(projectA));
-check("⑥a 表头 = 「问题追踪」完整七列（日期 / 问题描述 / 问题归类 / 问题处理人 / 责任人 / 解决方案或建议 / 问题附图 / 问题是否处理；Push 260 补处理人列）· 无行尾动作列（Push 242 下架）", rowsIssueA !== null && rowsIssueA.heads.length === 7 && rowsIssueA.heads.join("|") === "日期|问题描述|问题归类|问题处理人 / 责任人|解决方案或建议|问题附图|问题是否处理", rowsIssueA === null ? "null" : JSON.stringify(rowsIssueA.heads));
+check("⑥a 表头 = 「问题追踪」完整七列（日期 / 问题描述 / 问题归类 / 责任人 / 解决方案或建议 / 问题附图 / 问题是否处理；Push 260 补处理人列）· 无行尾动作列（Push 242 下架）", rowsIssueA !== null && rowsIssueA.heads.length === 7 && rowsIssueA.heads.join("|") === "日期|问题描述|问题归类|责任人|解决方案或建议|问题附图|问题是否处理", rowsIssueA === null ? "null" : JSON.stringify(rowsIssueA.heads));
 check("⑥b A 项目只显示 1 条（我提出的；A2 已完成 → 已完成不显示），行的 id = A1", rowsIssueA !== null && rowsIssueA.rows.length === 1 && rowsIssueA.rows[0].id === issueA1.issue.id && rowsIssueA.rows.every((item) => item.id !== issueA2.issue.id), rowsIssueA === null ? "null" : JSON.stringify(rowsIssueA.rows.map((item) => item.id)));
 check("⑥c 日期列 = 提出日（年月日）", rowsIssueA !== null && rowsIssueA.rows.every((item) => item.date === cnDate(TODAY)), rowsIssueA === null ? "null" : JSON.stringify(rowsIssueA.rows.map((item) => item.date)));
 check("⑥d 问题描述列 = 问题原文；归类列 = 色签（机械部）", rowsIssueA !== null && rowsIssueA.rows[0].title.indexOf("回放问题·我提出的未解决") >= 0 && rowsIssueA.rows[0].categories.indexOf("机械部") >= 0, rowsIssueA === null ? "null" : JSON.stringify(rowsIssueA.rows.map((item) => item.categories)));
 check("⑥e 状态列 = 未解决（三态中文）；「已完成」的 A2 整行不显示（已完成不显示）", rowsIssueA !== null && rowsIssueA.rows.length === 1 && rowsIssueA.rows[0].state === "未解决" && rowsIssueA.rows.every((item) => item.id !== issueA2.issue.id), rowsIssueA === null ? "null" : JSON.stringify(rowsIssueA.rows.map((item) => [item.id, item.state])));
-check("⑥d2（Push 260）「问题处理人 / 责任人」列 = 分派到人出姓名（A1 由我处理 = " + me.displayName + "）、未分派落灰杠「—」", rowsIssueA !== null && rowsIssueA.rows.length === 1 && rowsIssueA.rows[0].owner === me.displayName, rowsIssueA === null ? "null" : JSON.stringify(rowsIssueA.rows.map((item) => item.owner)));
+check("⑥d2（Push 260）「责任人」列 = 分派到人出姓名（A1 由我处理 = " + me.displayName + "）、未分派落灰杠「—」", rowsIssueA !== null && rowsIssueA.rows.length === 1 && rowsIssueA.rows[0].owner === me.displayName, rowsIssueA === null ? "null" : JSON.stringify(rowsIssueA.rows.map((item) => item.owner)));
 check("⑥e0（Push 260）「问题是否处理」色签壳体 = 项目页同一档（rounded-lg + px-3 + py-1.5 + text-[11px]；底色 / 字色 = ISSUE_TAG_CLASS 同源）", rowsIssueA !== null && rowsIssueA.rows[0].stateClass.indexOf("rounded-lg") >= 0 && rowsIssueA.rows[0].stateClass.indexOf("px-3") >= 0 && rowsIssueA.rows[0].stateClass.indexOf("py-1.5") >= 0 && rowsIssueA.rows[0].stateClass.indexOf("text-[11px]") >= 0 && rowsIssueA.rows[0].stateClass.indexOf("bg-sky-100") >= 0 && rowsIssueA.rows[0].stateClass.indexOf("text-sky-700") >= 0 && rowsIssueA.rows.length === 1, rowsIssueA === null ? "null" : JSON.stringify(rowsIssueA.rows.map((item) => item.stateClass)));
 const geomA260 = await ev(issueStateGeomExpr(projectA));
 check("⑥e0b（Push 260）「要居中这个状态」：「问题是否处理」列表头 / 单元格一律 text-align=center，色签水平中心与单元格中心一致（±2px）、左右留白差 ≤4px", geomA260 !== null && geomA260.table === true && geomA260.headAlign === "center" && geomA260.headText === "问题是否处理" && geomA260.rows.length === 1 && geomA260.rows.every((item) => item.align === "center") && geomA260.rows.every((item) => item.tagCenter !== null && Math.abs(item.tagCenter - item.cellCenter) <= 2) && geomA260.rows.every((item) => Math.abs(item.leftGap - item.rightGap) <= 4), JSON.stringify(geomA260));

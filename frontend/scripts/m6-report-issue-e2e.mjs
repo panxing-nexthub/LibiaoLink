@@ -19,7 +19,7 @@
  *      + 缺省子视图 = 「日报记录」（Push 243 业务口径「点击默认是日报记录页面」）+ 「日报填写」表单（日期默认今天 /
  *      提交人 = 当前用户 / 问题块列表：描述 / 归类 / 处理人 / 附图 / 解决方案 + 「+ 添加问题」）；
  *   ② 附图真粘贴：真实剪贴板 + 真 Ctrl+V → 文件库分片直传 → fileId 回填（现场工作附图 + 当前问题附图两区各自上传完）；
- *      Push 243：点「+ 添加问题」追加第二条问题块，第二条选「问题处理人 / 责任人」= 回放用户；
+ *      Push 243：点「+ 添加问题」追加第二条问题块，第二条选「责任人」= 回放用户；
  *   ③ 提交落库：日报 submitted + 服务端按内联问题清单**逐条**生成独立问题（open · 第二条带处理人 · 问题图挂问题侧）；
  *   ④ 同日多条：同一天第二篇照样落库（无唯一约束），列表两行；
  *   ⑤ 草稿写库：暂存 = state=draft（列表出「草稿」签）；同一表单再点「提交日报」= PATCH 转 submitted（不新增行）；
@@ -377,7 +377,7 @@ async function pickIssueCategory(name, block = 0) {
   if (picked !== true) throw new Error("问题归类里找不到：" + name);
   await pressKey("Escape", "Escape", 27);
 }
-/** 在某条问题块里选「问题处理人 / 责任人」（SearchSelect：点触发 → 点姓名行）。 */
+/** 在某条问题块里选「责任人」（SearchSelect：点触发 → 点姓名行）。 */
 async function pickIssueOwner(block, name) {
   await clickSelector("[data-issue-draft=" + Q + String(block) + Q + "] [data-field=issueOwner] button");
   await sleep(500);
@@ -498,7 +498,7 @@ const iss1 = issuesOfRep1.filter((row) => row.title === ISSUE_EXPECT)[0];
 const iss2 = issuesOfRep1.filter((row) => row.title === ISSUE2_EXPECT)[0];
 if (iss1 === undefined || iss2 === undefined) { await bail("提交后没取到逐条生成的问题（③ 多条生成没落？）"); }
 check("③f 内联问题清单逐条生成 2 条独立问题（state=open · 各自标题 / 归类 · 提出人 = 提交人）", list1Issues.total === 2 && iss1 !== undefined && iss2 !== undefined && iss1.state === "open" && iss2.state === "open" && iss1.title === ISSUE_EXPECT && iss1.categories.length === 2 && iss2.title === ISSUE2_EXPECT && JSON.stringify(iss2.categories) === JSON.stringify(["采购部"]), iss1 === undefined || iss2 === undefined ? "-" : JSON.stringify({ total: list1Issues.total, one: { title: iss1.title, categories: iss1.categories }, two: { title: iss2.title, categories: iss2.categories } }));
-check("③g 问题处理人 / 责任人落库（Push 243）：问题 1 留空 = 只按归类自动分派责任部门 · 问题 2 = 表单选中的 " + userRow.display_name, iss1.ownerId === null && iss2.ownerId === userRow.id && iss2.ownerName === userRow.display_name, iss1 === undefined || iss2 === undefined ? "-" : JSON.stringify({ one: { ownerId: iss1.ownerId, ownerDepartment: iss1.ownerDepartment }, two: { ownerId: iss2.ownerId, ownerName: iss2.ownerName } }));
+check("③g 责任人落库（Push 243）：问题 1 留空 = 只按归类自动分派责任部门 · 问题 2 = 表单选中的 " + userRow.display_name, iss1.ownerId === null && iss2.ownerId === userRow.id && iss2.ownerName === userRow.display_name, iss1 === undefined || iss2 === undefined ? "-" : JSON.stringify({ one: { ownerId: iss1.ownerId, ownerDepartment: iss1.ownerDepartment }, two: { ownerId: iss2.ownerId, ownerName: iss2.ownerName } }));
 check("③g2 两条问题的来源日报都 = ③ 那篇、问题附图只挂问题 1（1 张 · 直接挂问题侧不经日报）", iss1.sourceReportId === rep1.id && iss2.sourceReportId === rep1.id && iss1.photos.length === 1 && iss2.photos.length === 0, iss1 === undefined || iss2 === undefined ? "-" : JSON.stringify({ photos: [iss1.photos.length, iss2.photos.length] }));
 const links1 = (await db.query("select fl.object_type, fl.kind, f.name from file_links fl join files f on f.id = fl.file_id where fl.object_id = any($1::uuid[]) order by fl.object_type, fl.kind", [[rep1.id, iss1.id]])).rows;
 const linkKey = (row) => row.object_type + ":" + row.kind;
@@ -636,7 +636,7 @@ const issueRowSel = "[data-issue-row=" + Q + iss1.id + Q + "]";
 await clickSelector(issueRowSel + " [data-issue-edit-slot] button");
 const issueModalOpened = await waitFor("document.querySelector(" + j("[data-record-edit-modal]") + ")!==null", 6000);
 const issueModalScope = await ev(modalScopeExpr);
-check("⑥h 问题编辑弹窗 = 文字两列 + 图片一区（Push 244 起含「问题处理人 / 责任人」单选；归类 / 状态不在弹窗里 —— 下拉保持行内）", issueModalOpened === true && issueModalScope !== null && issueModalScope.fields.join(",") === "title,owner,solution" && issueModalScope.pasteZones === 1 && issueModalScope.attachments === 1 && issueModalScope.inlineSave === 0 && issueModalScope.multiOptions === 0 && issueModalScope.options === 0, JSON.stringify(issueModalScope));
+check("⑥h 问题编辑弹窗 = 文字两列 + 图片一区（Push 244 起含「责任人」单选；归类 / 状态不在弹窗里 —— 下拉保持行内）", issueModalOpened === true && issueModalScope !== null && issueModalScope.fields.join(",") === "title,owner,solution" && issueModalScope.pasteZones === 1 && issueModalScope.attachments === 1 && issueModalScope.inlineSave === 0 && issueModalScope.multiOptions === 0 && issueModalScope.options === 0, JSON.stringify(issueModalScope));
 await typeInto("[data-record-field=title]", "回放·钢结构偏差（已复测）");
 await typeInto("[data-record-field=solution]", "回放·解决方案-复测通过");
 await clickSelector("[data-record-edit-submit]");
@@ -660,7 +660,7 @@ const iss1State3 = (await issuesOf()).items.filter((row) => row.id === iss1.id)[
 const dbReopen = (await db.query("select state, closed_at from issues where id = $1", [iss1.id])).rows[0];
 check("⑥m 状态允许回退：done → open（closed_at 归零）", iss1State3.state === "open" && dbReopen.state === "open" && dbReopen.closed_at === null, JSON.stringify({ state: dbReopen.state, closed_at: String(dbReopen.closed_at) }));
 const issueUiRow = await ev("(function(){var r=document.querySelector(" + j("[data-issue-row]") + ");if(r===null){return null;}return {columns:r.querySelectorAll(\"td\").length,editButtons:r.querySelectorAll(" + j("[data-issue-edit-slot] button") + ").length,deleteButtons:r.querySelectorAll(" + j("[data-issue-delete-slot] button") + ").length,text:r.innerText.split(String.fromCharCode(10)).join(\" | \")};})()");
-check("⑥n 问题追踪表 = 七列口径（Push 243 增「问题处理人 / 责任人」+ 行尾动作列 = 8 格）、行尾「编辑 + 删除」两枚在位、三态色签在位", issueUiRow !== null && issueUiRow.columns === 8 && issueUiRow.editButtons === 1 && issueUiRow.deleteButtons === 1 && issueUiRow.text.indexOf("未解决") >= 0 && issueUiRow.text.indexOf("提出人") >= 0, issueUiRow === null ? "-" : String(issueUiRow.text).slice(0, 240));
+check("⑥n 问题追踪表 = 七列口径（Push 243 增「责任人」+ 行尾动作列 = 8 格）、行尾「编辑 + 删除」两枚在位、三态色签在位", issueUiRow !== null && issueUiRow.columns === 8 && issueUiRow.editButtons === 1 && issueUiRow.deleteButtons === 1 && issueUiRow.text.indexOf("未解决") >= 0 && issueUiRow.text.indexOf("提出人") >= 0, issueUiRow === null ? "-" : String(issueUiRow.text).slice(0, 240));
 
 // ⑥q（Push 244 业务口径「这个负责人要可以编辑」）：问题追踪行「编辑」弹窗里改处理人 / 责任人 → PATCH ownerId 落库。
 const issueRowSelQ = "[data-issue-row=" + Q + iss1.id + Q + "]";
@@ -706,15 +706,15 @@ await sleep(2000);
 const iss1Drawer = (await issuesOf()).items.filter((row) => row.id === iss1.id)[0];
 const drawerThumbsAfter = await ev("(function(){var s=document.querySelector(" + j(drawerStrip) + ");return s===null?0:s.querySelectorAll(" + j("[data-attachment-thumb]") + ").length;})()");
 check("⑥o 抽屉「移除图片」= 顶部同款确认 Toast（第一下 × 只出浮条 · 图还在；第二下「移除」才真摘并落库）", drawerOpened === true && drawerConfirmShown === true && drawerConfirmPos !== null && drawerConfirmPos.top <= 48 && String(drawerConfirmPos.cls).indexOf("ll-toast-top") >= 0 && drawerThumbsBefore === 1 && iss1Drawer.photos.length === 0 && drawerThumbsAfter === 0 && iss1Drawer.version > iss1State3.version, JSON.stringify({ opened: drawerOpened, strip: drawerConfirmShown, pos: drawerConfirmPos, before: drawerThumbsBefore, after: drawerThumbsAfter, version: iss1Drawer.version }));
-// ⑥r（Push 244）：抽屉「问题处理人 / 责任人」行内单选 —— 预填当前人，点首行「待分派」清空回缺省。
-await clickSelector("[data-issue-drawer] button[aria-label^=" + Q + "修改问题处理人 / 责任人" + Q + "]");
+// ⑥r（Push 244）：抽屉「责任人」行内单选 —— 预填当前人，点首行「待分派」清空回缺省。
+await clickSelector("[data-issue-drawer] button[aria-label^=" + Q + "修改责任人" + Q + "]");
 const drawerOwnerOpened = await waitFor("document.querySelector(" + j("[data-inline-popover]") + ")!==null", 6000);
 const drawerOwnerBefore = await ev("(function(){var d=document.querySelector(" + j("[data-issue-drawer]") + ");if(d===null){return null;}return {hasOwner:d.querySelector(" + j("[data-issue-owner]") + ")!==null};})()");
 await clickSelector("[data-inline-popover] [data-member-clear]");
 await sleep(2200);
 const iss1Owner2 = (await issuesOf()).items.filter((row) => row.id === iss1.id)[0];
 const drawerOwnerAfter = await ev("(function(){var d=document.querySelector(" + j("[data-issue-drawer]") + ");if(d===null){return null;}return {hasOwner:d.querySelector(" + j("[data-issue-owner]") + ")!==null};})()");
-const ownerCellSel = "button[aria-label^=" + Q + "修改问题处理人 / 责任人" + Q + "]";
+const ownerCellSel = "button[aria-label^=" + Q + "修改责任人" + Q + "]";
 const headCellSel = "button[aria-label^=" + Q + "修改施工人数" + Q + "]";
 const cellStyle = await ev("(function(){var d=document.querySelector(" + j("[data-issue-drawer]") + ");if(d===null){return null;}var owner=d.querySelector(" + j(ownerCellSel) + ");var head=d.querySelector(" + j(headCellSel) + ");if(owner===null||head===null){return {ownerPresent:owner!==null,headPresent:head!==null};}var cells=d.querySelectorAll(" + j("[data-inline-cell]") + ");var bad=[];for(var i=0;i<cells.length;i++){var c=cells[i];if(c.className!==head.className||c.getAttribute(" + j("data-inline-cell") + ")!==" + j("editor") + "){bad.push(String(c.getAttribute(" + j("aria-label") + ")).slice(0,40));}}return {same:owner.className===head.className,ownerKind:owner.getAttribute(" + j("data-inline-cell") + "),headKind:head.getAttribute(" + j("data-inline-cell") + "),cells:cells.length,bad:bad,ownerText:owner.innerText.trim()};})()");
 check("⑥t 抽屉可编辑行统一为「施工人数」同款小框（Push 244 业务口径「修改的选择区域要统一 都和施工人数一致」+「关联阶段 明日计划也要同理统一」）：全部 9 行 class 全等 + data-inline-cell=editor", cellStyle !== null && cellStyle.same === true && cellStyle.ownerKind === "editor" && cellStyle.headKind === "editor" && cellStyle.cells === 9 && cellStyle.bad.length === 0, JSON.stringify(cellStyle));

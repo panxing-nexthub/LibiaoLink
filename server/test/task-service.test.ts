@@ -79,6 +79,12 @@ class FakeTaskRepository {
   /** 群消息姓名解析（真实仓储由 users 联表给出；测试按需替换）。 */
   ownerNames: (string | null)[] = ["张三"];
   managerNames: (string | null)[] = ["经理"];
+  /** 群通知的项目编号 / 名称 / 创建时的项目经理姓名。 */
+  projectNotice: { code: string; name: string; managerNames: (string | null)[] | null } = {
+    code: "P-2026-001",
+    name: "上海仓储项目",
+    managerNames: ["原经理"],
+  };
   /** 项目群绑定窄读面；群同步用例按需置 null / 未激活。 */
   groupBinding: { activatedAt: Date | null } | null = { activatedAt: new Date("2026-09-01T00:00:00Z") };
   /** listChangeLinks 收到的 change_refs（追加序）。 */
@@ -120,6 +126,9 @@ class FakeTaskRepository {
   }
   async findGroupBinding(): Promise<{ activatedAt: Date | null } | null> {
     return this.groupBinding;
+  }
+  async findProjectNotificationContext(): Promise<{ code: string; name: string; managerNames: (string | null)[] | null }> {
+    return this.projectNotice;
   }
   async listFiles(): Promise<never[]> {
     return [];
@@ -439,7 +448,7 @@ describe("TaskService.create（A10 / A1-13）", () => {
     expect(repo.inserted).toBeNull();
   });
 
-  it("临时任务选择负责人并同步项目群：outbox 含任务名称、项目经理和任务负责人", async () => {
+  it("临时任务选择负责人并同步项目群：outbox 含项目、原/当前项目经理和任务负责人", async () => {
     const repo = new FakeTaskRepository();
     repo.project = { id: PROJECT, managerIds: [ACTOR], stageKey: "acceptance", status: "active" };
     repo.ownerNames = ["李四"];
@@ -465,7 +474,7 @@ describe("TaskService.create（A10 / A1-13）", () => {
       payload: {
         projectId: PROJECT,
         title: "新建临时任务",
-        body: "任务名称：现场巡检\n项目经理：王经理\n任务负责人：李四",
+        body: "任务名称：现场巡检\n项目编号：P-2026-001\n项目名称：上海仓储项目\n原项目经理：原经理\n当前项目经理：王经理\n任务负责人：李四",
         refType: "task",
         refId: created.id,
         templateCode: "TEMP_TASK_CREATED_GROUP",
@@ -488,7 +497,7 @@ describe("TaskService.create（A10 / A1-13）", () => {
         item !== null &&
         (item as { topic?: string }).topic === "notify.group",
     ) as { payload: Record<string, unknown> } | undefined;
-    expect(groupEvent?.payload.body).toBe("任务名称：现场巡检\n项目经理：王经理\n任务负责人：待定");
+    expect(groupEvent?.payload.body).toBe("任务名称：现场巡检\n项目编号：P-2026-001\n项目名称：上海仓储项目\n原项目经理：原经理\n当前项目经理：王经理\n任务负责人：待定");
   });
 
   it("临时任务未勾选群同步：不写 notify.group", async () => {

@@ -23,10 +23,10 @@
 
 - **触发**：`POST /api/v1/projects/{id}/tasks` 创建无阶段、无来源节点的临时任务时，`TaskCreateBody.syncToGroup=true`。阶段任务传 true 返回 400。
 - **前置**：创建事务内读取 `wecom_groups`，要求该项目群已绑定且 `activated_at` 非空；未绑定 / 未激活均 400，整笔事务回滚，不产生半成品任务。
-- **载荷**：同事务追加 `notify.group`，`templateCode=TEMP_TASK_CREATED_GROUP`，正文包含任务名称、项目经理、任务负责人；负责人空数组显示「待定」。
+- **载荷**：同事务追加 `notify.group`，`templateCode=TEMP_TASK_CREATED_GROUP`，正文包含任务名称、项目编号、项目名称、原项目经理、当前项目经理、任务负责人；原项目经理取创建时项目记录中的项目经理名单，当前项目经理取临时任务所选名单；负责人空数组显示「待定」。
 - **幂等**：outbox `dedupe_key = temp-task.created:{taskId}`。
 - **边界**：任务模块只读 `wecom_groups` 窄字段，不 import project 模块，避免 `project → node → task` 循环依赖。
-- **回归**：`server/test/task-service.test.ts` 覆盖有负责人 / 待定 / 未勾选 / 非临时任务拒绝 / 群未绑定与未激活回滚。
+- **回归**：`server/test/task-service.test.ts` 覆盖项目编号 / 名称 / 原项目经理 / 当前项目经理 / 负责人、待定、未勾选、非临时任务拒绝、群未绑定与未激活回滚。
 
 ## 已实现（h4 · Push 89）
 

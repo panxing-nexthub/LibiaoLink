@@ -65,6 +65,13 @@ export interface TaskGroupBindingRow {
   activatedAt: Date | null;
 }
 
+/** 临时任务群通知的项目上下文：编号 / 名称 / 项目原项目经理姓名。 */
+export interface TaskProjectNotificationRow {
+  code: string;
+  name: string;
+  managerNames: (string | null)[] | null;
+}
+
 export interface TaskInsertInput {
   projectId: string;
   /** null = 「未分组」（A15 · Push 124）。 */
@@ -327,6 +334,27 @@ export class TaskRepository {
       .select({ activatedAt: wecomGroups.activatedAt })
       .from(wecomGroups)
       .where(eq(wecomGroups.projectId, projectId))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  /** 临时任务群通知的项目字段窄读面：项目编号 / 名称 + 创建时的项目经理姓名。 */
+  async findProjectNotificationContext(
+    projectId: string,
+    client: DbClient = this.database.db,
+  ): Promise<TaskProjectNotificationRow | null> {
+    const rows = await client
+      .select({
+        code: projects.code,
+        name: projects.name,
+        managerNames: sql<(string | null)[] | null>`(
+          select array_agg(u.display_name order by m.ord)
+          from unnest(${projects.managerIds}) with ordinality as m(uid, ord)
+          left join ${users} u on u.id = m.uid
+        )`,
+      })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
       .limit(1);
     return rows[0] ?? null;
   }

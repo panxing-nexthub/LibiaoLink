@@ -388,10 +388,16 @@ export class TaskService {
       });
       if (syncToGroup) {
         const identity = await this.repository.findListRowById(created.id, projectId, tx);
-        const managerText = groupNames(identity?.managerNames, "—");
+        const projectNotice = await this.repository.findProjectNotificationContext(projectId, tx);
         const ownerText = created.ownerIds.length === 0 ? "待定" : groupNames(identity?.ownerNames, "—");
-        const bodyText =
-          "任务名称：" + created.title + "\n项目经理：" + managerText + "\n任务负责人：" + ownerText;
+        const bodyText = [
+          "任务名称：" + created.title,
+          "项目编号：" + (projectNotice?.code ?? "—"),
+          "项目名称：" + (projectNotice?.name ?? "—"),
+          "原项目经理：" + groupNames(projectNotice?.managerNames, "—"),
+          "当前项目经理：" + groupNames(identity?.managerNames, "—"),
+          "任务负责人：" + ownerText,
+        ].join("\n");
         await appendOutbox(tx, {
           topic: "notify.group",
           dedupeKey: "temp-task.created:" + created.id,

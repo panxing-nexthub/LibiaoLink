@@ -34,7 +34,7 @@ import type { DbClient } from "../db/db-client.js";
 import { DatabaseService } from "../db/database.service.js";
 import { files } from "../db/schema/files.js";
 import { users } from "../db/schema/identity.js";
-import { projectMembers, projects, projectStages } from "../db/schema/projects.js";
+import { projectArchives, projectMembers, projects, projectStages } from "../db/schema/projects.js";
 import { dailyReports } from "../db/schema/reports.js";
 import { tasks } from "../db/schema/tasks.js";
 import { todos } from "../db/schema/todos.js";
@@ -313,12 +313,13 @@ export class AutomationSubjectReader {
     const projectId = stringField(payload, "projectId");
     if (projectId === null) return null;
     const rows = await client
-      .select({ id: projects.id, code: projects.code, name: projects.name, status: projects.status, version: projects.version })
+      .select({ id: projects.id, code: projects.code, name: projects.name, status: projects.status, version: projects.version, archiveKind: projectArchives.archiveKind })
       .from(projects)
+      .leftJoin(projectArchives, eq(projectArchives.projectId, projects.id))
       .where(eq(projects.id, projectId))
       .limit(1);
     const project = rows[0];
-    if (project === undefined) return null;
+    if (project === undefined || (project.status === "archived" && project.archiveKind === "unaccepted")) return null;
     return toProjectSubject({
       projectId: project.id,
       projectCode: project.code,

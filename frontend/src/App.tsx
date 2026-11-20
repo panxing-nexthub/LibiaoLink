@@ -57,7 +57,7 @@ import {
   type HubView,
   type Route,
 } from "./useHashRoute";
-import { projectStatusOf, type MeResponse, type Project } from "./types";
+import type { MeResponse, Project, ProjectArchiveKind } from "./types";
 
 type ViewState =
   | { kind: "loading" }
@@ -171,7 +171,8 @@ function errorMessageOf(error: unknown, fallback: string): string {
       return t("app.err.archived");
     }
     if (error.code === "ARCHIVE_NOT_READY") {
-      return t("app.err.archiveNotReady");
+      if (error.details.some((item) => item.code === "acceptance_missing")) return t("modal.archive.noAcceptance");
+      return t("app.err.archiveNotReady", { count: error.details.length });
     }
     if (error.code === "ARCHIVE_GATE_NOT_PASSED") {
       return t("app.err.archiveGate");
@@ -230,7 +231,7 @@ export default function App() {
   const [managerCandidates, setManagerCandidates] = useState<ProjectManagerCandidate[]>([]);
   // 常用筛选（A24 · Push 169 落库）：按账号存服务端，换设备同账号可见（契约 users.ts homeSavedFilters）
   const filterRevision = useRef(0);
-  const archiveAttempt = useRef<{ id: string; version: number; fields: string } | null>(null);
+  const archiveAttempt = useRef<{ id: string; baseVersion: number; version: number; fields: string } | null>(null);
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   // 任务表列显隐（A4 · Push 170）：同样按账号存服务端；null = 偏好尚未取到（先用页面默认列）
   const [taskTableHiddenColumns, setTaskTableHiddenColumns] = useState<string[] | null>(null);
@@ -685,14 +686,14 @@ export default function App() {
   };
 
   /**
-   * 编辑项目（Push 262 起带状态口径）：active / paused / done 走 PATCH（乐观锁 version）；
+   * 编辑项目（Push 262 起带状态口径）：active / paused 走 PATCH（乐观锁 version）；
    * archived 走归档端点（契约：PATCH 不收 archived —— ADR-027 门禁 + 清单 + 留痕）。
    * 返回结构化结果：ok = 成功；error = 文案；archive-confirm = 归档缺项，弹窗内二次确认。
    */
   const handleUpdateProject = async (
     project: Project,
     draft: ProjectDraft,
-    options?: { archiveConfirm?: boolean; version?: number },
+    options?: { archiveKind?: ProjectArchiveKind; archiveConfirm?: boolean; version?: number },
   ): Promise<ProjectSubmitResult> => {
     const fields = {
       code: draft.code.trim(),
@@ -702,6 +703,10 @@ export default function App() {
       managerIds: draft.managerIds,
       remark: draft.note.trim(),
     };
+    const baseVersion = options?.version ?? project.version;
+    const attempt = archiveAttempt.current;
+    const previous = attempt?.id === project.id && attempt.baseVersion === baseVersion ? attempt : null;
+    let version = previous?.version ?? baseVersion;
     try {
       if (project.status === "archived") {
         if (draft.status !== "active") {
@@ -712,19 +717,20 @@ export default function App() {
         return { kind: "ok" };
       }
       if (draft.status !== "archived") {
-        await updateProject(project.id, fields, options?.version ?? project.version, draft.status);
+        await updateProject(project.id, fields, version, draft.status);
         setDataVersion((value) => value + 1);
         return { kind: "ok" };
       }
       const signature = JSON.stringify(fields);
-      const attempt = archiveAttempt.current;
-      let version = options?.archiveConfirm && attempt?.id === project.id && attempt.fields === signature ? attempt.version : options?.version ?? project.version;
-      if (!options?.archiveConfirm && (options?.version !== undefined || projectFieldsChanged(project, fields))) {
+      const fieldsChanged = previous === null
+        ? options?.version !== undefined || projectFieldsChanged(project, fields)
+        : previous.fields !== signature;
+      if (fieldsChanged) {
         const saved = await updateProject(project.id, fields, version);
         version = saved.version;
       }
-      archiveAttempt.current = { id: project.id, version, fields: signature };
-      await archiveProject(project.id, version, options?.archiveConfirm === true);
+      archiveAttempt.current = { id: project.id, baseVersion, version, fields: signature };
+      await archiveProject(project.id, version, options?.archiveKind ?? "accepted", options?.archiveConfirm === true);
       archiveAttempt.current = null;
       setDataVersion((value) => value + 1);
       return { kind: "ok" };
@@ -732,7 +738,7 @@ export default function App() {
       if (error instanceof ApiError && error.code === "VERSION_CONFLICT") {
         try {
           const latest = toUiProject(await fetchProject(project.id));
-          return { kind: "conflict", version: latest.version, latest: { code: latest.code, description: latest.description, note: latest.remark, managerIds: latest.managerIds, projectType: latest.projectType, region: latest.region, status: projectStatusOf(latest.status) ?? "active" } };
+          return { kind: "conflict", version: latest.version, latest: { code: latest.code, description: latest.description, note: latest.remark, managerIds: latest.managerIds, projectType: latest.projectType, region: latest.region, status: latest.status } };
         } catch {
           return { kind: "error", message: t("app.err.projectGone") };
         }
@@ -745,51 +751,23 @@ export default function App() {
     }
   };
 
-  /**
-   * 验收交付完成后把项目设为已完成（2026-10-22 · 业务口径「当验收交付完成后 弹出一个弹出显示是否需要将项目设为已完成」）：
-   * 只改 status（project.update），保留其余字段；成功更新详情并触发列表刷新，失败沿用全局顶部 Toast。
-   * 409 时先回读最新项目：若他人已设为已完成则视为成功，否则让详情滚动到最新 version 供用户重试。
-   */
-  const handleSetProjectDone = async (id: string): Promise<boolean> => {
-    if (detail === null || detail.id !== id) {
-      return false;
-    }
-    const current = detail;
-    if (current.status === "done") {
-      return true;
-    }
+  const handleArchiveAfterAcceptance = async (id: string): Promise<boolean> => {
+    if (detail?.id !== id) return false;
     try {
-      const view = await updateProject(
-        id,
-        {
-          code: current.code,
-          name: current.description,
-          region: current.region,
-          projectType: current.projectType,
-          managerIds: current.managerIds,
-        },
-        current.version,
-        "done",
-      );
-      setDetail(toUiProject(view));
-      setDataVersion((value) => value + 1);
-      return true;
+      await archiveProject(id, detail.version, "accepted");
     } catch (error: unknown) {
-      if (error instanceof ApiError && error.code === "VERSION_CONFLICT") {
-        try {
-          const latest = toUiProject(await fetchProject(id));
-          setDetail(latest);
-          setDataVersion((value) => value + 1);
-          if (latest.status === "done") {
-            return true;
-          }
-        } catch {
-          // 回读失败仍走下面的统一错误提示
-        }
+      if (error instanceof ApiError && error.code === "PROJECT_ARCHIVED") {
+        setDataVersion((value) => value + 1);
+        return true;
       }
-      setNotice(errorMessageOf(error, t("app.fail.completeProject")));
+      if (error instanceof ApiError && error.code === "VERSION_CONFLICT") {
+        setDataVersion((value) => value + 1);
+      }
+      setNotice(errorMessageOf(error, t("app.fail.archiveProject")));
       return false;
     }
+    setDataVersion((value) => value + 1);
+    return true;
   };
 
   /**
@@ -822,7 +800,7 @@ export default function App() {
   const canUpdateProject = permissions === null || hasPermission(permissions, "project.update");
   const canExportProject = permissions === null || hasPermission(permissions, "project.export");
   /** 归档权（Push 262 · M7-04 前端接线一部分）：决定编辑弹窗「已归档」选项是否可选（服务端逐请求仍是最终裁决）。 */
-  const canArchiveProject = permissions === null || hasPermission(permissions, "project.archive");
+  const canArchiveProject = permissions !== null && hasPermission(permissions, "project.archive");
   /**
    * 任务模板页拆成两档写权限：公共节点库 = 仅系统管理员；公共模板新建 = 管理员或有效项目经理，单份模板维护仅创建人或管理员。
    * 任务负责人 / 普通成员只读；服务端逐请求仍是最终裁决 —— 无权 = 403 FORBIDDEN。
@@ -933,6 +911,7 @@ export default function App() {
       <ProjectModal
         key={editingProject.id + ":" + String(editingProject.version)}
         mode="edit"
+        initialArchiveKind={editingProject.archiveKind}
         initial={{
           code: editingProject.code,
           description: editingProject.description,
@@ -940,7 +919,7 @@ export default function App() {
           managerIds: editingProject.managerIds,
           projectType: editingProject.projectType,
           region: editingProject.region,
-          status: projectStatusOf(editingProject.status) ?? "active",
+          status: editingProject.status,
         }}
         dicts={dicts}
         dictTools={dictTools}
@@ -1044,7 +1023,7 @@ export default function App() {
   }
 
   if (route.kind === "project") {
-    if (detailLoading && detail === null) {
+    if ((detailLoading && detail === null) || (detail !== null && detail.id !== route.id)) {
       return (
         <main className="page">
           <Loader />
@@ -1062,6 +1041,7 @@ export default function App() {
     return (
       <>
         <ProjectDetail
+          key={route.id}
           me={state.me}
           project={detail}
           view={route.view}
@@ -1079,7 +1059,7 @@ export default function App() {
           onTaskHiddenColumnsChange={handleSaveTaskHiddenColumns}
           canManageStakeholders={canManageStakeholders}
           canCreateTemporaryTask={permissions !== null && (permissions.groupAccessAdmin || detail?.managerIds.includes(permissions.userId) === true)}
-          onSetProjectDone={canUpdateProject && detail?.accessLevel === "edit" ? handleSetProjectDone : undefined}
+          onArchiveProject={canArchiveProject && detail?.accessLevel === "edit" ? handleArchiveAfterAcceptance : undefined}
         />
         {editModal}
         {bottomBars}
@@ -1156,7 +1136,10 @@ export default function App() {
         savedFilters={savedFilters}
         onSavedFiltersChange={handleSaveSavedFilters}
         onCreate={handleCreateProject}
-        onEdit={setEditingProject}
+        onEdit={(project) => {
+          archiveAttempt.current = null;
+          setEditingProject(project);
+        }}
         refreshToken={dataVersion}
       />
       {editModal}

@@ -10,7 +10,6 @@ import { AuditService } from "../admin/index.js";
 import { BlueprintService } from "../blueprint/index.js";
 import {
   GateService,
-  type ProjectCompletionMissingItem,
   type StageGateMissingItem,
 } from "../node/index.js";
 import { PermissionService, isProjectEditor } from "../permission/index.js";
@@ -497,35 +496,6 @@ export class FlowService {
     return view;
   }
 
-  /**
-   * 项目标记完成门禁：所有任务已完成，且配置了成果类型的任务均已上传对应文件。
-   * 未配置成果类型的任务只检查完成状态；缺交付文件时返回 422 TASK_REQUIRED_DOC_MISSING，前端沿用统一 Toast 提示。
-   */
-  async assertProjectCompletionGate(client: DbClient, projectId: string): Promise<void> {
-    const gate = await this.gate.evaluateProjectCompletion(client, projectId);
-    if (gate.ok) return;
-    const pending = gate.missing.find((item) => item.type === "task_not_done");
-    const deliveries = gate.missing.filter(
-      (item): item is Extract<ProjectCompletionMissingItem, { type: "task_delivery_missing" }> =>
-        item.type === "task_delivery_missing",
-    );
-    const parts: string[] = [];
-    if (deliveries.length > 0) parts.push("有 " + deliveries.length + " 项已配置成果文件尚未上传");
-    if (pending !== undefined) parts.push("有 " + (pending.total - pending.done) + " / " + pending.total + " 项任务未完成");
-    const examples = [...new Set(deliveries.map((item) => "「" + item.taskTitle + "」" + item.docType))].slice(0, 3);
-    const suffix = examples.length === 0 ? "" : "：" + examples.join("、");
-    throw new AppError(
-      deliveries.length > 0 ? "TASK_REQUIRED_DOC_MISSING" : "VALIDATION_FAILED",
-      "项目无法标记为已完成 —— " + parts.join("；") + suffix,
-      gate.missing.map((item) => ({
-        code: item.type,
-        message: projectCompletionMissingMessage(item),
-        path: "missing",
-        meta: { ...item },
-      })),
-    );
-  }
-
   /** 项目级流程写权限：只认最终项目编辑权；所管项目经理已计入 accessLevel，成员 / 任务负责人关系不提升。 */
   async assertProjectEditor(projectId: string, actorId: string, action: string): Promise<void> {
     const access = await this.permission.assertProjectVisible(actorId, projectId);
@@ -566,11 +536,6 @@ export class FlowService {
 }
 
 /** 阶段门禁缺项的可读说明（422 details）。 */
-function projectCompletionMissingMessage(item: ProjectCompletionMissingItem): string {
-  if (item.type === "task_not_done") return "项目仍有任务未完成：" + item.done + " / " + item.total;
-  return "任务「" + item.taskTitle + "」缺少已上传的成果文件：" + item.docType + "（需要 " + item.required + "，现有 " + item.present + "）";
-}
-
 function stageMissingMessage(item: StageGateMissingItem): string {
   if (item.type === "node_not_done") return "节点未完成：" + item.name + "（" + item.nodeKey + "，状态 " + item.status + "）";
   if (item.type === "task_not_done") return "阶段内任务未全部完成：" + item.done + " / " + item.total;

@@ -13,7 +13,6 @@ import {
 } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import { DatabaseService } from "../../db/database.service.js";
-import { appendOutbox } from "../../db/outbox.js";
 import { AuditService, diffRecords } from "../admin/index.js";
 import { PermissionService, ProjectManagerEligibilityService } from "../permission/index.js";
 import type { ProjectScopeFilter } from "../permission/index.js";
@@ -71,6 +70,7 @@ export function toProjectView(
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    archiveKind: row.status === "archived" ? view.archiveKind ?? "accepted" : null,
     archivedAt: row.archivedAt === null ? null : row.archivedAt.toISOString(),
     archivedBy: row.archivedBy,
     deletedAt: row.deletedAt === null ? null : row.deletedAt.toISOString(),
@@ -255,7 +255,6 @@ export class ProjectService {
 
   /**
    * 更新（M2-01）：乐观锁（version 必须回传）；归档写保护（ADR-027）；code 变更同样校验唯一性；变更写审计（字段级）。
-   * 首次改为 done 时先过项目完成门禁：任务全部完成，且已配置成果类型的任务均有上传文件。
    */
   async updateProject(id: string, body: ProjectUpdateBody, actorId: string): Promise<ProjectView> {
     const current = await this.projects.findViewById(id);
@@ -288,9 +287,6 @@ export class ProjectService {
     if (body.description !== undefined) patch.description = body.description;
     const at = new Date();
     const updated = await this.database.db.transaction(async (tx) => {
-      if (body.status === "done" && current.project.status !== "done") {
-        await this.flow.assertProjectCompletionGate(tx, id);
-      }
       const row = await this.projects.updateWithVersion(id, patch, body.version, at, tx);
       if (row === null) {
         const again = await this.projects.findViewById(id);
@@ -313,20 +309,6 @@ export class ProjectService {
         summary: "修改项目：" + row.code + "（" + row.name + "）",
         changes: changes.length > 0 ? changes : null,
       });
-      if (body.status === "done" && current.project.status !== "done") {
-        await appendOutbox(tx, {
-          topic: "project.completed",
-          dedupeKey: "project.completed:" + id + ":" + row.version,
-          payload: {
-            projectId: id,
-            status: row.status,
-            previousStatus: current.project.status,
-            version: row.version,
-            actorId,
-            at: at.toISOString(),
-          },
-        });
-      }
       return row;
     });
     const view = await this.projects.findViewById(id);

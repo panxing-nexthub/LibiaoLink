@@ -55,7 +55,7 @@ export const projects = pgTable(
       "ck_projects_stage_key",
       sql`${table.stageKey} in ${sql.raw(sqlValueList(STAGE_KEYS))}`,
     ),
-    check("ck_projects_status", sql`${table.status} in ${sql.raw(sqlValueList(["active", "paused", "done", "archived"]))}`),
+    check("ck_projects_status", sql`${table.status} in ${sql.raw(sqlValueList(["active", "paused", "archived"]))}`),
     check("ck_projects_version", sql`${table.version} >= 0`),
     check("ck_projects_archived_pair", sql`(${table.archivedAt} is null) = (${table.archivedBy} is null)`),
     check("ck_projects_deleted_pair", sql`(${table.deletedAt} is null) = (${table.deletedBy} is null)`),
@@ -80,6 +80,7 @@ export const projectArchives = pgTable(
     archivedAt: timestamp("archived_at", { withTimezone: true }).notNull().defaultNow(),
     /** 归档操作人（users.id；归档端点置位，与 projects.archived_by 同值）。 */
     archivedBy: uuid("archived_by").notNull(),
+    archiveKind: text("archive_kind", { enum: ["accepted", "unaccepted"] }).notNull().default("accepted"),
     /** 清单快照（引用式）：任务统计 / 阶段状态 / 文件清单含版本 / 变更 / 日报 / 问题；形态 = 契约 ProjectArchiveSnapshot。 */
     snapshot: jsonb("snapshot").notNull(),
     /** 确认越过的缺项（契约 ProjectArchiveMissing 数组；无缺项 = 空数组）。 */
@@ -88,6 +89,7 @@ export const projectArchives = pgTable(
   (table) => [
     unique("uq_project_archives_project").on(table.projectId),
     index("ix_project_archives_archived_at").on(table.archivedAt),
+    check("ck_project_archives_kind", sql`${table.archiveKind} in ('accepted', 'unaccepted')`),
     check("ck_project_archives_acknowledged", sql`jsonb_typeof(${table.acknowledgedMissing}) = 'array'`),
   ],
 );

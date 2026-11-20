@@ -18,7 +18,6 @@ import { useLiveRefresh } from "./useLiveRefresh";
 import {
   isLocalizedLocale,
   prefetchLocalizedText,
-  projectStatusTextOf,
   projectTypeText,
   statusText,
   textOf,
@@ -901,7 +900,7 @@ export function FileLibraryPage({ me, query, onChangeQuery, directory, dicts }: 
                           vividInk={backgroundTier === "vivid"}
                           typeLabel={projectTypeText(locale, dictLabel(dicts, "projectType", project.projectType))}
                           status={project.status}
-                          statusText={projectStatusTextOf(locale, project.status)}
+                          archiveKind={project.archiveKind}
                           accentColor={accent.color}
                           accentText={accent.text}
                           managerNames={project.managerNames}

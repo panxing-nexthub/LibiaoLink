@@ -78,11 +78,10 @@ const TIER_FILL = {
   4: "rgb(82, 144, 244)",
   5: "rgb(47, 111, 224)"
 };
-/** 立柱分段四色（与 app.css 的 .hub-map__pillar-seg[data-status] 同值；柱顶椭圆跟最上段同色） */
+/** 立柱分段三色（与 app.css 的 .hub-map__pillar-seg[data-status] 同值；柱顶椭圆跟最上段同色） */
 const PILLAR_STATUS_FILL = {
   active: "rgb(26, 115, 232)",
   paused: "rgb(242, 153, 0)",
-  done: "rgb(30, 142, 62)",
   archived: "rgb(154, 160, 166)"
 };
 /** 中国口径硬护栏：这几个都不允许作为独立国家出现在图上（台湾是中国的省；后三个中国不承认） */
@@ -512,7 +511,7 @@ const awayStyle = await ev(styleExpr(6, vh - 8));
 check("鼠标移开：国家 hover 归零、面板投影还原", awayStyle !== null && awayStyle.hovered === 0 && awayStyle.panelShadow === restPanelShadow, JSON.stringify(awayStyle));
 
 /** —— 项目立柱层（Push 188 追订：地图与项目地区联动 + 立柱展示项目梳理）—— */
-const STATUS_TEXT = { active: "进行中", paused: "已暂停", done: "已完成", archived: "已归档" };
+const STATUS_TEXT = { active: "进行中", paused: "已暂停", archived: "已归档" };
 const projectRows = (await db.query("select region, status, count(*)::int as n from projects where deleted_at is null group by region, status")).rows;
 const dbRegionTotal = new Map();
 for (const row of projectRows) {
@@ -667,13 +666,13 @@ if (focusPillar !== undefined) {
     check("触碰有项目的国家（" + focusPillar.name + "）：该国的柱才长出来（只有这一根露面、柱身与柱顶计数都展开了）", grownNames.length === 1 && grownNames[0] === focusPillar.name && grownSelf !== null && grownSelf.bodyOpacity === 1 && grownSelf.hitPointer === "all" && grownSelf.countOpacity === 1, grownInfo === null ? "null" : JSON.stringify([grownNames, grownSelf === null ? null : [grownSelf.bodyOpacity, grownSelf.hitPointer, grownSelf.countOpacity]]));
     check("触碰有项目的国家（" + focusPillar.name + "）：该国压深一档（" + PROJECT_BLUE_DEEP + "）+ 白轮廓", grownPaint !== null && grownPaint.fill === PROJECT_BLUE_DEEP && grownPaint.stroke === "rgb(255, 255, 255)", JSON.stringify(grownPaint));
     check("鼠标触碰有项目的国家（" + focusPillar.name + "）：徽标加报项目数、该柱同步高亮（联动）", grownInfo !== null && grownInfo.badgeCount === String(focusCount) + " 个项目" && grownInfo.linkedPillar === focusPillar.name && grownInfo.linkedCountry === focusPillar.name, grownInfo === null ? "null" : JSON.stringify([grownInfo.badgeCount, grownInfo.linkedPillar, grownInfo.linkedCountry]));
-    /* 立柱分段四色（Push 188 七追订）：柱身每段的填充 = 四色表、段数与库内状态分布一致；柱顶椭圆跟最上段同色 */
+    /* 立柱分段三色（Push 188 七追订）：柱身每段的填充 = 三色表、段数与库内状态分布一致；柱顶椭圆跟最上段同色 */
     const focusColor = focusPillar === undefined ? null : await ev(pillarColorExpr(focusPillar.name));
     const wantStatusCounts = focusPillar === undefined ? {} : (regionStatus.get(focusPillar.name) ?? {});
     const wantCuts = Object.keys(wantStatusCounts).filter((key) => wantStatusCounts[key] > 0).sort();
     const gotCuts = focusColor === null ? [] : focusColor.cuts.map((item) => item.status).sort();
     const cutFillBad = focusColor === null ? ["null"] : focusColor.cuts.filter((item) => item.fill !== PILLAR_STATUS_FILL[item.status]).map((item) => item.status + "=" + item.fill);
-    check("立柱分段：柱身按项目状态分段、每段填充 = 四色表（进行中 " + PILLAR_STATUS_FILL.active + " / 已暂停 " + PILLAR_STATUS_FILL.paused + " / 已完成 " + PILLAR_STATUS_FILL.done + " / 已归档 " + PILLAR_STATUS_FILL.archived + "）", focusColor !== null && cutFillBad.length === 0 && gotCuts.join("|") === wantCuts.join("|"), focusColor === null ? "null" : JSON.stringify([focusColor.cuts, wantCuts]));
+    check("立柱分段：柱身按项目状态分段、每段填充 = 三色表（进行中 " + PILLAR_STATUS_FILL.active + " / 已暂停 " + PILLAR_STATUS_FILL.paused + " / 已归档 " + PILLAR_STATUS_FILL.archived + "）", focusColor !== null && cutFillBad.length === 0 && gotCuts.join("|") === wantCuts.join("|"), focusColor === null ? "null" : JSON.stringify([focusColor.cuts, wantCuts]));
     const topWant = focusColor === null ? "" : (PILLAR_STATUS_FILL[focusColor.topStatus] ?? "");
     check("立柱分段：柱顶椭圆跟最上面那一段的状态上色（data-top-status=" + (focusColor === null ? "" : focusColor.topStatus) + " -> " + topWant + "）", focusColor !== null && focusColor.topStatus !== "" && focusColor.topFill === topWant, focusColor === null ? "null" : JSON.stringify([focusColor.topStatus, focusColor.topFill]));
     focusPoint = await ev(pillarPointExpr(focusPillar.name));

@@ -1537,7 +1537,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** 项目归档（门禁：项目内未删除任务全部完成；有未完成任务 409 ARCHIVE_NOT_READY 且 confirm 不可越过；通过后置位并生成引用式清单） */
+        /** 项目归档：已验收需全部任务完成且含验收任务；异常归档可直接办理，两者均生成清单 */
         post: {
             parameters: {
                 query?: never;
@@ -1638,7 +1638,7 @@ export interface paths {
             };
             requestBody?: {
                 content: {
-                    "application/json": components["schemas"]["ProjectArchiveBody"];
+                    "application/json": components["schemas"]["ProjectUnarchiveBody"];
                 };
             };
             responses: {
@@ -13998,19 +13998,29 @@ export interface components {
             version: components["schemas"]["Version"];
             createdAt: components["schemas"]["DateTime"];
             updatedAt: components["schemas"]["DateTime"];
+            /**
+             * @description 已归档项目返回已验收归档或异常归档，已有归档按已验收处理；未归档为 null
+             * @enum {string|null}
+             */
+            archiveKind: "accepted" | "unaccepted" | null;
             archivedAt: components["schemas"]["DateTime"] & (string | null);
             archivedBy: components["schemas"]["Uuid"] & (string | null);
             deletedAt: components["schemas"]["DateTime"] & (string | null);
             deletedBy: components["schemas"]["Uuid"] & (string | null);
         };
-        /** @description 归档 / 恢复请求：version 必带；confirm 仅兼容旧客户端，当前忽略 */
         ProjectArchiveBody: {
             version: components["schemas"]["Version"] & unknown;
             /**
-             * @description 旧契约兼容字段：当前忽略；归档只校验任务是否全部完成，true 不能绕过 ARCHIVE_NOT_READY
+             * @description 旧契约兼容字段：当前忽略，不改变归档类型或门禁
              * @default false
              */
             confirm: boolean;
+            /**
+             * @description accepted 已验收归档，unaccepted 异常归档；旧请求默认已验收
+             * @default accepted
+             * @enum {string}
+             */
+            archiveKind: "accepted" | "unaccepted";
         };
         /** @description 归档缺项条目（历史兼容；2026-11-12 起新归档 acknowledgedMissing 恒为空） */
         ProjectArchiveMissing: {
@@ -14091,6 +14101,11 @@ export interface components {
             projectId: components["schemas"]["Uuid"];
             archivedAt: components["schemas"]["DateTime"];
             archivedBy: components["schemas"]["Uuid"];
+            /**
+             * @description 归档清单的验收类型
+             * @enum {string}
+             */
+            archiveKind: "accepted" | "unaccepted";
             /** @description 归档操作人姓名（users.display_name；取不到 = null） */
             archivedByName: string | null;
             snapshot: components["schemas"]["ProjectArchiveSnapshot"];
@@ -14557,7 +14572,7 @@ export interface components {
          * @description 项目状态（projects.status）
          * @enum {string}
          */
-        ProjectStatus: "active" | "paused" | "done" | "archived";
+        ProjectStatus: "active" | "paused" | "archived";
         /** @description 项目总览汇总卡统计（任务派生；口径见 v0.2 §2.4 与前端功能需求 §3.4） */
         ProjectSummary: {
             projectId: components["schemas"]["Uuid"];
@@ -14568,6 +14583,14 @@ export interface components {
             total: number;
             /** @description 仅归档项目返回，表示是否仍可填报日报（另需具备填报权限） */
             hasUnfinishedTemporaryTask?: boolean;
+        };
+        ProjectUnarchiveBody: {
+            version: components["schemas"]["Version"] & unknown;
+            /**
+             * @description 旧契约兼容字段：当前忽略，不改变归档类型或门禁
+             * @default false
+             */
+            confirm: boolean;
         };
         ProjectUpdateBody: {
             /**
@@ -14583,10 +14606,10 @@ export interface components {
             managerIds?: components["schemas"]["Uuid"][];
             stageKey?: components["schemas"]["StageKey"];
             /**
-             * @description 项目状态（active / paused / done）；archived 不接受 PATCH —— 归档只能走 POST /projects/{id}/archive（ADR-027 门禁 + 清单），确保归档必有清单与留痕
+             * @description 项目状态（active / paused）；archived 不接受 PATCH —— 归档只能走 POST /projects/{id}/archive（ADR-027 门禁 + 清单），确保归档必有清单与留痕
              * @enum {string}
              */
-            status?: "active" | "paused" | "done";
+            status?: "active" | "paused";
             description?: string | null;
             version: components["schemas"]["Version"];
         };

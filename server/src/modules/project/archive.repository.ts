@@ -68,13 +68,20 @@ export class ArchiveRepository {
     return rows[0] ?? null;
   }
 
-  /** 未完成任务（项目内、未软删、非 done；含未分组）—— 归档硬前置。 */
+  /** 未完成任务（项目内、未软删、非 done，含未分组），用于已验收归档。 */
   async listUnfinishedTasks(client: DbClient, projectId: string): Promise<ArchiveUnfinishedTaskRow[]> {
     return client
       .select({ id: tasks.id, title: tasks.title, stageKey: tasks.stageKey, status: tasks.status })
       .from(tasks)
       .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt), ne(tasks.status, "done")))
       .orderBy(asc(tasks.stageKey), asc(tasks.sortIndex), asc(tasks.id));
+  }
+
+  async hasCompletedAcceptanceTask(client: DbClient, projectId: string): Promise<boolean> {
+    const rows = await client.select({ id: tasks.id }).from(tasks)
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.stageKey, "acceptance"), eq(tasks.status, "done"), isNull(tasks.deletedAt)))
+      .limit(1);
+    return rows.length > 0;
   }
 
   /** 任务数按状态分组（清单：任务数与状态分布）。 */
@@ -141,7 +148,8 @@ export class ArchiveRepository {
   }
 
   /** 归档置位：status = archived + archived_at / archived_by + 版本前移（乐观锁在 WHERE 内；不匹配返回 null）。 */
-  async updateProjectArchived(tx: DbClient, projectId: string, at: Date, actorId: string, expectedVersion: number) {
+  async updateProjectArchived(tx: DbClient, projectId: string, actorId: string, expectedVersion: number) {
+    const at = sql`statement_timestamp()`;
     const rows = await tx
       .update(projects)
       .set({ status: "archived", archivedAt: at, archivedBy: actorId, version: sql`${projects.version} + 1`, updatedAt: at })
@@ -153,13 +161,14 @@ export class ArchiveRepository {
   /** 写入归档清单（一项目一份：重新归档时覆盖原清单，唯一约束兜底并发）。 */
   async insertArchive(
     tx: DbClient,
-    input: { projectId: string; archivedAt: Date; archivedBy: string; snapshot: unknown; acknowledgedMissing: unknown },
+    input: { projectId: string; archiveKind: ProjectArchiveRow["archiveKind"]; archivedBy: string; snapshot: unknown; acknowledgedMissing: unknown },
   ): Promise<ProjectArchiveRow> {
     const rows = await tx
       .insert(projectArchives)
       .values({
         projectId: input.projectId,
-        archivedAt: input.archivedAt,
+        archiveKind: input.archiveKind,
+        archivedAt: sql`(select ${projects.archivedAt} from ${projects} where ${projects.id} = ${input.projectId})`,
         archivedBy: input.archivedBy,
         snapshot: input.snapshot,
         acknowledgedMissing: input.acknowledgedMissing,
@@ -167,7 +176,8 @@ export class ArchiveRepository {
       .onConflictDoUpdate({
         target: projectArchives.projectId,
         set: {
-          archivedAt: input.archivedAt,
+          archiveKind: input.archiveKind,
+          archivedAt: sql`excluded.archived_at`,
           archivedBy: input.archivedBy,
           snapshot: input.snapshot,
           acknowledgedMissing: input.acknowledgedMissing,

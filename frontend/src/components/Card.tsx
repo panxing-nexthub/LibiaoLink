@@ -1,13 +1,13 @@
 import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useLocalizedText, useT } from "../i18n";
+import { projectStatusTextOf, useLocale, useLocalizedText, useT } from "../i18n";
 import type { ProjectExportFormat } from "../projectApi";
+import type { ProjectArchiveKind, ProjectStatusValue } from "../types";
 import { RowDeleteButton } from "./RowDeleteButton";
 import { usePopover } from "./usePopover";
 
 /**
- * 项目卡片（首页）：主题色由字典 projectType 条目的 metadata.accent / accentText 下发（M2-07 · A3），
- * 前端不再硬编码「类型 → 颜色」映射；缺省色在 dicts.ts 的 typeAccent 里兜底。
+ * 项目卡片（首页）：类型标签、底色和描边共用项目类型的字典主题色。
  * 底部动作条（Push 172）：编辑与删除都是**隐式**的 —— 静止不显示，鼠标悬停卡片 / 键盘聚焦才浮现；
  * 删除 = 任务表行内同款（RowDeleteButton，红底胶囊），排在编辑右侧，占固定 48px 槽位、展开不挤动右侧时间。
  * 背景档位（Push 289 · 同日「用 c 试试」；Push 293 加炫彩）：tint 传值 = 该色铺满整卡（适中 = 「我的任务」便签同款淡彩；炫彩 = 同色相高饱和浓彩），
@@ -31,6 +31,13 @@ function glowOf(color: string): string {
   return hex;
 }
 
+const statusBadges = {
+  active: { colors: "bg-[#08634c] text-white", icon: "M5.5 3.5 12 8l-6.5 4.5z" },
+  accepted: { colors: "bg-[#e4edf9] text-[#244776]", icon: "M2 8l4 4 8-8" },
+  unaccepted: { colors: "bg-[#ffeadc] text-[#813916]", icon: "M4 4h8v8H4z" },
+  paused: { colors: "bg-[#fff1bf] text-[#694b09]", icon: "M5.5 3v10 M10.5 3v10" },
+};
+
 type CardProps = {
   seqNo: number;
   code: string;
@@ -38,9 +45,9 @@ type CardProps = {
   /** 项目类型展示名（字典 name；未知码回落码本身）。 */
   typeLabel: string;
   /** 项目状态取值（契约 projects.status —— 回放钩子 data-card-status）。 */
-  status: string;
-  /** 项目状态展示文案（Push 262：跟在分类徽标右侧的淡灰字）。 */
-  statusText: string;
+  status: ProjectStatusValue;
+  archiveKind: ProjectArchiveKind | null;
+  statusId?: string;
   /** 主题色（字典 metadata.accent）。 */
   accentColor?: string;
   /** 徽标文字色（字典 metadata.accentText；浅色底用深灰）。 */
@@ -81,7 +88,8 @@ export function Card({
   description,
   typeLabel,
   status,
-  statusText,
+  archiveKind,
+  statusId,
   accentColor = "#feca04",
   accentText = "#313033",
   icon,
@@ -102,6 +110,12 @@ export function Card({
   purgeLabel,
 }: CardProps) {
   const t = useT();
+  const locale = useLocale();
+  const displayStatus = status === "archived" ? archiveKind ?? "accepted" : status;
+  const badge = statusBadges[displayStatus];
+  const statusText = displayStatus === "accepted" || displayStatus === "unaccepted"
+    ? t(displayStatus === "accepted" ? "card.archive.accepted" : "card.archive.unaccepted")
+    : projectStatusTextOf(locale, displayStatus);
   const exportMenu = usePopover(248, 116);
   const uniqueManagerNames = Array.from(new Set(managerNames.map((name) => (name ?? "").trim()).filter((name) => name !== "")));
   const managerLabel = uniqueManagerNames.length === 0 ? "—" : uniqueManagerNames.join("、");
@@ -138,16 +152,12 @@ export function Card({
           {watermark}
         </span>
       )}
-      <span className="absolute top-0 left-0 flex items-center whitespace-nowrap">
-        <span
-          style={{ backgroundColor: accentColor, color: accentText }}
-          className="rounded-br-xl px-3 py-1 text-[11px] font-semibold tracking-wide"
-        >
-          {typeLabel}
-        </span>
-        <span data-card-status={status} className="pl-2 text-[11px] text-zinc-400">
-          {statusText}
-        </span>
+      <span
+        title={typeLabel}
+        style={{ backgroundColor: accentColor, color: accentText }}
+        className="absolute top-0 left-0 max-w-[calc(100%-4rem)] truncate rounded-br-xl px-3 py-1 text-[11px] font-semibold tracking-wide"
+      >
+        {typeLabel}
       </span>
       <div className="w-20 h-20 rounded-full absolute -right-5 -top-7 bg-zinc-100">
         <p className="absolute bottom-5 right-6 whitespace-nowrap text-2xl font-medium text-zinc-500" title={t("card.seqNo") + " " + seqNoText}>{seqNoText}</p>
@@ -159,7 +169,20 @@ export function Card({
           <span className="min-w-0 truncate font-medium text-zinc-600" title={managerLabel}>{managerLabel}</span>
         </p>
       </div>
-      <h1 className="font-mono text-xl font-bold tracking-tight">{code}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+        <h1 className="min-w-0 wrap-anywhere font-mono text-xl font-bold tracking-tight">{code}</h1>
+        <span
+          id={statusId}
+          data-card-status={status}
+          data-archive-kind={status === "archived" ? displayStatus : undefined}
+          className={"inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold leading-4 " + badge.colors}
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-3.5 shrink-0">
+            <path d={badge.icon} />
+          </svg>
+          {statusText}
+        </span>
+      </div>
       <p className="text-lg text-zinc-500 leading-7" title={localizedDescription === description ? undefined : description}>{localizedDescription}</p>
       <div data-card-actions="" className="flex items-center gap-3">
         {onRestore !== undefined || onEdit !== undefined ? (

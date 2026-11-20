@@ -21,6 +21,7 @@ export type ProjectRow = typeof projects.$inferSelect;
 /** 列表 / 详情视图行：项目字段 + managerNames（A2：随行下发，与 managerIds 同下标；停用 / 离职仍返回姓名，取不到为 null）。 */
 export interface ProjectViewRow {
   project: ProjectRow;
+  archiveKind?: typeof projectArchives.$inferSelect.archiveKind | null;
   managerNames: (string | null)[] | null;
 }
 
@@ -127,8 +128,9 @@ export class ProjectRepository {
     }
     const where = and(...projectConditions(filter, scope));
     const items = await this.database.db
-      .select({ project: projects, managerNames: MANAGER_NAMES_SQL })
+      .select({ project: projects, managerNames: MANAGER_NAMES_SQL, archiveKind: projectArchives.archiveKind })
       .from(projects)
+      .leftJoin(projectArchives, and(eq(projects.status, "archived"), eq(projectArchives.projectId, projects.id)))
       .where(where)
       .orderBy(...projectOrderBy(sorts))
       .limit(limit)
@@ -178,8 +180,9 @@ export class ProjectRepository {
 
   async findViewById(id: string): Promise<ProjectViewRow | null> {
     const rows = await this.database.db
-      .select({ project: projects, managerNames: MANAGER_NAMES_SQL })
+      .select({ project: projects, managerNames: MANAGER_NAMES_SQL, archiveKind: projectArchives.archiveKind })
       .from(projects)
+      .leftJoin(projectArchives, and(eq(projects.status, "archived"), eq(projectArchives.projectId, projects.id)))
       .where(and(eq(projects.id, id), isNull(projects.deletedAt)))
       .limit(1);
     return rows[0] ?? null;

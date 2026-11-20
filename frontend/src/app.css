@@ -855,11 +855,10 @@ body {
 }
 
 /* 立柱分段色（Push 188 七追订「为什么有些柱子是图二的状态」：原来四档全是灰蓝深浅，已归档那段 #dfe4ec
-   几乎白，看着像「柱子没渲染完」）→ 四色各表一个状态：进行中蓝 / 已暂停橙 / 已完成绿 / 已归档灰，
+   几乎白，看着像「柱子没渲染完」）→ 三个项目状态：进行中蓝 / 已暂停橙 / 已归档灰，
    跟「项目梳理」清单里的状态文案对得上，柱身任何一段都不会浅到看不见。 */
 .hub-map__pillar-seg[data-status="active"] { fill: #1a73e8; }
 .hub-map__pillar-seg[data-status="paused"] { fill: #f29900; }
-.hub-map__pillar-seg[data-status="done"] { fill: #1e8e3e; }
 .hub-map__pillar-seg[data-status="archived"] { fill: #9aa0a6; }
 
 .hub-map__pillar-top {
@@ -873,7 +872,6 @@ body {
 /* 柱顶椭圆跟着最上面那一段的状态上色（柱顶 = 柱子最上面的「盖子」，原来固定灰，跟柱身对不上） */
 .hub-map__pillar[data-top-status="active"] .hub-map__pillar-top { fill: #1a73e8; }
 .hub-map__pillar[data-top-status="paused"] .hub-map__pillar-top { fill: #f29900; }
-.hub-map__pillar[data-top-status="done"] .hub-map__pillar-top { fill: #1e8e3e; }
 .hub-map__pillar[data-top-status="archived"] .hub-map__pillar-top { fill: #9aa0a6; }
 
 .hub-map__pillar-count {
@@ -1157,7 +1155,7 @@ body {
   gap: 0.3rem;
 }
 
-/* 图例分两组：项目数（档位随数据算）/ 立柱分段（四种状态）—— 每组前面带一个字头 */
+/* 图例分两组：项目数（档位随数据算）/ 立柱分段（项目状态）—— 每组前面带一个字头 */
 .hub-map-legend__group {
   display: inline-flex;
   flex-wrap: wrap;
@@ -1183,7 +1181,6 @@ body {
 
 .hub-map-legend__swatch[data-status="active"] { background: #1a73e8; }
 .hub-map-legend__swatch[data-status="paused"] { background: #f29900; }
-.hub-map-legend__swatch[data-status="done"] { background: #1e8e3e; }
 .hub-map-legend__swatch[data-status="archived"] { background: #9aa0a6; }
 
 .hub-map-legend__swatch[data-tier="1"] { background: #c8dcfc; }

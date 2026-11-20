@@ -1,20 +1,16 @@
 #!/usr/bin/env node
 /**
- * LibiaoLink 前端 · 回放：项目状态（Push 262 · 编辑项目「项目状态」四选一 + 卡片状态字 + 已归档归档流）+ 编辑弹窗「备注」字段（Push 280）
+ * LibiaoLink 前端 · 回放：项目状态（Push 262 · 编辑项目「项目状态」三选一 + 卡片状态字 + 已归档归档流）+ 编辑弹窗「备注」字段（Push 280）
  *
- * 业务口径（2026-10-09）：「编辑项目里面加一个修改项目的状态 进行中 已暂停 已完成 已归档」+
- * 「在项目卡片分类右侧显示淡淡的文字状态」。
- *
- * 本脚本用真机浏览器（无头 Chrome + CDP）验：
- *   ① 项目卡片：每张卡分类徽标右侧有淡灰状态字（data-card-status）：文案四档、位置（同排、徽标右侧）、
- *      颜色（zinc-400 浅灰）、与库内 projects.status 逐卡对账；
- *   ② 编辑弹窗「项目状态」四选一：四枚选项 / 文案四档 / 当前选中 = 库内值；新建弹窗不含该区（只编辑有）；
+ * 本脚本用真机浏览器（无头 Chrome + CDP）验证：
+ *   ① 项目卡片在编号旁显示带图标的状态标签，核对数据库状态、归档类型与文字对比度；
+ *   ② 编辑弹窗「项目状态」三选一：进行中 / 已暂停 / 已归档 / 当前选中 = 库内值；新建弹窗不含该区（只编辑有）；
  *   ③ 状态改「已暂停」→ 保存：卡面 / 库内 / 审计（status active → paused）三处对账；刷新后仍生效（持久化）；
- *      再改「已完成」对账、最后「进行中」还原（PATCH 走乐观锁 version，均写字段级留痕）；
+ *      最后「进行中」还原（PATCH 走乐观锁 version，均写字段级留痕）；
  *   ④「已归档」走归档端点（契约：PATCH 不收 archived —— ADR-027 任务完成门禁 + 清单 + 留痕）：在抛荒项目上
  *      先插入未完成任务 → 409 提示、无二次确认、库内不置位 → SQL 置全部任务 done → 再保存直接归档；
  *      归档成功：status = archived + project_archives 清单 1 行（acknowledged_missing=[]）+ 审计 action = archive；
- *   ⑤ 已归档项目再开编辑弹窗：四枚选项与保存全禁用（只读保护），提示「项目已归档：处于只读保护」在场；
+ *   ⑤ 已归档项目再开编辑弹窗：仅可选择进行中以恢复，初始保存禁用（只读保护）；
  *   ⑥ 控制台零报错；跑完会话撤销、抛荒项目业务表零残留（审计行追加写、按 C7-05 保留）、目标项目状态还原。
  *   ⑦ 编辑弹窗「备注」（Push 280 · 契约 description）：多行文本框在场（选填 · 上限 2000 · 占位文案）且初值 = 库内值；填文本保存 → 库内 description 落文本 + 审计字段级留痕（null → 文本）；重开弹窗回填；清空保存 → 库内 null（清空发 null）+ 审计（文本 → null）；再开为空；收尾随 ⑱ 一并还原。
  *
@@ -42,8 +38,8 @@ const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 const j = (value) => JSON.stringify(value);
 const checks = [];
 const check = (name, ok, detail) => { checks.push({ name: name, ok: ok === true }); console.log((ok === true ? "  PASS  " : "  FAIL  ") + name + (ok === true || detail === undefined ? " " : "  —— " + detail)); };
-const STATUS_TEXT = { active: "进行中", paused: "已暂停", done: "已完成", archived: "已归档" };
-const STATUS_VALUES = ["active", "paused", "done", "archived"];
+const STATUS_TEXT = { active: "进行中", paused: "已暂停", archived: "已归档" };
+const STATUS_VALUES = ["active", "paused", "archived"];
 
 mkdirSync(SHOTS, { recursive: true });
 const db = new Client({ connectionString: DB });
@@ -100,10 +96,11 @@ if (created.body === null || typeof created.body.id !== "string") { console.erro
 const throwId = created.body.id;
 console.log("抛荒项目：" + throwCode + "（" + throwId + "）");
 // 归档门禁 = 项目内任务全部 done；先插入一条未完成任务复现 409，再置为 done 复现直接归档。
-await db.query("insert into tasks (project_id, stage_key, manager_ids, title, status) select id, stage_key, manager_ids, $2, $3 from projects where id = $1", [throwId, "回放-未完成任务-" + stamp, "pending"]);
+await db.query("insert into tasks (project_id, stage_key, manager_ids, title, status) select id, 'acceptance', manager_ids, $2, $3 from projects where id = $1", [throwId, "回放-未完成任务-" + stamp, "pending"]);
 
 async function cleanupThrowProject() {
   await db.query("delete from follows where object_type = $1 and object_id = $2", ["project", throwId]);
+  await db.query("delete from task_events where task_id in (select id from tasks where project_id = $1)", [throwId]);
   await db.query("delete from tasks where project_id = $1", [throwId]);
   await db.query("delete from node_requirements where node_id in (select id from project_nodes where project_id = $1)", [throwId]);
   await db.query("delete from project_nodes where project_id = $1", [throwId]);
@@ -251,8 +248,43 @@ const editDialogSel = "[role=dialog][aria-label=" + j("编辑项目") + "]";
 const createDialogSel = "[role=dialog][aria-label=" + j("新建项目") + "]";
 const submitSel = editDialogSel + " button[type=submit]";
 
-const cardExpr = () => "(function(){var ref=document.createElement(" + j("span") + ");ref.className=" + j("text-zinc-400") + ";ref.textContent=" + j("m") + ";ref.style.position=" + j("absolute") + ";ref.style.visibility=" + j("hidden") + ";document.body.appendChild(ref);var refColor=getComputedStyle(ref).color;document.body.removeChild(ref);var cards=document.querySelectorAll(" + j(".project-card") + ");var out=[];for(var i=0;i<cards.length;i+=1){var c=cards[i];var h=c.querySelector(" + j("h1") + ");var st=c.querySelector(" + j("[data-card-status]") + ");var badge=st===null?null:st.previousElementSibling;var r=st===null?null:st.getBoundingClientRect();var b=badge===null?null:badge.getBoundingClientRect();var conf=st===null?null:getComputedStyle(st);out.push({code:h===null?null:String(h.textContent).trim(),status:st===null?null:String(st.getAttribute(" + j("data-card-status") + ")),text:st===null?null:String(st.textContent).trim(),left:r===null?null:r.left,badgeRight:b===null?null:b.right,top:r===null?null:r.top,bottom:r===null?null:r.bottom,badgeTop:b===null?null:b.top,badgeBottom:b===null?null:b.bottom,color:conf===null?null:conf.color,refColor:refColor,fontSize:conf===null?null:conf.fontSize});}return out;})()";
-const modalExpr = () => "(function(){var d=document.querySelector(" + j(editDialogSel) + ");if(d===null){return null;}var opts=[];var bs=d.querySelectorAll(" + j("[data-project-status-option]") + ");for(var i=0;i<bs.length;i+=1){opts.push({value:bs[i].getAttribute(" + j("data-project-status-option") + "),text:String(bs[i].textContent).trim(),selected:bs[i].getAttribute(" + j("aria-checked") + "),disabled:bs[i].disabled});}var submit=d.querySelector(" + j("button[type=submit]") + ");var spans=d.querySelectorAll(" + j("span") + ");var hint=null;for(var k=0;k<spans.length;k+=1){var t=String(spans[k].textContent).trim();if(t.indexOf(" + j("保存后立即生效") + ")===0||t.indexOf(" + j("项目任务全部完成后即可归档") + ")===0||t.indexOf(" + j("项目已归档：处于只读保护") + ")===0){hint=t;break;}}return {options:opts,submitLabel:submit===null?null:String(submit.textContent).trim(),submitDisabled:submit===null?true:submit.disabled,hint:hint};})()";
+function readCards() {
+  return Array.from(document.querySelectorAll(".project-card"), (card) => {
+    const heading = card.querySelector("h1");
+    const badge = card.querySelector("[data-card-status]");
+    const code = heading?.textContent.trim();
+    if (!badge || !heading) return { code };
+    const rect = badge.getBoundingClientRect();
+    const title = heading.getBoundingClientRect();
+    const bounds = card.getBoundingClientRect();
+    const style = getComputedStyle(badge);
+    return {
+      code, status: badge.dataset.cardStatus, kind: badge.dataset.archiveKind ?? null,
+      text: badge.textContent.trim(), icon: Boolean(badge.querySelector("svg path")),
+      foreground: style.color, background: style.backgroundColor,
+      besideOrBelow: heading.parentElement === badge.parentElement &&
+        (rect.left >= title.right - 1 || rect.top >= title.bottom - 1) &&
+        rect.right <= bounds.right && rect.left >= bounds.left,
+    };
+  });
+}
+const cardExpr = () => "(" + readCards.toString() + ")()";
+
+function contrastRatio(foreground, background) {
+  function luminance(color) {
+    const rgb = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(color);
+    if (!rgb) return NaN;
+    const [r, g, b] = rgb.slice(1).map((channel) => {
+      const value = Number(channel) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+  const a = luminance(foreground);
+  const b = luminance(background);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+const modalExpr = () => "(function(){var d=document.querySelector(" + j(editDialogSel) + ");if(d===null){return null;}var opts=[];var bs=d.querySelectorAll(" + j("[data-project-status-option]") + ");for(var i=0;i<bs.length;i+=1){opts.push({value:bs[i].getAttribute(" + j("data-project-status-option") + "),text:String(bs[i].textContent).trim(),selected:bs[i].getAttribute(" + j("aria-checked") + "),disabled:bs[i].disabled});}var submit=d.querySelector(" + j("button[type=submit]") + ");var spans=d.querySelectorAll(" + j("span") + ");var hint=null;for(var k=0;k<spans.length;k+=1){var t=String(spans[k].textContent).trim();if(t.indexOf(" + j("保存后立即生效") + ")===0||t.indexOf(" + j("所有任务完成且验收阶段有已完成的任务后") + ")===0||t.indexOf(" + j("项目已归档：处于只读保护") + ")===0){hint=t;break;}}return {options:opts,submitLabel:submit===null?null:String(submit.textContent).trim(),submitDisabled:submit===null?true:submit.disabled,hint:hint};})()";
 
 const remarkSel = editDialogSel + " textarea";
 const remarkExpr = () => "(function(){var d=document.querySelector(" + j(editDialogSel) + ");if(d===null){return null;}var a=d.querySelector(" + j("textarea") + ");if(a===null){return {present:false};}var lab=a.closest(" + j("label") + ");return {present:true,tag:a.tagName,label:lab===null?null:String(lab.textContent).trim(),value:a.value,maxLength:a.maxLength,placeholder:a.placeholder,disabled:a.disabled};})()";
@@ -291,25 +323,28 @@ try {
   const cardsReady = await waitFor("document.querySelectorAll(" + j(".project-card") + ").length > 0", 40000);
   await sleep(1500);
   const cards = await ev(cardExpr());
-  const dbStatus = new Map((await db.query("select code, status from projects where deleted_at is null")).rows.map((row) => [row.code, row.status]));
+  const dbCards = await db.query(`
+    select p.code, p.status,
+      case when p.status = 'archived' then coalesce(a.archive_kind, 'accepted') end as archive_kind
+    from projects p left join project_archives a on a.project_id = p.id and p.status = 'archived'
+    where p.deleted_at is null
+  `);
+  const dbStatus = new Map(dbCards.rows.map((row) => [row.code, row]));
   const cardShot = await shot("project-status-card", { x: 16, y: 140, width: 430, height: 300, scale: 2 });
   console.log("截图：" + cardShot);
-  check("① 卡片状态字在场：每张卡一枚（data-card-status）、四档取值、文案 = 中文状态（共 " + String(cards.length) + " 张）",
-    cardsReady === true && cards.length > 0 && cards.every((c) => STATUS_VALUES.includes(c.status) && STATUS_TEXT[c.status] === c.text),
+  check("① 卡片状态字在场：每张卡一枚（data-card-status）、三档取值、文案 = 中文状态（共 " + String(cards.length) + " 张）",
+    cardsReady === true && cards.length > 0 && cards.every((c) => STATUS_VALUES.includes(c.status) && (c.status === "archived" ? ["已验收归档", "异常归档"].includes(c.text) : STATUS_TEXT[c.status] === c.text)),
     JSON.stringify(cards.slice(0, 2)));
-  const mismatch = cards.filter((c) => dbStatus.get(c.code) !== c.status);
-  check("② 卡面状态 = 库内 projects.status（按编号逐卡对账）", mismatch.length === 0, JSON.stringify(mismatch.slice(0, 2)));
-  const geomBad = cards.filter((c) => !(c.left !== null && c.badgeRight !== null && c.left >= c.badgeRight - 0.5 && Math.abs((c.top + c.bottom) / 2 - (c.badgeTop + c.badgeBottom) / 2) <= 8));
-  check("③ 状态字位置：分类徽标右侧同排（左缘 ≥ 徽标右缘、垂直中心差 ≤ 8px）", geomBad.length === 0, JSON.stringify(geomBad.slice(0, 2)));
-  function isLightGray(value) {
-    const rgb = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(value);
-    if (rgb !== null) { return Math.abs(Number(rgb[1]) - 161) <= 6 && Math.abs(Number(rgb[2]) - 161) <= 6 && Math.abs(Number(rgb[3]) - 170) <= 6; }
-    const oklch = /^oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)/.exec(value);
-    if (oklch !== null) { const l = Number(oklch[1]); const c = Number(oklch[2]); return l >= 0.6 && l <= 0.8 && c <= 0.05; }
-    return false;
-  }
-  const colorBad = cards.filter((c) => c.color !== c.refColor || c.fontSize !== "11px" || !isLightGray(c.color));
-  check("④ 状态字淡灰：与 text-zinc-400 同款 token（浏览器计算色值逐卡对比，且为浅灰低饱和）+ 11px 小字", colorBad.length === 0, JSON.stringify(colorBad.slice(0, 2)));
+  const archiveLabels = { accepted: "已验收归档", unaccepted: "异常归档" };
+  const mismatch = cards.filter((card) => {
+    const row = dbStatus.get(card.code);
+    return !row || card.status !== row.status || card.kind !== row.archive_kind ||
+      card.text !== (archiveLabels[row.archive_kind] ?? STATUS_TEXT[row.status]);
+  });
+  check("② 卡面状态和归档类型与数据库逐卡一致", mismatch.length === 0, JSON.stringify(mismatch.slice(0, 2)));
+  check("③ 状态标签紧邻编号或换行，完整显示", cards.every((c) => c.besideOrBelow));
+  check("④ 状态具备图标，文字与标签底色对比度至少 4.5:1",
+    cards.every((c) => c.icon && contrastRatio(c.foreground, c.background) >= 4.5));
 
   // ---------- ② 新建弹窗回归（不含状态区） ----------
   await clickByText("button", "新建项目");
@@ -323,12 +358,12 @@ try {
   await clickByText(createDialogSel + " button", "取消");
   await waitFor("document.querySelector(" + j(createDialogSel) + ") === null", 8000);
 
-  // ---------- ③ 编辑弹窗四选一 + 状态切换（目标项目） ----------
+  // ---------- ③ 编辑弹窗三选一 + 状态切换（目标项目） ----------
   const opened = await openEditFor(TARGET_CODE);
   const modal = await ev(modalExpr());
   const selected = modal === null ? [] : modal.options.filter((o) => o.selected === "true");
-  check("⑥ 编辑弹窗「项目状态」四选一：四枚选项 / 文案四档 / 当前选中 = 库内 active / 可保存",
-    opened === true && modal !== null && modal.options.length === 4 && modal.options.map((o) => o.value).join(",") === "active,paused,done,archived" && modal.options.every((o) => STATUS_TEXT[o.value] === o.text) && selected.length === 1 && selected[0].value === "active" && modal.submitDisabled === false,
+  check("⑥ 编辑弹窗「项目状态」三选一：进行中 / 已暂停 / 已归档 / 当前选中 = 库内 active / 可保存",
+    opened === true && modal !== null && modal.options.length === 3 && modal.options.map((o) => o.value).join(",") === "active,paused,archived" && modal.options.every((o) => STATUS_TEXT[o.value] === o.text) && selected.length === 1 && selected[0].value === "active" && modal.submitDisabled === false,
     JSON.stringify(modal));
   const modalShot = await shot("project-status-modal", { x: 380, y: 60, width: 740, height: 880, scale: 1 });
   console.log("截图：" + modalShot);
@@ -347,24 +382,14 @@ try {
   const cardAfterReload = await cardStatusOf(TARGET_CODE);
   check("⑧ 刷新后仍生效：卡面 = 已暂停（服务端持久化）", cardAfterReload !== null && cardAfterReload.status === "paused" && cardAfterReload.text === "已暂停", JSON.stringify(cardAfterReload));
   await openEditFor(TARGET_CODE);
-  await clickSelector("[data-project-status-option=" + j("done") + "]");
-  await clickSelector(submitSel);
-  await waitFor("document.querySelector(" + j(editDialogSel) + ") === null", 20000);
-  await sleep(1200);
-  const targetAfterDone = await projectRowOf(target.id);
-  const cardAfterDone = await cardStatusOf(TARGET_CODE);
-  check("⑨ 改「已完成」保存：库内 done、卡面 = 已完成、审计 paused → done",
-    targetAfterDone.status === "done" && cardAfterDone !== null && cardAfterDone.text === "已完成" && hasStatusChange(await auditRows(target.id, 3), "paused", "done"),
-    JSON.stringify({ db: targetAfterDone.status, card: cardAfterDone === null ? null : cardAfterDone.status }));
-  await openEditFor(TARGET_CODE);
   await clickSelector("[data-project-status-option=" + j("active") + "]");
   await clickSelector(submitSel);
   await waitFor("document.querySelector(" + j(editDialogSel) + ") === null", 20000);
   await sleep(1200);
   const targetRestored = await projectRowOf(target.id);
   const cardRestored = await cardStatusOf(TARGET_CODE);
-  check("⑩ 改回「进行中」还原：库内 active、卡面 = 进行中、审计 done → active",
-    targetRestored.status === "active" && cardRestored !== null && cardRestored.text === "进行中" && hasStatusChange(await auditRows(target.id, 3), "done", "active"),
+  check("⑩ 改回「进行中」还原：库内 active、卡面 = 进行中、审计 paused → active",
+    targetRestored.status === "active" && cardRestored !== null && cardRestored.text === "进行中" && hasStatusChange(await auditRows(target.id, 3), "paused", "active"),
     JSON.stringify({ db: targetRestored.status, card: cardRestored === null ? null : cardRestored.status }));
 
   // ---------- ③bis 编辑弹窗「备注」（Push 280 · 契约 description：建 / 读 / 清空 / 回填） ----------
@@ -420,21 +445,21 @@ try {
   await sleep(600);
   const archivedModal = await ev(modalExpr());
   const archivedSelected = archivedModal === null ? [] : archivedModal.options.filter((o) => o.selected === "true");
-  const hintOk = archivedModal !== null && archivedModal.hint !== null && archivedModal.hint.indexOf("项目任务全部完成后即可归档") === 0;
+  const hintOk = archivedModal !== null && archivedModal.hint !== null && archivedModal.hint.indexOf("所有任务完成且验收阶段有已完成的任务后") === 0;
   const hintShot = await shot("project-status-archived-hint", { x: 380, y: 60, width: 740, height: 880, scale: 1 });
   console.log("截图：" + hintShot);
-  check("⑫ 点「已归档」：选中态 + 提示「项目任务全部完成后即可归档」在场",
+  check("⑫ 点「已归档」：选中态 + 提示「所有任务完成且验收阶段有已完成的任务后」在场",
     openedThrow === true && archivedModal !== null && hintOk && archivedSelected.length === 1 && archivedSelected[0].value === "archived",
     JSON.stringify(archivedModal === null ? null : archivedModal.hint));
   await clickSelector(submitSel);
-  const rejectedReady = await waitFor("(function(){var d=document.querySelector(" + j(editDialogSel) + ");if(d===null){return false;}var a=d.querySelector(" + j("[role=alert]") + ");return a!==null&&String(a.textContent).trim().indexOf(" + j("项目还有任务未完成") + ")===0;})()", 25000);
+  const rejectedReady = await waitFor("(function(){var d=document.querySelector(" + j(editDialogSel) + ");if(d===null){return false;}var a=d.querySelector(" + j("[role=alert]") + ");return a!==null&&String(a.textContent).trim().indexOf(" + j("还有 1 项任务未完成") + ")===0;})()", 25000);
   const rejectedUi = await ev("(function(){var d=document.querySelector(" + j(editDialogSel) + ");if(d===null){return null;}var a=d.querySelector(" + j("[role=alert]") + ");return {text:a===null?null:String(a.textContent).trim(),panel:document.querySelector(" + j("[data-archive-confirm]") + ")!==null,dialog:true};})()");
   const stillActive = (await projectRowOf(throwId)).status;
   const rejectedArchiveCount = Number((await db.query("select count(*)::int n from project_archives where project_id = $1", [throwId])).rows[0].n);
   const rejectShot = await shot("project-status-archive-not-ready", { x: 380, y: 60, width: 740, height: 900, scale: 1 });
   console.log("截图：" + rejectShot);
-  check("⑬ 有未完成任务 → 409：弹窗内提示「项目还有任务未完成，不能归档。」、无二次确认、库内未归档",
-    rejectedReady === true && rejectedUi !== null && rejectedUi.text !== null && rejectedUi.text.indexOf("项目还有任务未完成") === 0 && rejectedUi.panel === false && stillActive === "active" && rejectedArchiveCount === 0,
+  check("⑬ 有未完成任务 → 409：弹窗内提示剩余 1 项任务、无二次确认、库内未归档",
+    rejectedReady === true && rejectedUi !== null && rejectedUi.text !== null && rejectedUi.text.indexOf("还有 1 项任务未完成") === 0 && rejectedUi.panel === false && stillActive === "active" && rejectedArchiveCount === 0,
     JSON.stringify({ ui: rejectedUi, status: stillActive, archives: rejectedArchiveCount }));
   await db.query("update tasks set status = $2, updated_at = now() where project_id = $1 and deleted_at is null", [throwId, "done"]);
   await clickSelector(submitSel);
@@ -442,12 +467,12 @@ try {
   await sleep(1500);
   const throwAfter = await projectRowOf(throwId);
   const archiveCount = Number((await db.query("select count(*)::int n from project_archives where project_id = $1", [throwId])).rows[0].n);
-  const archiveRow = (await db.query("select acknowledged_missing from project_archives where project_id = $1", [throwId])).rows[0];
+  const archiveRow = (await db.query("select acknowledged_missing, archive_kind from project_archives where project_id = $1", [throwId])).rows[0];
   const ackEmpty = archiveRow !== undefined && Array.isArray(archiveRow.acknowledged_missing) && archiveRow.acknowledged_missing.length === 0;
   const archiveAudit = Number((await db.query("select count(*)::int n from audit_logs where object_id = $1 and action = $2 and result = $3", [throwId, "archive", "succeeded"])).rows[0].n);
   const throwCardArchived = await cardStatusOf(throwCode);
-  check("⑮ 全部任务完成 → 直接归档：status = archived + 清单 1 行 · acknowledged_missing 为空 + 审计 archive 成功 + 卡面 = 已归档",
-    archivedOk === true && throwAfter.status === "archived" && archiveCount === 1 && ackEmpty === true && archiveAudit >= 1 && throwCardArchived !== null && throwCardArchived.text === "已归档",
+  check("⑮ 全部任务完成 → 直接归档：status = archived + 清单 1 行 · acknowledged_missing 为空 + 审计 archive 成功 + 清单与卡面 = 已验收归档",
+    archivedOk === true && throwAfter.status === "archived" && archiveCount === 1 && ackEmpty === true && archiveRow.archive_kind === "accepted" && archiveAudit >= 1 && throwCardArchived !== null && throwCardArchived.text === "已验收归档",
     JSON.stringify({ db: throwAfter.status, archives: archiveCount, ack: archiveRow === undefined ? null : archiveRow.acknowledged_missing, audit: archiveAudit, card: throwCardArchived === null ? null : throwCardArchived.status }));
 
   // ---------- ⑤ 已归档项目只读 ----------
@@ -456,8 +481,8 @@ try {
   const lockedModal = await ev(modalExpr());
   const lockedShot = await shot("project-status-locked", { x: 380, y: 60, width: 740, height: 880, scale: 1 });
   console.log("截图：" + lockedShot);
-  check("⑯ 已归档项目只读：四枚选项全禁用、保存禁用（label「已归档只读」）、提示「项目已归档：处于只读保护」在场",
-    openedLocked === true && lockedModal !== null && lockedModal.options.length === 4 && lockedModal.options.every((o) => o.disabled === true) && lockedModal.submitDisabled === true && lockedModal.submitLabel === "已归档只读" && lockedModal.hint !== null && lockedModal.hint.indexOf("项目已归档：处于只读保护") === 0,
+  check("⑯ 已归档项目仅可恢复到进行中、保存禁用（label「已归档只读」）",
+    openedLocked === true && lockedModal !== null && lockedModal.options.length === 3 && lockedModal.options.every((o) => o.disabled === (o.value !== "active")) && lockedModal.submitDisabled === true && lockedModal.submitLabel === "已归档只读",
     JSON.stringify({ submit: lockedModal === null ? null : lockedModal.submitLabel, hint: lockedModal === null ? null : lockedModal.hint }));
   await clickByText(editDialogSel + " button", "取消");
   await waitFor("document.querySelector(" + j(editDialogSel) + ") === null", 8000);
@@ -473,8 +498,8 @@ try {
   const dbStatusCounts = new Map((await db.query("select status, count(*)::int n from projects where deleted_at is null group by status")).rows.map((row) => [row.status, Number(row.n)]));
   const statusChipShot = await shot("project-status-sidebar");
   console.log("截图：" + statusChipShot);
-  check("⑲ 侧栏「项目状态」区（顺序 常用筛选→地区→项目类型→项目经理→项目状态→项目时间、无吸顶）：旧「分类筛选」标题与说明已删、四枚 chip 文案四档、计数 = 库内各档（无其他筛选）",
-    cardsSidebarReady === true && sidebarOpened === true && sidebarState !== null && sidebarState.oldTitleGone === true && sidebarState.oldDescGone === true && sidebarState.heads.join(",") === "常用筛选,地区,项目类型,项目经理,项目状态,项目时间" && sidebarState.stickyCount === 0 && sidebarState.title === "项目状态" && sidebarState.chips.length === 4 && sidebarState.chips.map((c) => c.value).join(",") === "active,paused,done,archived" && sidebarState.chips.map((c) => c.text.indexOf(STATUS_TEXT[c.value]) === 0).every((x) => x === true) && sidebarState.chips.every((c) => c.count === (dbStatusCounts.get(c.value) ?? 0)),
+  check("⑲ 侧栏「项目状态」区（顺序 常用筛选→地区→项目类型→项目经理→项目状态→项目时间、无吸顶）：旧「分类筛选」标题与说明已删、现有项目状态的筛选项、计数 = 库内各档（无其他筛选）",
+    cardsSidebarReady === true && sidebarOpened === true && sidebarState !== null && sidebarState.oldTitleGone === true && sidebarState.oldDescGone === true && sidebarState.heads.join(",") === "常用筛选,地区,项目类型,项目经理,项目状态,项目时间" && sidebarState.stickyCount === 0 && sidebarState.title === "项目状态" && sidebarState.chips.map((c) => c.value).join(",") === STATUS_VALUES.filter((value) => dbStatusCounts.has(value)).join(",") && sidebarState.chips.map((c) => c.text.indexOf(STATUS_TEXT[c.value]) === 0).every((x) => x === true) && sidebarState.chips.every((c) => c.count === (dbStatusCounts.get(c.value) ?? 0)),
     JSON.stringify({ open: sidebarOpened, state: sidebarState, db: Array.from(dbStatusCounts.entries()) }));
   await clickSelector("[data-status-section] [data-chip=" + j("active") + "]");
   await sleep(1400);
@@ -505,7 +530,7 @@ try {
   check("⑲e 再点「已暂停」= 清空状态筛选：地址回 #/projects（缺省不落参数）、张数还原",
     typeof clearedHash === "string" && clearedHash.indexOf("filter[status]") === -1 && clearedCards.length === dbTotal && (await ev(footerText())).indexOf("未选择筛选条件") === 0,
     JSON.stringify({ hash: clearedHash, cards: clearedCards.length, total: dbTotal }));
-  await clickSelector("[data-status-section] [data-chip=" + j("done") + "]");
+  await clickSelector("[data-status-section] [data-chip=" + j("archived") + "]");
   await sleep(1400);
   const resetClicked = await clickSelector("[data-filter-reset]");
   await sleep(1600);

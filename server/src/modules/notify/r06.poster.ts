@@ -102,7 +102,7 @@ function formatMonthDay(value: string | null): string {
 }
 
 export function shouldUseR06BrandPoster(view: Pick<R06PosterView, "status" | "taskTotal" | "taskDone" | "onTimeDone">): boolean {
-  return view.status === "done" && view.taskTotal > 0 && view.taskDone === view.taskTotal && view.onTimeDone === view.taskTotal;
+  return view.status === "archived" && view.taskTotal > 0 && view.taskDone === view.taskTotal && view.onTimeDone === view.taskTotal;
 }
 
 export function buildR06PosterMetrics(view: Pick<R06PosterView, "taskTotal" | "taskDone" | "onTimeDone" | "startDate" | "plannedEnd" | "completedAt">): R06PosterMetrics {
@@ -266,7 +266,7 @@ function drawHeader(ctx: SKRSContext2D, status: string): void {
   setSans(ctx, 400, 10);
   ctx.fillStyle = rgba(INK, 0.52);
   ctx.fillRect(56, 50, 26, 1);
-  const label = status === "done" ? "PROJECT COMPLETE · 项目喜报" : "PROJECT IN PROGRESS · 项目进行中";
+  const label = status === "archived" ? "PROJECT COMPLETE · 项目喜报" : "PROJECT IN PROGRESS · 项目进行中";
   drawSpaced(ctx, label, 93, 54, 2.4);
   const brand = "LIBIAOLINK";
   const brandWidth = spacedWidth(ctx, brand, 2.4);
@@ -419,7 +419,7 @@ function summarySegments(view: R06PosterView, metrics: R06PosterMetrics): Summar
   if (view.taskTotal === 0) {
     return [{ text: "项目已完成，暂无任务记录。" }];
   }
-  if (view.status === "done" && view.taskDone === view.taskTotal) {
+  if (view.status === "archived" && view.taskDone === view.taskTotal) {
     return [
       { text: "历时 " },
       { text: String(metrics.elapsedDays), accent: true, bold: true },
@@ -428,7 +428,7 @@ function summarySegments(view: R06PosterView, metrics: R06PosterMetrics): Summar
       { text: " 项任务全部完成，项目已通过验收并正式交付。" },
     ];
   }
-  if (view.status === "done") {
+  if (view.status === "archived") {
     return [
       { text: "历时 " },
       { text: String(metrics.elapsedDays), accent: true, bold: true },
@@ -490,7 +490,7 @@ function drawDetail(ctx: SKRSContext2D, view: R06PosterView, metrics: R06PosterM
 
   const factX = [57, 365, 615];
   const labels = ["项目经理", "参与成员", "交付日期"];
-  const completed = view.status === "done";
+  const completed = view.status === "archived";
   if (!completed) {
     labels[2] = "计划交付";
   }

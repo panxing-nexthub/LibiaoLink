@@ -1275,10 +1275,10 @@ const ZH_TEXTS = {
   "project.deleteTaskPre": "删除任务「",
   "project.deleteTaskPost": "」？删除后这一行从项目里移除；有变更记录引用的任务会被拦下。",
   "project.acceptanceDone.title": "验收交付已完成",
-  "project.acceptanceDone.body": "是否将当前项目设为「已完成」？",
+  "project.acceptanceDone.body": "是否将当前项目标记为「已验收归档」？",
   "project.acceptanceDone.cancel": "暂不",
-  "project.acceptanceDone.confirm": "设为已完成",
-  "project.acceptanceDone.pending": "设置中…",
+  "project.acceptanceDone.confirm": "已验收归档",
+  "project.acceptanceDone.pending": "归档中…",
   "export.aria": "导出项目总览数据（PDF）",
   "export.pdf": "导出 PDF",
   "export.busy": "生成中…",
@@ -1590,7 +1590,14 @@ const ZH_TEXTS = {
   "modal.err.archived": "项目已归档：处于只读保护，不能修改。",
   "modal.restore.note": "选择「进行中」并保存，即可将项目恢复到进行中。",
   "modal.restore.submit": "恢复为进行中",
-  "modal.gate.note": "项目任务全部完成后即可归档。",
+  "modal.archive.kind": "归档类型",
+  "card.archive.accepted": "已验收归档",
+  "card.archive.unaccepted": "异常归档",
+  "modal.archive.accepted": "已验收归档",
+  "modal.archive.unaccepted": "异常归档",
+  "modal.gate.note": "所有任务完成且验收阶段有已完成的任务后，可按已验收归档。",
+  "modal.archive.unacceptedNote": "直接归档，保留当前任务进度，不发送验收喜报。",
+  "modal.archive.noAcceptance": "验收阶段还没有已完成的任务，无法按已验收归档。",
   "modal.save.note": "保存后立即生效，并写入操作记录。",
   "modal.gate.aria": "归档缺项确认",
   "modal.gate.title": "归档门禁未通过：{n} 项缺项",
@@ -2124,7 +2131,7 @@ const ZH_TEXTS = {
   "app.err.codeExists": "项目编号已存在，请换一个编号。",
   "app.err.versionConflict": "数据已被他人更新，本次改动未保存。请核对最新内容后重试。",
   "app.err.archived": "项目已归档，不能修改。",
-  "app.err.archiveNotReady": "项目还有任务未完成，不能归档。",
+  "app.err.archiveNotReady": "还有 {count} 项任务未完成，无法归档。",
   "app.err.archiveGate": "归档门禁未通过（有缺项），请重试并在弹窗内确认。",
   "app.err.dictExists": "该名称已被占用：请换一个名称，或联系管理员处理。",
   "app.err.validation": "参数校验失败：{message}",
@@ -2150,7 +2157,7 @@ const ZH_TEXTS = {
   "app.fail.saveHubDashView": "仪表盘视图切换保存失败",
   "app.fail.saveProject": "保存项目失败",
   "app.fail.saveManagers": "项目经理修改失败",
-  "app.fail.completeProject": "设置项目状态失败",
+  "app.fail.archiveProject": "归档项目失败",
   "app.err.projectGone": "项目已被修改或已不可见，当前输入已保留，暂时无法读取最新内容。",
   "app.login.redirecting": "正在跳转公司统一登录…",
   "app.loadFailed": "加载失败",
@@ -3493,10 +3500,10 @@ const EN_TEXTS: Record<TextKey, string> = {
   "project.deleteTaskPre": "Delete task “",
   "project.deleteTaskPost": "”? The row will be removed from the project; tasks referenced by change records will be blocked.",
   "project.acceptanceDone.title": "Acceptance handover complete",
-  "project.acceptanceDone.body": "Set this project to “Completed”?",
+  "project.acceptanceDone.body": "Archive this project as accepted?",
   "project.acceptanceDone.cancel": "Not now",
-  "project.acceptanceDone.confirm": "Set as completed",
-  "project.acceptanceDone.pending": "Updating…",
+  "project.acceptanceDone.confirm": "Archive as accepted",
+  "project.acceptanceDone.pending": "Archiving…",
   "export.aria": "Export the project overview (PDF)",
   "export.pdf": "Export PDF",
   "export.busy": "Generating…",
@@ -3807,7 +3814,14 @@ const EN_TEXTS: Record<TextKey, string> = {
   "modal.err.archived": "The project is archived: read-only and cannot be edited.",
   "modal.restore.note": "Select In progress and save to restore the project.",
   "modal.restore.submit": "Restore to in progress",
-  "modal.gate.note": "The project can be archived once all tasks are completed.",
+  "modal.archive.kind": "Archive type",
+  "card.archive.accepted": "Archived · Accepted",
+  "card.archive.unaccepted": "Archived · Exception",
+  "modal.archive.accepted": "Archive after acceptance",
+  "modal.archive.unaccepted": "Archive as an exception",
+  "modal.gate.note": "All tasks must be complete, including at least one in the acceptance stage.",
+  "modal.archive.unacceptedNote": "Archive with the current task progress. No acceptance celebration will be sent.",
+  "modal.archive.noAcceptance": "At least one completed acceptance task is required for this archive type.",
   "modal.save.note": "Takes effect on save and is written to the activity log.",
   "modal.gate.aria": "Confirm archiving with missing items",
   "modal.gate.title": "Archive gate not passed: {n} missing items",
@@ -4341,7 +4355,7 @@ const EN_TEXTS: Record<TextKey, string> = {
   "app.err.codeExists": "That project code already exists — pick another one.",
   "app.err.versionConflict": "This data was updated by someone else, so your change was not saved. Check the latest content and try again.",
   "app.err.archived": "The project is archived and cannot be edited.",
-  "app.err.archiveNotReady": "The project still has unfinished tasks and cannot be archived.",
+  "app.err.archiveNotReady": "Unfinished tasks remaining: {count}. Complete them before archiving.",
   "app.err.archiveGate": "The archive gate is not passed (some items are missing). Retry and confirm in the dialog.",
   "app.err.dictExists": "That name is already taken — choose another name or contact an administrator.",
   "app.err.validation": "Validation failed: {message}",
@@ -4367,7 +4381,7 @@ const EN_TEXTS: Record<TextKey, string> = {
   "app.fail.saveHubDashView": "Failed to save the dashboard view switch",
   "app.fail.saveProject": "Failed to save the project",
   "app.fail.saveManagers": "Failed to update the project managers",
-  "app.fail.completeProject": "Failed to set the project status",
+  "app.fail.archiveProject": "Failed to archive the project",
   "app.err.projectGone": "The project was changed or is no longer visible; your input is kept, but the latest content cannot be loaded right now.",
   "app.login.redirecting": "Redirecting to the company single sign-on…",
   "app.loadFailed": "Load failed",
@@ -5129,16 +5143,15 @@ export function priorityText(locale: Locale, priority: string): string {
   return localizedName(locale, priority, PRIORITY_EN, PRIORITY_JA, PRIORITY_KO);
 }
 
-/** 项目状态英文名（契约取值 active / paused / done / archived）。 */
+/** 项目状态英文名（契约取值 active / paused / archived）。 */
 const PROJECT_STATUS_EN: Record<string, string> = {
   active: "Active",
   paused: "Paused",
-  done: "Done",
   archived: "Archived",
 };
 
-const PROJECT_STATUS_JA: Record<string, string> = { active: "進行中", paused: "一時停止", done: "完了", archived: "アーカイブ済み" };
-const PROJECT_STATUS_KO: Record<string, string> = { active: "진행 중", paused: "일시 중지", done: "완료", archived: "보관됨" };
+const PROJECT_STATUS_JA: Record<string, string> = { active: "進行中", paused: "一時停止", archived: "アーカイブ済み" };
+const PROJECT_STATUS_KO: Record<string, string> = { active: "진행 중", paused: "일시 중지", archived: "보관됨" };
 
 /** 项目状态显示名（非中文界面按契约状态码换本地名；未知值原样返回）。 */
 export function projectStatusTextOf(locale: Locale, status: string): string {

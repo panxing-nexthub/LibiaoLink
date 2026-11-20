@@ -840,63 +840,68 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
         ) : null}
 
         <div className="grid grid-cols-1 gap-6 @md:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
-          {items.map((project) => (
-            <div
-              key={project.id}
-              data-live-row={project.id}
-              role="link"
-              tabIndex={0}
-              aria-label={t("home.openAria", { code: project.code })}
-              onClick={() => openProject(project.id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  openProject(project.id);
-                }
-              }}
-              className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
-            >
-              <Card
-                seqNo={project.seqNo}
-                code={project.code}
-                description={project.description}
-                watermark={cardWatermark ? regionWatermarkText(locale, dicts, project.region) : undefined}
-                watermarkBleed={locale === "zh"}
-                tint={cardTintOf(backgroundTier, typeAccent(dicts, project.projectType).color)}
-                tintBorder={cardBorderOf(backgroundTier, typeAccent(dicts, project.projectType).color)}
-                vividInk={backgroundTier === "vivid"}
-                typeLabel={projectTypeText(locale, dictLabel(dicts, "projectType", project.projectType))}
-                status={project.status}
-                statusText={projectStatusTextOf(locale, project.status)}
-                accentColor={typeAccent(dicts, project.projectType).color}
-                accentText={typeAccent(dicts, project.projectType).text}
-                managerNames={project.managerNames}
-                time={project.createdAt}
-                onEdit={
-                  canUpdateProject && project.accessLevel === "edit"
-                    ? () => {
-                        onEdit(project);
-                      }
-                    : undefined
-                }
-                onExport={
-                  canExportProject && project.accessLevel === "edit"
-                    ? (format) => {
-                        onExportProject(project, format);
-                      }
-                    : undefined
-                }
-                exporting={exportingProjectId === project.id}
-                onDelete={
-                  canDeleteProject && project.accessLevel === "edit"
-                    ? () => {
-                        onDeleteProject(project);
-                      }
-                    : undefined
-                }
-              />
-            </div>
-          ))}
+          {items.map((project) => {
+            const accent = typeAccent(dicts, project.projectType);
+            return (
+              <div
+                key={project.id}
+                data-live-row={project.id}
+                role="link"
+                tabIndex={0}
+                aria-label={t("home.openAria", { code: project.code })}
+                aria-describedby={"card-status-" + project.id}
+                onClick={() => openProject(project.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openProject(project.id);
+                  }
+                }}
+                className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+              >
+                <Card
+                  seqNo={project.seqNo}
+                  code={project.code}
+                  description={project.description}
+                  watermark={cardWatermark ? regionWatermarkText(locale, dicts, project.region) : undefined}
+                  watermarkBleed={locale === "zh"}
+                  tint={cardTintOf(backgroundTier, accent.color)}
+                  tintBorder={cardBorderOf(backgroundTier, accent.color)}
+                  vividInk={backgroundTier === "vivid"}
+                  typeLabel={projectTypeText(locale, dictLabel(dicts, "projectType", project.projectType))}
+                  status={project.status}
+                  archiveKind={project.archiveKind}
+                  statusId={"card-status-" + project.id}
+                  accentColor={accent.color}
+                  accentText={accent.text}
+                  managerNames={project.managerNames}
+                  time={project.createdAt}
+                  onEdit={
+                    canUpdateProject && project.accessLevel === "edit"
+                      ? () => {
+                          onEdit(project);
+                        }
+                      : undefined
+                  }
+                  onExport={
+                    canExportProject && project.accessLevel === "edit"
+                      ? (format) => {
+                          onExportProject(project, format);
+                        }
+                      : undefined
+                  }
+                  exporting={exportingProjectId === project.id}
+                  onDelete={
+                    canDeleteProject && project.accessLevel === "edit"
+                      ? () => {
+                          onDeleteProject(project);
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+            );
+          })}
         </div>
 
         {total > items.length ? (

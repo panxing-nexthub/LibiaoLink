@@ -383,7 +383,7 @@ const MEMBER_FILTER_TONES = [
   "bg-blue-100 text-blue-700",
 ];
 const PM_TABLE_TAG_CLASS = "inline-block max-w-full truncate whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-medium";
-const PM_GANTT_TAG_CLASS = "inline-block max-w-full truncate whitespace-nowrap rounded-full px-1 py-0 text-[10px] leading-4 font-medium";
+const PM_GANTT_TAG_CLASS = "inline-block max-w-full truncate whitespace-nowrap rounded-full px-1 py-0 text-[9px] leading-4 font-normal";
 
 const memberFilterToneOf = (value: string): string => {
   let hash = 0;
@@ -1547,6 +1547,7 @@ const PM_GANTT_COLUMNS: readonly PmGanttColumn[] = [
 
 const PM_GANTT_MIN_TABLE_WIDTH = 320;
 const PM_GANTT_OVERFLOW_WIDTH = 32;
+const PM_GANTT_STATUS_LANE_WIDTH = 180;
 const PM_GANTT_TABLE_WIDTH_STORAGE_KEY = "libiaolink.pm.gantt.tableWidth";
 
 type PmGanttColumnLayoutEntry = {
@@ -1588,9 +1589,9 @@ const PM_GANTT_CELL_PADDING = 8;
 const PM_GANTT_CELL_SAFETY = 2;
 const PM_GANTT_CHIP_PADDING = 8;
 const PM_GANTT_CHIP_GAP = 2;
-const PM_GANTT_TEXT_FONT = "500 11px Noto Sans SC, Microsoft YaHei, sans-serif";
-const PM_GANTT_HEADER_FONT = "500 10px Noto Sans SC, Microsoft YaHei, sans-serif";
-const PM_GANTT_CHIP_FONT = "500 10px Noto Sans SC, Microsoft YaHei, sans-serif";
+const PM_GANTT_TEXT_FONT = "400 10px Noto Sans SC, Microsoft YaHei, sans-serif";
+const PM_GANTT_HEADER_FONT = "500 9px Noto Sans SC, Microsoft YaHei, sans-serif";
+const PM_GANTT_CHIP_FONT = "400 9px Noto Sans SC, Microsoft YaHei, sans-serif";
 let pmGanttMeasureContext: CanvasRenderingContext2D | null | undefined;
 
 const pmGanttTextWidth = (text: string, font: string = PM_GANTT_TEXT_FONT): number => {
@@ -2137,14 +2138,14 @@ function PmGanttProjectCells({
   const dateStartLabel = pmGanttShortDate(dateRange.start);
   const dateEndLabel = pmGanttShortDate(dateRange.end);
   const cellClass =
-    "flex min-w-0 items-center overflow-hidden whitespace-nowrap border-r border-zinc-200 px-1 text-[11px] text-zinc-700";
+    "flex min-w-0 items-center overflow-hidden whitespace-nowrap border-r border-zinc-200 px-1 text-[10px] text-zinc-700";
 
   return (
     <>
       {columns.map(({ column, width }, columnIndex) => {
         let content: ReactNode = null;
         if (column.key === "rowNo") {
-          content = <span className="text-[11px] tabular-nums text-zinc-400">{sequence}</span>;
+          content = <span className="text-[10px] tabular-nums text-zinc-400">{sequence}</span>;
         } else if (column.key === "code") {
           content = (
             <span className="block truncate font-medium tabular-nums text-zinc-800" title={row.code.trim() === "" ? undefined : row.code}>
@@ -2162,7 +2163,7 @@ function PmGanttProjectCells({
           content = <PmMemberChips names={managerNames} compact />;
         } else if (column.key === "engineer") {
           content = row.implementationHandedOver ? (
-            <span className="rounded bg-[#f02b2b] px-1.5 py-0 text-[10px] font-semibold leading-4 text-white">
+            <span className="rounded bg-[#f02b2b] px-1.5 py-0 text-[9px] font-medium leading-4 text-white">
               {t("pm.engineer.handedOver")}
             </span>
           ) : (
@@ -2183,7 +2184,7 @@ function PmGanttProjectCells({
               <span className="text-zinc-400">—</span>
             ) : (
               <span
-                className="flex min-w-0 items-center gap-0.5 overflow-hidden whitespace-nowrap text-[10px] font-medium tabular-nums"
+                className="flex min-w-0 items-center gap-0.5 overflow-hidden whitespace-nowrap text-[9px] font-normal tabular-nums"
                 title={dateRange.title === "" ? undefined : dateRange.title}
               >
                 <span className="text-sky-700">{dateStartLabel ?? "—"}</span>
@@ -2237,7 +2238,7 @@ function PmGanttProjectCells({
         <div
           style={{ width: overflowWidth }}
           title={hiddenColumnsLabel}
-          className="flex min-w-0 items-center justify-center border-r-0 border-zinc-200 text-[10px] font-medium tabular-nums text-zinc-400"
+          className="flex min-w-0 items-center justify-center border-r-0 border-zinc-200 text-[9px] font-normal tabular-nums text-zinc-400"
         >
           +{hiddenColumnCount}
         </div>
@@ -2288,7 +2289,7 @@ function PmImplementationGantt({
         if (row.implementationHandedOver) {
           bump(
             "engineer",
-            pmGanttChipTextWidth(t("pm.engineer.handedOver"), "600 10px Noto Sans SC, Microsoft YaHei, sans-serif"),
+            pmGanttChipTextWidth(t("pm.engineer.handedOver"), "500 9px Noto Sans SC, Microsoft YaHei, sans-serif"),
           );
         } else {
           bump(
@@ -2358,7 +2359,10 @@ function PmImplementationGantt({
   const [collapsedGanttGroupKeys, setCollapsedGanttGroupKeys] = useState<Set<string>>(() => new Set());
   const allGanttGroupsCollapsed =
     groups.length > 0 && groups.every((group) => collapsedGanttGroupKeys.has(group.key));
-  const ganttTimelineViewportWidth = Math.max(0, ganttViewportWidth - ganttTableWidth);
+  const ganttTimelineViewportWidth = Math.max(
+    0,
+    ganttViewportWidth - ganttTableWidth - PM_GANTT_STATUS_LANE_WIDTH,
+  );
   const [ganttScale, setGanttScale] = useState<PmGanttScale>("month");
   const [ganttAnchorIso, setGanttAnchorIso] = useState<string>(pmGanttTodayIso);
   const [ganttScrollRequest, setGanttScrollRequest] = useState<{
@@ -3088,7 +3092,7 @@ function PmImplementationGantt({
                   key={column.key}
                   style={{ width }}
                   className={
-                    "flex h-full min-w-0 items-center justify-center overflow-hidden border-r border-zinc-300 px-0.5 text-center text-[10px] font-medium text-zinc-600 " +
+                    "flex h-full min-w-0 items-center justify-center overflow-hidden border-r border-zinc-300 px-0.5 text-center text-[9px] font-medium text-zinc-600 " +
                     (columnIndex === ganttColumnLayout.visible.length - 1 && ganttColumnLayout.hiddenColumnCount === 0
                       ? " border-r-0"
                       : "")
@@ -3105,7 +3109,7 @@ function PmImplementationGantt({
                 <div
                   style={{ width: ganttColumnLayout.overflowWidth }}
                   title={hiddenColumnsLabel}
-                  className="flex h-full min-w-0 items-center justify-center border-r-0 border-zinc-300 text-[11px] font-medium tabular-nums text-zinc-400"
+                  className="flex h-full min-w-0 items-center justify-center border-r-0 border-zinc-300 text-[10px] font-medium tabular-nums text-zinc-400"
                 >
                   +{ganttColumnLayout.hiddenColumnCount}
                 </div>
@@ -3133,6 +3137,17 @@ function PmImplementationGantt({
                   {t("pm.gantt.tableWidth", { n: ganttTableWidth })}
                 </span>
               ) : null}
+            </div>
+            <div
+              className="sticky z-20 flex shrink-0 items-center justify-center border-b border-x border-zinc-300 bg-zinc-50 shadow-[6px_0_14px_-16px_rgba(15,23,42,0.55)]"
+              style={{ left: ganttTableWidth, width: PM_GANTT_STATUS_LANE_WIDTH }}
+            >
+              <span
+                className="truncate whitespace-nowrap px-1 text-[9px] font-medium leading-3 text-zinc-500"
+                title={t("pm.gantt.statusLane")}
+              >
+                {t("pm.gantt.statusLane")}
+              </span>
             </div>
             <div
               className="relative shrink-0 border-b border-zinc-300 bg-zinc-50"
@@ -3261,14 +3276,9 @@ function PmImplementationGantt({
                     free: group.freeDays,
                   });
             const groupStatusLabel = group.hasConflict
-              ? t("pm.gantt.resourceConflict")
+              ? t("pm.gantt.timeConflict")
               : t("pm.gantt.scheduleNormal");
-            const groupTitle =
-              group.label +
-              " · " +
-              groupCapacityLabel +
-              " · " +
-              (group.hasConflict ? t("pm.gantt.resourceConflict") : t("pm.gantt.scheduleNormal"));
+            const groupTitle = group.label + " · " + groupCapacityLabel + " · " + groupStatusLabel;
             return (
               <div
                 key={group.key}
@@ -3295,40 +3305,61 @@ function PmImplementationGantt({
                         <path d="m6 3.5 4.5 4.5L6 12.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </button>
-                    <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden whitespace-nowrap">
-                      {groupCanJump ? (
-                        <button
-                          type="button"
-                          aria-label={t("pm.gantt.jumpToDates") + " · " + groupTitle}
-                          title={groupTitle}
-                          onClick={() => revealGanttEntry(group.key, groupBarLeft)}
-                          className={"max-w-[124px] shrink-0 truncate rounded-[2px] px-1.5 py-0 text-left text-[10px] font-semibold leading-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " + pmGanttGroupTone(group)}
-                        >
-                          {group.label}
-                        </button>
-                      ) : (
-                        <span className={"max-w-[124px] shrink-0 truncate rounded-[2px] px-1.5 py-0 text-[11px] font-semibold leading-5 " + pmGanttGroupTone(group)} title={group.label}>
-                          {group.label}
-                        </span>
-                      )}
-                      {isPersonGroup ? (
+                    {groupCanJump ? (
+                      <button
+                        type="button"
+                        aria-label={t("pm.gantt.jumpToDates") + " · " + groupTitle}
+                        title={groupTitle}
+                        onClick={() => revealGanttEntry(group.key, groupBarLeft)}
+                        className={"min-w-0 flex-1 truncate rounded-[2px] px-1 py-0 text-left text-[10px] font-medium leading-4 tracking-[0.01em] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " + pmGanttGroupTone(group)}
+                      >
+                        {group.label}
+                      </button>
+                    ) : (
+                      <span className={"min-w-0 flex-1 truncate rounded-[2px] px-1 py-0 text-[10px] font-medium leading-4 tracking-[0.01em] " + pmGanttGroupTone(group)} title={group.label}>
+                        {group.label}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    data-project-management-gantt-group-status-lane={group.key}
+                    title={groupTitle}
+                    className={
+                      "sticky z-[19] flex shrink-0 flex-col justify-center gap-0 border-b border-x border-zinc-200/80 px-1.5 " +
+                      (groupSelected ? "bg-sky-50 " : isPersonGroup ? "bg-emerald-50 " : "bg-zinc-50 ")
+                    }
+                    style={{ left: ganttTableWidth, width: PM_GANTT_STATUS_LANE_WIDTH }}
+                  >
+                    {isPersonGroup ? (
+                      <>
+                        <div className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap">
+                          <span
+                            data-project-management-gantt-group-status={group.hasConflict ? "conflict" : "normal"}
+                            className={
+                              "inline-flex h-3.5 shrink-0 items-center rounded-full px-1.5 text-[9px] font-normal leading-3 tracking-[0.01em] ring-1 ring-inset " +
+                              (group.hasConflict
+                                ? "bg-rose-100 text-rose-700 ring-rose-200"
+                                : "bg-emerald-100 text-emerald-700 ring-emerald-200")
+                            }
+                          >
+                            {groupStatusLabel}
+                          </span>
+                          <span className="shrink-0 text-[9px] font-normal leading-3 tabular-nums text-zinc-500">
+                            {t("pm.gantt.totalCount", { n: group.items.length })}
+                          </span>
+                        </div>
                         <span
-                          data-project-management-gantt-group-status={group.hasConflict ? "conflict" : "normal"}
-                          className={
-                            "shrink-0 rounded-full px-1.5 py-0 text-[9px] font-semibold leading-4 ring-1 ring-inset " +
-                            (group.hasConflict
-                              ? "bg-rose-100 text-rose-700 ring-rose-200"
-                              : "bg-emerald-100 text-emerald-700 ring-emerald-200")
-                          }
+                          className="mt-px block min-w-0 truncate whitespace-nowrap text-[9px] font-normal leading-3 tabular-nums text-zinc-500"
+                          title={groupCapacityLabel}
                         >
-                          {groupStatusLabel}
+                          {groupCapacityLabel}
                         </span>
-                      ) : null}
-                      <span className="shrink-0 text-[9px] text-zinc-500">{t("pm.gantt.totalCount", { n: group.items.length })}</span>
-                      {isPersonGroup ? (
-                        <span className="min-w-0 truncate text-[9px] text-zinc-500" title={groupCapacityLabel}>{groupCapacityLabel}</span>
-                      ) : null}
-                    </div>
+                      </>
+                    ) : (
+                      <span className="block min-w-0 truncate whitespace-nowrap text-[9px] font-normal leading-3 tabular-nums text-zinc-500">
+                        {t("pm.gantt.totalCount", { n: group.items.length })}
+                      </span>
+                    )}
                   </div>
                   <div
                     className={"relative shrink-0 border-b border-zinc-200 " + (isPersonGroup ? "bg-emerald-50/60" : "bg-white")}
@@ -3521,13 +3552,18 @@ function PmImplementationGantt({
                         />
                       </div>
                       <div
+                        aria-hidden="true"
+                        className="pointer-events-none sticky z-[19] shrink-0 border-b border-x border-zinc-200/80 bg-white"
+                        style={{ left: ganttTableWidth, width: PM_GANTT_STATUS_LANE_WIDTH, height: PM_GANTT_ROW_HEIGHT }}
+                      />
+                      <div
                         className="relative shrink-0 border-b border-zinc-200 bg-white"
                         style={{ width: timeline.width, height: PM_GANTT_ROW_HEIGHT, ...pmGanttGridStyle(ganttDayWidth, timeline.gridDays) }}
                       >
                         {selectedColumnMarker}
                         {todayMarker}
                         {barWidth === 0 ? (
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400">
                             {t("pm.gantt.noDates")}
                           </span>
                         ) : (

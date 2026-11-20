@@ -1,6 +1,6 @@
 # 案例数据面迁移
 
-迁移只在独立 PostgreSQL 实例的 `libiaolink_case` 数据库执行。首条迁移创建 `project_read.project_summary`，供项目投影任务写入；`0012` 新增本地项目、跨来源编号占用和合并目录视图。迁移记录保存在案例库的 `"case".case_schema_migrations`。
+迁移只在独立 PostgreSQL 实例的 `libiaolink_case` 数据库执行。首条迁移创建 `project_read.project_summary`，供项目投影任务写入；`0012` 新增本地项目、跨来源编号占用和合并目录视图，`0013` 修正本地项目写入触发器的字段读取。迁移记录保存在案例库的 `"case".case_schema_migrations`。
 
 ## 角色与权限
 
@@ -202,7 +202,7 @@ node server/case-data/operation-cleanup.mjs /path/to/settled-outbox.json
 
 ## C10 本地端到端联调
 
-`server/test/case-data-gateway.integration.test.ts` 的 C10 用例从项目目录读取来源版本，经案例创建及更新、真实素材上传、staging、本地审批、outbox 激活、公开读取和撤回。案例库应用 `0001–0012`。另起仅监听回环地址的 PostgreSQL 实例，在 `case_partner_fixture` 库初始化案例小组 v0.2 的 `03-local-schema/001_local_schema_up.sql`。使用独立的作者、公开与媒体服务令牌，通过测试桶 `libiaolink-case-proof` 验证实际对象版本。媒体夹具通过 HTTP 回传合成结果，故障代理独立注入丢请求或丢响应。
+`server/test/case-data-gateway.integration.test.ts` 的 C10 用例从项目目录读取来源版本，经案例创建及更新、真实素材上传、staging、本地审批、outbox 激活、公开读取和撤回。案例库应用 `0001–0013`。另起仅监听回环地址的 PostgreSQL 实例，在 `case_partner_fixture` 库初始化案例小组 v0.2 的 `03-local-schema/001_local_schema_up.sql`。使用独立的作者、公开与媒体服务令牌，通过测试桶 `libiaolink-case-proof` 验证实际对象版本。媒体夹具通过 HTTP 回传合成结果，故障代理独立注入丢请求或丢响应。
 
 测试沿用网关的 `CASE_DATA_GATEWAY_TEST_ADMIN_URL`、`CASE_DATA_GATEWAY_TEST_DATABASE_URL`、`CASE_DATA_PUBLIC_TEST_DATABASE_URL` 及 `CASE_DATA_ASSETS_TEST_ENDPOINT`、`CASE_DATA_ASSETS_TEST_BUCKET`、`CASE_DATA_ASSETS_TEST_ACCESS_KEY`、`CASE_DATA_ASSETS_TEST_SECRET_KEY`。新增 `CASE_DATA_PARTNER_TEST_DATABASE_URL` 用于夹具写业务决定，`CASE_DATA_PARTNER_OUTBOX_TEST_DATABASE_URL` 用于独立 worker 进程。worker 只接收后者、网关 HTTP 地址和作者服务令牌。worker 角色读审批记录，对本地 outbox、案例状态和分享链接拥有查询与更新权限。
 

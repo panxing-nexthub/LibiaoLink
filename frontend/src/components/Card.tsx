@@ -32,11 +32,11 @@ function glowOf(color: string): string {
 }
 
 const statusBadges = {
-  active: { background: "bg-[#08634c]", icon: "M5.5 3.5 12 8l-6.5 4.5z" },
-  temporary: { background: "bg-[#383877]", icon: "M8 2v6l3 2 M14 8a6 6 0 1 1-6-6" },
-  accepted: { background: "bg-[#194c78]", icon: "M2 8l4 4 8-8" },
-  unaccepted: { background: "bg-[#8c2d35]", icon: "M4 4h8v8H4z" },
-  paused: { background: "bg-[#714907]", icon: "M5.5 3v10 M10.5 3v10" },
+  active: { background: "bg-[#08634c]" },
+  temporary: { background: "bg-[#383877]" },
+  accepted: { background: "bg-[#194c78]" },
+  unaccepted: { background: "bg-[#8c2d35]" },
+  paused: { background: "bg-[#714907]" },
 };
 
 type CardProps = {
@@ -156,12 +156,22 @@ export function Card({
           {watermark}
         </span>
       )}
-      <span
-        title={typeLabel}
-        style={{ backgroundColor: accentColor, color: accentText }}
-        className="absolute top-0 left-0 max-w-[calc(100%-4rem)] truncate rounded-br-xl px-3 py-1 text-[11px] font-semibold tracking-wide"
-      >
-        {typeLabel}
+      <span className="absolute top-0 left-0 flex max-w-[calc(100%-4rem)] items-center gap-2">
+        <span
+          title={typeLabel}
+          style={{ backgroundColor: accentColor, color: accentText }}
+          className="min-w-0 truncate rounded-br-xl px-3 py-1 text-[11px] font-semibold tracking-wide"
+        >
+          {typeLabel}
+        </span>
+        <span
+          id={statusId}
+          data-card-status={status}
+          data-archive-kind={status === "archived" ? displayStatus : undefined}
+          className={"inline-flex max-w-full shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold leading-4 text-white " + badge.background}
+        >
+          <span className="truncate">{statusText}</span>
+        </span>
       </span>
       <div className="w-20 h-20 rounded-full absolute -right-5 -top-7 bg-zinc-100">
         <p className="absolute bottom-5 right-6 whitespace-nowrap text-2xl font-medium text-zinc-500" title={t("card.seqNo") + " " + seqNoText}>{seqNoText}</p>
@@ -173,20 +183,7 @@ export function Card({
           <span className="min-w-0 truncate font-medium text-zinc-600" title={managerLabel}>{managerLabel}</span>
         </p>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-        <h1 className="min-w-0 wrap-anywhere font-mono text-xl font-bold tracking-tight">{code}</h1>
-        <span
-          id={statusId}
-          data-card-status={status}
-          data-archive-kind={status === "archived" ? displayStatus : undefined}
-          className={"inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold leading-4 text-white " + badge.background}
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-3.5 shrink-0">
-            <path d={badge.icon} />
-          </svg>
-          {statusText}
-        </span>
-      </div>
+      <h1 className="wrap-anywhere font-mono text-xl font-bold tracking-tight">{code}</h1>
       <p className="text-lg text-zinc-500 leading-7" title={localizedDescription === description ? undefined : description}>{localizedDescription}</p>
       <div data-card-actions="" className="flex items-center gap-3">
         {onRestore !== undefined || onEdit !== undefined ? (

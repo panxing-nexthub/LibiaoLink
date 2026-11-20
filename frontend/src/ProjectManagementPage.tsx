@@ -2291,14 +2291,6 @@ function PmImplementationGantt({
   const [selectedGanttKey, setSelectedGanttKey] = useState<string | null>(null);
   const [selectedGanttColumnKey, setSelectedGanttColumnKey] = useState<string | null>(null);
   const [collapsedGanttGroupKeys, setCollapsedGanttGroupKeys] = useState<Set<string>>(() => new Set());
-  const didInitializeGanttCollapseRef = useRef(false);
-  useLayoutEffect(() => {
-    if (didInitializeGanttCollapseRef.current || groups.length === 0) {
-      return;
-    }
-    didInitializeGanttCollapseRef.current = true;
-    setCollapsedGanttGroupKeys(new Set(groups.map((group) => group.key)));
-  }, [groups]);
   const allGanttGroupsCollapsed =
     groups.length > 0 && groups.every((group) => collapsedGanttGroupKeys.has(group.key));
   const ganttTimelineViewportWidth = Math.max(0, ganttViewportWidth - ganttTableWidth);
@@ -3192,9 +3184,6 @@ function PmImplementationGantt({
             const groupSelected = selectedGanttKey === group.key;
             const groupCollapsed = collapsedGanttGroupKeys.has(group.key);
             const isPersonGroup = group.kind === "person";
-            const groupRoleLabel = group.roles
-              .map((role) => t(role === "manager" ? "pm.column.manager" : "pm.column.engineer"))
-              .join(" · ");
             const groupCapacityLabel =
               group.occupancy.parallelDays > 0
                 ? t("pm.gantt.capacityParallel", {
@@ -3273,7 +3262,6 @@ function PmImplementationGantt({
                         ) : null}
                       </div>
                       <div className="mt-0.5 flex min-w-0 items-center gap-2 whitespace-nowrap text-[11px] leading-4 text-zinc-500">
-                        {groupRoleLabel === "" ? null : <span className="shrink-0">{groupRoleLabel}</span>}
                         <span className="shrink-0">{t("pm.gantt.totalCount", { n: group.items.length })}</span>
                         {isPersonGroup ? (
                           <span className="min-w-0 truncate" title={groupCapacityLabel}>{groupCapacityLabel}</span>

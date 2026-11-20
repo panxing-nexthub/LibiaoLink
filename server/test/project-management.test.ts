@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canUseProjectManagement } from "@libiaolink/contracts";
+import { canUseProjectManagement, ProjectManagementRecordCreateBodySchema } from "@libiaolink/contracts";
 import { ProjectManagementAccessGuard } from "../src/modules/project-management/project-management-access.guard.js";
 import type { AppError } from "../src/common/errors/app-error.js";
 import type { ProjectManagementRecordRow } from "../src/db/schema/project-management.js";
@@ -151,6 +151,14 @@ function makeService(): {
   const service = new ProjectManagementService(repository as never, managers as never, snapshots as never);
   return { service, repository, managers, snapshots };
 }
+
+describe("项目管理阶段契约（2026-11-20）", () => {
+  it("项目当前阶段人工覆盖接受新增三种状态", () => {
+    for (const currentStageOverride of ["not_started", "archived", "terminated"] as const) {
+      expect(ProjectManagementRecordCreateBodySchema.parse({ currentStageOverride }).currentStageOverride).toBe(currentStageOverride);
+    }
+  });
+});
 
 describe("项目管理独立记录服务（2026-11-17）", () => {
   it("首笔输入即可创建：文本收敛、地点空值回落未分类、返回账号姓名", async () => {

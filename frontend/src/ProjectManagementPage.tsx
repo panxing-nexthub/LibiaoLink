@@ -3362,9 +3362,10 @@ function PmImplementationGantt({
                           return (
                             <span
                               key={group.key + "-available-" + String(segment.startIndex)}
+                              data-project-management-gantt-available={group.key + "-" + String(availableStartIndex)}
                               aria-hidden="true"
                               title={segmentTitle}
-                              className="pointer-events-none absolute inset-y-0 z-[1] flex items-center justify-center border-r border-emerald-100/80 text-[11px] font-medium text-emerald-700/75"
+                              className="pointer-events-none absolute inset-y-0 z-[1] flex items-center justify-center border-r border-emerald-200/70 bg-emerald-50/80 text-[11px] font-medium text-emerald-700/80"
                               style={{ left: availableStartIndex * ganttDayWidth + 1, width: segmentWidth }}
                             >
                               {segmentWidth >= 42 ? t("pm.gantt.available") : null}
@@ -3447,7 +3448,7 @@ function PmImplementationGantt({
                           <span
                             aria-hidden="true"
                             className={
-                              "pointer-events-none absolute inset-x-0 bottom-0 h-1 rounded-full " +
+                              "pointer-events-none absolute inset-x-0 bottom-0 h-2 rounded-full " +
                               (segmentConflict
                                 ? "bg-rose-400/85 group-hover:bg-rose-500"
                                 : "bg-sky-400/80 group-hover:bg-sky-500")

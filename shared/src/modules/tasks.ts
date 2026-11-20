@@ -314,6 +314,9 @@ export const TaskCreateBodySchema = z
     managerIds: z.array(UuidSchema).min(1).max(TASK_MANAGER_IDS_LIMIT).optional().openapi({
       description: "无阶段、无来源节点的临时任务必填，至少一位有效项目经理。阶段任务使用项目名单，创建时省略此字段",
     }),
+    syncToGroup: z.boolean().optional().openapi({
+      description: "仅临时任务可用：true = 创建事务内校验项目群已绑定且机器人已激活，并写入 notify.group 群消息；阶段任务传 true 返回 400",
+    }),
     plannedStart: DateOnlySchema.nullable().optional(),
     plannedEnd: DateOnlySchema.nullable().optional(),
     estimatedDays: z.number().int().min(0).nullable().optional(),

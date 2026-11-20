@@ -865,12 +865,21 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   };
 
   /**
-   * 手工填写名称、选择项目经理。看板入口的负责人和状态取自所在列，阶段留空。
+   * 手工填写名称、项目经理和负责人。看板入口的负责人默认取所在列，状态取所在列；负责人可在表单中改选或清空为待定。
+   * 「同步到项目群」仅在项目群已绑定且机器人已激活时出现在表单中，勾选后由创建事务原子写入群消息。
    * 返回新任务 id（Push 196）—— 看板拿到后直接打开它的详情抽屉（确认时间等细节）；失败 = null。
    */
   const handleQuickAdd = async (context: KanbanAddContext, values: TempTaskCreateValues): Promise<string | null> => {
     const created = await createOne(
-      { stageKey: null, title: values.title, titleEn: values.titleEn === "" ? null : values.titleEn, managerIds: values.managerIds, ownerIds: context.ownerIds, priority: "中" },
+      {
+        stageKey: null,
+        title: values.title,
+        titleEn: values.titleEn === "" ? null : values.titleEn,
+        managerIds: values.managerIds,
+        ownerIds: values.ownerIds,
+        syncToGroup: values.syncToGroup,
+        priority: "中",
+      },
       context.status,
     );
     if (created === null) {

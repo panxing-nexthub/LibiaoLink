@@ -258,6 +258,8 @@ export type TaskCreateInput = {
   sourceNodeId?: string;
   managerIds?: string[];
   ownerIds?: string[];
+  /** 仅临时任务：true = 创建事务内同步任务名称 / 项目经理 / 任务负责人到项目群。 */
+  syncToGroup?: boolean;
   plannedStart?: string | null;
   plannedEnd?: string | null;
   estimatedDays?: number | null;

@@ -1305,7 +1305,9 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
       ))}
       {tempFormOpen && onCreateTempTask !== undefined ? (
         <TempTaskCreateForm
+          projectId={projectId}
           managerOptions={managerMembers}
+          ownerOptions={members}
           onCreate={async (values) => {
             const createdId = await onCreateTempTask(values);
             if (createdId !== null) setSelectedTaskId(createdId);

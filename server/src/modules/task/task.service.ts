@@ -109,6 +109,14 @@ type TaskWriteRequest = Pick<
 > & { expectedVersion: number | null };
 
 const EMPTY_FILE_SUMMARY: TaskFileSummaryCounts = { total: 0, draft: 0, final: 0 };
+/** 群消息里的姓名清单：缺失用户跳过；无可展示姓名时回退指定文案。 */
+function groupNames(names: readonly (string | null)[] | null | undefined, fallback: string): string {
+  const text = (names ?? [])
+    .filter((name): name is string => name !== null && name.trim() !== "")
+    .join("、");
+  return text === "" ? fallback : text;
+}
+
 const CHANGE_SUMMARY_MAX = 40;
 
 /** 门禁拒绝的内部信号（事务回滚后补写留痕，再转 422 契约错误）—— 与 FlowService 同模式。 */
@@ -253,6 +261,10 @@ export class TaskService {
     const nodeId = body.taskNodeId ?? null;
     const sourceNodeId = body.sourceNodeId ?? null;
     const temporary = isTemporaryTask({ stageKey: body.stageKey ?? null, nodeId, taskNodeId: sourceNodeId });
+    if (body.syncToGroup === true && !temporary) {
+      throw new AppError("VALIDATION_FAILED", "只有临时任务可在创建时同步到项目群");
+    }
+    const syncToGroup = body.syncToGroup === true;
     const currentProject = await this.loadProjectForWrite(projectId, temporary);
     const temporaryCreatorIsAdmin = temporary && await this.permission.canManageGroupAccess(actorId);
     if (temporary && !temporaryCreatorIsAdmin && !currentProject.managerIds.includes(actorId)) {
@@ -311,6 +323,15 @@ export class TaskService {
       if (temporary && !temporaryCreatorIsAdmin && !project.managerIds.includes(actorId)) {
         throw new AppError("FORBIDDEN", "仅系统管理员或当前项目的项目经理可创建临时任务");
       }
+      if (syncToGroup) {
+        const group = await this.repository.findGroupBinding(projectId, tx);
+        if (group === null) {
+          throw new AppError("VALIDATION_FAILED", "项目群未绑定，无法同步临时任务到群聊");
+        }
+        if (group.activatedAt === null) {
+          throw new AppError("VALIDATION_FAILED", "项目群机器人尚未激活，无法同步临时任务到群聊");
+        }
+      }
       if (nodeId !== null) {
         const existing = await this.repository.findTaskIdByNode(projectId, nodeId, tx);
         if (existing !== null) {
@@ -365,6 +386,25 @@ export class TaskService {
           at: at.toISOString(),
         },
       });
+      if (syncToGroup) {
+        const identity = await this.repository.findListRowById(created.id, projectId, tx);
+        const managerText = groupNames(identity?.managerNames, "—");
+        const ownerText = created.ownerIds.length === 0 ? "待定" : groupNames(identity?.ownerNames, "—");
+        const bodyText =
+          "任务名称：" + created.title + "\n项目经理：" + managerText + "\n任务负责人：" + ownerText;
+        await appendOutbox(tx, {
+          topic: "notify.group",
+          dedupeKey: "temp-task.created:" + created.id,
+          payload: {
+            projectId,
+            title: "新建临时任务",
+            body: bodyText.length > 4000 ? bodyText.slice(0, 3999) + "…" : bodyText,
+            refType: "task",
+            refId: created.id,
+            templateCode: "TEMP_TASK_CREATED_GROUP",
+          },
+        });
+      }
       await this.repository.touchProject(projectId, at, tx);
       await this.audit.record(tx, {
         actorId,

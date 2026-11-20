@@ -13,7 +13,7 @@ export type ListQueryState = {
   regions: string[];
   projectTypes: string[];
   managerIds: string[];
-  /** 项目状态筛选（Push 262 追订）：active / paused / done / archived，多值任一命中（`filter[status]`）。 */
+  /** 项目状态筛选（Push 262 追订）：active / paused / archived，多值任一命中（`filter[status]`）。 */
   statuses: string[];
   timeFrom: string | null;
   timeTo: string | null;
@@ -207,7 +207,7 @@ function parseDayValue(value: string | null): string | null {
   return trimmed;
 }
 
-/** 项目状态白名单（与 `PROJECT_STATUS_VALUES` 同源）：`filter[status]` 只认这四档，非法值丢弃、不阻塞页面。 */
+/** 项目状态白名单（与 `PROJECT_STATUS_VALUES` 同源）：`filter[status]` 只认可用状态，非法值丢弃、不阻塞页面。 */
 function parseProjectStatuses(value: string | null): string[] {
   return parseListValue(value).filter((item) => (PROJECT_STATUS_VALUES as readonly string[]).includes(item));
 }

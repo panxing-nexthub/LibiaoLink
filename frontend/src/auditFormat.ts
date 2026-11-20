@@ -80,6 +80,7 @@ const FIELD_LABELS: Record<string, string> = {
   priority: "紧急重要度",
   progress: "进度",
   projectType: "项目类型",
+  projectTypes: "项目类型",
   raisedAt: "提出日期",
   region: "地区",
   remark: "备注",

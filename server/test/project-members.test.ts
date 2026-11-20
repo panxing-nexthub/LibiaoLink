@@ -141,6 +141,8 @@ function projectRow(status = "active"): ProjectViewRow {
       customer: null,
       region: "华东",
       projectType: "分拣",
+      additionalProjectTypes: [],
+      sourceBlueprintType: null,
       managerIds: [UUID_MANAGER],
       stageKey: "presale",
       status,

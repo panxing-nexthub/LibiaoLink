@@ -81,7 +81,7 @@ export const PrioritySchema = z.enum(PRIORITY_VALUES).openapi("Priority", {
     "紧急重要度三档字典（高 / 中 / 低）；2026-09-24 定案「与页面口径一致」—— 四象限口径作废，存量值由迁移 0031 折算（有损：中 = 重要不紧急 / 紧急但不重要）",
 });
 
-export const ProjectStatusSchema = z.enum(["active", "paused", "done", "archived"]).openapi("ProjectStatus", {
+export const ProjectStatusSchema = z.enum(["active", "paused", "archived"]).openapi("ProjectStatus", {
   description: "项目状态（projects.status）",
 });
 

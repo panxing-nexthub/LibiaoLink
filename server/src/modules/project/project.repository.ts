@@ -12,7 +12,7 @@ import { projectArchives, projectMembers, projects, projectStages } from "../../
 import { dailyReports, issueEvents, issues } from "../../db/schema/reports.js";
 import { projectStakeholders } from "../../db/schema/stakeholders.js";
 import { taskEvents, tasks } from "../../db/schema/tasks.js";
-import { syncProjectManagersToStageTasks } from "../../db/task-scope.js";
+import { hasOpenPostArchiveTask, syncProjectManagersToStageTasks } from "../../db/task-scope.js";
 import type { ProjectScopeFilter } from "../permission/index.js";
 import type { ProjectFilter, ProjectSort } from "./project.query.js";
 
@@ -21,6 +21,8 @@ export type ProjectRow = typeof projects.$inferSelect;
 /** 列表 / 详情视图行：项目字段 + managerNames（A2：随行下发，与 managerIds 同下标；停用 / 离职仍返回姓名，取不到为 null）。 */
 export interface ProjectViewRow {
   project: ProjectRow;
+  hasOpenPostArchiveTask?: boolean;
+  archiveKind?: typeof projectArchives.$inferSelect.archiveKind | null;
   managerNames: (string | null)[] | null;
 }
 
@@ -38,6 +40,7 @@ export interface ProjectMapOverviewRow {
   name: string;
   region: string;
   projectType: string;
+  additionalProjectTypes: string[];
   status: string;
 }
 
@@ -49,17 +52,20 @@ export interface ProjectInsertInput {
   customer: string | null;
   region: string;
   projectType: string;
+  additionalProjectTypes?: string[];
   managerIds: string[];
   stageKey: string;
   description: string | null;
 }
 
 export interface ProjectUpdateInput {
+  sourceBlueprintType?: string;
   code?: string;
   name?: string;
   customer?: string | null;
   region?: string;
   projectType?: string;
+  additionalProjectTypes?: string[];
   managerIds?: string[];
   stageKey?: string;
   status?: string;
@@ -127,8 +133,9 @@ export class ProjectRepository {
     }
     const where = and(...projectConditions(filter, scope));
     const items = await this.database.db
-      .select({ project: projects, managerNames: MANAGER_NAMES_SQL })
+      .select({ project: projects, managerNames: MANAGER_NAMES_SQL, archiveKind: projectArchives.archiveKind, hasOpenPostArchiveTask })
       .from(projects)
+      .leftJoin(projectArchives, and(eq(projects.status, "archived"), eq(projectArchives.projectId, projects.id)))
       .where(where)
       .orderBy(...projectOrderBy(sorts))
       .limit(limit)
@@ -146,19 +153,20 @@ export class ProjectRepository {
       .select({
         region: projects.region,
         projectType: projects.projectType,
+        additionalProjectTypes: projects.additionalProjectTypes,
         stageKey: projects.stageKey,
         status: projects.status,
         value: count(),
       })
       .from(projects)
       .where(where)
-      .groupBy(projects.region, projects.projectType, projects.stageKey, projects.status);
+      .groupBy(projects.region, projects.projectType, projects.additionalProjectTypes, projects.stageKey, projects.status);
     const facets: ProjectFacetsResult = { total: 0, region: {}, projectType: {}, managerId: {}, stageKey: {}, status: {} };
     for (const row of rows) {
       const value = Number(row.value);
       facets.total += value;
       bump(facets.region, row.region, value);
-      bump(facets.projectType, row.projectType, value);
+      for (const code of [row.projectType, ...row.additionalProjectTypes]) bump(facets.projectType, code, value);
       bump(facets.stageKey, row.stageKey, value);
       bump(facets.status, row.status, value);
     }
@@ -178,8 +186,9 @@ export class ProjectRepository {
 
   async findViewById(id: string): Promise<ProjectViewRow | null> {
     const rows = await this.database.db
-      .select({ project: projects, managerNames: MANAGER_NAMES_SQL })
+      .select({ project: projects, managerNames: MANAGER_NAMES_SQL, archiveKind: projectArchives.archiveKind, hasOpenPostArchiveTask })
       .from(projects)
+      .leftJoin(projectArchives, and(eq(projects.status, "archived"), eq(projectArchives.projectId, projects.id)))
       .where(and(eq(projects.id, id), isNull(projects.deletedAt)))
       .limit(1);
     return rows[0] ?? null;
@@ -224,6 +233,7 @@ export class ProjectRepository {
         name: projects.name,
         region: projects.region,
         projectType: projects.projectType,
+        additionalProjectTypes: projects.additionalProjectTypes,
         status: projects.status,
       })
       .from(projects)
@@ -245,6 +255,7 @@ export class ProjectRepository {
           customer: input.customer,
           region: input.region,
           projectType: input.projectType,
+          additionalProjectTypes: input.additionalProjectTypes ?? [],
           managerIds: input.managerIds,
           stageKey: input.stageKey,
           status: "active",
@@ -485,7 +496,9 @@ function projectConditions(filter: ProjectFilter, scope: ProjectScopeFilter): SQ
   const conditions: SQL[] = [filter.recycled ? isNotNull(projects.deletedAt) : isNull(projects.deletedAt)];
   if (scope.kind === "ids") conditions.push(inArray(projects.id, scope.ids));
   if (filter.regions !== null) conditions.push(inArray(projects.region, filter.regions));
-  if (filter.projectTypes !== null) conditions.push(inArray(projects.projectType, filter.projectTypes));
+  if (filter.projectTypes !== null) {
+    conditions.push(sql`array_prepend(${projects.projectType}, ${projects.additionalProjectTypes}) && ${sql.param(filter.projectTypes)}::text[]`);
+  }
   if (filter.managerIds !== null) {
     // sql.param：数组必须作为单个参数下发（直接内插会被展开成 ($1) 的文本参数，PG 报 malformed array literal）
     conditions.push(sql`${projects.managerIds} && ${sql.param(filter.managerIds)}::uuid[]`);

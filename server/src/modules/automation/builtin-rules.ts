@@ -153,7 +153,7 @@ export const BUILTIN_RULES: readonly AutomationRule[] = [
     name: "项目完成喜报",
     enabled: false,
     trigger: { kind: "event", topic: "project.completed" },
-    conditions: [{ field: "project.status", op: "eq", value: "done" }],
+    conditions: [{ field: "project.status", op: "eq", value: "archived" }],
     actions: [{ kind: "notify", channel: "wecom_group", recipient: "project.group", template: "R06_GROUP" }],
     version: 1,
   },

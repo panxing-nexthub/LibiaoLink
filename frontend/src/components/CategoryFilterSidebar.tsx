@@ -32,7 +32,7 @@ type CategoryFilterSidebarProps = {
   regions: FacetOption[];
   types: FacetOption[];
   managers: FacetOption[];
-  /** 项目状态计数（Push 262 追订）：固定四档 active / paused / done / archived。 */
+  /** 项目状态计数（Push 262 追订）： active / paused / archived。 */
   statuses: FacetOption[];
   /** 常用筛选胶囊的命中数（按组合单独取 total；缺数据按 0 显示）。 */
   savedFilterCounts: Record<string, number>;

@@ -9,7 +9,7 @@ import { ScrollArea } from "./ScrollArea";
 import { MemberMultiSelect } from "./MemberSelect";
 import { RegionSelect } from "./RegionSelect";
 import { useFocusTrapFor } from "./useFocusTrap";
-import { PROJECT_STATUS_VALUES, projectStatusOf, type ProjectStatusValue } from "../types";
+import { PROJECT_STATUS_VALUES, type ProjectStatusValue, type ProjectArchiveKind } from "../types";
 import { fieldText, isLocalizedLocale, projectStatusTextOf, projectTypeText, useLocale, useMachineText, useT } from "../i18n";
 import { regionNameEn } from "../data/regionPicker";
 import { fetchUsedRegions } from "../projectApi";
@@ -32,10 +32,10 @@ export type ProjectDraft = {
   /** 项目经理（多位，Push 136）：至少一位，数组顺序 = 展示顺序。 */
   managerIds: string[];
   /** 项目类型：字典 projectType 的码（主题色由字典元数据下发）。 */
-  projectType: string;
+  projectTypes: string[];
   /** 项目地区：字典 region 的码 / 标准国家清单里的中文国名（Push 195 模态窗点选）。 */
   region: string;
-  /** 项目状态（Push 262）：active / paused / done 走 PATCH；archived 走归档端点（见 App.handleUpdateProject）。 */
+  /** 项目状态（Push 262）：active / paused 走 PATCH；archived 走归档端点（见 App.handleUpdateProject）。 */
   status: ProjectStatusValue;
 };
 
@@ -49,6 +49,8 @@ export type ProjectSubmitResult =
 type ProjectModalProps = {
   mode: "create" | "edit";
   initial?: ProjectDraft;
+  hasOpenPostArchiveTask?: boolean;
+  initialArchiveKind?: ProjectArchiveKind | null;
   /** 字典下拉项（GET /api/v1/dicts）：地区 + 项目类型。 */
   dicts: Dicts;
   /** 字典「＋ 添加」与行内删除的落地方式，由 App 层实现（region 登录即可；projectType 与删除需 dict.manage）。 */
@@ -61,7 +63,7 @@ type ProjectModalProps = {
   canArchive?: boolean;
   onClose: () => void;
   /** 提交（Push 262 起返回结构化结果）：ok = 成功（父层负责关窗 / 刷新列表）；error = 失败提示；archive-confirm = 旧服务端 422 缺项兼容。 */
-  onSubmit: (draft: ProjectDraft, options?: { archiveConfirm?: boolean; version?: number }) => Promise<ProjectSubmitResult>;
+  onSubmit: (draft: ProjectDraft, options?: { archiveKind?: ProjectArchiveKind; archiveConfirm?: boolean; version?: number }) => Promise<ProjectSubmitResult>;
 };
 
 const fieldClass =
@@ -84,7 +86,7 @@ function projectTypeContent(name: string, item: DictItem | null): ReactNode {
   );
 }
 
-export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, managerOptions, canArchive = false, onClose, onSubmit }: ProjectModalProps) {
+export function ProjectModal({ mode, initial, initialArchiveKind, hasOpenPostArchiveTask, dicts, dictTools, canManageDicts, managerOptions, canArchive = false, onClose, onSubmit }: ProjectModalProps) {
   const isEdit = mode === "edit";
   const t = useT();
   const locale = useLocale();
@@ -99,11 +101,12 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
   const [description, setDescription] = useState(initial?.description ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
   const [managerIds, setManagerIds] = useState<string[]>(initial?.managerIds ?? []);
-  const [projectType, setProjectType] = useState<string>(initial?.projectType ?? dicts.projectType[0]?.code ?? "");
+  const [projectTypes, setProjectTypes] = useState<string[]>(() => initial?.projectTypes ?? dicts.projectType.slice(0, 1).map((item) => item.code));
   /** 新建默认不带地区（业务口径「新建项目不要默认英国 默认为空即可」）：占位「请选择地区」，由用户在小窗里点选。 */
   const [region, setRegion] = useState<string>(initial?.region ?? "");
   /** 项目状态（Push 262）：新建 = active；编辑 = 库里现值（未知值回落 active 兜底）。 */
-  const [status, setStatus] = useState<ProjectStatusValue>(projectStatusOf(initial?.status ?? "active") ?? "active");
+  const [status, setStatus] = useState<ProjectStatusValue>(initial?.status ?? "active");
+  const [archiveKind, setArchiveKind] = useState<ProjectArchiveKind>("accepted");
   const [regionPopoverOpen, setRegionPopoverOpen] = useState(false);
   /**
    * 「已有项目地区」计数（Push 304）：挂载即取全量 region 计数（值 = 项目落库原文 → 未删除项目数）——
@@ -214,7 +217,7 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
     code.trim() !== "" &&
     description.trim() !== "" &&
     managerIds.length > 0 &&
-    projectType !== "" &&
+    projectTypes.length > 0 &&
     region !== "" &&
     !pending &&
     archiveMissing === null &&
@@ -250,7 +253,7 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
     }
     setPending(true);
     setError(null);
-    const result = await onSubmit({ code, description, note, managerIds, projectType, region, status }, { version: confirmedVersion });
+    const result = await onSubmit({ code, description, note, managerIds, projectTypes, region, status }, { archiveKind, version: confirmedVersion });
     setPending(false);
     applyResult(result);
   };
@@ -262,7 +265,7 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
     }
     setPending(true);
     setError(null);
-    const result = await onSubmit({ code, description, note, managerIds, projectType, region, status }, { archiveConfirm: true, version: confirmedVersion });
+    const result = await onSubmit({ code, description, note, managerIds, projectTypes, region, status }, { archiveKind, archiveConfirm: true, version: confirmedVersion });
     setPending(false);
     applyResult(result);
   };
@@ -329,7 +332,7 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
           <div className="block">
             <span className="mb-1.5 block text-sm font-medium text-zinc-700">{t("modal.type.field")}</span>
             <DictSelect
-              value={projectType}
+              values={projectTypes}
               items={dicts.projectType}
               ariaLabel={t("modal.type.aria")}
               placeholder={t("modal.type.placeholder")}
@@ -353,7 +356,7 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
                   : undefined
               }
               deleteLabelOf={(_code, name) => t("modal.type.deleteAria", { name })}
-              onChange={setProjectType}
+              onChange={setProjectTypes}
             />
           </div>
 
@@ -403,6 +406,7 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
                           : undefined
                       }
                       onClick={() => {
+                        if (status !== "archived") setArchiveKind("accepted");
                         setStatus(value);
                         setArchiveMissing(null);
                         setError(null);
@@ -415,18 +419,35 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
                         (disabled ? " cursor-not-allowed opacity-50" : "")
                       }
                     >
-                      {projectStatusTextOf(locale, value)}
+                      {archivedLock && archiveOption && hasOpenPostArchiveTask ? t("card.archive.temporary") : projectStatusTextOf(locale, value)}
                     </button>
                   );
                 })}
               </div>
+              {status === "archived" && !archivedLock && (
+                <fieldset disabled={pending} className="mt-3">
+                  <legend className="mb-1 text-xs font-medium text-zinc-600">{t("modal.archive.kind")}</legend>
+                  <div className="flex flex-wrap gap-x-5 gap-y-2">
+                    {(["accepted", "unaccepted"] as const).map((kind) => (
+                      <label key={kind} className="flex items-center gap-2 text-sm text-zinc-700">
+                        <input type="radio" name="archiveKind" value={kind} checked={archiveKind === kind}
+                          onChange={() => { setArchiveKind(kind); setError(null); setArchiveMissing(null); }} />
+                        {t(kind === "accepted" ? "modal.archive.accepted" : "modal.archive.unaccepted")}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
+              {archivedLock && status === "archived" && (
+                <p className="mt-2 text-sm">{t(initialArchiveKind === "unaccepted" ? "modal.archive.unaccepted" : "modal.archive.accepted")}</p>
+              )}
               <span className="mt-1 block text-[11px] text-zinc-400">
                 {archivedLock
                   ? status === "active" && canArchive
                     ? t("modal.restore.note")
                     : t("modal.err.archived")
                   : status === "archived"
-                    ? t("modal.gate.note")
+                    ? t(archiveKind === "accepted" ? "modal.gate.note" : "modal.archive.unacceptedNote")
                     : t("modal.save.note")}
               </span>
             </div>
@@ -478,7 +499,7 @@ export function ProjectModal({ mode, initial, dicts, dictTools, canManageDicts, 
           )}
           {conflict === null ? null : (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-              <details><summary>{t("modal.conflict.latest")}</summary><p className="mt-2 whitespace-pre-wrap">{fieldText(locale, "项目编号")}{colon}{conflict.latest.code}<br />{fieldText(locale, "项目名称")}{colon}{conflict.latest.description}<br />{fieldText(locale, "备注")}{colon}{conflict.latest.note || "—"}<br />{fieldText(locale, "项目经理")}{colon}{conflict.latest.managerIds.map((id) => managerOptions.find((member) => member.id === id)?.name ?? id).join(isLocalizedLocale(locale) ? ", " : "、")}<br />{fieldText(locale, "项目类型")}{colon}{projectTypeText(locale, dictLabel(dicts, "projectType", conflict.latest.projectType))}{semi}{fieldText(locale, "项目地区")}{colon}{isLocalizedLocale(locale) ? regionNameEn(dictLabel(dicts, "region", conflict.latest.region)) || dictLabel(dicts, "region", conflict.latest.region) : dictLabel(dicts, "region", conflict.latest.region)}{semi}{fieldText(locale, "项目状态")}{colon}{projectStatusTextOf(locale, conflict.latest.status)}</p></details>
+              <details><summary>{t("modal.conflict.latest")}</summary><p className="mt-2 whitespace-pre-wrap">{fieldText(locale, "项目编号")}{colon}{conflict.latest.code}<br />{fieldText(locale, "项目名称")}{colon}{conflict.latest.description}<br />{fieldText(locale, "备注")}{colon}{conflict.latest.note || "—"}<br />{fieldText(locale, "项目经理")}{colon}{conflict.latest.managerIds.map((id) => managerOptions.find((member) => member.id === id)?.name ?? id).join(isLocalizedLocale(locale) ? ", " : "、")}<br />{fieldText(locale, "项目类型")}{colon}{conflict.latest.projectTypes.map((code) => projectTypeText(locale, dictLabel(dicts, "projectType", code))).join(" + ")}{semi}{fieldText(locale, "项目地区")}{colon}{isLocalizedLocale(locale) ? regionNameEn(dictLabel(dicts, "region", conflict.latest.region)) || dictLabel(dicts, "region", conflict.latest.region) : dictLabel(dicts, "region", conflict.latest.region)}{semi}{fieldText(locale, "项目状态")}{colon}{projectStatusTextOf(locale, conflict.latest.status)}</p></details>
               <button type="button" disabled={pending || conflict.latest.status === "archived"} className="mt-2 underline disabled:opacity-50" onClick={() => {
                 setConfirmedVersion(conflict.version);
                 setConflict(null);

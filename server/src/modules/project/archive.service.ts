@@ -1,8 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import { ProjectArchiveViewSchema, z } from "@libiaolink/contracts";
+import { ProjectArchiveBodySchema, ProjectArchiveViewSchema, ProjectUnarchiveBodySchema, z } from "@libiaolink/contracts";
 import type { StageKey } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import { DatabaseService } from "../../db/database.service.js";
+import { appendOutbox } from "../../db/outbox.js";
 import type { DbClient } from "../../db/db-client.js";
 import { AuditService } from "../admin/index.js";
 import { ArchiveRepository, type ArchiveViewRow } from "./archive.repository.js";
@@ -13,12 +14,14 @@ import type { ProjectStageRow } from "./flow.repository.js";
 
 export type ProjectArchiveView = z.infer<typeof ProjectArchiveViewSchema>;
 
-export type ArchiveRequestBody = { version: number; confirm: boolean };
+export type ArchiveRequestBody = z.infer<typeof ProjectArchiveBodySchema>;
+export type UnarchiveRequestBody = z.infer<typeof ProjectUnarchiveBodySchema>;
 
 /** 行 → 契约视图（归档清单读面 / 归档成功返回同形）。 */
 export function toArchiveView(row: ArchiveViewRow): ProjectArchiveView {
   return {
     id: row.archive.id,
+    archiveKind: row.archive.archiveKind,
     projectId: row.archive.projectId,
     archivedAt: row.archive.archivedAt.toISOString(),
     archivedBy: row.archive.archivedBy,
@@ -29,11 +32,11 @@ export function toArchiveView(row: ArchiveViewRow): ProjectArchiveView {
 }
 
 /**
- * 归档用例（M7-04 · ADR-027 · C4-02 / C4-03）：任务全部完成 → 冻结状态位 + 引用式清单 + 只读保护。
+ * 归档用例（M7-04 · ADR-027 · C4-02 / C4-03）：按验收结果 → 冻结状态位 + 引用式清单 + 只读保护。
  * 口径：
- *   1. 硬前置：项目内未删除任务全部 done；有未完成任务 409 ARCHIVE_NOT_READY（不可确认越过）。
+ *   1. 已验收归档要求未删除任务全部完成，且包含已完成的验收阶段任务；异常归档直接保留原进度。
  *      文件是否定档、节点必交成果是否齐全均不再阻断归档（2026-11-12 业务口径）。
- *   2. 归档事务（全部同事务）：锁项目行 → 乐观锁 version 判定 → 校验任务完成 → 置 status = archived + archived_at / archived_by →
+ *   2. 归档事务（全部同事务）：锁项目行 → 乐观锁 version 判定 → 按归档类型校验 → 置 status = archived + archived_at / archived_by →
  *      生成 project_archives 清单 → 撤销进行中的上传会话 → 审计 action = archive；不删数据、不改阶段。
  *   3. 权限：仅最终项目编辑者（管理员、所管本项目的项目经理或规则 edit）；记录级可见性由 ProjectAccessGuard 先行（404 语义）。
  */
@@ -48,7 +51,7 @@ export class ArchiveService {
   ) {}
 
   /**
-   * POST /projects/{id}/archive：任务全部完成即置位 + 清单。
+   * POST /projects/{id}/archive：分类归档并生成清单。
    * confirm 保留为旧契约兼容字段；当前口径不存在可确认越过的缺项，值会被忽略。
    */
   async archiveProject(projectId: string, body: ArchiveRequestBody, actorId: string): Promise<ProjectArchiveView> {
@@ -56,33 +59,40 @@ export class ArchiveService {
     if (view === null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
     if (view.project.status === "archived") throw new AppError("PROJECT_ARCHIVED", "项目已归档");
     await this.flow.assertProjectEditor(projectId, actorId, "项目归档");
-    const at = new Date();
     await this.database.db.transaction(async (tx) => {
       const locked = await this.archive.lockProjectRow(tx, projectId);
       if (locked === null || locked.deletedAt !== null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
       if (locked.status === "archived") throw new AppError("PROJECT_ARCHIVED", "项目已归档");
       if (locked.version !== body.version) throw new AppError("VERSION_CONFLICT", "项目已被他人更新，请刷新后重试");
-      const unfinished = await this.archive.listUnfinishedTasks(tx, projectId);
-      if (unfinished.length > 0) {
-        throw new AppError(
-          "ARCHIVE_NOT_READY",
-          "项目任务未全部完成，不能归档（还有 " + unfinished.length + " 项）",
-          unfinished.map((task) => ({
-            code: "task_not_done",
-            message: "任务未完成：" + task.title + "（状态 " + task.status + (task.stageKey === null ? "，未分组" : "，阶段 " + task.stageKey) + "）",
-            path: "missing",
-            meta: { taskId: task.id, title: task.title, stageKey: task.stageKey, status: task.status },
-          })),
-        );
+      if (body.archiveKind === "accepted") {
+        const unfinished = await this.archive.listUnfinishedTasks(tx, projectId);
+        if (unfinished.length > 0) {
+          throw new AppError(
+            "ARCHIVE_NOT_READY",
+            "项目任务未全部完成，不能归档（还有 " + unfinished.length + " 项）",
+            unfinished.map((task) => ({
+              code: "task_not_done",
+              message: "任务未完成：" + task.title + "（状态 " + task.status + (task.stageKey === null ? "，未分组" : "，阶段 " + task.stageKey) + "）",
+              path: "missing",
+              meta: { taskId: task.id, title: task.title, stageKey: task.stageKey, status: task.status },
+            })),
+          );
+        }
+        if (!(await this.archive.hasCompletedAcceptanceTask(tx, projectId))) {
+          throw new AppError("ARCHIVE_NOT_READY", "验收阶段尚无已完成的任务", [
+            { code: "acceptance_missing", message: "验收阶段至少需要一项已完成的任务", path: "missing" },
+          ]);
+        }
       }
       const stage = await this.archive.findStage(tx, projectId, locked.stageKey);
       if (stage === null) throw new AppError("INTERNAL", "项目阶段快照缺失，无法归档");
-      const updated = await this.archive.updateProjectArchived(tx, projectId, at, actorId, body.version);
+      const updated = await this.archive.updateProjectArchived(tx, projectId, actorId, body.version);
       if (updated === null) throw new AppError("VERSION_CONFLICT", "项目已被他人更新，请刷新后重试");
+      const at = updated.updatedAt;
       const snapshot = await this.buildSnapshot(tx, projectId, stage);
       const record = await this.archive.insertArchive(tx, {
         projectId,
-        archivedAt: at,
+        archiveKind: body.archiveKind,
         archivedBy: actorId,
         snapshot,
         acknowledgedMissing: [],
@@ -96,8 +106,15 @@ export class ArchiveService {
         projectId,
         summary: "归档项目：" + locked.code + "（" + locked.name + "）",
         changes: [{ field: "status", from: locked.status, to: "archived" }],
-        metadata: { archiveId: record.id },
+        metadata: { archiveId: record.id, archiveKind: body.archiveKind },
       });
+      if (body.archiveKind === "accepted") {
+        await appendOutbox(tx, {
+          topic: "project.completed",
+          dedupeKey: "project.completed:" + projectId + ":" + updated.version,
+          payload: { projectId, status: updated.status, previousStatus: locked.status, version: updated.version, actorId, at: at.toISOString() },
+        });
+      }
     });
     const record = await this.archive.findArchive(this.database.db, projectId);
     if (record === null) throw new AppError("INTERNAL", "归档记录写入后读取失败");
@@ -118,7 +135,7 @@ export class ArchiveService {
    * POST /projects/{id}/unarchive：归档后恢复到进行中。
    * 保留 project_archives 中的最近一次归档清单；再次归档时覆盖该清单，避免一项目一份唯一约束冲突。
    */
-  async restoreArchivedProject(projectId: string, body: ArchiveRequestBody, actorId: string): Promise<ProjectView> {
+  async restoreArchivedProject(projectId: string, body: UnarchiveRequestBody, actorId: string): Promise<ProjectView> {
     const view = await this.projects.findViewById(projectId);
     if (view === null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
     if (view.project.status !== "archived") throw new AppError("VALIDATION_FAILED", "项目未归档，无需恢复到进行中");

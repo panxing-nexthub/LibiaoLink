@@ -59,10 +59,10 @@ describe("buildR06PosterMetrics（R06 动态海报口径）", () => {
 
 describe("shouldUseR06BrandPoster（黄黑品牌海报分流）", () => {
   it("仅当项目已完成且全部任务完成、全部按期时启用", () => {
-    expect(shouldUseR06BrandPoster({ status: "done", taskTotal: 24, taskDone: 24, onTimeDone: 24 })).toBe(true);
-    expect(shouldUseR06BrandPoster({ status: "done", taskTotal: 24, taskDone: 24, onTimeDone: 23 })).toBe(false);
-    expect(shouldUseR06BrandPoster({ status: "done", taskTotal: 24, taskDone: 23, onTimeDone: 23 })).toBe(false);
-    expect(shouldUseR06BrandPoster({ status: "done", taskTotal: 0, taskDone: 0, onTimeDone: 0 })).toBe(false);
+    expect(shouldUseR06BrandPoster({ status: "archived", taskTotal: 24, taskDone: 24, onTimeDone: 24 })).toBe(true);
+    expect(shouldUseR06BrandPoster({ status: "archived", taskTotal: 24, taskDone: 24, onTimeDone: 23 })).toBe(false);
+    expect(shouldUseR06BrandPoster({ status: "archived", taskTotal: 24, taskDone: 23, onTimeDone: 23 })).toBe(false);
+    expect(shouldUseR06BrandPoster({ status: "archived", taskTotal: 0, taskDone: 0, onTimeDone: 0 })).toBe(false);
     expect(shouldUseR06BrandPoster({ status: "active", taskTotal: 24, taskDone: 24, onTimeDone: 24 })).toBe(false);
   });
 });
@@ -102,7 +102,7 @@ describe("renderR06Poster（动态海报 PNG）", () => {
   }, 20_000);
 
   it("全部任务按时交付时输出黄黑品牌版 900x1350 PNG", async () => {
-    const buffer = await renderR06Poster({ ...VIEW, status: "done", taskDone: 44, onTimeDone: 44 });
+    const buffer = await renderR06Poster({ ...VIEW, status: "archived", taskDone: 44, onTimeDone: 44 });
     expect(buffer.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
     expect(buffer.readUInt32BE(16)).toBe(900);
     expect(buffer.readUInt32BE(20)).toBe(1350);

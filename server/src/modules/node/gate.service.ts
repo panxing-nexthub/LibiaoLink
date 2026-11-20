@@ -17,19 +17,6 @@ export type StageGateMissingItem =
   | { type: "task_delivery_missing"; total: number; ready: number }
   | { type: "doc_missing"; nodeId: string; nodeKey: string; docType: string; required: number; present: number };
 
-/** 项目标记完成前的任务交付缺项（FlowService 转 422 明细；缺少成果类型配置的任务不产生缺项）。 */
-export type ProjectCompletionMissingItem =
-  | { type: "task_not_done"; total: number; done: number }
-  | {
-      type: "task_delivery_missing";
-      taskId: string;
-      taskTitle: string;
-      stageKey: string | null;
-      docType: string;
-      required: number;
-      present: number;
-    };
-
 /**
  * 门禁判定唯一出口（v0.2 §3.6 / ADR-023）：节点完成与阶段推进共用同一实现，
  * 保证「节点 / 任务 / 阶段」三处判定一致；只读，不写库（拒绝留痕由调用方在同事务外补写）。
@@ -98,25 +85,6 @@ export class GateService {
         total: taskCounts.total,
         ready: taskCounts.deliveryReady,
       });
-    }
-    return { ok: missing.length === 0, missing };
-  }
-
-  /**
-   * 项目标记完成门禁：全部未删除任务 done；配置了成果类型的任务均有对应上传文件。
-   * 未配置成果类型的任务只校验状态，不额外要求文件。
-   */
-  async evaluateProjectCompletion(
-    client: DbClient,
-    projectId: string,
-  ): Promise<{ ok: boolean; missing: ProjectCompletionMissingItem[] }> {
-    const status = await this.taskStats.evaluateProjectDelivery(client, projectId);
-    const missing: ProjectCompletionMissingItem[] = [];
-    if (status.done < status.total) {
-      missing.push({ type: "task_not_done", total: status.total, done: status.done });
-    }
-    for (const issue of status.issues) {
-      missing.push({ type: "task_delivery_missing", ...issue });
     }
     return { ok: missing.length === 0, missing };
   }

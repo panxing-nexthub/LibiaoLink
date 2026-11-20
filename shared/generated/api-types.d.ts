@@ -1537,7 +1537,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** 项目归档（门禁：项目内未删除任务全部完成；有未完成任务 409 ARCHIVE_NOT_READY 且 confirm 不可越过；通过后置位并生成引用式清单） */
+        /** 项目归档：已验收需全部任务完成且含验收任务；异常归档可直接办理，两者均生成清单 */
         post: {
             parameters: {
                 query?: never;
@@ -1638,7 +1638,7 @@ export interface paths {
             };
             requestBody?: {
                 content: {
-                    "application/json": components["schemas"]["ProjectArchiveBody"];
+                    "application/json": components["schemas"]["ProjectUnarchiveBody"];
                 };
             };
             responses: {
@@ -13256,6 +13256,8 @@ export interface components {
             region: string | null;
             /** @description 识别出的项目类型（字典码：AIRROB → 飞箱）；识别不出 = null（可留空） */
             projectType: string | null;
+            /** @description 文件名中识别的全部类型，按首次出现顺序排列 */
+            projectTypes: string[];
             /** @description 源表项目经理原文（按全表多数口径补） */
             managerNames: string[];
         };
@@ -13984,6 +13986,8 @@ export interface components {
             customer: string | null;
             /** @description 项目落地地区（字典 region；缺省「未分类」） */
             region: string;
+            /** @description 按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。 */
+            projectTypes: string[];
             /** @description 项目类型（字典 project_type；主题色随字典元数据下发，前端不硬编码） */
             projectType: string;
             /** @description 项目经理（A22 · Push 136：一位也可、可多位）：至少一位、数组顺序 = 展示顺序（前端按「、」连接展示）；与 managerNames 同下标一一对应 */
@@ -13998,19 +14002,31 @@ export interface components {
             version: components["schemas"]["Version"];
             createdAt: components["schemas"]["DateTime"];
             updatedAt: components["schemas"]["DateTime"];
+            /** @description 本次归档后新增的手工临时任务中，是否仍有未删除且未完成的任务 */
+            hasOpenPostArchiveTask: boolean;
+            /**
+             * @description 已归档项目返回已验收归档或异常归档，已有归档按已验收处理；未归档为 null
+             * @enum {string|null}
+             */
+            archiveKind: "accepted" | "unaccepted" | null;
             archivedAt: components["schemas"]["DateTime"] & (string | null);
             archivedBy: components["schemas"]["Uuid"] & (string | null);
             deletedAt: components["schemas"]["DateTime"] & (string | null);
             deletedBy: components["schemas"]["Uuid"] & (string | null);
         };
-        /** @description 归档 / 恢复请求：version 必带；confirm 仅兼容旧客户端，当前忽略 */
         ProjectArchiveBody: {
             version: components["schemas"]["Version"] & unknown;
             /**
-             * @description 旧契约兼容字段：当前忽略；归档只校验任务是否全部完成，true 不能绕过 ARCHIVE_NOT_READY
+             * @description 旧契约兼容字段：当前忽略，不改变归档类型或门禁
              * @default false
              */
             confirm: boolean;
+            /**
+             * @description accepted 已验收归档，unaccepted 异常归档；旧请求默认已验收
+             * @default accepted
+             * @enum {string}
+             */
+            archiveKind: "accepted" | "unaccepted";
         };
         /** @description 归档缺项条目（历史兼容；2026-11-12 起新归档 acknowledgedMissing 恒为空） */
         ProjectArchiveMissing: {
@@ -14091,6 +14107,11 @@ export interface components {
             projectId: components["schemas"]["Uuid"];
             archivedAt: components["schemas"]["DateTime"];
             archivedBy: components["schemas"]["Uuid"];
+            /**
+             * @description 归档清单的验收类型
+             * @enum {string}
+             */
+            archiveKind: "accepted" | "unaccepted";
             /** @description 归档操作人姓名（users.display_name；取不到 = null） */
             archivedByName: string | null;
             snapshot: components["schemas"]["ProjectArchiveSnapshot"];
@@ -14111,6 +14132,8 @@ export interface components {
              * @default 未分类
              */
             region: string;
+            /** @description 按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。 */
+            projectTypes?: string[];
             /**
              * @description 项目类型（字典 project_type）；未填写归入「未分类」（A1-12 定档）
              * @default 未分类
@@ -14197,6 +14220,8 @@ export interface components {
             previewId: components["schemas"]["Uuid"];
             /** @description 项目地区（region 字典的码 / 标准国家名；必填） */
             region: string;
+            /** @description 按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。 */
+            projectTypes?: string[];
             /**
              * @description 项目类型（projectType 字典的码）；空串 = 未指定（解析按源表关键字给默认，如 AIRROB → 飞箱）
              * @default
@@ -14460,6 +14485,8 @@ export interface components {
             name: string;
             /** @description 项目落地地区（字典 region） */
             region: string;
+            /** @description 按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。 */
+            projectTypes: string[];
             /** @description 项目类型（字典 project_type） */
             projectType: string;
             status: components["schemas"]["ProjectStatus"];
@@ -14557,7 +14584,7 @@ export interface components {
          * @description 项目状态（projects.status）
          * @enum {string}
          */
-        ProjectStatus: "active" | "paused" | "done" | "archived";
+        ProjectStatus: "active" | "paused" | "archived";
         /** @description 项目总览汇总卡统计（任务派生；口径见 v0.2 §2.4 与前端功能需求 §3.4） */
         ProjectSummary: {
             projectId: components["schemas"]["Uuid"];
@@ -14569,6 +14596,14 @@ export interface components {
             /** @description 仅归档项目返回，表示是否仍可填报日报（另需具备填报权限） */
             hasUnfinishedTemporaryTask?: boolean;
         };
+        ProjectUnarchiveBody: {
+            version: components["schemas"]["Version"] & unknown;
+            /**
+             * @description 旧契约兼容字段：当前忽略，不改变归档类型或门禁
+             * @default false
+             */
+            confirm: boolean;
+        };
         ProjectUpdateBody: {
             /**
              * @description 项目编号：建后可修改；同样校验唯一性，重复返回 409 PROJECT_CODE_EXISTS
@@ -14578,15 +14613,17 @@ export interface components {
             name?: string;
             customer?: string | null;
             region?: string;
+            /** @description 按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。 */
+            projectTypes?: string[];
             projectType?: string;
             /** @description 项目经理（A22 · Push 136）：至少一位、可多位（≤ 200 位）；不传 = 不改、传空数组或超过上限 = 400；数组顺序 = 展示顺序 */
             managerIds?: components["schemas"]["Uuid"][];
             stageKey?: components["schemas"]["StageKey"];
             /**
-             * @description 项目状态（active / paused / done）；archived 不接受 PATCH —— 归档只能走 POST /projects/{id}/archive（ADR-027 门禁 + 清单），确保归档必有清单与留痕
+             * @description 项目状态（active / paused）；archived 不接受 PATCH —— 归档只能走 POST /projects/{id}/archive（ADR-027 门禁 + 清单），确保归档必有清单与留痕
              * @enum {string}
              */
-            status?: "active" | "paused" | "done";
+            status?: "active" | "paused";
             description?: string | null;
             version: components["schemas"]["Version"];
         };

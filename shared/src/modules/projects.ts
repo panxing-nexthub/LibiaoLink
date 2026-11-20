@@ -6,6 +6,13 @@ import { UserSummarySchema } from "./users.ts";
 
 const PROJECT_MANAGER_IDS_LIMIT = 200;
 
+export const ProjectTypesSchema = z.array(z.string().trim().min(1).max(100)).min(1).max(200)
+  .refine((codes) => new Set(codes).size === codes.length, "项目类型不能重复")
+  .describe("按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。");
+
+export const ProjectArchiveKindSchema = z.enum(["accepted", "unaccepted"]);
+export type ProjectArchiveKind = z.infer<typeof ProjectArchiveKindSchema>;
+
 /** 项目主数据（projects 表；API 字段 camelCase 与 DDL snake_case 的映射见 shared/README.md）。 */
 export const ProjectSchema = z
   .object({
@@ -15,6 +22,7 @@ export const ProjectSchema = z
     name: z.string().openapi({ example: "XX 客户分拣项目" }),
     customer: z.string().nullable(),
     region: z.string().openapi({ description: "项目落地地区（字典 region；缺省「未分类」）" }),
+    projectTypes: ProjectTypesSchema,
     projectType: z.string().openapi({ description: "项目类型（字典 project_type；主题色随字典元数据下发，前端不硬编码）" }),
     managerIds: z.array(UuidSchema).min(1).openapi({
       description: "项目经理（A22 · Push 136：一位也可、可多位）：至少一位、数组顺序 = 展示顺序（前端按「、」连接展示）；与 managerNames 同下标一一对应",
@@ -32,6 +40,8 @@ export const ProjectSchema = z
     version: VersionSchema,
     createdAt: DateTimeSchema,
     updatedAt: DateTimeSchema,
+    hasOpenPostArchiveTask: z.boolean().describe("本次归档后新增的手工临时任务中，是否仍有未删除且未完成的任务"),
+    archiveKind: ProjectArchiveKindSchema.nullable().describe("已归档项目返回已验收归档或异常归档，已有归档按已验收处理；未归档为 null"),
     archivedAt: DateTimeSchema.nullable().openapi({
       description: "归档时点（ADR-027 · M7-04）：仅归档端点置位；未归档 = null（归档后项目进入只读保护）",
     }),
@@ -155,6 +165,7 @@ export const ProjectMapOverviewItemSchema = z
     code: z.string(),
     name: z.string(),
     region: z.string().openapi({ description: "项目落地地区（字典 region）" }),
+    projectTypes: ProjectTypesSchema,
     projectType: z.string().openapi({ description: "项目类型（字典 project_type）" }),
     status: ProjectStatusSchema,
     accessLevel: GroupAccessAccessLevelSchema.nullable().openapi({
@@ -182,6 +193,7 @@ export const ProjectCreateBodySchema = z
       .max(100)
       .default("未分类")
       .openapi({ description: "项目落地地区（字典 region）；未填写归入「未分类」（A1-12 定档）" }),
+    projectTypes: ProjectTypesSchema.optional(),
     projectType: z
       .string()
       .min(1)
@@ -204,15 +216,16 @@ export const ProjectUpdateBodySchema = z
     name: z.string().min(1).max(200).optional(),
     customer: z.string().max(200).nullable().optional(),
     region: z.string().min(1).max(100).optional(),
+    projectTypes: ProjectTypesSchema.optional(),
     projectType: z.string().min(1).max(100).optional(),
     managerIds: z.array(UuidSchema).min(1).max(PROJECT_MANAGER_IDS_LIMIT).optional().openapi({
       description: "项目经理（A22 · Push 136）：至少一位、可多位（≤ 200 位）；不传 = 不改、传空数组或超过上限 = 400；数组顺序 = 展示顺序",
     }),
     stageKey: StageKeySchema.optional(),
     status: z
-      .enum(["active", "paused", "done"])
+      .enum(["active", "paused"])
       .optional()
-      .openapi({ description: "项目状态（active / paused / done）；archived 不接受 PATCH —— 归档只能走 POST /projects/{id}/archive（ADR-027 门禁 + 清单），确保归档必有清单与留痕" }),
+      .openapi({ description: "项目状态（active / paused）；archived 不接受 PATCH —— 归档只能走 POST /projects/{id}/archive（ADR-027 门禁 + 清单），确保归档必有清单与留痕" }),
     description: z.string().max(2000).nullable().optional(),
     version: VersionSchema,
   })
@@ -233,23 +246,27 @@ const ZeroOrMore = z.number().int().min(0);
 /**
  * 归档（C4-02 / C4-03 · ADR-027 · M7-04）：门禁 + 引用式清单 + 冻结状态位（projects.status = archived）；
  * 归档项目可走 POST /projects/{id}/unarchive 恢复到 active，保留最近一次归档清单并写审计。
- * 门禁：项目内未删除任务全部完成（有未完成任务 409 ARCHIVE_NOT_READY，confirm=true 不可越过）；
+ * 已验收归档要求未删除任务全部完成且包含验收任务；异常归档保留原任务进度。
  * 文件是否定档、节点必交成果是否齐全均不再阻断归档（2026-11-12 业务口径）；
  * 新归档 acknowledgedMissing 恒为空；旧缺项 422 与 file_not_final / doc_missing 仅用于历史读取。
  * 清单为引用式快照：只记 id 与摘要（任务数与状态分布 / 阶段状态 / 文件清单含版本 / 变更 / 日报 / 问题），不复制业务数据；
  * 归档不清数据、不改阶段；清单导出（目录结构 + 文件按类型 / 阶段组织）随 M7-03 导出框架。
  */
-export const ProjectArchiveBodySchema = z
+const archiveVersionBody = z
   .object({
     version: VersionSchema.openapi({ description: "项目当前 version（乐观锁；不匹配 409 VERSION_CONFLICT）" }),
     confirm: z
       .boolean()
       .default(false)
-      .openapi({ description: "旧契约兼容字段：当前忽略；归档只校验任务是否全部完成，true 不能绕过 ARCHIVE_NOT_READY" }),
-  })
-  .openapi("ProjectArchiveBody", { description: "归档 / 恢复请求：version 必带；confirm 仅兼容旧客户端，当前忽略" });
+      .openapi({ description: "旧契约兼容字段：当前忽略，不改变归档类型或门禁" }),
+  });
 
-/** 归档缺项条目（历史兼容）：旧版本 422 明细与清单 acknowledgedMissing 同形；新归档只可能产生 task_not_done。 */
+export const ProjectUnarchiveBodySchema = archiveVersionBody.openapi("ProjectUnarchiveBody");
+export const ProjectArchiveBodySchema = archiveVersionBody.extend({
+  archiveKind: ProjectArchiveKindSchema.default("accepted").describe("accepted 已验收归档，unaccepted 异常归档；旧请求默认已验收"),
+}).openapi("ProjectArchiveBody");
+
+/** 归档缺项条目（历史兼容）：旧版本 422 明细与清单 acknowledgedMissing 同形；新归档的拒绝明细通过错误响应返回。 */
 export const ProjectArchiveMissingSchema = z
   .object({
     code: z
@@ -309,6 +326,7 @@ export const ProjectArchiveViewSchema = z
     projectId: UuidSchema,
     archivedAt: DateTimeSchema,
     archivedBy: UuidSchema,
+    archiveKind: ProjectArchiveKindSchema.describe("归档清单的验收类型"),
     archivedByName: z.string().nullable().openapi({ description: "归档操作人姓名（users.display_name；取不到 = null）" }),
     snapshot: ProjectArchiveSnapshotSchema,
     acknowledgedMissing: z.array(ProjectArchiveMissingSchema).openapi({ description: "旧流程缺项留痕（历史兼容；2026-11-12 起新归档恒为空数组）" }),

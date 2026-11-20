@@ -16,11 +16,11 @@
 - 路由（契约 `shared/src/modules/projects.ts`，OpenAPI tags=projects）：全部挂 `SessionGuard + CsrfGuard`（读要登录、写要 `X-CSRF-Token`）。注册顺序上 `GET /facets`、`GET /map-overview` 均在 `GET /:id` 之前（否则被 `:id` 吃掉）；`id` 走 `UuidSchema` 校验（非法 400 VALIDATION_FAILED）。`POST /api/v1/projects/{id}/visit` 记录项目详情访问（`action=visit` / `entry=page`；不存在 / 不可见 404 不写）。
 - M2-01 项目 CRUD：
   - 创建 `POST /api/v1/projects` → 201；`seq_no` 由服务端在事务内分配“当前最小可用正整数”（请求不接受 `seqNo`；彻底删除后的空号由下一次创建复用，并发创建用事务级 advisory lock 串行化）；`code` 唯一由约束兜底，23505 + `projects_code_key` → 409 `PROJECT_CODE_EXISTS`；缺省 `stageKey = presale`。
-  - 更新 `PATCH /api/v1/projects/{id}`：乐观锁（正文回传 `version`，命中则 `version + 1` 并刷新 `updated_at`）；不匹配 409 `VERSION_CONFLICT`；期间被删 → 404。首次把 `status` 改为 `done` 时先过项目完成门禁：未删除任务必须全部 done；配置了成果类型的任务必须有对应上传文件（`draft / final / changed` 均算），未配置不要求；缺交付文件返回 422 `TASK_REQUIRED_DOC_MISSING` 与逐项明细，任务未完成返回 400。
+  - 更新 `PATCH /api/v1/projects/{id}`：乐观锁（正文回传 `version`，命中则 `version + 1` 并刷新 `updated_at`）；不匹配 409 `VERSION_CONFLICT`；期间被删 → 404。
   - 回收站 `DELETE /api/v1/projects/{id}`：`If-Match` 回传当前 `version`，只写 `deleted_at` / `deleted_by` 并 `version + 1`；普通读面立即不可见，`GET /projects?filter[recycled]=true` 可查。
   - 恢复 / 彻底删除：`POST /projects/{id}/restore`（只需 `project.delete`）清回收站标记；`POST /projects/{id}/purge`（仅 admin）先按 `projects/{id}/` 前缀清对象全部版本，再按外键序物理清 9 张聚合子表与项目行。`code` 与 `seq_no` 均在回收站期间保留，彻底删除后同时释放。
   - 30 天到期清理：worker 每 24 小时扫描 `deleted_at <= now() - 30 days` 的项目，单轮内按 ≤ 20 个一批（`PROJECT_RECYCLE_SWEEP_BATCH`）drain，直到不满批或无进展；复用彻底删除链路清理数据、文件 / 图片对象并写 `source=system` 审计；并发恢复 / 手动彻底删除在行锁内复核后跳过。
-  - 归档（M7-04 · Push 167 · 2026-11-12 口径）：走专门端点 —— `POST /api/v1/projects/{id}/archive`（项目内未删除任务全部完成门禁 + 置位 + 引用式清单 + 撤销上传会话 + 审计）与 `GET /api/v1/projects/{id}/archive`（清单读面，未归档 404）；文件定档 / 必交成果不再阻断；`PATCH` 的 `status` 收紧为 active / paused / done（**不再接受 archived**）；列表增 `filter[archivedYear]`（C4-07 检索）。写保护不变：`status = archived` 的项目 PATCH / DELETE 一律 409 `PROJECT_ARCHIVED`。
+  - 归档（M7-04 · Push 167 · 2026-11-12 口径）：走专门端点 —— `POST /api/v1/projects/{id}/archive`（按验收类型校验 + 置位 + 引用式清单 + 撤销上传会话 + 审计）与 `GET /api/v1/projects/{id}/archive`（清单读面，未归档 404）；文件定档 / 必交成果不再阻断；`PATCH` 的 `status` 收紧为 active / paused（archived 由归档端点写入）；列表增 `filter[archivedYear]`（C4-07 检索）。写保护不变：`status = archived` 的项目 PATCH / DELETE 一律 409 `PROJECT_ARCHIVED`。
 - M2-04 首页列表 / facets：`GET /api/v1/projects` 与 `GET /api/v1/projects/facets` 共用 `buildProjectFilter`（v0.3 §3.3「禁止两套 SQL」）——多值 `filter[region|projectType|managerId|stageKey|status]`（英文逗号分隔；`managerId` 命中口径 = 项目挂的任意一位经理，A22 · Push 136）；facets 的项目经理维度 = 数组展开后按人头计数（一个项目挂多位经理时每位各计一次）、`q` 命中编号 / 名称 / 客户 / 序号、`filter[timeFrom] / filter[timeTo]` 闭区间（`updated_at`）；facets 五组固定返回（A6），`total` 与列表同口径。
 - 时间口径（ADR-028 · **Push 175 维度修订**）：区间按 Asia/Shanghai 日界（固定 `+08:00`，中国无夏令时）——下界含当日 00:00，上界取次日 00:00 不含；**区间维度 = `projects.created_at`（项目创建时间；原「最近活动 `updated_at`」口径作废）**；`timeFrom` 晚于 `timeTo` 或 `status` / `stageKey` / `managerId` 含非法值一律 400（不返回静默空列表）。
 - 排序（A9 · **Push 175 缺省修订**）：白名单 `updatedAt` / `createdAt` / `seqNo`，方向 `asc|desc`；**缺省 `createdAt:desc`（最近创建的在前；原 `updatedAt:desc` 作废）** —— 前端 TIME = 「维度 × 方向」（创建时间 / 更新时间 × 降序 / 升序）；仓储补 `asc(seq_no)` 稳定 tie-breaker，分页不跳行。
@@ -56,7 +56,7 @@
 ## 已实现（M7-04 归档 · ADR-027 · C4-02 / C4-03 · Push 167）
 
 - 端点（契约 `shared/src/modules/projects.ts`，OpenAPI tags = projects；`project.archive` 功能权限 + 记录级可见性）：`POST /api/v1/projects/{id}/archive`（200 返回清单视图）与 `GET /api/v1/projects/{id}/archive`（未归档 / 无清单 404）。
-- 门禁（ADR-027 · 2026-11-12 业务口径）：项目内未删除任务全部 done 才可归档；有未完成任务 409 `ARCHIVE_NOT_READY`（details 逐条 `task_not_done`），`confirm=true` 不可越过。文件是否定档、节点必交成果是否齐全均不再阻断，也不再产生 422 缺项清单；`acknowledgedMissing` 仅保留历史记录读取，新归档恒为空数组。
+- 已验收归档（默认 `archiveKind=accepted`）要求所有未删除任务完成且含验收阶段任务；缺项返回 409 `ARCHIVE_NOT_READY`。异常归档（`unaccepted`）保留任务进度，不写 `project.completed`。两类归档均保留清单与操作审计，既有归档清单的 `archiveKind` 统一补为 `accepted`。
 - 归档事务（单事务）：锁项目行（`FOR UPDATE`）→ 乐观锁 `version` 判定 → 置 `status = archived` + `archived_at` / `archived_by` → 生成 `project_archives` 引用式清单（阶段 / 任务分布 / 文件含版本 / 变更 / 日报 / 问题统计）→ 撤销进行中的上传会话 → 审计 `action=archive`；不删数据、不改阶段、不做解冻（冻结口径）。
 - 检索与投影：列表 `filter[archivedYear]`（四位年份 1900-2100、多值逗号分隔；按 `archived_at` 的 Asia/Shanghai 年）—— 归档检索（C4-07）的服务端读面；`search_docs` 搜索投影随 M7-01（lan）。
 - 数据面：迁移 `0036_project_archive.sql`（`projects.archived_at` / `archived_by` 成对 CHECK + `project_archives` 表 + `ck_audit_logs_action` 十值 → 十一值）；`project_archives` 已并入硬删外键依赖序（本模块 README 上节删除序列）。

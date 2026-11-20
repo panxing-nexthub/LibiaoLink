@@ -6,8 +6,9 @@ import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
 import { files } from "../../db/schema/files.js";
 import { users } from "../../db/schema/identity.js";
-import { projects } from "../../db/schema/projects.js";
+import { projectArchives, projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
+import { hasOpenPostArchiveTask } from "../../db/task-scope.js";
 import { tasks } from "../../db/schema/tasks.js";
 import type { ProjectScopeFilter } from "../permission/index.js";
 import { loadIssuePhotos, type FilePhotoRefRow } from "../report-issue/index.js";
@@ -68,6 +69,7 @@ export interface WorkspaceProjectRow {
   customer: string | null;
   region: string;
   projectType: string;
+  additionalProjectTypes: string[];
   managerIds: string[];
   managerNames: (string | null)[] | null;
   stageKey: string;
@@ -76,6 +78,8 @@ export interface WorkspaceProjectRow {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+  hasOpenPostArchiveTask: boolean;
+  archiveKind: typeof projectArchives.$inferSelect.archiveKind | null;
   archivedAt: Date | null;
   archivedBy: string | null;
 }
@@ -297,6 +301,7 @@ export class WorkspaceRepository {
         customer: projects.customer,
         region: projects.region,
         projectType: projects.projectType,
+        additionalProjectTypes: projects.additionalProjectTypes,
         managerIds: projects.managerIds,
         managerNames: MANAGER_NAMES_SQL,
         stageKey: projects.stageKey,
@@ -305,10 +310,13 @@ export class WorkspaceRepository {
         version: projects.version,
         createdAt: projects.createdAt,
         updatedAt: projects.updatedAt,
+        hasOpenPostArchiveTask,
+        archiveKind: projectArchives.archiveKind,
         archivedAt: projects.archivedAt,
         archivedBy: projects.archivedBy,
       })
       .from(projects)
+      .leftJoin(projectArchives, and(eq(projects.status, "archived"), eq(projectArchives.projectId, projects.id)))
       .where(and(inArray(projects.id, [...projectIds]), isNull(projects.deletedAt)));
     return rows as WorkspaceProjectRow[];
   }

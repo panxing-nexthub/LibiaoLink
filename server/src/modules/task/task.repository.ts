@@ -532,7 +532,7 @@ export class TaskRepository {
     return rows[0] ?? null;
   }
 
-  async insert(input: TaskInsertInput, at: Date, client: DbClient): Promise<TaskRow> {
+  async insert(input: TaskInsertInput, client: DbClient): Promise<TaskRow> {
     const rows = await client
       .insert(tasks)
       .values({
@@ -554,8 +554,8 @@ export class TaskRepository {
         priority: input.priority,
         deliverableTypes: input.deliverableTypes,
         note: input.note,
-        createdAt: at,
-        updatedAt: at,
+        createdAt: sql`statement_timestamp()`,
+        updatedAt: sql`statement_timestamp()`,
       })
       .returning();
     const row = rows[0];

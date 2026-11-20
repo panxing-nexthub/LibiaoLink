@@ -29,15 +29,6 @@ export interface TaskDeliveryMissing {
   present: number;
 }
 
-export interface TaskDeliveryIssue {
-  taskId: string;
-  taskTitle: string;
-  stageKey: string | null;
-  docType: string;
-  required: number;
-  present: number;
-}
-
 export interface TaskFinalizationTargetRow {
   id: string;
   nodeId: string | null;
@@ -55,16 +46,6 @@ export interface TaskDeliveryStatus {
   total: number;
   done: number;
   deliveryReady: number;
-  issues: TaskDeliveryIssue[];
-}
-
-interface TaskDeliveryTaskRow {
-  id: string;
-  title: string;
-  stageKey: string | null;
-  nodeId: string | null;
-  status: string;
-  deliverableTypes: string[];
 }
 
 /**
@@ -141,31 +122,27 @@ export class TaskGateRepository {
   }
 
   /**
-   * 阶段 / 项目交付齐套状态：逐任务合并节点 required_doc 与任务 deliverable_types；
+   * 阶段交付齐套状态：逐任务合并节点 required_doc 与任务 deliverable_types；
    * 配置了成果类型时仅要求范围内存在至少一份已上传文件，未配置 = 不需要文件。
    * deliveryReady 只统计已完成任务中要求已满足的数量，供阶段通知 / 阶段推进判断。
    */
   async evaluateDeliveryStatus(
     client: DbClient,
     projectId: string,
-    stageKey?: string,
+    stageKey: string,
   ): Promise<TaskDeliveryStatus> {
-    const taskConditions: SQL[] = [eq(tasks.projectId, projectId), isNull(tasks.deletedAt)];
-    if (stageKey !== undefined) taskConditions.push(eq(tasks.stageKey, stageKey));
-    const taskRows = (await client
+    const taskRows = await client
       .select({
         id: tasks.id,
-        title: tasks.title,
-        stageKey: tasks.stageKey,
         nodeId: tasks.nodeId,
         status: tasks.status,
         deliverableTypes: tasks.deliverableTypes,
       })
       .from(tasks)
-      .where(and(...taskConditions))) as TaskDeliveryTaskRow[];
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.stageKey, stageKey), isNull(tasks.deletedAt)));
 
     if (taskRows.length === 0) {
-      return { total: 0, done: 0, deliveryReady: 0, issues: [] };
+      return { total: 0, done: 0, deliveryReady: 0 };
     }
 
     const nodeIds = [...new Set(taskRows.flatMap((row) => (row.nodeId === null ? [] : [row.nodeId])))];
@@ -195,12 +172,12 @@ export class TaskGateRepository {
     }
 
     const fileConditions: SQL[] = [
+      eq(tasks.stageKey, stageKey),
       eq(tasks.projectId, projectId),
       isNull(tasks.deletedAt),
       inArray(files.status, ["draft", "final", "changed"]),
       isNotNull(files.currentVersionId),
     ];
-    if (stageKey !== undefined) fileConditions.push(eq(tasks.stageKey, stageKey));
     const fileJoin = or(
       eq(files.taskId, tasks.id),
       and(isNotNull(tasks.nodeId), eq(files.nodeId, tasks.nodeId)),
@@ -218,32 +195,19 @@ export class TaskGateRepository {
       uploadedByTask.set(row.taskId, current);
     }
 
-    let total = 0;
     let done = 0;
     let deliveryReady = 0;
-    const issues: TaskDeliveryIssue[] = [];
     for (const task of taskRows) {
-      total += 1;
+      if (task.status !== "done") continue;
+      done += 1;
       const requirements = mergeDeliveryRequirements(
         task.nodeId === null ? [] : requirementByNode.get(task.nodeId) ?? [],
         task.deliverableTypes,
       );
       const missing = missingDeliveryRequirements(requirements, uploadedByTask.get(task.id) ?? []);
-      for (const item of missing) {
-        issues.push({
-          taskId: task.id,
-          taskTitle: task.title,
-          stageKey: task.stageKey,
-          docType: item.docType,
-          required: item.required,
-          present: item.present,
-        });
-      }
-      if (task.status !== "done") continue;
-      done += 1;
       if (missing.length === 0) deliveryReady += 1;
     }
-    return { total, done, deliveryReady, issues };
+    return { total: taskRows.length, done, deliveryReady };
   }
 }
 

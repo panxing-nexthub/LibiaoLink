@@ -1,10 +1,10 @@
 import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from "@nestjs/common";
-import { ProjectArchiveBodySchema, UuidSchema } from "@libiaolink/contracts";
+import { ProjectArchiveBodySchema, ProjectUnarchiveBodySchema, UuidSchema } from "@libiaolink/contracts";
 import { ZodValidationPipe } from "../../common/http/zod-validation.pipe.js";
 import { CsrfGuard, CurrentActorId, SessionGuard } from "../identity/index.js";
 import { ProjectAccessGuard, RequirePermission } from "../permission/index.js";
 import { ArchiveService } from "./archive.service.js";
-import type { ArchiveRequestBody, ProjectArchiveView } from "./archive.service.js";
+import type { ArchiveRequestBody, UnarchiveRequestBody, ProjectArchiveView } from "./archive.service.js";
 import type { ProjectView } from "./project.service.js";
 
 const uuidParam = new ZodValidationPipe(UuidSchema);
@@ -19,7 +19,7 @@ const uuidParam = new ZodValidationPipe(UuidSchema);
 export class ArchiveController {
   constructor(private readonly archive: ArchiveService) {}
 
-  /** 归档：仅校验项目内未删除任务全部完成（否则 409 ARCHIVE_NOT_READY，confirm 不可越过）；通过后置位并生成清单。 */
+  /** 归档：按验收结果校验，生成带归档类型的清单。 */
   @Post(":id/archive")
   @HttpCode(200)
   @RequirePermission("project.archive")
@@ -37,7 +37,7 @@ export class ArchiveController {
   @RequirePermission("project.archive")
   restoreArchivedProject(
     @Param("id", uuidParam) id: string,
-    @Body(new ZodValidationPipe(ProjectArchiveBodySchema)) body: ArchiveRequestBody,
+    @Body(new ZodValidationPipe(ProjectUnarchiveBodySchema)) body: UnarchiveRequestBody,
     @CurrentActorId() actorId: string,
   ): Promise<ProjectView> {
     return this.archive.restoreArchivedProject(id, body, actorId);

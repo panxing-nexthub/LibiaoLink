@@ -262,9 +262,9 @@ function readCards() {
       code, status: badge.dataset.cardStatus, kind: badge.dataset.archiveKind ?? null,
       text: badge.textContent.trim(), icon: Boolean(badge.querySelector("svg path")),
       foreground: style.color, background: style.backgroundColor,
-      besideOrBelow: heading.parentElement === badge.parentElement &&
-        (rect.left >= title.right - 1 || rect.top >= title.bottom - 1) &&
-        rect.right <= bounds.right && rect.left >= bounds.left,
+      topLeft: rect.top >= bounds.top - 1 && rect.bottom <= title.top + 1 &&
+        rect.left >= bounds.left - 1 && rect.left < bounds.left + bounds.width / 2 &&
+        rect.right <= bounds.right,
     };
   });
 }
@@ -354,9 +354,9 @@ try {
       card.text !== (row.open_post_archive_task ? "归档（临时任务）" : archiveLabels[row.archive_kind] ?? STATUS_TEXT[row.status]);
   });
   check("② 卡面状态和归档类型与数据库逐卡一致", mismatch.length === 0, JSON.stringify(mismatch.slice(0, 2)));
-  check("③ 状态标签紧邻编号或换行，完整显示", cards.every((c) => c.besideOrBelow));
-  check("④ 状态具备图标、统一白字，文字与标签底色对比度至少 4.5:1",
-    cards.every((c) => c.icon && c.foreground === "rgb(255, 255, 255)" && contrastRatio(c.foreground, c.background) >= 4.5));
+  check("③ 状态标签位于卡片左上角、编号上方，完整显示", cards.every((c) => c.topLeft));
+  check("④ 状态标签不显示图标，统一白字，文字与标签底色对比度至少 4.5:1",
+    cards.every((c) => !c.icon && c.foreground === "rgb(255, 255, 255)" && contrastRatio(c.foreground, c.background) >= 4.5));
 
   // ---------- ② 新建弹窗回归（不含状态区） ----------
   await clickByText("button", "新建项目");

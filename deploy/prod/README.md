@@ -1,3 +1,11 @@
+> **2026-11-20 10:44–10:53 Excel 导出表头字体比例修复（测试机 + 正式机 server delta · Push 851）**：测试机 release = `test-20261120-1044-px-export-header-height-792abd34`，previous = `test-20261120-1013-px-archive-readonly-report-lock-28e314ac`；正式机 release = `prod-20261120-1050-px-export-header-height-792abd34`，previous = `prod-20261120-1021-px-temp-task-group-fields-7338cae7`。两站均来自 px `792abd34`，仅替换 `server/dist/modules/project-export` 下 2 个运行时文件。
+>
+> **根因 / 改动**：原实现按正文初始列宽生成表头 PNG，正文动态扩列后 Excel 将位图横向拉满，造成字体和 Logo 纵向压扁。项目全量导出六张 Sheet 改为正文列宽定稿后再生成表头；内存与流式一致；「商业秘密文件 / Confidential」与主标题共用同一自适应字号。页面级导出沿用已定稿列宽路径。
+>
+> **门禁 / 发布件**：server typecheck / build / check:boundaries 通过；全量 Vitest 134 个文件通过 / 11 个跳过，2016 通过 / 75 跳过。两站共用 `server-project-export.tar.gz` 11,100 B · `1748e60e…`；header JS 6,162 B · `eac79f2f…`，workbook JS 43,327 B · `992572b0…`；staging / live 哈希均一致。
+>
+> **验收 / 运行态**：两站 api / worker 已重启，api / worker / web / postgres healthy，RestartCount 0、OOM false，近 10 分钟 api / worker 部署窗口错误 0；`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true，未登录项目 API 401。测试机 manifest `24adb559…`、备份 17,010 B；正式机 manifest `238003c1…`、备份 18,698 B；各 3 个文件，2 / 2 SHA-256 校验通过。无前端 / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。
+
 > **2026-11-20 10:13–10:21 归档只读提示区分与日报表单保留禁用（测试机 frontend-only · test-20261120-1013-px-archive-readonly-report-lock-28e314ac）**：测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261120-1013-px-archive-readonly-report-lock-28e314ac`，previous = `test-20261120-1003-px-temp-task-group-fields-f8df53cb`；staging = `/srv/data/deploy-test-20261120-1013-px-archive-readonly-report-lock-28e314ac/staging`，备份 = `/srv/data/backups/before-test-20261120-1013-px-archive-readonly-report-lock-28e314ac`。代码来源 px `28e314ac`，随 Push 850 进入常驻分支。
 
 > **根因 / 改动**：归档项目此前把任务能力统一收敛为只读，但任务行仍提示「当前账号仅可查看该任务，不能编辑」；日报页则把整块表单替换为「日报填写已关闭」空态。现由项目详情标记 `archiveLocked`：归档项目内仅保留未完成手工临时任务的编辑例外，其余任务统一提示「当前项目已归档，无法编辑」；日报填写页不再关闭，保留草稿栏与完整表单，通过 `fieldset disabled` 锁定填报日期、施工人数、阶段、当日工作、明日计划、附件、问题块及提交 / 暂存，并在表单顶部显示「当前项目已归档，日报不能填写」。中 / 英 / 日 / 韩文案同步，删除旧 `report.archived.closed` / `report.archived.hint`。

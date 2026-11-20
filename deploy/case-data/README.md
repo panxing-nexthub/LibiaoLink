@@ -26,8 +26,9 @@
 | MinIO 策略 | `/opt/libiaolink-case/deploy/minio/case-gateway-policy.json` |
 | 密钥目录 | `/opt/libiaolink-case/secrets`（目录 700，文件 600） |
 | 服务身份元数据 | `/opt/libiaolink-case/config/service-identities.json` |
-| 发布清单 | `/opt/libiaolink-case/CASE_DATA_RELEASE_MANIFEST.json`（SHA-256 `f3786456abf815d370d21a1a0fdc7b66516656a1b456785edb21cb8975dd24a1`） |
+| 发布清单 | `/opt/libiaolink-case/CASE_DATA_RELEASE_MANIFEST.json`（SHA-256 `868ddee60c26c2744fdede9622fa771c4ed9f0007e8b212b839b67090afd44be`） |
 | 配置包 | `/srv/case/staging/case-data-20261119-1526/case-data-config-20261119-1526.tar.gz`（SHA-256 `55db9e320e2671e7b354d32806c7afd0839672f1669fd96cb894836db759a017`，不含密钥） |
+| 应用包 | `/srv/case/staging/libiaolink-case-20261120-1543.tgz`（SHA-256 `08b6b6813144c9b3d79194e02e23887dc409c2de74d0c949a5fdb022ed7698a3`） |
 
 /srv/case 为 30G 独立分区；/srv/data 为 295G 数据盘。结构化数据与媒体对象分离。
 
@@ -47,7 +48,7 @@
 
 - 数据库：`libiaolink_case`。
 - 迁移账号：`case_migrator`；运行账号：`case_project_projection_rw`、`case_gateway_authoring_rw`、`case_operation_cleanup`、`case_gateway_public_ro`。
-- 测试机已应用迁移：`0001` 至 `0011`；仓库新增 `0012`（本地项目与合并目录），下次部署时执行迁移并复跑 `migrate.mjs --check`。
+- 测试机已应用迁移：`0001` 至 `0013`；`0012` 为本地项目与合并目录，`0013` 修复本地项目写入触发器。迁移账本校验通过。
 - 连接上限：投影 4、作者 6、清理 2、公开读 3。
 - 核心投影账号：`case_project_ro`，连接上限 2，默认只读，语句超时 5s、锁超时 500ms、事务空闲超时 10s。
 
@@ -76,7 +77,7 @@ docker compose --profile tools run --rm projection node case-data/project-projec
   docker compose --profile tools -f docker-compose.yml -f docker-compose.projection.yml ps projection
   docker compose --profile tools -f docker-compose.yml -f docker-compose.projection.yml logs --tail=50 projection
   ```
-- 当前测试机尚未部署 `0012` 与常驻 `watch`；下次按仓库版本部署时先迁移，再启动并确认 `started` 日志。
+- 2026-11-20 已部署 `0012`/`0013` 与常驻 `watch`；投影水位实测持续前进，单轮滞后约 0.2 秒。
 
 ## 对象桶与服务身份
 
@@ -85,7 +86,7 @@ docker compose --profile tools run --rm projection node case-data/project-projec
 - 策略只允许 `GetBucketVersioning`、`cases/*` 前缀的 `ListBucketVersions`，以及 `cases/*` 的 `PutObject`、`GetObjectVersion`、`ListMultipartUploadParts`、`AbortMultipartUpload`。
 - 网关只挂载 `secrets/gateway` 与 `secrets/public`；JWT 私钥在 `secrets/auth`，不进入网关容器。
 - issuer：`https://test-pm.libiaorobot.com/case-data/issuer`；audience：`case-data-gateway`。
-- 测试令牌位于 `secrets/tokens/`，有效期至 `2026-12-19T07:11:33Z`；换发使用 `deploy/scripts/mint-service-token.mjs`。
+- 测试令牌位于 `secrets/tokens/`；`case-authoring-test-projects-write-20261120.jwt` 含 `case-data:projects:write`，有效期至 `2026-12-20T07:41:55Z`。旧公共/媒体令牌仍至 `2026-12-19T07:11:33Z`；换发使用 `deploy/scripts/mint-service-token.mjs`。
 
 ## 健康检查
 
@@ -98,11 +99,18 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://test-pm.libiaorobot.com/case-d
 
 `/case-data/readyz` 会检查案例库作者连接、公开读视图、独立桶访问和版本控制。
 
+## 本地项目联调验收
+
+- `POST /api/v1/projects` 为仅创建；更新和归档使用 `PATCH /api/v1/projects/{projectId}`，请求必须带当前 `sourceVersion` 作为 `expectedVersion`。
+- 2026-11-20 实测：创建 `201`、更新 `200`、过期版本 `409 PROJECT_VERSION_CONFLICT`、归档 `200`、原 `operationId` 重放 `200`；核心项目 PATCH 返回 `409 PROJECT_SOURCE_READ_ONLY`。
+- 实测本地项目 `01a1f7e9-5deb-71fb-b260-c1602f35243b`（`LOCAL-CASE-TEST-20261120-154355`）已归档，出现在合并目录，`project_summary` 无对应行；重复编号和跨来源项目 ID 均返回 `409`。
+
 ## 备份与回滚
 
 - 核心 Nginx 原配置：`/srv/data/backups/nginx-libiaolink.conf.before-case-data-20261119-1525`，SHA-256 `b5ffbf7c8917acf006cd85232c556a020f9d75426fe374a7edce6873f4253e22`。
 - 部署后 Nginx：SHA-256 `34e6bb6905961103c862a147684ed1da5be238eaafdf6640ba6f612708d2e8d8`；`nginx -t` 通过。
 - 分区前 fstab 备份：`/srv/data/backups/fstab-before-case-20261119-150459`、`/srv/data/backups/fstab-before-case-mount-20261119-150523`。
+- 本次 `0012` 前应用备份：`/srv/case/staging/case-data-20261120-153010/app-before.tgz`、`/srv/case/staging/case-data-20261120-153010/libiaolink_case-before-0012.dump`。
 - 回滚入口：先 `docker compose --profile tools -f docker-compose.yml -f docker-compose.projection.yml stop projection`，再停止 `libiaolink-case` Compose，恢复上述 Nginx 备份并 `nginx -t` / `nginx -s reload`；保留 `/srv/case` 与桶数据，按需再撤销 `case_project_ro` 与 MinIO 身份。
 - 不得直接修改正式机；正式发布只走 `10.1.103.44` 与仓库发布流程。
 

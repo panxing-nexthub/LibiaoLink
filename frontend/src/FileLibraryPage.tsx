@@ -900,6 +900,7 @@ export function FileLibraryPage({ me, query, onChangeQuery, directory, dicts }: 
                           vividInk={backgroundTier === "vivid"}
                           typeLabel={projectTypeText(locale, dictLabel(dicts, "projectType", project.projectType))}
                           status={project.status}
+                          hasOpenPostArchiveTask={project.hasOpenPostArchiveTask}
                           archiveKind={project.archiveKind}
                           accentColor={accent.color}
                           accentText={accent.text}

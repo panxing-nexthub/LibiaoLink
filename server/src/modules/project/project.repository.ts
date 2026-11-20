@@ -12,7 +12,7 @@ import { projectArchives, projectMembers, projects, projectStages } from "../../
 import { dailyReports, issueEvents, issues } from "../../db/schema/reports.js";
 import { projectStakeholders } from "../../db/schema/stakeholders.js";
 import { taskEvents, tasks } from "../../db/schema/tasks.js";
-import { syncProjectManagersToStageTasks } from "../../db/task-scope.js";
+import { hasOpenPostArchiveTask, syncProjectManagersToStageTasks } from "../../db/task-scope.js";
 import type { ProjectScopeFilter } from "../permission/index.js";
 import type { ProjectFilter, ProjectSort } from "./project.query.js";
 
@@ -21,6 +21,7 @@ export type ProjectRow = typeof projects.$inferSelect;
 /** 列表 / 详情视图行：项目字段 + managerNames（A2：随行下发，与 managerIds 同下标；停用 / 离职仍返回姓名，取不到为 null）。 */
 export interface ProjectViewRow {
   project: ProjectRow;
+  hasOpenPostArchiveTask?: boolean;
   archiveKind?: typeof projectArchives.$inferSelect.archiveKind | null;
   managerNames: (string | null)[] | null;
 }
@@ -128,7 +129,7 @@ export class ProjectRepository {
     }
     const where = and(...projectConditions(filter, scope));
     const items = await this.database.db
-      .select({ project: projects, managerNames: MANAGER_NAMES_SQL, archiveKind: projectArchives.archiveKind })
+      .select({ project: projects, managerNames: MANAGER_NAMES_SQL, archiveKind: projectArchives.archiveKind, hasOpenPostArchiveTask })
       .from(projects)
       .leftJoin(projectArchives, and(eq(projects.status, "archived"), eq(projectArchives.projectId, projects.id)))
       .where(where)
@@ -180,7 +181,7 @@ export class ProjectRepository {
 
   async findViewById(id: string): Promise<ProjectViewRow | null> {
     const rows = await this.database.db
-      .select({ project: projects, managerNames: MANAGER_NAMES_SQL, archiveKind: projectArchives.archiveKind })
+      .select({ project: projects, managerNames: MANAGER_NAMES_SQL, archiveKind: projectArchives.archiveKind, hasOpenPostArchiveTask })
       .from(projects)
       .leftJoin(projectArchives, and(eq(projects.status, "archived"), eq(projectArchives.projectId, projects.id)))
       .where(and(eq(projects.id, id), isNull(projects.deletedAt)))

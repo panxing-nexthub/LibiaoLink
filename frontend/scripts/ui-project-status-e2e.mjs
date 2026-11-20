@@ -325,7 +325,12 @@ try {
   const cards = await ev(cardExpr());
   const dbCards = await db.query(`
     select p.code, p.status,
-      case when p.status = 'archived' then coalesce(a.archive_kind, 'accepted') end as archive_kind
+      case when p.status = 'archived' then coalesce(a.archive_kind, 'accepted') end as archive_kind,
+      p.status = 'archived' and exists (
+        select 1 from tasks t where t.project_id = p.id and t.created_at > p.archived_at
+        and t.stage_key is null and t.node_id is null and t.task_node_id is null
+        and t.deleted_at is null and t.status <> 'done'
+      ) as open_post_archive_task
     from projects p left join project_archives a on a.project_id = p.id and p.status = 'archived'
     where p.deleted_at is null
   `);
@@ -333,13 +338,13 @@ try {
   const cardShot = await shot("project-status-card", { x: 16, y: 140, width: 430, height: 300, scale: 2 });
   console.log("截图：" + cardShot);
   check("① 卡片状态字在场：每张卡一枚（data-card-status）、三档取值、文案 = 中文状态（共 " + String(cards.length) + " 张）",
-    cardsReady === true && cards.length > 0 && cards.every((c) => STATUS_VALUES.includes(c.status) && (c.status === "archived" ? ["已验收归档", "异常归档"].includes(c.text) : STATUS_TEXT[c.status] === c.text)),
+    cardsReady === true && cards.length > 0 && cards.every((c) => STATUS_VALUES.includes(c.status) && (c.status === "archived" ? ["已验收归档", "异常归档", "归档（临时任务）"].includes(c.text) : STATUS_TEXT[c.status] === c.text)),
     JSON.stringify(cards.slice(0, 2)));
   const archiveLabels = { accepted: "已验收归档", unaccepted: "异常归档" };
   const mismatch = cards.filter((card) => {
     const row = dbStatus.get(card.code);
     return !row || card.status !== row.status || card.kind !== row.archive_kind ||
-      card.text !== (archiveLabels[row.archive_kind] ?? STATUS_TEXT[row.status]);
+      card.text !== (row.open_post_archive_task ? "归档（临时任务）" : archiveLabels[row.archive_kind] ?? STATUS_TEXT[row.status]);
   });
   check("② 卡面状态和归档类型与数据库逐卡一致", mismatch.length === 0, JSON.stringify(mismatch.slice(0, 2)));
   check("③ 状态标签紧邻编号或换行，完整显示", cards.every((c) => c.besideOrBelow));
@@ -486,6 +491,21 @@ try {
     JSON.stringify({ submit: lockedModal === null ? null : lockedModal.submitLabel, hint: lockedModal === null ? null : lockedModal.hint }));
   await clickByText(editDialogSel + " button", "取消");
   await waitFor("document.querySelector(" + j(editDialogSel) + ") === null", 8000);
+
+  // 使用独立项目验证归档后任务从创建到完成都能在卡片回显。
+  const afterArchivePath = "/api/v1/projects/" + throwId + "/tasks";
+  const tempTask = await apiCall("POST", afterArchivePath, { title: "回放-归档后补办", managerIds: [userRow.id] });
+  const archiveBadge = j('[data-live-row="' + throwId + '"] [data-card-status="archived"]');
+  async function waitForArchiveBadge(label) {
+    await page.send("Page.reload", { ignoreCache: true });
+    return waitFor("document.querySelector(" + archiveBadge + ")?.textContent.trim() === " + j(label), 12000);
+  }
+  check("归档后新增临时任务，卡片显示归档（临时任务）",
+    tempTask.status < 300 && await waitForArchiveBadge("归档（临时任务）"));
+  if (tempTask.body?.id) {
+    const completed = await apiCall("PATCH", afterArchivePath + "/" + tempTask.body.id, { version: tempTask.body.version, status: "done" });
+    check("临时任务完成后，卡片恢复已验收归档", completed.status < 300 && await waitForArchiveBadge("已验收归档"));
+  }
 
   // ---------- ⑤bis 侧栏「项目状态」筛选 ----------
   await page.send("Page.navigate", { url: "about:blank" });

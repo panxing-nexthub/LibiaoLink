@@ -35,6 +35,7 @@ export const ProjectSchema = z
     version: VersionSchema,
     createdAt: DateTimeSchema,
     updatedAt: DateTimeSchema,
+    hasOpenPostArchiveTask: z.boolean().describe("本次归档后新增的手工临时任务中，是否仍有未删除且未完成的任务"),
     archiveKind: ProjectArchiveKindSchema.nullable().describe("已归档项目返回已验收归档或异常归档，已有归档按已验收处理；未归档为 null"),
     archivedAt: DateTimeSchema.nullable().openapi({
       description: "归档时点（ADR-027 · M7-04）：仅归档端点置位；未归档 = null（归档后项目进入只读保护）",

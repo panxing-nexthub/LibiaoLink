@@ -911,6 +911,7 @@ export default function App() {
       <ProjectModal
         key={editingProject.id + ":" + String(editingProject.version)}
         mode="edit"
+        hasOpenPostArchiveTask={editingProject.hasOpenPostArchiveTask}
         initialArchiveKind={editingProject.archiveKind}
         initial={{
           code: editingProject.code,

@@ -33,6 +33,7 @@ function glowOf(color: string): string {
 
 const statusBadges = {
   active: { colors: "bg-[#08634c] text-white", icon: "M5.5 3.5 12 8l-6.5 4.5z" },
+  temporary: { colors: "bg-[#ece7fa] text-[#523491]", icon: "M8 2v6l3 2 M14 8a6 6 0 1 1-6-6" },
   accepted: { colors: "bg-[#e4edf9] text-[#244776]", icon: "M2 8l4 4 8-8" },
   unaccepted: { colors: "bg-[#ffeadc] text-[#813916]", icon: "M4 4h8v8H4z" },
   paused: { colors: "bg-[#fff1bf] text-[#694b09]", icon: "M5.5 3v10 M10.5 3v10" },
@@ -46,6 +47,7 @@ type CardProps = {
   typeLabel: string;
   /** 项目状态取值（契约 projects.status —— 回放钩子 data-card-status）。 */
   status: ProjectStatusValue;
+  hasOpenPostArchiveTask: boolean;
   archiveKind: ProjectArchiveKind | null;
   statusId?: string;
   /** 主题色（字典 metadata.accent）。 */
@@ -89,6 +91,7 @@ export function Card({
   typeLabel,
   status,
   archiveKind,
+  hasOpenPostArchiveTask,
   statusId,
   accentColor = "#feca04",
   accentText = "#313033",
@@ -112,8 +115,9 @@ export function Card({
   const t = useT();
   const locale = useLocale();
   const displayStatus = status === "archived" ? archiveKind ?? "accepted" : status;
-  const badge = statusBadges[displayStatus];
-  const statusText = displayStatus === "accepted" || displayStatus === "unaccepted"
+  const temporary = status === "archived" && hasOpenPostArchiveTask;
+  const badge = temporary ? statusBadges.temporary : statusBadges[displayStatus];
+  const statusText = temporary ? t("card.archive.temporary") : displayStatus === "accepted" || displayStatus === "unaccepted"
     ? t(displayStatus === "accepted" ? "card.archive.accepted" : "card.archive.unaccepted")
     : projectStatusTextOf(locale, displayStatus);
   const exportMenu = usePopover(248, 116);

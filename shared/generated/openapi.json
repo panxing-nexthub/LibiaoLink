@@ -8904,6 +8904,10 @@
           "updatedAt": {
             "$ref": "#/components/schemas/DateTime"
           },
+          "hasOpenPostArchiveTask": {
+            "type": "boolean",
+            "description": "本次归档后新增的手工临时任务中，是否仍有未删除且未完成的任务"
+          },
           "archiveKind": {
             "type": [
               "string",
@@ -8991,6 +8995,7 @@
           "version",
           "createdAt",
           "updatedAt",
+          "hasOpenPostArchiveTask",
           "archiveKind",
           "archivedAt",
           "archivedBy",

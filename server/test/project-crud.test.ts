@@ -474,8 +474,8 @@ describe("toProjectView", () => {
   it("既有归档视为已验收，显式异常归档保留其类型", () => {
     const archived = { project: projectRow({ id: UUID_A, status: "archived" }), managerNames: [] };
     expect(toProjectView(archived).archiveKind).toBe("accepted");
-    expect(toProjectView({ ...archived, archiveKind: "unaccepted" }))
-      .toMatchObject({ status: "archived", archiveKind: "unaccepted" });
+    expect(toProjectView({ ...archived, archiveKind: "unaccepted", hasOpenPostArchiveTask: true }))
+      .toMatchObject({ status: "archived", archiveKind: "unaccepted", hasOpenPostArchiveTask: true });
   });
 
   it("camelCase 对齐 + managerNames 随行下发 + ISO 时间 + 回收站字段", () => {
@@ -501,6 +501,7 @@ describe("toProjectView", () => {
       "deletedBy",
       "description",
       "groupAccessLevel",
+      "hasOpenPostArchiveTask",
       "id",
       "managerIds",
       "managerNames",

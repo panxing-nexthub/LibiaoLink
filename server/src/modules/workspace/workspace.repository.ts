@@ -8,6 +8,7 @@ import { files } from "../../db/schema/files.js";
 import { users } from "../../db/schema/identity.js";
 import { projectArchives, projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
+import { hasOpenPostArchiveTask } from "../../db/task-scope.js";
 import { tasks } from "../../db/schema/tasks.js";
 import type { ProjectScopeFilter } from "../permission/index.js";
 import { loadIssuePhotos, type FilePhotoRefRow } from "../report-issue/index.js";
@@ -76,6 +77,7 @@ export interface WorkspaceProjectRow {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+  hasOpenPostArchiveTask: boolean;
   archiveKind: typeof projectArchives.$inferSelect.archiveKind | null;
   archivedAt: Date | null;
   archivedBy: string | null;
@@ -306,6 +308,7 @@ export class WorkspaceRepository {
         version: projects.version,
         createdAt: projects.createdAt,
         updatedAt: projects.updatedAt,
+        hasOpenPostArchiveTask,
         archiveKind: projectArchives.archiveKind,
         archivedAt: projects.archivedAt,
         archivedBy: projects.archivedBy,

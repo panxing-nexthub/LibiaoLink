@@ -1241,6 +1241,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "modal.restore.note": "「進行中」を選択して保存すると、プロジェクトを進行中に戻せます。",
   "modal.restore.submit": "進行中に戻す",
   "modal.archive.kind": "アーカイブ種別",
+  "card.archive.temporary": "アーカイブ（一時タスク）",
   "card.archive.accepted": "検収済みアーカイブ",
   "card.archive.unaccepted": "例外アーカイブ",
   "modal.archive.accepted": "検収済みでアーカイブ",

@@ -183,6 +183,7 @@ function toProjectItem(
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    hasOpenPostArchiveTask: row.hasOpenPostArchiveTask,
     archiveKind: row.status === "archived" ? row.archiveKind ?? "accepted" : null,
     archivedAt: row.archivedAt === null ? null : row.archivedAt.toISOString(),
     archivedBy: row.archivedBy,

@@ -1241,6 +1241,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "modal.restore.note": "‘진행 중’을 선택하고 저장하면 프로젝트를 진행 중으로 복원합니다.",
   "modal.restore.submit": "진행 중으로 복원",
   "modal.archive.kind": "보관 유형",
+  "card.archive.temporary": "보관됨 (임시 작업)",
   "card.archive.accepted": "검수 완료 보관",
   "card.archive.unaccepted": "예외 보관",
   "modal.archive.accepted": "검수 완료 보관",

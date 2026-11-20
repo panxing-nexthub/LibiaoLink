@@ -24,6 +24,7 @@ export type ApiProject = {
   managerNames: Array<string | null>;
   stageKey: string;
   status: ProjectStatusValue;
+  hasOpenPostArchiveTask: boolean;
   archiveKind: ProjectArchiveKind | null;
   /** 最终项目权限：管理员 / 所管本项目的项目经理 / 规则 edit 为 edit。 */
   accessLevel: "edit" | "view";
@@ -295,6 +296,7 @@ export function toUiProject(view: ApiProject): Project {
     version: view.version,
     stageKey: view.stageKey,
     status: view.status,
+    hasOpenPostArchiveTask: view.hasOpenPostArchiveTask,
     archiveKind: view.archiveKind ?? null,
     accessLevel: view.accessLevel,
     groupAccessLevel: view.groupAccessLevel,

@@ -13998,6 +13998,8 @@ export interface components {
             version: components["schemas"]["Version"];
             createdAt: components["schemas"]["DateTime"];
             updatedAt: components["schemas"]["DateTime"];
+            /** @description 本次归档后新增的手工临时任务中，是否仍有未删除且未完成的任务 */
+            hasOpenPostArchiveTask: boolean;
             /**
              * @description 已归档项目返回已验收归档或异常归档，已有归档按已验收处理；未归档为 null
              * @enum {string|null}

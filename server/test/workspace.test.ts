@@ -141,6 +141,7 @@ function makeProject(overrides: Partial<WorkspaceProjectRow> = {}): WorkspacePro
     version: 4,
     createdAt: new Date("2026-08-01T00:00:00.000Z"),
     updatedAt: new Date("2026-08-02T00:00:00.000Z"),
+    hasOpenPostArchiveTask: false,
     archiveKind: null,
     archivedAt: null,
     archivedBy: null,

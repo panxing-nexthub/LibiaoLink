@@ -49,6 +49,7 @@ export type ProjectSubmitResult =
 type ProjectModalProps = {
   mode: "create" | "edit";
   initial?: ProjectDraft;
+  hasOpenPostArchiveTask?: boolean;
   initialArchiveKind?: ProjectArchiveKind | null;
   /** 字典下拉项（GET /api/v1/dicts）：地区 + 项目类型。 */
   dicts: Dicts;
@@ -85,7 +86,7 @@ function projectTypeContent(name: string, item: DictItem | null): ReactNode {
   );
 }
 
-export function ProjectModal({ mode, initial, initialArchiveKind, dicts, dictTools, canManageDicts, managerOptions, canArchive = false, onClose, onSubmit }: ProjectModalProps) {
+export function ProjectModal({ mode, initial, initialArchiveKind, hasOpenPostArchiveTask, dicts, dictTools, canManageDicts, managerOptions, canArchive = false, onClose, onSubmit }: ProjectModalProps) {
   const isEdit = mode === "edit";
   const t = useT();
   const locale = useLocale();
@@ -418,7 +419,7 @@ export function ProjectModal({ mode, initial, initialArchiveKind, dicts, dictToo
                         (disabled ? " cursor-not-allowed opacity-50" : "")
                       }
                     >
-                      {projectStatusTextOf(locale, value)}
+                      {archivedLock && archiveOption && hasOpenPostArchiveTask ? t("card.archive.temporary") : projectStatusTextOf(locale, value)}
                     </button>
                   );
                 })}

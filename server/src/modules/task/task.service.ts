@@ -303,7 +303,6 @@ export class TaskService {
     }
     // 负责人缺省 = 「待分配」空数组（2026-09-24 业务口径：任务添加后负责人默认为空 —— 不再兜底项目经理；A23 的兜底口径据此修订）
     const ownerIds = body.ownerIds !== undefined ? body.ownerIds : [];
-    const at = new Date();
     const row = await this.database.db.transaction(async (tx) => {
       let nodeStage = sourceStage;
       if (nodeId !== null) {
@@ -369,7 +368,6 @@ export class TaskService {
           deliverableTypes: await this.resolveDeliverableTypes(tx, nodeId, body.deliverableTypes),
           note: body.note ?? null,
         },
-        at,
         tx,
       );
       await appendOutbox(tx, {
@@ -383,7 +381,7 @@ export class TaskService {
           status: created.status,
           progress: Number(created.progress),
           actorId,
-          at: at.toISOString(),
+          at: created.createdAt.toISOString(),
         },
       });
       if (syncToGroup) {
@@ -411,7 +409,7 @@ export class TaskService {
           },
         });
       }
-      await this.repository.touchProject(projectId, at, tx);
+      await this.repository.touchProject(projectId, created.createdAt, tx);
       await this.audit.record(tx, {
         actorId,
         action: "create",
@@ -430,7 +428,7 @@ export class TaskService {
       });
       return created;
     });
-    return toTaskView(row, shanghaiToday(at), []);
+    return toTaskView(row, shanghaiToday(row.createdAt), []);
   }
 
   /**
@@ -508,7 +506,6 @@ export class TaskService {
             deliverableTypes: [],
             note: null,
           },
-          at,
           tx,
         );
         await appendOutbox(tx, {

@@ -70,6 +70,7 @@ export function toProjectView(
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    hasOpenPostArchiveTask: view.hasOpenPostArchiveTask ?? false,
     archiveKind: row.status === "archived" ? view.archiveKind ?? "accepted" : null,
     archivedAt: row.archivedAt === null ? null : row.archivedAt.toISOString(),
     archivedBy: row.archivedBy,

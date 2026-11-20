@@ -870,6 +870,7 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
                   vividInk={backgroundTier === "vivid"}
                   typeLabel={projectTypeText(locale, dictLabel(dicts, "projectType", project.projectType))}
                   status={project.status}
+                  hasOpenPostArchiveTask={project.hasOpenPostArchiveTask}
                   archiveKind={project.archiveKind}
                   statusId={"card-status-" + project.id}
                   accentColor={accent.color}

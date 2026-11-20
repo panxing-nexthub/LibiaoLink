@@ -52,6 +52,7 @@ export type Project = {
   stageKey: string;
   /** 项目状态（契约 status：active / paused / archived）。 */
   status: ProjectStatusValue;
+  hasOpenPostArchiveTask: boolean;
   archiveKind: ProjectArchiveKind | null;
   /** 当前登录人在该项目的最终项目权限：管理员 / 所管本项目的项目经理 / 规则 edit 为 edit；其余可见关系为 view。 */
   accessLevel: "edit" | "view";

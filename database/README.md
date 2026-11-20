@@ -235,6 +235,26 @@ seed: 完成，本次执行 4 个种子
 - 迁移属高风险变更（CONTRIBUTING §15）：需要另一名评审人（lan / px）批准后才能合并。
 - 种子数据（字典 / 模板）走 `seeds/`，与迁移分离、可重跑（规格见 `seeds/README.md`）；CONTRIBUTING §14 的只追加约束只作用于 `migrations/`。
 
+### 收紧状态约束时验证存量升级（0108 / 0110）
+
+[#950](https://github.com/panxing-nexthub/LibiaoLink/pull/950) 的 [0108](migrations/0108_project_status.sql) 从 `ck_projects_status` 中移除了 `done`。旧版允许项目保存为「已完成」，而 0108 在加约束前没有处理这些存量行。用已迁移到 0105 的隔离库插入一条合法的 `done` 项目后，现行迁移器执行了 0106 和 0107，在 0108 回滚退出，后续的 [0110](migrations/0110_project_type_combinations.sql) 未执行。移除隔离库中的合成记录后，重跑可到 0110。这个回放验证了升级缺陷，测试机实际迁移状态仍待核对。
+
+遇到项目空间新建或编辑多选失败时，由具备迁移记录读取权限的人员在目标库只读核对。状态约束作用于整张 `projects` 表，统计需包含回收站记录。
+
+```sql
+begin read only;
+select count(*) as done_projects from projects where status = 'done';
+select filename, applied_at
+from schema_migrations
+where left(filename, 4) in ('0106', '0107', '0108', '0109', '0110')
+order by filename;
+commit;
+```
+
+若记录停在 0107，再核对迁移日志是否有 0108 的 `ck_projects_status` 约束错误。新版 API 依赖 0110 新增的项目类型列。`/readyz` 对 `projects` 只检查表是否可读，发布时还应核对 `schema_migrations` 并实测项目新建和编辑。
+
+后续移除旧状态值或收紧 `CHECK` 时，先明确已有数据的处理口径，在收紧约束前处理旧值。升级回放应从上一版本 schema 开始，放入旧版确实允许的代表性数据，验证迁移完成、存量业务含义保留和应用写入成功。已合入迁移的文件与校验和继续遵循上面的不可变规则。
+
 ## 与 v0.2 §2.3 的对应
 
 - `0001_baseline.sql` 覆盖 §2.3 全部 10 张表与索引，另补两处（文件头已注明）：

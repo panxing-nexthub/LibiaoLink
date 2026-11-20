@@ -1,3 +1,23 @@
+> **2026-11-20 17:05–17:12 项目管理甘特-时间状态行内展示与排期正常绿色（正式机 frontend-only · prod-20261120-1710-px-pm-gantt-inline-status-ad792b08）**：代码来源 PR [#953](https://github.com/panxing-nexthub/LibiaoLink/pull/953) / main `ad792b08`；正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261120-1710-px-pm-gantt-inline-status-ad792b08`，previous = `prod-20261120-1640-px-pm-gantt-time-status-a95bfc8e`；staging = `/srv/data/deploy-prod-20261120-1710-px-pm-gantt-inline-status-ad792b08/staging`。PR CI 6 / 6，squash 合入 main；px 常驻分支同步 `0946892e`。
+
+> **改动 / 验收**：移除甘特右侧独立的「时间状态」列与表头，人员总数、占用 / 空闲及时间状态回归人员行内；「排期正常」改为绿色胶囊，使用 `bg-emerald-100 text-emerald-700 ring-emerald-200`，「时间冲突」保持红色。公网 `index.html` / 主包 / CSS 与构建逐字节一致，主包含「排期正常」1 次、`bg-emerald-100` 13 次、`text-emerald-700` 58 次，旧 `statusLane` 标识 0 次。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,592,866 B / SHA-256 `329bee07…`、692 归档条目、678 文件；`build-info.json` 1,574 B / `6fd72a77…`；`frontend-files.sha256` 91,081 B / `f3a6e421…`；`release-files.sha256` 257 B / `73cf5d93…`。按内容哈希替换 `assets/es-BGxmpFWT.js`、`assets/index-B46bf1-C.css`、`assets/index-DED512i3.js` 并原子替换 `index.html`；线上 1,436 → 1,439 文件，旧 hashed 资源全部保留。staging 与 live 均 678 / 678 哈希通过，发布件 3 / 3 通过；`index.html` `340249ec…`、主包 `assets/index-DED512i3.js` 2,487,097 B / `829894fd…`、CSS `assets/index-B46bf1-C.css` 234,415 B / `92e70fb5…` 与公网逐字节一致，上一版主包 `assets/index-DW6_Y3t4.js` 仍 200。
+
+> **验证 / 备份 / 清单**：正式机 `/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；api / worker / web / postgres / minio / CAD / SVG preview / OnlyOffice 容器均 healthy，RestartCount 0、OOM false，近 10 分钟错误 0；项目管理三账号白名单保持 `panxing@ / lixiawei@ / yangm@libiaorobot.com`。备份 87,214,246 B，含前端全量、原清单、文件计数与 SHA256SUMS，3 / 3 校验通过。新 `RELEASE_MANIFEST.json` 6,697 B / `6b347878…`，`root:root 644` 原子替换。
+
+> **边界 / 回滚**：仅正式机 `10.1.103.44` 前端 dist 与 release manifest；测试机同步部署同版本。无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更，未重启后端。回滚：恢复 backup 的 `frontend-dist-before.tar.gz` 到 `/opt/libiaolink/frontend`，并恢复 `RELEASE_MANIFEST.json.before`；静态资源无需重启 web。
+
+> **2026-11-20 17:05–17:08 项目管理甘特-时间状态行内展示与排期正常绿色（测试机 frontend-only · test-20261120-1705-px-pm-gantt-inline-status-ad792b08）**：代码来源 PR [#953](https://github.com/panxing-nexthub/LibiaoLink/pull/953) / main `ad792b08`；测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261120-1705-px-pm-gantt-inline-status-ad792b08`，previous = `test-20261120-1640-px-pm-gantt-time-status-a95bfc8e`；staging = `/srv/data/deploy-test-20261120-1705-px-pm-gantt-inline-status-ad792b08/staging`。
+
+> **改动 / 验收**：移除独立「时间状态」列与表头，人员状态回到行内；「排期正常」改为绿色胶囊，「时间冲突」保持红色。公网 `index.html`、主包与 CSS 哈希均与构建一致，主包含「排期正常」1 次、`bg-emerald-100` 13 次、`text-emerald-700` 58 次，旧 `statusLane` 标识 0 次。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,592,866 B / SHA-256 `329bee07…`、692 归档条目、678 文件；`build-info.json` 1,579 B / `3615899e…`；`frontend-files.sha256` 91,081 B / `f3a6e421…`；`release-files.sha256` 257 B / `6098fb89…`。按内容哈希替换 `assets/es-BGxmpFWT.js`、`assets/index-B46bf1-C.css`、`assets/index-DED512i3.js` 并原子替换 `index.html`；线上 953 → 956 文件，旧 hashed 资源全部保留。staging 与 live 均 678 / 678 哈希通过，发布件 3 / 3 通过；主包 2,487,097 B / `829894fd…`、CSS 234,415 B / `92e70fb5…` 与公网逐字节一致，上一版主包仍 200。
+
+> **验证 / 备份 / 清单**：测试机 `/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；api / worker / web / postgres / minio / rustfs-poc 容器均 healthy，RestartCount 0、OOM false，近 10 分钟错误 0；三账号白名单保持。备份 114,033,963 B，3 / 3 校验通过。新 `RELEASE_MANIFEST.json` 6,605 B / `9abd96f3…`，`root:root 644` 原子替换。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44` 前端 dist 与 release manifest；正式机随后部署同版本。无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更，未重启后端。回滚：恢复 backup 的 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-20 16:40–16:43 项目管理甘特-时间冲突状态栏与字号优化（正式机 frontend-only · prod-20261120-1640-px-pm-gantt-time-status-a95bfc8e）**：代码来源 PR [#951](https://github.com/panxing-nexthub/LibiaoLink/pull/951) / main `a95bfc8e`；正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261120-1640-px-pm-gantt-time-status-a95bfc8e`，previous = `prod-20261120-1615-px-pm-gantt-compact-7e6c712e`；staging = `/srv/data/deploy-prod-20261120-1640-px-pm-gantt-time-status-a95bfc8e/staging`。PR CI 6 / 6，squash 合入 main；px 常驻分支同步 `cf9aba02`。
 
 > **改动 / 验收**：甘特-实施的「资源冲突」统一改为「时间冲突」，中 / 英 / 日 / 韩文案同步；人员组状态、总数、占用 / 空闲移至右侧时间轴左缘固定 180px 状态栏，横向滚动时保持固定；左侧人员组只保留折叠箭头与姓名；时间轴正文 `11px → 10px`、表头与胶囊 `10px → 9px`，降低字重并微调字距。公网 `index.html` / 主包 / CSS 与构建逐字节一致，主包含时间冲突文案与 `statusLane` 标识，旧「资源冲突」文案 0 命中。

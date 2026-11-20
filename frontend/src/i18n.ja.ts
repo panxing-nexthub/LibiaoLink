@@ -1991,7 +1991,6 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "tt.ownerOptional": "タスク担当者（任意。未選択は未定）",
   "tt.ownerPending": "未定",
   "tt.syncToGroup": "プロジェクトグループに同期",
-  "tt.syncToGroupHint": "ボットはタスク名、プロジェクトマネージャー、タスク担当者を送信します。",
   "tt.create": "作成",
   "pdfv.loading": "PDFを読み込み中…",
   "pdfv.page": "{page} / {total} ページ",

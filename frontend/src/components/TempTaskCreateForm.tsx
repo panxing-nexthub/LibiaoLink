@@ -157,10 +157,7 @@ export function TempTaskCreateForm({ projectId, managerOptions, ownerOptions, in
                   onChange={(event) => { setSyncToGroup(event.target.checked); }}
                   className="mt-0.5 h-4 w-4 shrink-0 accent-zinc-900"
                 />
-                <span className="min-w-0">
-                  <span className="block font-medium">{t("tt.syncToGroup")}</span>
-                  <span className="mt-0.5 block text-[11px] leading-4 text-zinc-500">{t("tt.syncToGroupHint")}</span>
-                </span>
+                <span className="min-w-0 font-medium">{t("tt.syncToGroup")}</span>
               </label>
             ) : null}
             <div className="mt-1 flex items-center justify-end gap-2">

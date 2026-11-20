@@ -1991,7 +1991,6 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "tt.ownerOptional": "작업 담당자(선택 사항, 미선택 시 미정)",
   "tt.ownerPending": "미정",
   "tt.syncToGroup": "프로젝트 그룹에 동기화",
-  "tt.syncToGroupHint": "봇이 작업 이름, 프로젝트 매니저, 작업 담당자를 전송합니다.",
   "tt.create": "생성",
   "pdfv.loading": "PDF 불러오는 중…",
   "pdfv.page": "{page} / {total}페이지",

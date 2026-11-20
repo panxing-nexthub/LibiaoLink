@@ -1547,7 +1547,6 @@ const PM_GANTT_COLUMNS: readonly PmGanttColumn[] = [
 
 const PM_GANTT_MIN_TABLE_WIDTH = 320;
 const PM_GANTT_OVERFLOW_WIDTH = 32;
-const PM_GANTT_STATUS_LANE_WIDTH = 180;
 const PM_GANTT_TABLE_WIDTH_STORAGE_KEY = "libiaolink.pm.gantt.tableWidth";
 
 type PmGanttColumnLayoutEntry = {
@@ -2049,14 +2048,14 @@ const buildPmGanttGroups = (
   return [...personGroups, ...specialGroups];
 };
 
-const pmGanttGroupTone = (group: PmGanttGroup): string => {
+const pmGanttGroupTextTone = (group: PmGanttGroup): string => {
   if (group.kind === "handedOver") {
-    return "bg-[#f02b2b] text-white";
+    return "text-[#f02b2b]";
   }
   if (group.kind === "unassigned") {
-    return "bg-zinc-200 text-zinc-600";
+    return "text-zinc-500";
   }
-  return memberFilterToneOf(group.label);
+  return "text-zinc-900";
 };
 
 function PmMemberChips({
@@ -2359,10 +2358,7 @@ function PmImplementationGantt({
   const [collapsedGanttGroupKeys, setCollapsedGanttGroupKeys] = useState<Set<string>>(() => new Set());
   const allGanttGroupsCollapsed =
     groups.length > 0 && groups.every((group) => collapsedGanttGroupKeys.has(group.key));
-  const ganttTimelineViewportWidth = Math.max(
-    0,
-    ganttViewportWidth - ganttTableWidth - PM_GANTT_STATUS_LANE_WIDTH,
-  );
+  const ganttTimelineViewportWidth = Math.max(0, ganttViewportWidth - ganttTableWidth);
   const [ganttScale, setGanttScale] = useState<PmGanttScale>("month");
   const [ganttAnchorIso, setGanttAnchorIso] = useState<string>(pmGanttTodayIso);
   const [ganttScrollRequest, setGanttScrollRequest] = useState<{
@@ -3139,17 +3135,6 @@ function PmImplementationGantt({
               ) : null}
             </div>
             <div
-              className="sticky z-20 flex shrink-0 items-center justify-center border-b border-x border-zinc-300 bg-zinc-50 shadow-[6px_0_14px_-16px_rgba(15,23,42,0.55)]"
-              style={{ left: ganttTableWidth, width: PM_GANTT_STATUS_LANE_WIDTH }}
-            >
-              <span
-                className="truncate whitespace-nowrap px-1 text-[9px] font-medium leading-3 text-zinc-500"
-                title={t("pm.gantt.statusLane")}
-              >
-                {t("pm.gantt.statusLane")}
-              </span>
-            </div>
-            <div
               className="relative shrink-0 border-b border-zinc-300 bg-zinc-50"
               style={{ width: timeline.width }}
             >
@@ -3288,7 +3273,7 @@ function PmImplementationGantt({
                 <div className="flex" style={{ height: PM_GANTT_GROUP_HEIGHT }}>
                   <div
                     className={
-                      "sticky left-0 z-20 flex shrink-0 items-center gap-0.5 border-b border-zinc-300 px-1 shadow-[8px_0_18px_-18px_rgba(15,23,42,0.55)] " +
+                      "sticky left-0 z-20 flex shrink-0 items-center gap-1.5 border-b border-zinc-300 px-1.5 shadow-[8px_0_18px_-18px_rgba(15,23,42,0.55)] " +
                       (groupSelected ? "bg-sky-50 " : "bg-zinc-50/95 ")
                     }
                     style={{ width: ganttTableWidth }}
@@ -3305,61 +3290,44 @@ function PmImplementationGantt({
                         <path d="m6 3.5 4.5 4.5L6 12.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </button>
-                    {groupCanJump ? (
-                      <button
-                        type="button"
-                        aria-label={t("pm.gantt.jumpToDates") + " · " + groupTitle}
-                        title={groupTitle}
-                        onClick={() => revealGanttEntry(group.key, groupBarLeft)}
-                        className={"min-w-0 flex-1 truncate rounded-[2px] px-1 py-0 text-left text-[10px] font-medium leading-4 tracking-[0.01em] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " + pmGanttGroupTone(group)}
-                      >
-                        {group.label}
-                      </button>
-                    ) : (
-                      <span className={"min-w-0 flex-1 truncate rounded-[2px] px-1 py-0 text-[10px] font-medium leading-4 tracking-[0.01em] " + pmGanttGroupTone(group)} title={group.label}>
-                        {group.label}
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    data-project-management-gantt-group-status-lane={group.key}
-                    title={groupTitle}
-                    className={
-                      "sticky z-[19] flex shrink-0 flex-col justify-center gap-0 border-b border-x border-zinc-200/80 px-1.5 " +
-                      (groupSelected ? "bg-sky-50 " : isPersonGroup ? "bg-emerald-50 " : "bg-zinc-50 ")
-                    }
-                    style={{ left: ganttTableWidth, width: PM_GANTT_STATUS_LANE_WIDTH }}
-                  >
-                    {isPersonGroup ? (
-                      <>
-                        <div className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap">
-                          <span
-                            data-project-management-gantt-group-status={group.hasConflict ? "conflict" : "normal"}
-                            className={
-                              "inline-flex h-3.5 shrink-0 items-center rounded-full px-1.5 text-[9px] font-normal leading-3 tracking-[0.01em] ring-1 ring-inset " +
-                              (group.hasConflict
-                                ? "bg-rose-100 text-rose-700 ring-rose-200"
-                                : "bg-emerald-100 text-emerald-700 ring-emerald-200")
-                            }
-                          >
-                            {groupStatusLabel}
-                          </span>
-                          <span className="shrink-0 text-[9px] font-normal leading-3 tabular-nums text-zinc-500">
-                            {t("pm.gantt.totalCount", { n: group.items.length })}
-                          </span>
-                        </div>
-                        <span
-                          className="mt-px block min-w-0 truncate whitespace-nowrap text-[9px] font-normal leading-3 tabular-nums text-zinc-500"
-                          title={groupCapacityLabel}
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                      {groupCanJump ? (
+                        <button
+                          type="button"
+                          aria-label={t("pm.gantt.jumpToDates") + " · " + groupTitle}
+                          title={groupTitle}
+                          onClick={() => revealGanttEntry(group.key, groupBarLeft)}
+                          className={"min-w-0 max-w-[160px] shrink truncate rounded-[2px] px-0.5 py-0 text-left text-[11px] font-semibold leading-4 tracking-[0.01em] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " + pmGanttGroupTextTone(group)}
                         >
-                          {groupCapacityLabel}
+                          {group.label}
+                        </button>
+                      ) : (
+                        <span className={"min-w-0 max-w-[160px] shrink truncate rounded-[2px] px-0.5 py-0 text-[11px] font-semibold leading-4 tracking-[0.01em] " + pmGanttGroupTextTone(group)} title={group.label}>
+                          {group.label}
                         </span>
-                      </>
-                    ) : (
-                      <span className="block min-w-0 truncate whitespace-nowrap text-[9px] font-normal leading-3 tabular-nums text-zinc-500">
+                      )}
+                      <span
+                        className="min-w-0 truncate text-[10px] font-normal leading-4 tracking-[0.01em] tabular-nums text-zinc-500"
+                        title={(t("pm.gantt.totalCount", { n: group.items.length }) + (isPersonGroup ? " · " + groupCapacityLabel : ""))}
+                      >
                         {t("pm.gantt.totalCount", { n: group.items.length })}
+                        {isPersonGroup ? " · " + groupCapacityLabel : ""}
                       </span>
-                    )}
+                    </div>
+                    {isPersonGroup ? (
+                      <span
+                        data-project-management-gantt-group-status={group.hasConflict ? "conflict" : "normal"}
+                        title={groupStatusLabel}
+                        className={
+                          "inline-flex h-[18px] shrink-0 items-center rounded-full px-2 text-[10px] font-normal leading-4 tracking-[0.01em] ring-1 ring-inset " +
+                          (group.hasConflict
+                            ? "bg-rose-50 text-rose-700 ring-rose-200"
+                            : "bg-emerald-100 text-emerald-700 ring-emerald-200")
+                        }
+                      >
+                        {groupStatusLabel}
+                      </span>
+                    ) : null}
                   </div>
                   <div
                     className={"relative shrink-0 border-b border-zinc-200 " + (isPersonGroup ? "bg-emerald-50/60" : "bg-white")}
@@ -3551,11 +3519,6 @@ function PmImplementationGantt({
                           overflowWidth={ganttColumnLayout.overflowWidth}
                         />
                       </div>
-                      <div
-                        aria-hidden="true"
-                        className="pointer-events-none sticky z-[19] shrink-0 border-b border-x border-zinc-200/80 bg-white"
-                        style={{ left: ganttTableWidth, width: PM_GANTT_STATUS_LANE_WIDTH, height: PM_GANTT_ROW_HEIGHT }}
-                      />
                       <div
                         className="relative shrink-0 border-b border-zinc-200 bg-white"
                         style={{ width: timeline.width, height: PM_GANTT_ROW_HEIGHT, ...pmGanttGridStyle(ganttDayWidth, timeline.gridDays) }}

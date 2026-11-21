@@ -1,3 +1,13 @@
+> **2026-11-21 17:00 仪表盘全部项目与单项目统一滑动切换（测试机 frontend-only · test-20261121-1700-px-dashboard-slide-0bbbd2ad）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `0bbbd2ad`；测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1700-px-dashboard-slide-0bbbd2ad`，previous = `test-20261121-1630-px-dashboard-all-projects-490d5825`；staging = `/srv/data/deploy-test-20261121-1655-px-dashboard-slide-0bbbd2ad/staging`。
+
+> **改动 / 验收**：全部项目改为 6 屏刚体滑轨（问题归纳 / 项目数量 / 项目经理 / 销售负责人 / 规划负责人 / 启动年份），单项目原 6 视图改同一滑轨；滚轮、方向键 / PageUp / PageDown、底部单选按钮均可翻屏，首屏向上仍返回地图、末屏向下停住。浏览器实测全部项目 6 屏与底部切换、单项目「数据总览 → 项目进度」滑动；验后恢复账号偏好（移除 `hubDashProject`、`hubDashView=overview`）。仅前端变更，api / worker / database / shared 未改。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,603,079 B / SHA-256 `f3965180…`、678 文件；`build-info.json` 407 B / `894122dd…`；`frontend-files.sha256` 91,081 B / `418285e6…`；`release-files.sha256` 254 B / `fd58d68d…`。按内容哈希新增 3 个 hashed 资源并原子替换 `index.html`；线上 1003 → 1006 文件，旧资源保留；强制重建 web 容器恢复 bind 挂载。
+
+> **验证 / 备份 / 清单**：`index.html` `d2b1acba…`、主包 `assets/index-DMy6qozp.js` 2,529,495 B / `3b1c24de…`、CSS `assets/index-DoUAiUbT.css` 244,539 B / `66df7f02…`、ES 分包 `assets/es-DxkE_KIZ.js` `7923805a…` 与公网一致；678 / 678 构建文件校验通过。`/healthz`、`/readyz` 200；web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1655-px-dashboard-slide-0bbbd2ad`，前端 132,021,089 B / `892e6ba6…`、原 manifest 6,246 B / `15e86abe…`，SHA256SUMS 3 / 3 通过；新 `RELEASE_MANIFEST.json` 4,606 B / `236b580a…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API、字段、DDL、迁移、权限、Compose、env、Nginx、shared 或对象存储变更。回滚：恢复备份 `frontend-dist-before.tar.gz` 到 `/opt/libiaolink/frontend/dist`，重建 web 容器，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 16:30 仪表盘全部项目总览改版（测试机 · test-20261121-1630-px-dashboard-all-projects-490d5825）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `490d5825`（基于测试机现役基线 `62880b75`，未合入 main）；测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1630-px-dashboard-all-projects-490d5825`，previous = `test-20261121-1408-px-project-legacy-done-62880b75`；staging = `/srv/data/deploy-test-20261121-1630-px-dashboard-all-projects-490d5825/staging`。
 
 > **改动 / 验收**：全部项目页改为纵向长页：保留问题状态 × 归类图，新增启动年份 × 项目类型柱状图、项目经理 / 销售负责人 / 规划负责人三张阶段堆叠柱图、启动年份 × 最新阶段柱图与可切换年份的环形饼图；单项目仍保留原六视图。新增只读 `GET /api/v1/dashboard/project-insights`；104 项迁移未改，可选 `additional_project_types` / `archive_kind` 通过 `to_jsonb` 兼容旧测试库。浏览器实测全部项目页 4 个区块、7 张 SVG、滚动高度 4393 / 视口 757；2026 ↔ 全部年份饼图切换正常；单项目 UK-VANILLA-AIRROB 原六视图与底部切换完整；验后已恢复「全部项目」偏好。

@@ -20,7 +20,7 @@
 import { displayStatusLabel, stageNameOf } from "../taskApi";
 import { ISSUE_STATE_NAMES } from "../reportApi";
 import { isCompleteStatus, type TaskStatus } from "./tasks";
-import type { IssueState } from "./reports";
+import type { IssueState, ReportPhoto } from "./reports";
 
 /** 进度五档（契约 TaskProgressSchema）：堆叠顺序 = 从左到右 0 → 1。 */
 export const DASHBOARD_BINS = [0, 0.25, 0.5, 0.75, 1] as const;
@@ -224,6 +224,7 @@ export type DashboardIssueRecord = {
   readonly ownerName: string | null;
   readonly raisedAt: string;
   readonly solution: string | null;
+  readonly photos: readonly ReportPhoto[];
 };
 
 /** （状态 × 归类）计数键。 */

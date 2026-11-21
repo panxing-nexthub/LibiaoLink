@@ -402,6 +402,9 @@ describe("仪表盘聚合服务", () => {
         ownerName: null,
         raisedAt: "2026-10-20",
         solution: null,
+        photos: [
+          { fileId: "88888888-8888-4888-8888-888888888888", name: "现场问题.jpg" },
+        ],
       },
     ];
     repo.changeRows = [

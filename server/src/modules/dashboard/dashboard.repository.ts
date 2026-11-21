@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
+import { files, fileLinks } from "../../db/schema/files.js";
 import { users } from "../../db/schema/identity.js";
 import { projectArchives, projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
@@ -80,6 +81,7 @@ export interface DashboardIssueDetailRow {
   ownerName: string | null;
   raisedAt: string;
   solution: string | null;
+  photos: Array<{ fileId: string; name: string }>;
 }
 
 export interface DashboardChangeRow {
@@ -326,7 +328,7 @@ export class DashboardRepository {
   async listIssueDetails(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardIssueDetailRow[]> {
     if (scope.kind === "ids" && scope.ids.length === 0) return [];
     const conditions: SQL[] = [isNull(projects.deletedAt), ...scopeCondition(issues.projectId, scope)];
-    return client
+    const rows = await client
       .select({
         id: issues.id,
         projectId: issues.projectId,
@@ -346,6 +348,20 @@ export class DashboardRepository {
       .leftJoin(DASHBOARD_ISSUE_OWNER, eq(DASHBOARD_ISSUE_OWNER.id, issues.ownerId))
       .where(and(...conditions))
       .orderBy(desc(issues.raisedAt), desc(issues.createdAt), asc(issues.id));
+    if (rows.length === 0) return [];
+    const photoRows = await client
+      .select({ objectId: fileLinks.objectId, fileId: fileLinks.fileId, name: files.name })
+      .from(fileLinks)
+      .leftJoin(files, eq(files.id, fileLinks.fileId))
+      .where(and(eq(fileLinks.objectType, "issue"), inArray(fileLinks.objectId, rows.map((row) => row.id))))
+      .orderBy(fileLinks.createdAt, fileLinks.id);
+    const photosByIssue = new Map<string, Array<{ fileId: string; name: string }>>();
+    for (const photo of photoRows) {
+      const bucket = photosByIssue.get(photo.objectId) ?? [];
+      bucket.push({ fileId: photo.fileId, name: photo.name ?? "" });
+      photosByIssue.set(photo.objectId, bucket);
+    }
+    return rows.map((row) => ({ ...row, photos: photosByIssue.get(row.id) ?? [] }));
   }
 
   /** 变更原因原文（只下发给词频计算；不返回变更明细）。 */

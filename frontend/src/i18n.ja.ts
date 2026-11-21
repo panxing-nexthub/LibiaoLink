@@ -1888,6 +1888,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "hub.dash.projects.detail.count": "全 {n} 件のプロジェクト",
   "hub.dash.projects.issueCount": "{n} 件の課題",
   "hub.dash.projects.issueRaisedAt": "起票日",
+  "hub.dash.projects.issueDetail.open": "プロジェクトの課題一覧を開く：{title}",
   "hub.dash.projects.unassigned": "未割当",
   "hub.dash.projects.unknownPerson": "不明な担当者",
   "hub.dash.projects.empty": "プロジェクトデータがありません",

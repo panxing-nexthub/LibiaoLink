@@ -96,6 +96,7 @@ type ApiDashboardIssueRecord = {
   ownerName: string | null;
   raisedAt: string;
   solution: string | null;
+  photos: Array<{ fileId: string; name: string }>;
 };
 
 type ApiDashboardIssuesResponse = {
@@ -176,6 +177,7 @@ export async function fetchDashboardIssues(): Promise<DashboardIssueDataset> {
       ownerName: issue.ownerName,
       raisedAt: issue.raisedAt,
       solution: issue.solution,
+      photos: issue.photos.map((photo) => ({ fileId: photo.fileId, name: photo.name, url: null })),
     })),
   };
 }

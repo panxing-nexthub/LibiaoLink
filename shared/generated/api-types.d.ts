@@ -12584,6 +12584,8 @@ export interface components {
             ownerName: string | null;
             raisedAt: components["schemas"]["DateOnly"] & unknown;
             solution: string | null;
+            /** @description 问题附图引用；预览地址按需走文件预览接口 */
+            photos: components["schemas"]["FilePhotoRef"][];
         };
         DashboardIssues: {
             /** @description 有数据的问题状态（展示序：done / in_progress / open；0 条不出现） */

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DASHBOARD_ISSUE_COLORS, type DashboardIssueRecord } from "../data/dashboardProgress";
 import { ISSUE_STATE_NAMES } from "../reportApi";
 import { fieldText, statusText, useLocale, useT } from "../i18n";
+import { projectFocusHref } from "../useHashRoute";
+import { PhotoTiles } from "./HubDashIssueDetail";
 import { useFocusTrap } from "./useFocusTrap";
 
 type IssueProjectGroup = {
@@ -26,11 +28,12 @@ export function HubDashIssueGroupDetail({ rows, context, onClose }: {
   const trapRef = useFocusTrap<HTMLDivElement>();
   const [keyword, setKeyword] = useState("");
   const [expandedProjects, setExpandedProjects] = useState<readonly string[]>([]);
+  const thumbPreviewOpenRef = useRef(false);
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        if (!thumbPreviewOpenRef.current) onClose();
       }
     };
     document.addEventListener("keydown", onKey, true);
@@ -139,21 +142,35 @@ export function HubDashIssueGroupDetail({ rows, context, onClose }: {
                     <div className="hub-dash-issue-group-detail__issues">
                       {group.issues.map((issue) => (
                         <article key={issue.id} className="hub-dash-issue-group-detail__issue">
-                          <div className="hub-dash-issue-group-detail__issueTop">
-                            <span className="hub-dash-issue-group-detail__state" data-state={issue.state}>{statusText(locale, ISSUE_STATE_NAMES[issue.state])}</span>
-                            <h4>{issue.title}</h4>
-                          </div>
-                          <div className="hub-dash-issue-group-detail__meta">
-                            <span>{fieldText(locale, "责任人")}：{issue.ownerName === null || issue.ownerName === "" ? t("hub.dash.projects.unassigned") : issue.ownerName}</span>
-                            <span>{t("hub.dash.projects.issueRaisedAt")}：<time dateTime={issue.raisedAt}>{issue.raisedAt}</time></span>
-                          </div>
-                          <div className="hub-dash-issue-group-detail__categories">
-                            {issue.categories.map((category) => (
-                              <span key={category} style={{ backgroundColor: DASHBOARD_ISSUE_COLORS[category] ?? "#c9ced6" }}>{fieldText(locale, category)}</span>
-                            ))}
-                          </div>
-                          {issue.solution === null || issue.solution === "" ? null : (
-                            <p className="hub-dash-issue-group-detail__solution"><b>{fieldText(locale, "解决方案或建议")}</b>：{issue.solution}</p>
+                          <a
+                            className="hub-dash-issue-group-detail__issueLink"
+                            href={projectFocusHref(issue.projectId, { kind: "issue", id: issue.id })}
+                            aria-label={t("hub.dash.projects.issueDetail.open", { title: issue.title })}
+                            title={t("hub.dash.projects.issueDetail.open", { title: issue.title })}
+                          >
+                            <div className="hub-dash-issue-group-detail__issueTop">
+                              <span className="hub-dash-issue-group-detail__state" data-state={issue.state}>{statusText(locale, ISSUE_STATE_NAMES[issue.state])}</span>
+                              <h4>{issue.title}</h4>
+                              <span className="hub-dash-issue-group-detail__openHint" aria-hidden="true">›</span>
+                            </div>
+                            <div className="hub-dash-issue-group-detail__meta">
+                              <span>{fieldText(locale, "责任人")}：{issue.ownerName === null || issue.ownerName === "" ? t("hub.dash.projects.unassigned") : issue.ownerName}</span>
+                              <span>{t("hub.dash.projects.issueRaisedAt")}：<time dateTime={issue.raisedAt}>{issue.raisedAt}</time></span>
+                            </div>
+                            <div className="hub-dash-issue-group-detail__categories">
+                              {issue.categories.map((category) => (
+                                <span key={category} style={{ backgroundColor: DASHBOARD_ISSUE_COLORS[category] ?? "#c9ced6" }}>{fieldText(locale, category)}</span>
+                              ))}
+                            </div>
+                            {issue.solution === null || issue.solution === "" ? null : (
+                              <p className="hub-dash-issue-group-detail__solution"><b>{fieldText(locale, "解决方案或建议")}</b>：{issue.solution}</p>
+                            )}
+                          </a>
+                          {issue.photos.length === 0 ? null : (
+                            <div className="hub-dash-issue-group-detail__photos">
+                              <b>{fieldText(locale, "问题附图")}</b>
+                              <PhotoTiles photos={issue.photos} onPreviewOpenChange={(open) => { thumbPreviewOpenRef.current = open; }} />
+                            </div>
                           )}
                         </article>
                       ))}

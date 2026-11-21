@@ -3637,6 +3637,13 @@
               "string",
               "null"
             ]
+          },
+          "photos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilePhotoRef"
+            },
+            "description": "问题附图引用；预览地址按需走文件预览接口"
           }
         },
         "required": [
@@ -3650,7 +3657,8 @@
           "reporterName",
           "ownerName",
           "raisedAt",
-          "solution"
+          "solution",
+          "photos"
         ]
       },
       "DashboardIssues": {

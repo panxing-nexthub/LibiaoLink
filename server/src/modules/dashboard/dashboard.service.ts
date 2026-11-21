@@ -105,6 +105,7 @@ export class DashboardService {
         ownerName: row.ownerName,
         raisedAt: row.raisedAt,
         solution: row.solution,
+        photos: row.photos,
       })),
     };
   }

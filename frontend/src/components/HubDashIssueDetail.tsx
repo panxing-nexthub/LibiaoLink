@@ -88,7 +88,7 @@ function PhotoTile({ photo, onPreview }: { readonly photo: ReportPhoto; readonly
 }
 
 /** 附图列（小图瓦片 56 x 44、多张折行；空 = 「—」）。 */
-function PhotoTiles({ photos, onPreviewOpenChange }: { readonly photos: readonly ReportPhoto[]; /** 大图预览开 / 关通知（Push 351：宿主弹窗据此让出 Esc 优先级 —— 预览开着时 Esc 先关预览、弹窗仍在）。 */ onPreviewOpenChange?: (open: boolean) => void }) {
+export function PhotoTiles({ photos, onPreviewOpenChange }: { readonly photos: readonly ReportPhoto[]; /** 大图预览开 / 关通知（Push 351：宿主弹窗据此让出 Esc 优先级 —— 预览开着时 Esc 先关预览、弹窗仍在）。 */ onPreviewOpenChange?: (open: boolean) => void }) {
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null);
   /** 大图预览开 / 关（Push 351：带出开合通知 —— 宿主弹窗 Esc 让位给预览层）。 */
   const setPreviewOpen = (next: { url: string; name: string } | null) => {

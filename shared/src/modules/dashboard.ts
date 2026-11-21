@@ -2,6 +2,7 @@ import { z } from "../zod.ts";
 import { DateOnlySchema, UuidSchema } from "../common/conventions.ts";
 import { StageKeySchema, TaskDisplayStatusSchema } from "../common/dicts.ts";
 import { IssueCategorySchema, IssueStateSchema } from "./issues.ts";
+import { FilePhotoRefSchema } from "./files.ts";
 
 /**
  * 仪表盘聚合读面（B4 · M7-02）：服务端一次算好项目进度 / 任务状态 / 交付时间，
@@ -120,6 +121,7 @@ export const DashboardIssueRecordSchema = z
     ownerName: z.string().nullable(),
     raisedAt: DateOnlySchema,
     solution: z.string().nullable(),
+    photos: z.array(FilePhotoRefSchema).openapi({ description: "问题附图引用；预览地址按需走文件预览接口" }),
   })
   .openapi("DashboardIssueRecord");
 

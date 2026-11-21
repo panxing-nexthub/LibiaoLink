@@ -5680,6 +5680,56 @@ body {
   border-top: 1px solid #edf0f3;
 }
 
+.hub-dash-issue-group-detail__issueLink {
+  display: block;
+  border-radius: 0.45rem;
+  color: inherit;
+  outline: none;
+  text-decoration: none;
+}
+
+.hub-dash-issue-group-detail__issueLink:hover h4 {
+  color: #1d4ed8;
+}
+
+.hub-dash-issue-group-detail__issueLink:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 3px;
+}
+
+.hub-dash-issue-group-detail__openHint {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #9aa6b5;
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1;
+  transition: color 140ms ease, transform 140ms ease;
+}
+
+.hub-dash-issue-group-detail__issueLink:hover .hub-dash-issue-group-detail__openHint {
+  color: #3b82f6;
+  transform: translateX(2px);
+}
+
+.hub-dash-issue-group-detail__photos {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed #e5e8ec;
+  color: #6b7280;
+  font-size: 0.74rem;
+}
+
+.hub-dash-issue-group-detail__photos > b {
+  flex: 0 0 auto;
+  padding-top: 0.3rem;
+  color: #4b5563;
+  font-weight: 600;
+}
+
 .hub-dash-issue-group-detail__issue:first-child {
   border-top: 0;
 }

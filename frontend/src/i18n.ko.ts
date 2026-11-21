@@ -1888,6 +1888,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "hub.dash.projects.detail.count": "프로젝트 {n}개",
   "hub.dash.projects.issueCount": "이슈 {n}개",
   "hub.dash.projects.issueRaisedAt": "제기 시간",
+  "hub.dash.projects.issueDetail.open": "프로젝트 이슈 목록 열기: {title}",
   "hub.dash.projects.unassigned": "미지정",
   "hub.dash.projects.unknownPerson": "알 수 없는 담당자",
   "hub.dash.projects.empty": "프로젝트 데이터가 없습니다",

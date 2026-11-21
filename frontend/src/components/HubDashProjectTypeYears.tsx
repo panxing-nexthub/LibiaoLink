@@ -12,7 +12,7 @@ const AXIS_Y = 296;
 const TICK_LABEL_Y = 322;
 const BAR_MAX_W = 46;
 const GROUP_INSET_RATIO = 0.16;
-const YEAR_WINDOW = 3;
+const YEAR_WINDOW = 5;
 
 type YearKey = number | null;
 

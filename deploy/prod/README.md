@@ -1,3 +1,13 @@
+> **2026-11-21 23:00 折线图聚焦模式隐藏下方面板（测试机 frontend-only · test-20261121-2300-px-dashboard-line-focus-4324c597）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `4324c597`；release = `test-20261121-2300-px-dashboard-line-focus-4324c597`，previous = `test-20261121-2250-px-dashboard-stage-font-f1433805`；staging = `/srv/data/deploy-test-20261121-2300-px-dashboard-line-focus-4324c597/staging`。
+
+> **改动 / 验收**：点击「折线图」后下方项目阶段面板下滑收起（高度 0、opacity 0、translateY 28px、aria-hidden），上方项目数量面板扩展至 940px，折线图改用 1200×520 扩展画布居中展示；点击「柱状图」恢复双图，下面板回到 433px。frontend `npm run typecheck` / `npm run build` 通过。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,364 B / SHA-256 `cd5ca2c7…`、678 文件；`build-info.json` 364 B / `24946609…`；`frontend-files.sha256` 92,437 B / `cdc59c37…`；`release-files.sha256` 254 B / `a51def3c…`。线上 1070 → 1073 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `7da2ad5f…`、主包 `assets/index-Xl4XBVhy.js` 2,539,708 B / `e9c501fa…`、CSS `assets/index-Aw-29TuD.css` 253,799 B / `fdd23eb5…`、ES `assets/es-BOOvqkBy.js` 428,098 B / `67270607…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2300-px-dashboard-line-focus-4324c597`，前端 154,135,251 B / `f76602cc…`、原 manifest 4,007 B / `65d9c654…`，SHA256SUMS 3 / 3 通过；新 manifest 4,098 B / `c8fa1334…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 22:50 放大项目阶段图轴文字（测试机 frontend-only · test-20261121-2250-px-dashboard-stage-font-f1433805）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `f1433805`；release = `test-20261121-2250-px-dashboard-stage-font-f1433805`，previous = `test-20261121-2240-px-dashboard-filter-align-97c56d22`；staging = `/srv/data/deploy-test-20261121-2250-px-dashboard-stage-font-f1433805/staging`。
 
 > **改动 / 验收**：项目阶段图横轴中文标签 12.4 → 14.3、纵轴刻度 12 → 13.2、柱顶数字 12.5 → 13.5；12 个阶段标签单行显示，不压缩、不重叠。frontend `npm run typecheck` / `npm run build` 通过。

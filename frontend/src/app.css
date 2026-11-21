@@ -4916,6 +4916,13 @@ body {
   gap: 0.35rem;
 }
 
+.hub-dash-combined__panel .hub-dash-project-types__typeLine {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 .hub-dash-combined__panel .hub-dash-start {
   gap: 0.35rem;
 }
@@ -5146,6 +5153,7 @@ body {
 }
 
 .hub-dash-project-types__controls {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
@@ -5350,6 +5358,13 @@ body {
 .hub-dash-project-types__hoverTotal {
   font-variant-numeric: tabular-nums;
   user-select: none;
+}
+
+@media (max-width: 1100px) {
+  .hub-dash-combined__panel .hub-dash-project-types__typeLine {
+    position: static;
+    transform: none;
+  }
 }
 
 @media (max-width: 639.98px) {

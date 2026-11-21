@@ -5079,6 +5079,24 @@ body {
   justify-content: center;
   gap: 0.42rem;
   min-width: 0;
+  min-height: 68px;
+}
+
+.hub-dash-project-types__leftControls {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  transform: translateY(-50%);
+}
+
+.hub-dash-project-types__leftControls > .hub-dash-project-types__selectAll {
+  position: static;
+  transform: none;
 }
 
 .hub-dash-project-types__yearNavigator {
@@ -5122,11 +5140,6 @@ body {
   padding: 0.28rem 0.72rem;
   font-size: 0.75rem;
   transform: translateY(-50%);
-}
-
-.hub-dash-project-types__chartToggle {
-  left: auto;
-  right: 0;
 }
 
 .hub-dash-project-types__selectAll[data-active="true"] {
@@ -5262,6 +5275,7 @@ body {
   .hub-dash-project-types__yearLine {
     flex-wrap: wrap;
     gap: 0.28rem;
+    min-height: 0;
   }
 
   .hub-dash-project-types__selectAll {
@@ -5269,8 +5283,9 @@ body {
     transform: none;
   }
 
-  .hub-dash-project-types__chartToggle {
-    margin-left: auto;
+  .hub-dash-project-types__leftControls {
+    position: static;
+    transform: none;
   }
 
   .hub-dash-project-types__yearNavigator {

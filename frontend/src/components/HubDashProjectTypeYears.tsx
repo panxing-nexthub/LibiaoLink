@@ -81,7 +81,17 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
     <div className="hub-dash-project-types-wrap">
       <div className="hub-dash-project-types__controls">
         <div className="hub-dash-project-types__yearLine">
-          <button type="button" className="hub-dash-project-types__selectAll" data-active={allSelected ? "true" : "false"} aria-pressed={allSelected} onClick={() => setSelectedYears(allSelected ? [] : [...allYears])}>{t("hub.dash.projects.selectAll")}</button>
+          <div className="hub-dash-project-types__leftControls">
+            <button type="button" className="hub-dash-project-types__selectAll" data-active={allSelected ? "true" : "false"} aria-pressed={allSelected} onClick={() => setSelectedYears(allSelected ? [] : [...allYears])}>{t("hub.dash.projects.selectAll")}</button>
+            <button
+              type="button"
+              className="hub-dash-project-types__selectAll hub-dash-project-types__chartToggle"
+              data-active={chartType === "line" ? "true" : "false"}
+              aria-pressed={chartType === "line"}
+              aria-label={t("hub.dash.projects.typeYear.viewToggle")}
+              onClick={() => setChartType((current) => current === "bar" ? "line" : "bar")}
+            >{chartType === "bar" ? t("hub.dash.projects.typeYear.viewLine") : t("hub.dash.projects.typeYear.viewBar")}</button>
+          </div>
           <DashboardYearNavigator
             numericYears={numericYears}
             hasUnknownYear={hasUnknownYear}
@@ -90,14 +100,6 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
             windowStart={yearWindowStart}
             onWindowStartChange={setYearWindowStart}
           />
-          <button
-            type="button"
-            className="hub-dash-project-types__selectAll hub-dash-project-types__chartToggle"
-            data-active={chartType === "line" ? "true" : "false"}
-            aria-pressed={chartType === "line"}
-            aria-label={t("hub.dash.projects.typeYear.viewToggle")}
-            onClick={() => setChartType((current) => current === "bar" ? "line" : "bar")}
-          >{chartType === "bar" ? t("hub.dash.projects.typeYear.viewLine") : t("hub.dash.projects.typeYear.viewBar")}</button>
         </div>
         <div className="hub-dash-project-types__typeLine">
           {DASHBOARD_PROJECT_TYPES.map((type) => {

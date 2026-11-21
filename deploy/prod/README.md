@@ -1,3 +1,13 @@
+> **2026-11-21 18:00 负责人图移除阴影总数并放大阶段名称（测试机 frontend-only · test-20261121-1800-px-dashboard-role-copy-b36459ae）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `b36459ae`；release = `test-20261121-1800-px-dashboard-role-copy-b36459ae`，previous = `test-20261121-1755-px-dashboard-role-total-5a8c553b`；staging = `/srv/data/deploy-test-20261121-1800-px-dashboard-role-copy-b36459ae/staging`。
+
+> **改动 / 验收**：负责人人阴影区顶部总数字移除，仅保留悬停白卡；白卡内阶段名称改为 0.86rem、650 字重、深灰色。浏览器实测负责人页悬停白卡阶段名称清晰，柱内分段数字正常保留。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,606,212 B / SHA-256 `477fa747…`、678 文件；`build-info.json` 349 B / `b75deb0b…`；`frontend-files.sha256` 91,081 B / `38acdd6a…`；`release-files.sha256` 254 B / `637f6c02…`。线上 1029 → 1032 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `4aaeef18…`、主包 `assets/index-Bn48qXZ3.js` 2,538,156 B / `a1bbecbf…`、CSS `assets/index-Dj0xX3PD.css` 249,766 B / `ccb6e390…`、ES `assets/es-DsvEVM1V.js` `9d904e5f…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1800-px-dashboard-role-copy-b36459ae`，前端 140,350,097 B / `87b28ec3…`、原 manifest 4,102 B / `c70e49a9…`，SHA256SUMS 3 / 3 通过；新 manifest 4,074 B / `74f3392a…`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 17:55 负责人图阴影总数与说明文案（测试机 frontend-only · test-20261121-1755-px-dashboard-role-total-5a8c553b）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `5a8c553b`；release = `test-20261121-1755-px-dashboard-role-total-5a8c553b`，previous = `test-20261121-1745-px-dashboard-filters-ac3a22d3`；staging = `/srv/data/deploy-test-20261121-1755-px-dashboard-role-total-5a8c553b/staging`。
 
 > **改动 / 验收**：负责人三页删除说明文案；人员阴影区悬停时在顶部显示粗体总数，并隐藏该人员柱上的分段数字避免重叠；白卡明细保留。浏览器实测负责人页标题、图例、阴影总数与分段显隐正常。

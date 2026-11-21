@@ -1,3 +1,13 @@
+> **2026-11-22 00:18 问题点击直接定位项目问题行（测试机 frontend-only · test-20261122-0018-px-dashboard-issue-row-locate-ff408796）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `ff408796`；release = `test-20261122-0018-px-dashboard-issue-row-locate-ff408796`，previous = `test-20261122-0013-px-dashboard-issue-photo-link-eb93993b`；staging = `/srv/data/deploy-test-20261122-0018-px-dashboard-issue-row-locate-ff408796/staging`。
+
+> **改动 / 验收**：仪表盘问题链接由会打开问题抽屉的 `?issue={id}` 改为 `?issueLocate={id}`；项目问题追踪进入后清空可能遮挡的搜索词、滚动到目标问题行并常驻黄色高亮，不再打开右侧抽屉。通知深链原 `issue={id}` 抽屉语义保留。frontend typecheck / build 通过；Chrome 实测目标行直接居中高亮、抽屉未打开、console error 0。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,615,853 B / SHA-256 `a7c63b8e…`、678 文件；线上前端 1094 → 1097 文件并原子替换 `index.html`，强制重建 web。无 server / shared 产物变化。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `5a6bbf7d…`、主包 `assets/index-Ds3cmUdv.js` 2,555,394 B / `34ca5345…`、CSS `assets/index-B3mPVj0a.css` 261,333 B / `0d181b3d…`、ES `assets/es-1wtahwsY.js` 428,098 B / `9838b735…`；`/`、`/healthz`、`/readyz` 200，web healthy、RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261122-0018-px-dashboard-issue-row-locate-ff408796`，162,449,245 B / 4 文件 / SHA256SUMS `267de6e0…`；新 `RELEASE_MANIFEST.json` 4,731 B / `706d9e03…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / 迁移 / Compose / env / Nginx / 对象存储变更。回滚：恢复前端备份与原 manifest，再重建 web。
+
 > **2026-11-22 00:13 问题下钻补图片与项目定位跳转（测试机 full-stack · test-20261122-0013-px-dashboard-issue-photo-link-eb93993b）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `eb93993b`；release = `test-20261122-0013-px-dashboard-issue-photo-link-eb93993b`，previous = `test-20261122-0000-px-dashboard-project-row-link-414ae0a2`；staging = `/srv/data/deploy-test-20261122-0013-px-dashboard-issue-photo-link-eb93993b/staging`。
 
 > **改动 / 验收**：全部项目问题下拉行新增「问题附图」缩略图，点击可打开大图预览；问题正文改为链接，进入 `#/project/{projectId}?view=daily&sub=issues&issue={issueId}`，自动定位并打开对应项目的问题详情抽屉。`issues.details[]` 增只读 `photos[]`（fileId / name，预览仍走文件接口）。shared check、server typecheck / build / dashboard tests 10 条、frontend typecheck / build 通过；Chrome 实测供应商原因 4 条问题中两条各显示 2 张附图，点图预览正常；点击第一条问题进入 `UK-VANILLA-AIRROB` 问题追踪并自动打开所述问题，console error 0。

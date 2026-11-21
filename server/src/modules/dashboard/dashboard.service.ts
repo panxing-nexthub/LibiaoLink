@@ -62,16 +62,17 @@ export class DashboardService {
     };
   }
 
-  /** 全部项目维度聚合：启动年份 × 项目类型、三类负责人 × 最新阶段、启动年份 × 最新阶段，附项目下钻行。 */
+  /** 全部项目维度聚合：启动年份 × 项目类型、三类负责人 × 最新阶段、启动年份 × 最新阶段（任务派生，与项目空间同口径），附项目下钻行。 */
   async projectInsights(actorId: string): Promise<DashboardProjectAnalyticsResponse> {
     const scope = await this.permission.projectScope(actorId);
     const projects = await this.repository.listAnalyticsProjects(scope);
     if (projects.length === 0) return emptyProjectAnalytics();
-    const [roleTasks, startups] = await Promise.all([
+    const [roleTasks, startups, taskBuckets] = await Promise.all([
       this.repository.listProjectRoleTasks(scope),
       this.repository.listProjectStartupDates(scope),
+      this.repository.listTaskBuckets(scope, shanghaiToday(new Date())),
     ]);
-    return buildProjectAnalytics(projects, roleTasks, startups);
+    return buildProjectAnalytics(projects, roleTasks, startups, taskBuckets);
   }
 
   async issues(actorId: string): Promise<DashboardIssuesResponse> {

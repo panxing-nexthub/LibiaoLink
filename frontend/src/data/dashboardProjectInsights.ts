@@ -7,7 +7,7 @@ import { stageNameOf } from "../taskApi";
  * - 启动年份 × 项目最新阶段（柱状图 + 饼图）。
  *
  * 「启动年份」= 标题为「项目启动 / Project Startup」的任务实际完成日期所属年份；
- * 「最新阶段」= 未归档项目的 projects.stage_key；归档项目按异常归档 / 验收归档 / 归档-临时任务拆分。
+ * 「最新阶段」= 未归档项目按项目空间同口径取任务派生最新阶段（已动工任务中阶段序最靠后者，无动工任务回落 projects.stage_key）；归档项目按异常归档 / 验收归档 / 归档-临时任务拆分。
  * 聚合在服务端完成，见 server/src/modules/dashboard/dashboard.rules.ts。
  */
 

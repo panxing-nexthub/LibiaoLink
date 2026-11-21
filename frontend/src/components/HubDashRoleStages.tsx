@@ -9,6 +9,7 @@ import {
   type DashboardProjectInsights,
   type DashboardProjectRole,
   type DashboardProjectRoleStats,
+  type DashboardProjectStageBucket,
 } from "../data/dashboardProjectInsights";
 
 const ROLE_TITLE_KEYS: Readonly<Record<DashboardProjectRole, TextKey>> = {
@@ -38,21 +39,33 @@ function truncated(text: string, maxChars = 9): string {
   return text.length <= maxChars ? text : text.slice(0, maxChars - 1) + "…";
 }
 
-function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; readonly stats: DashboardProjectRoleStats | undefined }) {
+function RoleStageChart({ role, stats, visibleStages }: {
+  readonly role: DashboardProjectRole;
+  readonly stats: DashboardProjectRoleStats | undefined;
+  readonly visibleStages: readonly DashboardProjectStageBucket[];
+}) {
   const t = useT();
   const locale = useLocale();
   const [tip, setTip] = useState<DashboardHoverTip | null>(null);
   const people = stats?.people ?? [];
-  if (people.length === 0) {
+  const visibleStageEntries = DASHBOARD_PROJECT_STAGE_BUCKETS
+    .map((bucket, stageIndex) => ({ bucket, stageIndex }))
+    .filter((entry) => visibleStages.includes(entry.bucket));
+  const visibleStageIndexes = new Set(visibleStageEntries.map((entry) => entry.stageIndex));
+  if (people.length === 0 || visibleStageEntries.length === 0) {
     return <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>;
   }
+  const visibleTotals = people.map((person) => person.stageCounts.reduce(
+    (sum, count, stageIndex) => visibleStageIndexes.has(stageIndex) ? sum + count : sum,
+    0,
+  ));
+  const maxTotal = visibleTotals.reduce((max, total) => Math.max(max, total), 0);
+  const { max: tickMax, step } = axisOf(Math.max(maxTotal, 1));
+  const unit = (AXIS_Y - PLOT_TOP) / tickMax;
   const viewW = Math.max(MIN_VIEW_W, LEFT + RIGHT + people.length * SLOT_W);
   const plotW = viewW - LEFT - RIGHT;
   const slotW = plotW / people.length;
   const barW = Math.min(BAR_MAX_W, slotW * 0.52);
-  const maxTotal = people.reduce((max, person) => Math.max(max, person.total), 0);
-  const { max: tickMax, step } = axisOf(Math.max(maxTotal, 1));
-  const unit = (AXIS_Y - PLOT_TOP) / tickMax;
   const ticks: number[] = [];
   for (let value = 0; value <= tickMax; value += step) ticks.push(value);
   return (
@@ -79,11 +92,12 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
           const rawLabel = person.isUnassigned ? t("hub.dash.projects.unassigned") : person.name ?? t("hub.dash.projects.unknownPerson");
           const personKey = person.isUnassigned ? "unassigned" : person.personId ?? rawLabel;
           const label = truncated(rawLabel);
-          const stageRows = DASHBOARD_PROJECT_STAGE_BUCKETS.flatMap((bucket, stageIndex) => {
+          const visibleTotal = visibleTotals[personIndex] ?? 0;
+          const stageRows = visibleStageEntries.flatMap(({ bucket, stageIndex }) => {
             const count = person.stageCounts[stageIndex] ?? 0;
             return count > 0 ? [{ label: stageText(locale, dashboardProjectStageLabel(bucket)), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }] : [];
           });
-          stageRows.push({ label: t("hub.dash.projects.total"), value: person.total, color: "#94a3b8" });
+          stageRows.push({ label: t("hub.dash.projects.total"), value: visibleTotal, color: "#94a3b8" });
           let cursorY = AXIS_Y;
           return (
             <g key={personKey}>
@@ -98,7 +112,7 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
                 onMouseEnter={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
                 onMouseMove={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
               />
-              {DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket, stageIndex) => {
+              {visibleStageEntries.map(({ bucket, stageIndex }) => {
                 const count = person.stageCounts[stageIndex] ?? 0;
                 if (count <= 0) return null;
                 const height = count * unit;
@@ -137,18 +151,42 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
   );
 }
 
-/** 十二个最新阶段色例：负责人页与启动年份页共用（启动年份页自身也有一份，保持图内布局）。 */
-export function HubDashProjectStageLegend() {
+/** 十二个最新阶段色例：逐项点击显隐，最左侧「全选」一次开关全部阶段。 */
+export function HubDashProjectStageLegend({ visibleStages, onToggleStage, onSelectAll }: {
+  readonly visibleStages: readonly DashboardProjectStageBucket[];
+  readonly onToggleStage: (stage: DashboardProjectStageBucket) => void;
+  readonly onSelectAll: () => void;
+}) {
   const t = useT();
   const locale = useLocale();
+  const allSelected = visibleStages.length === DASHBOARD_PROJECT_STAGE_BUCKETS.length;
   return (
-    <div className="hub-dash-role__legend" aria-label={t("hub.dash.projects.stageLegend")}>
-      {DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket) => (
-        <span key={bucket} className="hub-dash-role__legendItem">
-          <i style={{ background: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }} />
-          {stageText(locale, dashboardProjectStageLabel(bucket))}
-        </span>
-      ))}
+    <div className="hub-dash-role__legendBar">
+      <button
+        type="button"
+        className="hub-dash-project-types__selectAll hub-dash-role__selectAll"
+        data-active={allSelected ? "true" : "false"}
+        aria-pressed={allSelected}
+        onClick={onSelectAll}
+      >{t("hub.dash.projects.selectAll")}</button>
+      <div className="hub-dash-role__legend" role="group" aria-label={t("hub.dash.projects.stageLegend")}>
+        {DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket) => {
+          const active = visibleStages.includes(bucket);
+          return (
+            <button
+              key={bucket}
+              type="button"
+              className="hub-dash-role__legendItem"
+              data-active={active ? "true" : "false"}
+              aria-pressed={active}
+              onClick={() => onToggleStage(bucket)}
+            >
+              <i style={{ background: active ? DASHBOARD_PROJECT_STAGE_COLORS[bucket] : "#c9ced6" }} />
+              <span>{stageText(locale, dashboardProjectStageLabel(bucket))}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -156,13 +194,22 @@ export function HubDashProjectStageLegend() {
 /**
  * 单一角色的「人员 × 最新阶段」堆叠柱图，供全部项目滑轨的一屏使用。
  * 同一项目同一角色同一人去重；未配置对应负责人落「待分配」。
+ * 阶段图例可逐项显隐，隐藏阶段不再绘制，合计与纵轴按可见阶段重算。
  */
 export function HubDashRoleStage({ role, insights }: { readonly role: DashboardProjectRole; readonly insights: DashboardProjectInsights }) {
   const stats = insights.roles.find((item) => item.role === role);
+  const [visibleStages, setVisibleStages] = useState<DashboardProjectStageBucket[]>(() => [...DASHBOARD_PROJECT_STAGE_BUCKETS]);
+  const allSelected = visibleStages.length === DASHBOARD_PROJECT_STAGE_BUCKETS.length;
+  const toggleStage = (stage: DashboardProjectStageBucket): void => setVisibleStages((current) =>
+    current.includes(stage) ? current.filter((item) => item !== stage) : [...current, stage]);
   return (
     <div className="hub-dash-role-section hub-dash-role-section--slide">
-      <HubDashProjectStageLegend />
-      <RoleStageChart role={role} stats={stats} />
+      <HubDashProjectStageLegend
+        visibleStages={visibleStages}
+        onToggleStage={toggleStage}
+        onSelectAll={() => setVisibleStages(allSelected ? [] : [...DASHBOARD_PROJECT_STAGE_BUCKETS])}
+      />
+      <RoleStageChart role={role} stats={stats} visibleStages={visibleStages} />
     </div>
   );
 }

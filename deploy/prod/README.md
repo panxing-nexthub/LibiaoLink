@@ -1,3 +1,13 @@
+> **2026-11-21 17:45 项目数量图年份居中与总数样式微调（测试机 frontend-only · test-20261121-1745-px-dashboard-filters-ac3a22d3）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `ac3a22d3`；release = `test-20261121-1745-px-dashboard-filters-ac3a22d3`，previous = `test-20261121-1735-px-dashboard-filters-2f09ec45`；staging = `/srv/data/deploy-test-20261121-1745-px-dashboard-filters-ac3a22d3/staging`。
+
+> **改动 / 验收**：年份导航居中，双箭头紧贴年份，全选固定最左；年份项无边框、仅方块纯色变化（`#2f7ef2`）且无荧光；悬停总数改为阴影区顶部纯粗体数字，不再使用胶囊。浏览器实测：全选、年份方块纯色、双箭头无边框且邻近年份、顶部总数与筛选功能保持。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,606,334 B / SHA-256 `783b2bf6…`、678 文件；`build-info.json` 397 B / `a3e78ba6…`；`frontend-files.sha256` 91,081 B / `7d6ae537…`；`release-files.sha256` 254 B / `fe5c9f93…`。线上 1023 → 1026 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `74263637…`、主包 `assets/index-CdiuGhOD.js` 2,538,350 B / `3e6578bc…`、CSS `assets/index-CZ-dOGvA.css` 249,733 B / `d21d75ea…`、ES `assets/es-7lwBnVeI.js` `234bb844…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1745-px-dashboard-filters-ac3a22d3`，前端 138,472,268 B / `8ad3af40…`、原 manifest 4,602 B / `687fcc5a…`，SHA256SUMS 3 / 3 通过；新 manifest 4,191 B / `696d61af…`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 17:35 项目数量图年份/类型筛选与悬停总数（测试机 frontend-only · test-20261121-1735-px-dashboard-filters-2f09ec45）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `2f09ec45`；测试机 release = `test-20261121-1735-px-dashboard-filters-2f09ec45`，previous = `test-20261121-1710-px-dashboard-hover-744c5034`；staging = `/srv/data/deploy-test-20261121-1735-px-dashboard-filters-2f09ec45/staging`。
 
 > **改动 / 验收**：项目数量图新增可点击类型图例与年份筛选；年份默认最近 3 年，`《`/`》` 分页，最左侧液态玻璃「全选」，年份按钮仅方块变色（`#2f7ef2`）；关闭类型 / 年份即隐藏对应柱；移除图内说明文字。阴影区悬停总数改为自适应白色徽标，放在最高柱上方，避免与柱体和数字重叠。浏览器实测：默认 2024 / 2025 / 2026；左翻显示 2022 / 2023 / 2024；3D分拣关闭后变灰且黄柱消失；2024 关闭后该年组消失；全选恢复全部年份 + 未记录；2026 阴影悬停显示粗体 15 且无重叠。

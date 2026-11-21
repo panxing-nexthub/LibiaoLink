@@ -1,3 +1,13 @@
+> **2026-11-21 17:55 负责人图阴影总数与说明文案（测试机 frontend-only · test-20261121-1755-px-dashboard-role-total-5a8c553b）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `5a8c553b`；release = `test-20261121-1755-px-dashboard-role-total-5a8c553b`，previous = `test-20261121-1745-px-dashboard-filters-ac3a22d3`；staging = `/srv/data/deploy-test-20261121-1755-px-dashboard-role-total-5a8c553b/staging`。
+
+> **改动 / 验收**：负责人三页删除说明文案；人员阴影区悬停时在顶部显示粗体总数，并隐藏该人员柱上的分段数字避免重叠；白卡明细保留。浏览器实测负责人页标题、图例、阴影总数与分段显隐正常。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,608,247 B / SHA-256 `ae47a439…`、678 文件；`build-info.json` 348 B / `c141dd06…`；`frontend-files.sha256` 91,081 B / `98e2a7ea…`；`release-files.sha256` 254 B / `376e1d48…`。线上 1026 → 1029 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `e85789c4…`、主包 `assets/index-DSASuMRi.js` 2,538,492 B / `64b5859a…`、CSS `assets/index-BsSDSXTd.css` 249,836 B / `019a64d4…`、ES `assets/es-C8thSFmW.js` `7664b28e…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1755-px-dashboard-role-total-5a8c553b`，前端 139,421,995 B / `2771ab6b…`、原 manifest 4,191 B / `696d61af…`，SHA256SUMS 3 / 3 通过；新 manifest 4,102 B / `c70e49a9…`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 17:45 项目数量图年份居中与总数样式微调（测试机 frontend-only · test-20261121-1745-px-dashboard-filters-ac3a22d3）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `ac3a22d3`；release = `test-20261121-1745-px-dashboard-filters-ac3a22d3`，previous = `test-20261121-1735-px-dashboard-filters-2f09ec45`；staging = `/srv/data/deploy-test-20261121-1745-px-dashboard-filters-ac3a22d3/staging`。
 
 > **改动 / 验收**：年份导航居中，双箭头紧贴年份，全选固定最左；年份项无边框、仅方块纯色变化（`#2f7ef2`）且无荧光；悬停总数改为阴影区顶部纯粗体数字，不再使用胶囊。浏览器实测：全选、年份方块纯色、双箭头无边框且邻近年份、顶部总数与筛选功能保持。

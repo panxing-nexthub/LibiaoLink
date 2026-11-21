@@ -1,3 +1,15 @@
+> **2026-11-21 16:30 仪表盘全部项目总览改版（测试机 · test-20261121-1630-px-dashboard-all-projects-490d5825）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `490d5825`（基于测试机现役基线 `62880b75`，未合入 main）；测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1630-px-dashboard-all-projects-490d5825`，previous = `test-20261121-1408-px-project-legacy-done-62880b75`；staging = `/srv/data/deploy-test-20261121-1630-px-dashboard-all-projects-490d5825/staging`。
+
+> **改动 / 验收**：全部项目页改为纵向长页：保留问题状态 × 归类图，新增启动年份 × 项目类型柱状图、项目经理 / 销售负责人 / 规划负责人三张阶段堆叠柱图、启动年份 × 最新阶段柱图与可切换年份的环形饼图；单项目仍保留原六视图。新增只读 `GET /api/v1/dashboard/project-insights`；104 项迁移未改，可选 `additional_project_types` / `archive_kind` 通过 `to_jsonb` 兼容旧测试库。浏览器实测全部项目页 4 个区块、7 张 SVG、滚动高度 4393 / 视口 757；2026 ↔ 全部年份饼图切换正常；单项目 UK-VANILLA-AIRROB 原六视图与底部切换完整；验后已恢复「全部项目」偏好。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,603,767 B / SHA-256 `d3337983…`、692 归档条目、678 文件；`dashboard-module.tar.gz` 19,029 B / `70767907…`；`build-info.json` 551 B / `b3570c74…`；`frontend-files.sha256` 91,081 B / `76787534…`；`release-files.sha256` 260 B / `76e5c2ce…`。前端按内容哈希新增 4 个文件并原子替换 `index.html`，线上 1000 → 1003 文件、旧 hashed 资源保留；server 仅覆盖 `server/dist/modules/dashboard`（12 文件）；shared/database 保持测试基线不变。bind 目录替换后强制重建 web 容器以恢复新挂载，api / worker 重启。
+
+> **验证 / 备份 / 清单**：`index.html` `04f18e92…`、主包 `assets/index-J7pk8KqS.js` 2,524,898 B / `7e6c10a4…`、CSS `assets/index-BhxgnxsG.css` 242,446 B / `39e2843a…`、ES 分包 `assets/es-CUdiRbrk.js` `af057700…` 与公网逐字节一致；构建文件 678 / 678 校验通过。已登录接口返回 200：11 个项目、3 类型、12 阶段桶、3 角色、启动年份 2026 / 未记录；未登录为 401。`/healthz`、`/readyz` 200 且四探针全 true；web / api / worker / postgres healthy，近期 api / worker 0 error。备份 `/srv/data/backups/before-test-20261121-1625-px-dashboard-all-projects-1b0746c1`，前端 131,097,630 B / `8891e5ce…`、server 1,345,602 B / `4b26ffa6…`、shared 295,401 B / `9545ad13…`，SHA256SUMS 5 / 5 通过；新 `RELEASE_MANIFEST.json` 6,246 B / `15e86abe…`，`root:root 644`。
+
+> **发布过程事故与纠正**：首次于 16:16 整包替换 server/shared/frontend 后，发现测试机现役 server 构建早于多类型迁移，旧库无 `additional_project_types`，项目 / 字典接口出现 500。已立即从 SHA 校验通过的备份恢复 server/shared/frontend，并把服务端发布改为仅覆盖仪表盘模块；新增查询通过 `to_jsonb` 兼容旧库可选列后重新发布。最终健康检查全绿、近期 0 error，备份与发布清单已同步。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机 `10.1.103.44` 未触碰；无 DDL、迁移、权限、Compose、env、Nginx 或对象存储变更；server 仅 dashboard 模块更新。回滚：恢复备份的 `frontend-dist-before.tar.gz` 到 `/opt/libiaolink/frontend/dist` 并重建 web，恢复 `server-dist-before.tar.gz` / `shared-dist-before.tar.gz` 后重启 api / worker，再恢复 `RELEASE_MANIFEST.json.before`。
+
 ***
 
 > **2026-11-21 11:25 项目管理甘特-实施时间筛选弹层说明文案精简（正式机 frontend-only · prod-20261121-1121-px-pm-gantt-filter-copy-eb766751）**：代码来源 main `eb766751`（PR [#984](https://github.com/panxing-nexthub/LibiaoLink/pull/984)；功能 PR [#983](https://github.com/panxing-nexthub/LibiaoLink/pull/983)）。正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261121-1121-px-pm-gantt-filter-copy-eb766751`，previous live = `prod-20261121-0015-px-pm-gantt-nav-click-c166cf6c`；staging = `/srv/data/deploy-prod-20261121-1121-px-pm-gantt-filter-copy-eb766751/staging`，备份 = `/srv/data/backups/before-prod-20261121-1121-px-pm-gantt-filter-copy-eb766751`。

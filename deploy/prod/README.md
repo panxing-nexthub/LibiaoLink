@@ -1,3 +1,13 @@
+> **2026-11-21 21:35 项目数量统计柱状图 / 折线图切换（测试机 frontend-only · test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `71ed6dd5`；release = `test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5`，previous = `test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87`；staging = `/srv/data/deploy-test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5/staging`。
+
+> **改动 / 验收**：项目数量统计右上角新增图表类型按钮，默认柱状图，点击切为折线图；折线模式按 T-sort / 3D分拣 / 飞箱绘制三条趋势线，按钮变为「柱状图」可切回。年份筛选、全选、类型显隐、悬停卡和刻度共用。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核默认 15 柱、折线 3 线 / 15 点、隐藏 T-sort 后 2 线 / 10 点、切回柱状图恢复；线上 bundle 命中 `hub-dash-project-types__line` / `hub-dash-project-types__chartToggle`。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,608,897 B / SHA-256 `4a2e6305…`、678 文件；`build-info.json` 353 B / `c5b02d17…`；`frontend-files.sha256` 92,437 B / `cbde5ad6…`；`release-files.sha256` 254 B / `6416402a…`。线上 1045 → 1048 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `6dc7840c…`、主包 `assets/index-_wiaoyw8.js` 2,539,241 B / `10ded47b…`、CSS `assets/index-CoP7tP7U.css` 251,944 B / `22ee02cc…`、ES `assets/es-CULKcChS.js` 428,098 B / `424d59be…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5`，前端 145,834,898 B / `5c2ac424…`、原 manifest 4,153 B / `96b9bd8c…`，SHA256SUMS 3 / 3 通过；新 manifest 4,139 B / `befad90e…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 21:20 项目阶段标题精简与问题原因归类可筛选（测试机 frontend-only · test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `ff029b87`；release = `test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87`，previous = `test-20261121-2105-px-dashboard-role-stage-filter-b332be0a`；staging = `/srv/data/deploy-test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87/staging`。
 
 > **改动 / 验收**：全部项目第 6 屏标题改为「项目阶段」并移除说明文字，底部标签同步；问题原因归纳 7 类图例改为可点击显隐，隐藏项灰显，左侧新增「全选」双向按钮，柱、刻度和状态组悬停明细按可见归类重算。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核问题图 7 个按钮、隐藏供应商原因后柱 11→9、全选清空与恢复；线上 bundle 断言命中 `hub-dash-issues__legendItem` / `hub-dash-issues__selectAll`，标题「项目阶段」已打入主包。

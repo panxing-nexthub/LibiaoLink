@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { DASHBOARD_PROJECT_TYPE_COLORS, DASHBOARD_PROJECT_TYPES, type DashboardProjectInsights, type DashboardProjectTypeCode } from "../data/dashboardProjectInsights";
 import { useT } from "../i18n";
 import { usePersistentDashboardFilter } from "../dashboardFilterStorage";
+import { dashboardAxisOf } from "../dashboardChartScale";
 import { DASHBOARD_YEAR_WINDOW, DashboardYearNavigator, type DashboardYearKey } from "./DashboardYearNavigator";
 import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
 
@@ -18,13 +19,6 @@ const GROUP_INSET_RATIO = 0.16;
 type YearKey = DashboardYearKey;
 export type DashboardProjectChartKind = "bar" | "line";
 type ChartKind = DashboardProjectChartKind;
-
-function axisOf(maxValue: number): { max: number; step: number } {
-  if (maxValue <= 5) return { max: Math.max(1, maxValue), step: 1 };
-  const raw = maxValue / 4;
-  const step = raw <= 1 ? 1 : raw <= 2 ? 2 : raw <= 5 ? 5 : raw <= 10 ? 10 : raw <= 20 ? 20 : raw <= 50 ? 50 : 100;
-  return { max: Math.max(step, Math.ceil(maxValue / step) * step), step };
-}
 
 function yearKey(year: YearKey): string { return year === null ? "unknown" : String(year); }
 function includesYear(years: readonly YearKey[], year: YearKey): boolean { return years.some((item) => item === year); }
@@ -82,7 +76,7 @@ export function HubDashProjectTypeYears({ insights, expanded = false, onChartTyp
   const visibleYears = rows.filter((row) => includesYear(selectedYears, row.year));
   const activeTypeIndexes = DASHBOARD_PROJECT_TYPES.map((type, index) => ({ type, index })).filter((item) => visibleTypes.includes(item.type));
   const maxValue = visibleYears.reduce((max, row) => activeTypeIndexes.reduce((inner, item) => Math.max(inner, row.counts[item.index] ?? 0), max), 0);
-  const { max: tickMax, step } = axisOf(Math.max(maxValue, 1));
+  const { max: tickMax, step } = dashboardAxisOf(maxValue);
   const unit = (axisY - PLOT_TOP) / tickMax;
   const groupW = visibleYears.length === 0 ? PLOT_X1 - PLOT_X0 : (PLOT_X1 - PLOT_X0) / visibleYears.length;
   const itemW = groupW * (1 - GROUP_INSET_RATIO * 2) / Math.max(activeTypeIndexes.length, 1);
@@ -191,7 +185,7 @@ export function HubDashProjectTypeYears({ insights, expanded = false, onChartTyp
                   return (
                     <g key={item.type}>
                       {count > 0 ? <rect className="hub-dash-project-types__bar" style={{ animationDelay: yearIndex * 55 + typeIndex * 30 + "ms" }} x={x} y={y} width={barW} height={Math.max(height, 2)} rx={4} fill={color} onMouseEnter={(event) => { setHoverYear(null); setTip(hoverTipAt(event, baselineLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color }], item.type)); }} onMouseMove={(event) => { setHoverYear(null); setTip(hoverTipAt(event, baselineLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color }], item.type)); }} /> : null}
-                      {count > 0 && hoverYear !== yearKey(row.year) ? <text className="hub-dash-project-types__num" style={{ animationDelay: yearIndex * 55 + typeIndex * 30 + 300 + "ms" }} x={x + barW / 2} y={Math.max(y - 8, PLOT_TOP + 10)} textAnchor="middle" fontSize={13} fontWeight={600} fill="#374151" pointerEvents="none">{count}</text> : null}
+                      {count > 0 && hoverYear !== yearKey(row.year) ? <text className="hub-dash-project-types__num" style={{ animationDelay: yearIndex * 55 + typeIndex * 30 + 300 + "ms" }} x={x + barW / 2} y={y - 8} textAnchor="middle" fontSize={13} fontWeight={600} fill="#374151" pointerEvents="none">{count}</text> : null}
                     </g>
                   );
                 })}
@@ -230,7 +224,7 @@ export function HubDashProjectTypeYears({ insights, expanded = false, onChartTyp
                       onMouseMove={(event) => { setHoverYear(null); setTip(hoverTipAt(event, baselineLabel, [{ label: t("hub.dash.projects.projectCount"), value: point.count, color: series.color }], series.type)); }}
                     />
                     <circle className="hub-dash-project-types__point" style={{ animationDelay: pointDelay + "ms" }} cx={point.x} cy={point.y} r={4.8} fill={series.color} stroke="#ffffff" strokeWidth={2} pointerEvents="none" />
-                    {point.count > 0 && hoverYear !== key ? <text className="hub-dash-project-types__num" style={{ animationDelay: pointDelay + 120 + "ms" }} x={point.x} y={Math.max(point.y - 10, PLOT_TOP + 10)} textAnchor="middle" fontSize={13} fontWeight={600} fill="#374151" pointerEvents="none">{point.count}</text> : null}
+                    {point.count > 0 && hoverYear !== key ? <text className="hub-dash-project-types__num" style={{ animationDelay: pointDelay + 120 + "ms" }} x={point.x} y={point.y - 10} textAnchor="middle" fontSize={13} fontWeight={600} fill="#374151" pointerEvents="none">{point.count}</text> : null}
                   </g>
                 );
               }))}

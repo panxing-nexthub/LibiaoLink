@@ -2,6 +2,7 @@ import { useState, type MouseEvent as ReactMouseEvent } from "react";
 import { DASHBOARD_ISSUE_COLORS, dashboardIssueKey, type DashboardIssues } from "../data/dashboardProgress";
 import { fieldText, statusText, useLocale, useT } from "../i18n";
 import { usePersistentDashboardFilter } from "../dashboardFilterStorage";
+import { dashboardAxisOf } from "../dashboardChartScale";
 
 /**
  * 仪表盘「问题」分组柱状图（Push 344 · 业务口径 2026-10-16「现在做这个问题 效果和上面做的一样」）：
@@ -42,15 +43,6 @@ const SERIES_ANIM_STAGGER = 70;
 const NUM_ANIM_OFFSET = 300;
 
 /** y 轴刻度：按最大单柱挑 1 / 2 / 5 / 10 / 20 整步（参考图最大柱 5 → 刻度 0 / 2 / 4 / 6）。 */
-function axisOf(maxBar: number): { max: number; step: number } {
-  if (maxBar <= 1) {
-    return { max: 1, step: 1 };
-  }
-  const raw = maxBar / 3;
-  const step = raw <= 1 ? 1 : raw <= 2 ? 2 : raw <= 5 ? 5 : raw <= 10 ? 10 : 20;
-  return { max: Math.max(step, Math.ceil(maxBar / step) * step), step };
-}
-
 /** 估算文本宽（CJK 按 1 em、其余 0.55 em；只服务图例居中）。 */
 function textWidthOf(text: string, fontSize: number): number {
   let width = 0;
@@ -121,7 +113,7 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
     return { state, rows };
   });
   const maxBar = groups.reduce((max, group) => group.rows.reduce((inner, row) => Math.max(inner, row.count), max), 0);
-  const { max: tickMax, step } = axisOf(Math.max(maxBar, 1));
+  const { max: tickMax, step } = dashboardAxisOf(maxBar);
   const unit = (AXIS_Y - PLOT_TOP) / tickMax;
   const groupW = PLOT_W / issues.states.length;
   const barW = Math.min(BAR_MAX_W, (groupW * 0.68) / Math.max(activeVisibleCategories.length, 1));

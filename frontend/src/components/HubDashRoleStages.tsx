@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { TextKey } from "../i18n";
 import { stageText, useLocale, useT } from "../i18n";
 import { usePersistentDashboardFilter } from "../dashboardFilterStorage";
+import { dashboardAxisOf } from "../dashboardChartScale";
 import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
 import {
   DASHBOARD_PROJECT_STAGE_BUCKETS,
@@ -29,13 +30,6 @@ const MIN_VIEW_W = 900;
 const SLOT_W = 86;
 const BAR_MAX_W = 42;
 
-function axisOf(maxValue: number): { max: number; step: number } {
-  if (maxValue <= 5) return { max: Math.max(1, maxValue), step: 1 };
-  const raw = maxValue / 4;
-  const step = raw <= 1 ? 1 : raw <= 2 ? 2 : raw <= 5 ? 5 : raw <= 10 ? 10 : raw <= 20 ? 20 : raw <= 50 ? 50 : 100;
-  return { max: Math.max(step, Math.ceil(maxValue / step) * step), step };
-}
-
 function truncated(text: string, maxChars = 9): string {
   return text.length <= maxChars ? text : text.slice(0, maxChars - 1) + "…";
 }
@@ -61,7 +55,7 @@ function RoleStageChart({ role, stats, visibleStages }: {
     0,
   ));
   const maxTotal = visibleTotals.reduce((max, total) => Math.max(max, total), 0);
-  const { max: tickMax, step } = axisOf(Math.max(maxTotal, 1));
+  const { max: tickMax, step } = dashboardAxisOf(maxTotal);
   const unit = (AXIS_Y - PLOT_TOP) / tickMax;
   const viewW = Math.max(MIN_VIEW_W, LEFT + RIGHT + people.length * SLOT_W);
   const plotW = viewW - LEFT - RIGHT;

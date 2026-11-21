@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { DASHBOARD_DELIVERY_ORDER, type DashboardDelivery, type DashboardDeliveryBucket } from "../data/dashboardProgress";
 import { statusText, useLocale, useT } from "../i18n";
+import { dashboardAxisOf } from "../dashboardChartScale";
 
 /**
  * 仪表盘「交付时间」视图（Push 345 · 业务口径 2026-10-16「这个交付时间也要做一个图表 但是它的这个逻辑我没搞懂
@@ -43,30 +44,6 @@ const NOTE_HIT_H = 34;
 const SERIES_ANIM_STAGGER = 90;
 const NUM_ANIM_OFFSET = 300;
 
-/** y 轴刻度步长：按最大柱挑 1 / 2 / 5 / 10 / 20（比行式图更粗一档 —— 三根柱的分布一眼可读）。 */
-function tickStepOf(maxCount: number): number {
-  if (maxCount <= 6) {
-    return 1;
-  }
-  if (maxCount <= 12) {
-    return 2;
-  }
-  if (maxCount <= 30) {
-    return 5;
-  }
-  if (maxCount <= 60) {
-    return 10;
-  }
-  return 20;
-}
-
-/** 轴上限：给最大柱留约 8% 余量再进到整步。 */
-function tickMaxOf(maxCount: number): { max: number; step: number } {
-  const step = tickStepOf(Math.max(maxCount, 1));
-  const target = Math.ceil((Math.max(maxCount, 1) * 1.08) / step) * step;
-  return { max: Math.max(step, target), step };
-}
-
 /** 顶部圆角柱路径（底边贴基线不收圆角）。 */
 function barPathOf(x: number, top: number, width: number, height: number): string {
   const radius = Math.min(BAR_RADIUS, height / 2, width / 2);
@@ -98,7 +75,7 @@ export function HubDashDelivery({ delivery, canDrill, onTip, onRateTip, onLeave,
   const rateLabelFont = 14 * fs;
   const rateNoteFont = 12.5 * fs;
   const maxCount = delivery.counts.reduce((max, count) => Math.max(max, count), 0);
-  const { max: tickMax, step } = tickMaxOf(maxCount);
+  const { max: tickMax, step } = dashboardAxisOf(maxCount);
   const unit = (AXIS_Y - TOP) / tickMax;
   const ticks: number[] = [];
   for (let value = 0; value <= tickMax; value += step) {

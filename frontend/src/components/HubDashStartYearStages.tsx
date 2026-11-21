@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { stageText, useLocale, useT } from "../i18n";
 import { usePersistentDashboardFilter } from "../dashboardFilterStorage";
+import { dashboardAxisOf } from "../dashboardChartScale";
 import { DASHBOARD_YEAR_WINDOW, DashboardYearNavigator, type DashboardYearKey } from "./DashboardYearNavigator";
 import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
 import {
@@ -20,13 +21,6 @@ const LABEL_Y = 276;
 const LABEL_LINE_H = 14.5;
 const BAR_MAX_W = 58;
 const BAR_INSET_RATIO = 0.22;
-
-function axisOf(maxValue: number): { max: number; step: number } {
-  if (maxValue <= 5) return { max: Math.max(1, maxValue), step: 1 };
-  const raw = maxValue / 4;
-  const step = raw <= 1 ? 1 : raw <= 2 ? 2 : raw <= 5 ? 5 : raw <= 10 ? 10 : raw <= 20 ? 20 : raw <= 50 ? 50 : 100;
-  return { max: Math.max(step, Math.ceil(maxValue / step) * step), step };
-}
 
 function yearLabel(year: DashboardYearKey, unknownLabel: string): string {
   return year === null ? unknownLabel : String(year);
@@ -79,7 +73,7 @@ function StageBars({ insights, selectedYears }: {
   const totals = DASHBOARD_PROJECT_STAGE_BUCKETS.map((_, stageIndex) =>
     selectedRows.reduce((sum, row) => sum + (row.stageCounts[stageIndex] ?? 0), 0));
   const maxValue = totals.reduce((max, count) => Math.max(max, count), 0);
-  const { max: tickMax, step } = axisOf(Math.max(maxValue, 1));
+  const { max: tickMax, step } = dashboardAxisOf(maxValue);
   const unit = (AXIS_Y - TOP) / tickMax;
   const slotW = (BAR_W - LEFT - RIGHT) / DASHBOARD_PROJECT_STAGE_BUCKETS.length;
   const barW = Math.min(BAR_MAX_W, slotW * (1 - BAR_INSET_RATIO * 2));
@@ -149,7 +143,7 @@ function StageBars({ insights, selectedYears }: {
                   className="hub-dash-start-stage__num"
                   style={{ animationDelay: stageIndex * 35 + 250 + "ms" }}
                   x={center}
-                  y={Math.max(y - 8, TOP + 10)}
+                  y={y - 8}
                   textAnchor="middle"
                   fontSize={13.5}
                   fontWeight={650}

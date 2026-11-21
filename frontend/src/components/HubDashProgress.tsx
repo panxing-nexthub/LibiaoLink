@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { DASHBOARD_BINS, type DashboardProgress } from "../data/dashboardProgress";
 import { stageText, useLocale, useT, type TextKey } from "../i18n";
+import { dashboardAxisOf } from "../dashboardChartScale";
 
 /**
  * 仪表盘「项目进度」横条图（Push 331 首版；Push 358 从 HubDashboard 内联 JSX 原样抽成独立组件 ——
@@ -50,30 +51,6 @@ function textWidthOf(text: string, fontSize: number): number {
   return width;
 }
 
-/** x 轴刻度步长：按最大行合计挑 1 / 2 / 5 / 10 / 20。 */
-function tickStepOf(maxTotal: number): number {
-  if (maxTotal <= 10) {
-    return 1;
-  }
-  if (maxTotal <= 20) {
-    return 2;
-  }
-  if (maxTotal <= 50) {
-    return 5;
-  }
-  if (maxTotal <= 100) {
-    return 10;
-  }
-  return 20;
-}
-
-/** 轴上限：给最大行合计留约 6% 余量再进到整步（18 → 20；44 → 50）。 */
-function tickMaxOf(maxTotal: number): { max: number; step: number } {
-  const step = tickStepOf(Math.max(maxTotal, 1));
-  const target = Math.ceil((maxTotal * 1.06) / step) * step;
-  return { max: Math.max(step, target), step };
-}
-
 export function HubDashProgress({ progress, canDrill, onTip, onRowTip, onLeave, onPick, fontScale = 1 }: {
   readonly progress: DashboardProgress;
   /** 选中具体项目才可点柱段（开只读「数据详情」）；「全部项目」下混合来源不可点。 */
@@ -105,7 +82,7 @@ export function HubDashProgress({ progress, canDrill, onTip, onRowTip, onLeave, 
   const numFont = 13 * fs;
   const rows = progress.rows;
   const maxTotal = rows.reduce((max, row) => Math.max(max, row.total), 0);
-  const { max: tickMax, step } = tickMaxOf(maxTotal);
+  const { max: tickMax, step } = dashboardAxisOf(maxTotal);
   const unit = PLOT_W / tickMax;
   const rowH = (AXIS_Y - ROWS_TOP) / rows.length;
   const barH = Math.min(BAR_MAX_H, Math.max(rowH - 12, 16));

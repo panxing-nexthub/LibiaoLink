@@ -1,3 +1,13 @@
+> **2026-11-21 21:50 项目数量与项目阶段合并同屏（测试机 frontend-only · test-20261121-2150-px-dashboard-combined-project-stats-2bd167c1）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `2bd167c1`；release = `test-20261121-2150-px-dashboard-combined-project-stats-2bd167c1`，previous = `test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a`；staging = `/srv/data/deploy-test-20261121-2150-px-dashboard-combined-project-stats-2bd167c1/staging`。
+
+> **改动 / 验收**：全部项目仪表盘由 6 屏精简为 5 屏，「项目数量统计」与「项目阶段」合并为一屏上下双面板；顶部保留年份 / 类型筛选、全选、柱线切换，底部保留年份筛选、阶段柱图和全选。独立「最新阶段」入口移除，合并页沿用「项目数量」入口。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 1600×1000、1366×768、768×1000 三种尺寸两面板均无裁切；线上 bundle 命中 `hub-dash-combined__panel` ×2。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,028 B / SHA-256 `6d9408c3…`、678 文件；`build-info.json` 375 B / `90518f6d…`；`frontend-files.sha256` 92,437 B / `54478cdf…`；`release-files.sha256` 254 B / `d373a5cb…`。线上 1051 → 1054 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `464b2c51…`、主包 `assets/index-DzePAv0X.js` 2,539,346 B / `05641ce0…`、CSS `assets/index-D1C_GO49.css` 253,229 B / `108968f9…`、ES `assets/es-Db-Bt6Vx.js` 428,098 B / `6d1cde98…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2150-px-dashboard-combined-project-stats-2bd167c1`，前端 147,701,619 B / `45c8a46b…`、原 manifest 4,089 B / `e6ac17c3…`，SHA256SUMS 3 / 3 通过；新 manifest 4,131 B / `a2d852b9…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 21:42 柱状图 / 折线图切换按钮移至全选下方（测试机 frontend-only · test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `77a94d6a`；release = `test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a`，previous = `test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5`；staging = `/srv/data/deploy-test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a/staging`。
 
 > **改动 / 验收**：项目数量统计左侧控制区改为上下排列，「全选」在上、「折线图 / 柱状图」按钮在下并左对齐；年份导航保持居中，窄屏继续堆叠。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 1600 宽度按钮 y=84 / 117 且左对齐、导航居中，600 宽度堆叠不重叠；线上 bundle 命中 `hub-dash-project-types__leftControls`。

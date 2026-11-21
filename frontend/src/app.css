@@ -2583,6 +2583,50 @@ body {
 
 .hub-dash-issues__legendText {
   fill: #6b7280;
+  transition: fill 150ms ease;
+}
+
+.hub-dash-issues__legendItem {
+  cursor: pointer;
+  outline: none;
+}
+
+.hub-dash-issues__legendItem[data-active="false"] .hub-dash-issues__legendText {
+  fill: #a1a1aa;
+}
+
+.hub-dash-issues__legendItem:hover .hub-dash-issues__legendText {
+  fill: #374151;
+}
+
+.hub-dash-issues__legendItem:focus-visible .hub-dash-issues__swatch {
+  stroke: #93c5fd;
+  stroke-width: 2;
+}
+
+.hub-dash-issues__selectAll {
+  cursor: pointer;
+  outline: none;
+}
+
+.hub-dash-issues__selectAllBg {
+  fill: #f8fbff;
+  stroke: #dbeafe;
+  transition: fill 150ms ease, stroke 150ms ease;
+}
+
+.hub-dash-issues__selectAllText {
+  fill: #1e3a8a;
+}
+
+.hub-dash-issues__selectAll:hover .hub-dash-issues__selectAllBg,
+.hub-dash-issues__selectAll[data-active="true"] .hub-dash-issues__selectAllBg {
+  fill: #eff6ff;
+}
+
+.hub-dash-issues__selectAll:focus-visible .hub-dash-issues__selectAllBg {
+  stroke: #93c5fd;
+  stroke-width: 2;
 }
 
 .hub-dash-issues__state {

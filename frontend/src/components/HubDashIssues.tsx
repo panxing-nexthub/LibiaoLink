@@ -7,12 +7,13 @@ import { fieldText, statusText, useLocale, useT } from "../i18n";
  * 形态照业务参考图 —— 图例居中在顶（问题归类）、x 轴 = 问题状态（已完成 / 处理中 / 未解决）、
  * 每个状态一组柱子（组内按归类契约原序）、柱顶写同色数字、y 轴虚线网格（0 轴实线）；
  * 悬停柱 = 整组铺浅灰底 + 浮层卡（状态名 + 归类色点 + 归类 + 条数，参考图二的形态）；
- * 悬停组内空白 = 浮层卡列出该状态全部归类（与「项目进度」的行阴影卡同一口径）；
+ * 悬停组内空白 = 浮层卡列出该状态全部可见归类（与「项目进度」的行阴影卡同一口径）；
  * 点柱 = 打开只读「数据详情」—— 仅选中具体项目时可点（与柱段 / 扇区同一套，父组件按 canDrill 关掉点击）；
  * 「全部项目」下不可点。父组件负责悬停卡 / 数据详情两个浮层的状态。
  *
  * 口径（buildDashboardIssues，data/dashboardProgress.ts）：0 条的状态整组不出现、0 条的归类整条不出现
  * （业务口径「没有相关的问题才没显示在图中」，与「任务状态」饼图同一口径）；一条问题多归类时每个归类各计一条。
+ * 2026-11-21：7 类原因图例可逐项显隐，左侧「全选」一次性开关全部归类；隐藏归类后柱、刻度和悬停明细同步重算。
  */
 
 const VIEW_W = 1200;
@@ -24,10 +25,15 @@ const PLOT_W = PLOT_X1 - PLOT_X0;
 const PLOT_TOP = 68;
 const AXIS_Y = 520;
 const TICK_LABEL_Y = 544;
-/** 图例（与饼图同款：14 色块 + 16 号字，居中在顶）。 */
+/** 图例（与饼图同款：14 色块 + 16 号字，居中在顶；左侧预留全选按钮）。 */
 const LEGEND_FONT = 16;
 const LEGEND_SWATCH = 14;
 const LEGEND_ITEM_GAP = 44;
+const LEGEND_AREA_LEFT = 94;
+const SELECT_ALL_X = 14;
+const SELECT_ALL_Y = 2;
+const SELECT_ALL_W = 62;
+const SELECT_ALL_H = 28;
 /** 柱宽上限与柱间距比例（一组里柱子越多 / 组越窄，柱越窄）。 */
 const BAR_MAX_W = 46;
 const BAR_GAP_RATIO = 0.32;
@@ -67,7 +73,7 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
   readonly canDrill: boolean;
   /** 悬停柱：父组件把鼠标位置换算成白卡坐标并出浮层卡（状态名 + 归类 + 条数）。 */
   readonly onTip: (event: ReactMouseEvent<SVGRectElement>, state: string, category: string, count: number) => void;
-  /** 悬停组内空白：浮层卡列出该状态全部归类（0 条的不列）。 */
+  /** 悬停组内空白：浮层卡列出该状态全部可见归类（0 条的不列）。 */
   readonly onRowTip: (event: ReactMouseEvent<SVGRectElement>, state: string, rows: readonly DashboardIssueRow[]) => void;
   /** 移出：收起浮层卡并撤掉组高亮。 */
   readonly onLeave: () => void;
@@ -80,6 +86,7 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
   const locale = useLocale();
   /** 悬停中的状态组（整组铺浅灰底，与参考图二同款）。 */
   const [hover, setHover] = useState<string | null>(null);
+  const [visibleCategories, setVisibleCategories] = useState<string[]>(() => [...issues.categories]);
   /** 总览字号倍率（见上）：字号与随之变化的排版量都从这里取；倍率 1 时与旧值逐值一致。 */
   const fs = fontScale;
   const legendBaseFont = LEGEND_FONT * fs;
@@ -89,9 +96,21 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
   if (issues.states.length === 0 || issues.categories.length === 0) {
     return null;
   }
-  /** 行 = 状态 × 归类 的计数矩阵（0 条不画柱、也不进浮层卡）。 */
+  const allSelected = issues.categories.length === visibleCategories.length
+    && issues.categories.every((category) => visibleCategories.includes(category));
+  const toggleCategory = (category: string): void => {
+    onLeave();
+    setVisibleCategories((current) => current.includes(category)
+      ? current.filter((item) => item !== category)
+      : [...current, category]);
+  };
+  const toggleAll = (): void => {
+    onLeave();
+    setVisibleCategories(allSelected ? [] : [...issues.categories]);
+  };
+  /** 行 = 状态 × 可见归类 的计数矩阵（0 条不画柱、也不进浮层卡）。 */
   const groups = issues.states.map((state) => {
-    const rows = issues.categories
+    const rows = visibleCategories
       .map((category) => ({ category, count: issues.counts.get(dashboardIssueKey(state, category)) ?? 0 }))
       .filter((row) => row.count > 0);
     return { state, rows };
@@ -100,30 +119,65 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
   const { max: tickMax, step } = axisOf(Math.max(maxBar, 1));
   const unit = (AXIS_Y - PLOT_TOP) / tickMax;
   const groupW = PLOT_W / issues.states.length;
-  const barW = Math.min(BAR_MAX_W, (groupW * 0.68) / issues.categories.length);
+  const barW = Math.min(BAR_MAX_W, (groupW * 0.68) / Math.max(visibleCategories.length, 1));
   const barGap = barW * BAR_GAP_RATIO;
   const ticks: number[] = [];
   for (let value = 0; value <= tickMax; value += step) {
     ticks.push(value);
   }
   /** 图例（居中）：归类色块 + 归类名（顺序 = 契约 C9 原序）。 */
-  const legendItems: Array<{ category: string; text: string; x: number }> = [];
+  const legendItems: Array<{ category: string; text: string; x: number; active: boolean }> = [];
   /** 图例宽随字号涨：按可用宽收口（归类多时逐档收小，保证居中不越界；常规 5~6 个归类不触发）。 */
   const legendEmSum = issues.categories.reduce((sum, category) => sum + textWidthOf(fieldText(locale, category), 1), 0);
-  const legendFitFont = legendEmSum > 0 ? (VIEW_W - 40 - issues.categories.length * (LEGEND_SWATCH + 8) - LEGEND_ITEM_GAP * Math.max(issues.categories.length - 1, 0)) / legendEmSum : legendBaseFont;
+  const legendFitFont = legendEmSum > 0
+    ? (VIEW_W - LEGEND_AREA_LEFT - 20 - issues.categories.length * (LEGEND_SWATCH + 8) - LEGEND_ITEM_GAP * Math.max(issues.categories.length - 1, 0)) / legendEmSum
+    : legendBaseFont;
   const legendFont = Math.max(12, Math.min(legendBaseFont, legendFitFont));
   const legendWidths = issues.categories.map((category) => LEGEND_SWATCH + 8 + textWidthOf(fieldText(locale, category), legendFont));
   const legendTotal = legendWidths.reduce((sum, width) => sum + width, 0) + LEGEND_ITEM_GAP * Math.max(legendWidths.length - 1, 0);
-  let legendX = (VIEW_W - legendTotal) / 2;
+  let legendX = LEGEND_AREA_LEFT + Math.max(0, VIEW_W - LEGEND_AREA_LEFT - 20 - legendTotal) / 2;
   issues.categories.forEach((category, index) => {
-    legendItems.push({ category, text: fieldText(locale, category), x: legendX });
+    legendItems.push({ category, text: fieldText(locale, category), x: legendX, active: visibleCategories.includes(category) });
     legendX += legendWidths[index] + LEGEND_ITEM_GAP;
   });
   return (
     <svg className="hub-dash-issues" viewBox={"0 0 " + VIEW_W + " " + VIEW_H} preserveAspectRatio="xMidYMid meet" role="img" aria-label={t("hub.dash.issues.aria")} onMouseLeave={() => { setHover(null); onLeave(); }}>
+      <g
+        className="hub-dash-issues__selectAll"
+        data-active={allSelected ? "true" : "false"}
+        role="button"
+        tabIndex={0}
+        aria-label={t("hub.dash.projects.selectAll")}
+        aria-pressed={allSelected}
+        onClick={toggleAll}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggleAll();
+          }
+        }}
+      >
+        <rect className="hub-dash-issues__selectAllBg" x={SELECT_ALL_X} y={SELECT_ALL_Y} width={SELECT_ALL_W} height={SELECT_ALL_H} rx={9} />
+        <text className="hub-dash-issues__selectAllText" x={SELECT_ALL_X + SELECT_ALL_W / 2} y={SELECT_ALL_Y + 19} textAnchor="middle" fontSize={13} fontWeight={650}>{t("hub.dash.projects.selectAll")}</text>
+      </g>
       {legendItems.map((item) => (
-        <g key={"legend-" + item.category}>
-          <rect className="hub-dash-issues__swatch" data-category={item.category} x={item.x} y={9} width={LEGEND_SWATCH} height={LEGEND_SWATCH} rx={3} fill={DASHBOARD_ISSUE_COLORS[item.category] ?? "#c9ced6"} />
+        <g
+          key={"legend-" + item.category}
+          className="hub-dash-issues__legendItem"
+          data-active={item.active ? "true" : "false"}
+          role="button"
+          tabIndex={0}
+          aria-label={item.text}
+          aria-pressed={item.active}
+          onClick={() => toggleCategory(item.category)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggleCategory(item.category);
+            }
+          }}
+        >
+          <rect className="hub-dash-issues__swatch" data-category={item.category} x={item.x} y={9} width={LEGEND_SWATCH} height={LEGEND_SWATCH} rx={3} fill={item.active ? DASHBOARD_ISSUE_COLORS[item.category] ?? "#c9ced6" : "#c9ced6"} />
           <text className="hub-dash-issues__legendText" x={item.x + LEGEND_SWATCH + 8} y={22 + (legendFont - LEGEND_FONT) * 0.35} fontSize={legendFont}>{item.text}</text>
         </g>
       ))}
@@ -137,7 +191,7 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
       {groups.map((group, groupIndex) => {
         const gx = PLOT_X0 + groupW * groupIndex;
         const center = gx + groupW / 2;
-        const totalW = issues.categories.length * barW + (issues.categories.length - 1) * barGap;
+        const totalW = visibleCategories.length * barW + Math.max(visibleCategories.length - 1, 0) * barGap;
         const startX = center - totalW / 2;
         return (
           <g key={group.state}>
@@ -150,10 +204,10 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
               width={groupW - BAND_INSET * 2}
               height={AXIS_Y - PLOT_TOP + 6}
               onMouseEnter={() => { setHover(group.state); }}
-              onMouseMove={(event) => { onRowTip(event, group.state, group.rows); }}
+              onMouseMove={(event) => { if (group.rows.length > 0) onRowTip(event, group.state, group.rows); }}
               onMouseLeave={() => { setHover(null); onLeave(); }}
             />
-            {issues.categories.map((category, seriesIndex) => {
+            {visibleCategories.map((category, seriesIndex) => {
               const count = issues.counts.get(dashboardIssueKey(group.state, category)) ?? 0;
               if (count === 0) {
                 return null;

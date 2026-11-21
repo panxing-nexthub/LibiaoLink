@@ -1,3 +1,15 @@
+> **2026-11-21 17:35 项目数量图年份/类型筛选与悬停总数（测试机 frontend-only · test-20261121-1735-px-dashboard-filters-2f09ec45）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `2f09ec45`；测试机 release = `test-20261121-1735-px-dashboard-filters-2f09ec45`，previous = `test-20261121-1710-px-dashboard-hover-744c5034`；staging = `/srv/data/deploy-test-20261121-1735-px-dashboard-filters-2f09ec45/staging`。
+
+> **改动 / 验收**：项目数量图新增可点击类型图例与年份筛选；年份默认最近 3 年，`《`/`》` 分页，最左侧液态玻璃「全选」，年份按钮仅方块变色（`#2f7ef2`）；关闭类型 / 年份即隐藏对应柱；移除图内说明文字。阴影区悬停总数改为自适应白色徽标，放在最高柱上方，避免与柱体和数字重叠。浏览器实测：默认 2024 / 2025 / 2026；左翻显示 2022 / 2023 / 2024；3D分拣关闭后变灰且黄柱消失；2024 关闭后该年组消失；全选恢复全部年份 + 未记录；2026 阴影悬停显示粗体 15 且无重叠。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,605,683 B / SHA-256 `ac156761…`、678 文件；`build-info.json` 399 B / `d0ff47c2…`；`frontend-files.sha256` 91,081 B / `2bfe7e47…`；`release-files.sha256` 254 B / `6e07cc6e…`。线上 1017 → 1020 文件，新增 3 个 hashed 资源并原子替换 `index.html`，旧资源保留；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `a9f7807f…`、主包 `assets/index-Bz0lAkyp.js` 2,537,298 B / `f8181f7c…`、CSS `assets/index-NUhKLNp1.css` 249,103 B / `792a27d5…`、ES `assets/es-D7BRpHXy.js` `618977e7…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1735-px-dashboard-filters-2f09ec45`，前端 136,619,155 B / `c4702d17…`、原 manifest 4,490 B / `e5914fbc…`，SHA256SUMS 3 / 3 通过；新 manifest 4,602 B / `687fcc5a…`。
+
+> **测试数据**：同日已向测试库加入 `DEMO-2022-01` ～ `DEMO-2026-10` 共 50 个项目、600 条任务；覆盖 2022–2026、三种项目类型和九个阶段，数据库写入前备份 `/srv/data/backups/before-demo50-20261121/libiaolink-before-demo50.dump`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 17:10 仪表盘新图表鼠标悬停交互（测试机 frontend-only · test-20261121-1710-px-dashboard-hover-744c5034）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `744c5034`；测试机 release = `test-20261121-1710-px-dashboard-hover-744c5034`，previous = `test-20261121-1700-px-dashboard-slide-0bbbd2ad`；staging = `/srv/data/deploy-test-20261121-1710-px-dashboard-hover-744c5034/staging`。
 
 > **改动 / 验收**：项目数量柱、负责人阶段分段、启动年份柱、启动年份饼图及饼图图例统一增加白卡悬停卡与悬停高亮；年份组 / 人员列可显示全部阶段及合计，饼图显示项目数与占比。浮层通过 Portal 固定视口，避免被滑轨裁切；隐藏屏使用 `overflow: clip` 修复程序化滚动串屏。浏览器实测：项目类型柱（2026 / T-sort / 4）、负责人分段（刘安楠 / 售前规划 / 6）、启动年份柱（2026 / 售前规划 / 4）、饼图图例（2026 / 售前规划 / 4 / 80%）。

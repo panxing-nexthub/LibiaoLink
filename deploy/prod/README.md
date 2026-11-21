@@ -1,3 +1,13 @@
+> **2026-11-21 22:20 合并页图表撑满可用画布（测试机 frontend-only · test-20261121-2220-px-dashboard-fill-charts-56128a83）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `56128a83`；release = `test-20261121-2220-px-dashboard-fill-charts-56128a83`，previous = `test-20261121-2210-px-dashboard-balanced-panels-744ad7e0`；staging = `/srv/data/deploy-test-20261121-2220-px-dashboard-fill-charts-56128a83/staging`。
+
+> **改动 / 验收**：项目数量图 viewBox 高度 360 → 280，项目阶段图 400 → 320，使两图在现有面板内横向撑满；1600×1000 两图绘图区约 353 / 364px，1366×768 约 229 / 256px，均完整显示。frontend `npm run typecheck` / `npm run build` 通过。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,607,320 B / SHA-256 `0c765c44…`、678 文件；`build-info.json` 364 B / `bd3627fa…`；`frontend-files.sha256` 92,437 B / `77f5097f…`；`release-files.sha256` 254 B / `33d5633a…`。线上 1060 → 1062 文件（CSS 沿用同哈希），新增 2 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `aec11024…`、主包 `assets/index-Cj-jV0Ew.js` 2,539,346 B / `5007a7b4…`、CSS `assets/index-DKc1ZDRE.css` 253,296 B / `ba66cfd8…`、ES `assets/es-B4OYkcWI.js` 428,098 B / `a4fd3b17…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2220-px-dashboard-fill-charts-56128a83`，前端 150,508,564 B / `b1e84de8…`、原 manifest 4,114 B / `1be0f104…`，SHA256SUMS 3 / 3 通过；新 manifest 4,045 B / `1b1fe435…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 22:10 合并页上下图表接近等高（测试机 frontend-only · test-20261121-2210-px-dashboard-balanced-panels-744ad7e0）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `744ad7e0`；release = `test-20261121-2210-px-dashboard-balanced-panels-744ad7e0`，previous = `test-20261121-2200-px-dashboard-enlarge-top-panel-00998b22`；staging = `/srv/data/deploy-test-20261121-2210-px-dashboard-balanced-panels-744ad7e0/staging`。
 
 > **改动 / 验收**：上方面板 flex-grow 由 1.45 回调为 1.15，上下接近等高；1600×1000 下上/下约 497 / 434px，绘图区约 353 / 364px；1366×768 下约 373 / 327px，绘图区约 229 / 256px。frontend `npm run typecheck` / `npm run build` 通过，两图均完整显示。

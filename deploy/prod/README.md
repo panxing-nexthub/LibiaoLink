@@ -1,3 +1,13 @@
+> **2026-11-21 18:05 项目数量图年份窗口扩展至 5 年（测试机 frontend-only · test-20261121-1805-px-dashboard-five-years-f3db362e）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `f3db362e`；release = `test-20261121-1805-px-dashboard-five-years-f3db362e`，previous = `test-20261121-1800-px-dashboard-role-copy-b36459ae`；staging = `/srv/data/deploy-test-20261121-1805-px-dashboard-five-years-f3db362e/staging`。
+
+> **改动 / 验收**：年份导航由 3 年改为 5 年，默认最近 5 年；年份不超过 5 个时左右箭头禁用，超过 5 个才分页。类型显隐、全选、悬停总数保持不变。线上 `index.html` 已引用新主包，主包 / CSS / ES 与发布件 SHA-256 一致；`/healthz`、`/readyz` 200，web / api / worker healthy。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,606,285 B / SHA-256 `3b157686…`、678 文件；`build-info.json` 334 B / `f48cc127…`；`frontend-files.sha256` 91,081 B / `d3b8a034…`；`release-files.sha256` 254 B / `d256c8d6…`。线上 1032 → 1034 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `e0c2968c…`、主包 `assets/index--prl6PKO.js` 2,538,156 B / `b32b5378…`、CSS `assets/index-Dj0xX3PD.css` 249,766 B / `ccb6e390…`、ES `assets/es-CEVg2hx3.js` 428,098 B / `ca7bca60…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1805-px-dashboard-five-years-f3db362e`，前端 141,269,270 B / `15358523…`、原 manifest 4,074 B / `74f3392a…`，SHA256SUMS 3 / 3 通过；新 manifest 3733 B / `f6dc0e33…`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 18:00 负责人图移除阴影总数并放大阶段名称（测试机 frontend-only · test-20261121-1800-px-dashboard-role-copy-b36459ae）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `b36459ae`；release = `test-20261121-1800-px-dashboard-role-copy-b36459ae`，previous = `test-20261121-1755-px-dashboard-role-total-5a8c553b`；staging = `/srv/data/deploy-test-20261121-1800-px-dashboard-role-copy-b36459ae/staging`。
 
 > **改动 / 验收**：负责人人阴影区顶部总数字移除，仅保留悬停白卡；白卡内阶段名称改为 0.86rem、650 字重、深灰色。浏览器实测负责人页悬停白卡阶段名称清晰，柱内分段数字正常保留。

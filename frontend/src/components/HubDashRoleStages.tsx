@@ -1,5 +1,7 @@
+import { useState } from "react";
 import type { TextKey } from "../i18n";
 import { stageText, useLocale, useT } from "../i18n";
+import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
 import {
   DASHBOARD_PROJECT_STAGE_BUCKETS,
   DASHBOARD_PROJECT_STAGE_COLORS,
@@ -39,6 +41,7 @@ function truncated(text: string, maxChars = 9): string {
 function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; readonly stats: DashboardProjectRoleStats | undefined }) {
   const t = useT();
   const locale = useLocale();
+  const [tip, setTip] = useState<DashboardHoverTip | null>(null);
   const people = stats?.people ?? [];
   if (people.length === 0) {
     return <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>;
@@ -61,6 +64,7 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
         preserveAspectRatio="xMinYMid meet"
         role="img"
         aria-label={t("hub.dash.projects.role.aria", { role: t(ROLE_TITLE_KEYS[role]) })}
+        onMouseLeave={() => setTip(null)}
       >
         {ticks.map((value) => value > 0 ? (
           <line key={"grid-" + value} x1={LEFT} y1={AXIS_Y - value * unit} x2={viewW - RIGHT} y2={AXIS_Y - value * unit} stroke="#e8eaee" strokeDasharray="3 4" />
@@ -74,9 +78,25 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
           const x = center - barW / 2;
           const rawLabel = person.isUnassigned ? t("hub.dash.projects.unassigned") : person.name ?? t("hub.dash.projects.unknownPerson");
           const label = truncated(rawLabel);
+          const stageRows = DASHBOARD_PROJECT_STAGE_BUCKETS.flatMap((bucket, stageIndex) => {
+            const count = person.stageCounts[stageIndex] ?? 0;
+            return count > 0 ? [{ label: stageText(locale, dashboardProjectStageLabel(bucket)), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }] : [];
+          });
+          stageRows.push({ label: t("hub.dash.projects.total"), value: person.total, color: "#94a3b8" });
           let cursorY = AXIS_Y;
           return (
             <g key={person.isUnassigned ? "unassigned" : person.personId ?? rawLabel}>
+              <rect
+                className="hub-dash-role__band"
+                x={center - slotW / 2 + 5}
+                y={PLOT_TOP - 6}
+                width={Math.max(slotW - 10, 1)}
+                height={AXIS_Y - PLOT_TOP + 6}
+                rx={8}
+                fill="transparent"
+                onMouseEnter={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
+                onMouseMove={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
+              />
               {DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket, stageIndex) => {
                 const count = person.stageCounts[stageIndex] ?? 0;
                 if (count <= 0) return null;
@@ -94,9 +114,9 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
                       width={barW}
                       height={Math.max(height, 1.5)}
                       fill={DASHBOARD_PROJECT_STAGE_COLORS[bucket]}
-                    >
-                      <title>{rawLabel + " · " + stageLabel + " · " + count}</title>
-                    </rect>
+                      onMouseEnter={(event) => setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
+                      onMouseMove={(event) => setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
+                    />
                     {height >= 11 ? (
                       <text x={center} y={y + height / 2 + 3.7} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={bucket === "purchase" ? "#313033" : "#ffffff"} pointerEvents="none">{count}</text>
                     ) : null}
@@ -111,6 +131,7 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
           );
         })}
       </svg>
+      <HubDashHoverTip tip={tip} />
     </div>
   );
 }

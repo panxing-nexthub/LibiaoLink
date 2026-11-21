@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { stageText, useLocale, useT } from "../i18n";
+import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
 import {
   DASHBOARD_PROJECT_STAGE_BUCKETS,
   DASHBOARD_PROJECT_STAGE_COLORS,
@@ -65,6 +66,7 @@ function StartYearBars({ insights, selected, onSelect }: {
 }) {
   const t = useT();
   const locale = useLocale();
+  const [tip, setTip] = useState<DashboardHoverTip | null>(null);
   const rows = insights.startYearStages;
   if (rows.length === 0) return <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>;
   const maxValue = rows.reduce((max, row) => Math.max(max, row.total), 0);
@@ -75,12 +77,14 @@ function StartYearBars({ insights, selected, onSelect }: {
   const ticks: number[] = [];
   for (let value = 0; value <= tickMax; value += step) ticks.push(value);
   return (
+    <>
     <svg
       className="hub-dash-start-year"
       viewBox={"0 0 " + BAR_W + " " + BAR_H}
       preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label={t("hub.dash.projects.startYear.aria")}
+      onMouseLeave={() => setTip(null)}
     >
       {ticks.map((value) => value > 0 ? (
         <line key={"grid-" + value} x1={LEFT} y1={AXIS_Y - value * unit} x2={BAR_W - RIGHT} y2={AXIS_Y - value * unit} stroke="#e8eaee" strokeDasharray="3 4" />
@@ -94,6 +98,11 @@ function StartYearBars({ insights, selected, onSelect }: {
         const x = center - barW / 2;
         const label = yearLabel(row.year, t("hub.dash.projects.unknownYear"));
         const active = selected !== "all" && selected === row.year;
+        const stageRows = DASHBOARD_PROJECT_STAGE_BUCKETS.flatMap((bucket, stageIndex) => {
+          const count = row.stageCounts[stageIndex] ?? 0;
+          return count > 0 ? [{ label: stageText(locale, dashboardProjectStageLabel(bucket)), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }] : [];
+        });
+        stageRows.push({ label: t("hub.dash.projects.total"), value: row.total, color: "#94a3b8" });
         let cursorY = AXIS_Y;
         return (
           <g
@@ -111,7 +120,17 @@ function StartYearBars({ insights, selected, onSelect }: {
               }
             }}
           >
-            <rect x={LEFT + slotW * yearIndex} y={TOP} width={slotW} height={AXIS_Y - TOP} fill={active ? "#f5f7fb" : "transparent"} rx={8} />
+            <rect
+              className="hub-dash-start-year__band"
+              x={LEFT + slotW * yearIndex}
+              y={TOP}
+              width={slotW}
+              height={AXIS_Y - TOP}
+              fill={active ? "#f5f7fb" : "transparent"}
+              rx={8}
+              onMouseEnter={(event) => setTip(hoverTipAt(event, label, stageRows, t("hub.dash.projects.startYear.title")))}
+              onMouseMove={(event) => setTip(hoverTipAt(event, label, stageRows, t("hub.dash.projects.startYear.title")))}
+            />
             {DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket, stageIndex) => {
               const count = row.stageCounts[stageIndex] ?? 0;
               if (count <= 0) return null;
@@ -129,9 +148,9 @@ function StartYearBars({ insights, selected, onSelect }: {
                     width={barW}
                     height={Math.max(height, 1.5)}
                     fill={DASHBOARD_PROJECT_STAGE_COLORS[bucket]}
-                  >
-                    <title>{label + " · " + stageLabel + " · " + count}</title>
-                  </rect>
+                    onMouseEnter={(event) => setTip(hoverTipAt(event, label, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
+                    onMouseMove={(event) => setTip(hoverTipAt(event, label, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
+                  />
                   {height >= 12 ? (
                     <text x={center} y={y + height / 2 + 3.8} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={bucket === "purchase" ? "#313033" : "#ffffff"} pointerEvents="none">{count}</text>
                   ) : null}
@@ -143,12 +162,15 @@ function StartYearBars({ insights, selected, onSelect }: {
         );
       })}
     </svg>
+    <HubDashHoverTip tip={tip} />
+    </>
   );
 }
 
 function StartYearPie({ insights, selected }: { readonly insights: DashboardProjectInsights; readonly selected: YearSelection }) {
   const t = useT();
   const locale = useLocale();
+  const [tip, setTip] = useState<DashboardHoverTip | null>(null);
   const rows = insights.startYearStages;
   const allCounts = zeroCounts();
   for (const row of rows) {
@@ -170,8 +192,9 @@ function StartYearPie({ insights, selected }: { readonly insights: DashboardProj
     return { ...item, start, end };
   });
   return (
+    <>
     <div className="hub-dash-start-pie">
-      <svg viewBox={"0 0 " + PIE_SIZE + " " + PIE_SIZE} role="img" aria-label={t("hub.dash.projects.startYear.pieAria", { year: selectedLabel })}>
+      <svg viewBox={"0 0 " + PIE_SIZE + " " + PIE_SIZE} role="img" aria-label={t("hub.dash.projects.startYear.pieAria", { year: selectedLabel })} onMouseLeave={() => setTip(null)}>
         {segments.length === 1 ? (
           <circle
             className="hub-dash-start-pie__segment"
@@ -181,9 +204,21 @@ function StartYearPie({ insights, selected }: { readonly insights: DashboardProj
             fill="none"
             stroke={DASHBOARD_PROJECT_STAGE_COLORS[segments[0].bucket]}
             strokeWidth={PIE_R - PIE_INNER_R}
-          >
-            <title>{stageText(locale, dashboardProjectStageLabel(segments[0].bucket)) + " · " + segments[0].count}</title>
-          </circle>
+            onMouseEnter={(event) => {
+              const label = stageText(locale, dashboardProjectStageLabel(segments[0].bucket));
+              setTip(hoverTipAt(event, selectedLabel, [
+                { label: t("hub.dash.projects.projectCount"), value: segments[0].count, color: DASHBOARD_PROJECT_STAGE_COLORS[segments[0].bucket] },
+                { label: t("hub.dash.projects.share"), value: "100%", color: "#94a3b8" },
+              ], label));
+            }}
+            onMouseMove={(event) => {
+              const label = stageText(locale, dashboardProjectStageLabel(segments[0].bucket));
+              setTip(hoverTipAt(event, selectedLabel, [
+                { label: t("hub.dash.projects.projectCount"), value: segments[0].count, color: DASHBOARD_PROJECT_STAGE_COLORS[segments[0].bucket] },
+                { label: t("hub.dash.projects.share"), value: "100%", color: "#94a3b8" },
+              ], label));
+            }}
+          />
         ) : segments.map((segment) => {
           const label = stageText(locale, dashboardProjectStageLabel(segment.bucket));
           return (
@@ -194,9 +229,15 @@ function StartYearPie({ insights, selected }: { readonly insights: DashboardProj
               fill={DASHBOARD_PROJECT_STAGE_COLORS[segment.bucket]}
               stroke="#ffffff"
               strokeWidth={2}
-            >
-              <title>{label + " · " + segment.count}</title>
-            </path>
+              onMouseEnter={(event) => setTip(hoverTipAt(event, selectedLabel, [
+                { label: t("hub.dash.projects.projectCount"), value: segment.count, color: DASHBOARD_PROJECT_STAGE_COLORS[segment.bucket] },
+                { label: t("hub.dash.projects.share"), value: Math.round((segment.count / total) * 100) + "%", color: "#94a3b8" },
+              ], label))}
+              onMouseMove={(event) => setTip(hoverTipAt(event, selectedLabel, [
+                { label: t("hub.dash.projects.projectCount"), value: segment.count, color: DASHBOARD_PROJECT_STAGE_COLORS[segment.bucket] },
+                { label: t("hub.dash.projects.share"), value: Math.round((segment.count / total) * 100) + "%", color: "#94a3b8" },
+              ], label))}
+            />
           );
         })}
         <text x={PIE_CX} y={PIE_CY - 5} textAnchor="middle" fontSize={13} fill="#6b7280">{selectedLabel}</text>
@@ -207,7 +248,18 @@ function StartYearPie({ insights, selected }: { readonly insights: DashboardProj
           const label = stageText(locale, dashboardProjectStageLabel(segment.bucket));
           const share = Math.round((segment.count / total) * 100);
           return (
-            <div key={segment.bucket} className="hub-dash-start-pie__row">
+            <div
+              key={segment.bucket}
+              className="hub-dash-start-pie__row"
+              onMouseEnter={(event) => setTip(hoverTipAt(event, selectedLabel, [
+                { label: t("hub.dash.projects.projectCount"), value: segment.count, color: DASHBOARD_PROJECT_STAGE_COLORS[segment.bucket] },
+                { label: t("hub.dash.projects.share"), value: share + "%", color: "#94a3b8" },
+              ], label))}
+              onMouseMove={(event) => setTip(hoverTipAt(event, selectedLabel, [
+                { label: t("hub.dash.projects.projectCount"), value: segment.count, color: DASHBOARD_PROJECT_STAGE_COLORS[segment.bucket] },
+                { label: t("hub.dash.projects.share"), value: share + "%", color: "#94a3b8" },
+              ], label))}
+            >
               <i style={{ background: DASHBOARD_PROJECT_STAGE_COLORS[segment.bucket] }} />
               <span className="hub-dash-start-pie__name">{label}</span>
               <span className="hub-dash-start-pie__count">{segment.count}</span>
@@ -217,6 +269,8 @@ function StartYearPie({ insights, selected }: { readonly insights: DashboardProj
         })}
       </div>
     </div>
+    <HubDashHoverTip tip={tip} />
+    </>
   );
 }
 

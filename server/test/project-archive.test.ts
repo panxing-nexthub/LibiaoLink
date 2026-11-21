@@ -8,6 +8,7 @@ import { ArchiveRepository, type ArchiveViewRow } from "../src/modules/project/a
 import { ArchiveService } from "../src/modules/project/archive.service.js";
 import { FlowService } from "../src/modules/project/flow.service.js";
 import { ProjectRepository, type ProjectRow, type ProjectViewRow } from "../src/modules/project/project.repository.js";
+import type { ProjectService } from "../src/modules/project/project.service.js";
 import { buildProjectFilter } from "../src/modules/project/project.query.js";
 
 const AT = new Date("2026-09-28T06:00:00.000Z");
@@ -187,6 +188,7 @@ function makeService() {
     projects as unknown as ProjectRepository,
     flow as unknown as FlowService,
     audit as unknown as AuditService,
+    {} as ProjectService,
   );
   return { service, repo, projects, flow, audit, outbox };
 }

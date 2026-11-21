@@ -13,6 +13,7 @@ import {
 } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import { DatabaseService } from "../../db/database.service.js";
+import type { DbTransaction } from "../../db/db-client.js";
 import { AuditService, diffRecords } from "../admin/index.js";
 import { PermissionService, ProjectManagerEligibilityService } from "../permission/index.js";
 import type { ProjectScopeFilter } from "../permission/index.js";
@@ -269,6 +270,20 @@ export class ProjectService {
     if (current.project.status === "archived") {
       throw new AppError("PROJECT_ARCHIVED", "项目已归档，禁止修改");
     }
+    const patch = await this.prepareProjectUpdate(current.project, body);
+    const updated = await this.database.db.transaction((tx) =>
+      this.applyProjectUpdate(tx, current.project, patch, body.version, actorId),
+    );
+    const view = await this.projects.findViewById(id);
+    const levels = await this.permission.projectGroupAccessLevelsOf(actorId, [id]);
+    return toProjectView(
+      view ?? { project: updated, managerNames: current.managerNames },
+      levels.get(id) ?? "view",
+    );
+  }
+
+  /** 生成项目字段变更。由提交方在写事务中校验项目版本。 */
+  async prepareProjectUpdate(current: ProjectRow, body: Omit<ProjectUpdateBody, "version">): Promise<ProjectUpdateInput> {
     const patch: ProjectUpdateInput = {};
     if (body.code !== undefined) patch.code = body.code;
     if (body.name !== undefined) patch.name = body.name;
@@ -277,21 +292,21 @@ export class ProjectService {
     if (body.projectTypes !== undefined) {
       patch.projectType = body.projectTypes[0];
       patch.additionalProjectTypes = body.projectTypes.slice(1);
-    } else if (body.projectType !== undefined && body.projectType !== current.project.projectType) {
+    } else if (body.projectType !== undefined && body.projectType !== current.projectType) {
       patch.projectType = body.projectType;
-      patch.additionalProjectTypes = current.project.additionalProjectTypes.filter((code) => code !== body.projectType);
+      patch.additionalProjectTypes = current.additionalProjectTypes.filter((code) => code !== body.projectType);
     }
-    if (current.project.sourceBlueprintType === null && patch.projectType !== undefined && patch.projectType !== current.project.projectType) {
-      patch.sourceBlueprintType = current.project.projectType;
+    if (current.sourceBlueprintType === null && patch.projectType !== undefined && patch.projectType !== current.projectType) {
+      patch.sourceBlueprintType = current.projectType;
     }
     if (body.managerIds !== undefined) {
       const eligibleManagerIds = await this.managerEligibility.eligibleUserIds();
-      const roster = await this.members.listByProject(id);
+      const roster = await this.members.listByProject(current.id);
       const rosterManagerIds = roster
         .filter((row) => row.member.roleInProject === "project_manager")
         .map((row) => row.member.userId);
       await this.managerEligibility.assertAssignable(body.managerIds, {
-        existingUserIds: [...current.project.managerIds, ...rosterManagerIds],
+        existingUserIds: [...current.managerIds, ...rosterManagerIds],
         eligibleIds: eligibleManagerIds,
       });
       patch.managerIds = body.managerIds;
@@ -299,38 +314,35 @@ export class ProjectService {
     if (body.stageKey !== undefined) patch.stageKey = body.stageKey;
     if (body.status !== undefined) patch.status = body.status;
     if (body.description !== undefined) patch.description = body.description;
+    return patch;
+  }
+
+  /** 共用项目字段写入，经理快照和审计由同一事务提交。 */
+  async applyProjectUpdate(tx: DbTransaction, current: ProjectRow, patch: ProjectUpdateInput, version: number, actorId: string): Promise<ProjectRow> {
+    const id = current.id;
     const at = new Date();
-    const updated = await this.database.db.transaction(async (tx) => {
-      const row = await this.projects.updateWithVersion(id, patch, body.version, at, tx);
-      if (row === null) {
-        const again = await this.projects.findViewById(id);
-        if (again === null) {
-          throw new AppError("NOT_FOUND", "项目不存在或不可见");
-        }
-        throw new AppError("VERSION_CONFLICT", "项目已被他人更新，请刷新后重试");
+    const row = await this.projects.updateWithVersion(id, patch, version, at, tx);
+    if (row === null) {
+      const again = await this.projects.findViewById(id, tx);
+      if (again === null) {
+        throw new AppError("NOT_FOUND", "项目不存在或不可见");
       }
-      if (patch.managerIds !== undefined) {
-        // 项目经理是项目级字段：项目弹窗与任务行 / 抽屉共用同一份名单，全部任务同步展示快照。
-        await this.projects.syncProjectManagersToTasks(id, row.managerIds, at, tx);
-      }
-      const changes = diffRecords(projectAuditSnapshot(current.project), projectAuditSnapshot(row));
-      await this.audit.record(tx, {
-        actorId,
-        action: "update",
-        objectType: "project",
-        objectId: id,
-        projectId: id,
-        summary: "修改项目：" + row.code + "（" + row.name + "）",
-        changes: changes.length > 0 ? changes : null,
-      });
-      return row;
+      throw new AppError("VERSION_CONFLICT", "项目已被他人更新，请刷新后重试");
+    }
+    if (patch.managerIds !== undefined) {
+      await this.projects.syncProjectManagersToTasks(id, row.managerIds, at, tx);
+    }
+    const changes = diffRecords(projectAuditSnapshot(current), projectAuditSnapshot(row));
+    await this.audit.record(tx, {
+      actorId,
+      action: "update",
+      objectType: "project",
+      objectId: id,
+      projectId: id,
+      summary: "修改项目：" + row.code + "（" + row.name + "）",
+      changes: changes.length > 0 ? changes : null,
     });
-    const view = await this.projects.findViewById(id);
-    const levels = await this.permission.projectGroupAccessLevelsOf(actorId, [id]);
-    return toProjectView(
-      view ?? { project: updated, managerNames: current.managerNames },
-      levels.get(id) ?? "view",
-    );
+    return row;
   }
 
   /**

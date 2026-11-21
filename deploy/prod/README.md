@@ -1,3 +1,13 @@
+> **2026-11-21 22:10 合并页上下图表接近等高（测试机 frontend-only · test-20261121-2210-px-dashboard-balanced-panels-744ad7e0）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `744ad7e0`；release = `test-20261121-2210-px-dashboard-balanced-panels-744ad7e0`，previous = `test-20261121-2200-px-dashboard-enlarge-top-panel-00998b22`；staging = `/srv/data/deploy-test-20261121-2210-px-dashboard-balanced-panels-744ad7e0/staging`。
+
+> **改动 / 验收**：上方面板 flex-grow 由 1.45 回调为 1.15，上下接近等高；1600×1000 下上/下约 497 / 434px，绘图区约 353 / 364px；1366×768 下约 373 / 327px，绘图区约 229 / 256px。frontend `npm run typecheck` / `npm run build` 通过，两图均完整显示。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,607,315 B / SHA-256 `a65fc235…`、678 文件；`build-info.json` 357 B / `8298856a…`；`frontend-files.sha256` 92,437 B / `13a6d64b…`；`release-files.sha256` 254 B / `2ab6d1f8…`。线上 1057 → 1060 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `f95fa6d6…`、主包 `assets/index-B47Ip1OT.js` 2,539,346 B / `386a063b…`、CSS `assets/index-DKc1ZDRE.css` 253,296 B / `ba66cfd8…`、ES `assets/es-Dexu7xMS.js` 428,098 B / `c6ce392d…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2210-px-dashboard-balanced-panels-744ad7e0`，前端 149,576,106 B / `fafe0cc7…`、原 manifest 4,134 B / `a6e97658…`，SHA256SUMS 3 / 3 通过；新 manifest 4,114 B / `1be0f104…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 22:00 合并页放大上方项目数量面板（测试机 frontend-only · test-20261121-2200-px-dashboard-enlarge-top-panel-00998b22）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `00998b22`；release = `test-20261121-2200-px-dashboard-enlarge-top-panel-00998b22`，previous = `test-20261121-2150-px-dashboard-combined-project-stats-2bd167c1`；staging = `/srv/data/deploy-test-20261121-2200-px-dashboard-enlarge-top-panel-00998b22/staging`。
 
 > **改动 / 验收**：项目数量 / 项目阶段上下合并页改为非等高布局，上方面板高度占比约 59%，下方约 41%；上方面板由 455.8px 放大到 548.4px，绘图区从 311.8px 放大到 404.3px。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 1366×768 上方面板 411px、下方 289px，仍无裁切。

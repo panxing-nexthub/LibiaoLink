@@ -16,7 +16,7 @@ const RIGHT = 28;
 const TOP = 24;
 const AXIS_Y = 254;
 const LABEL_Y = 276;
-const LABEL_LINE_H = 13;
+const LABEL_LINE_H = 14.5;
 const BAR_MAX_W = 58;
 const BAR_INSET_RATIO = 0.22;
 
@@ -72,7 +72,7 @@ function StageBars({ insights, selectedYears }: {
   const t = useT();
   const locale = useLocale();
   const [tip, setTip] = useState<DashboardHoverTip | null>(null);
-  const axisFontSize = locale === "zh" ? 12.4 : locale === "en" ? 10.8 : 11.2;
+  const axisFontSize = locale === "zh" ? 14.3 : locale === "en" ? 11.8 : 12.6;
   const selectedRows = insights.startYearStages.filter((row) => includesYear(selectedYears, row.year));
   if (selectedRows.length === 0) return <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>;
   const totals = DASHBOARD_PROJECT_STAGE_BUCKETS.map((_, stageIndex) =>
@@ -99,7 +99,7 @@ function StageBars({ insights, selectedYears }: {
         ) : null)}
         <line x1={LEFT - 8} y1={AXIS_Y} x2={BAR_W - RIGHT + 8} y2={AXIS_Y} stroke="#b8bec6" />
         {ticks.map((value) => (
-          <text key={"tick-" + value} x={LEFT - 12} y={AXIS_Y - value * unit + 4} textAnchor="end" fontSize={12} fill="#8a9099">{value}</text>
+          <text key={"tick-" + value} x={LEFT - 12} y={AXIS_Y - value * unit + 4} textAnchor="end" fontSize={13.2} fill="#8a9099">{value}</text>
         ))}
         {DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket, stageIndex) => {
           const count = totals[stageIndex] ?? 0;
@@ -150,7 +150,7 @@ function StageBars({ insights, selectedYears }: {
                   x={center}
                   y={Math.max(y - 8, TOP + 10)}
                   textAnchor="middle"
-                  fontSize={12.5}
+                  fontSize={13.5}
                   fontWeight={650}
                   fill="#374151"
                   pointerEvents="none"

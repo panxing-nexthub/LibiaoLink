@@ -1,3 +1,13 @@
+> **2026-11-21 22:40 年份与全选对齐、类型图例回到年份下方（测试机 frontend-only · test-20261121-2240-px-dashboard-filter-align-97c56d22）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `97c56d22`；release = `test-20261121-2240-px-dashboard-filter-align-97c56d22`，previous = `test-20261121-2230-px-dashboard-legend-row-cff6a383`；staging = `/srv/data/deploy-test-20261121-2240-px-dashboard-filter-align-97c56d22/staging`。
+
+> **改动 / 验收**：项目数量图筛选区改为两列布局，左列全选 / 折线图上下排列，右列年份导航在上、类型图例在下；全选与年份 y 坐标均为 68.7px，类型图例 y=102.2px，绘图区约 389px。frontend `npm run typecheck` / `npm run build` 通过。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,149 B / SHA-256 `7cfbed70…`、678 文件；`build-info.json` 367 B / `c5136256…`；`frontend-files.sha256` 92,437 B / `451bda52…`；`release-files.sha256` 254 B / `16072ffb…`。线上 1065 → 1068 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `ebfa4487…`、主包 `assets/index-Cq_dRUmm.js` 2,539,425 B / `92069eb7…`、CSS `assets/index-C22Z19ED.css` 253,324 B / `febb157b…`、ES `assets/es-CUyTcv3V.js` 428,098 B / `33eb05fa…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2240-px-dashboard-filter-align-97c56d22`，前端 152,332,617 B / `425041d0…`、原 manifest 4,049 B / `b517f041…`，SHA256SUMS 3 / 3 通过；新 manifest 4,065 B / `88d34321…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 22:30 类型图例上移释放纵轴空间（测试机 frontend-only · test-20261121-2230-px-dashboard-legend-row-cff6a383）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `cff6a383`；release = `test-20261121-2230-px-dashboard-legend-row-cff6a383`，previous = `test-20261121-2220-px-dashboard-fill-charts-56128a83`；staging = `/srv/data/deploy-test-20261121-2230-px-dashboard-legend-row-cff6a383/staging`。
 
 > **改动 / 验收**：项目数量图类型图例移到年份导航同一行右侧，年份导航保持居中；窄于 1100px 时图例回落年份导航下方。项目数量图绘图区高度由 353.1px 增至 383.7px，纵轴多出约 30.6px。frontend `npm run typecheck` / `npm run build` 通过。

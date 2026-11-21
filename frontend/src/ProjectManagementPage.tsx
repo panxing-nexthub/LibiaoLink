@@ -2856,7 +2856,7 @@ function PmImplementationGantt({
         ganttScrollViewportRef.current = null;
       }
     };
-  }, []);
+  }, [groups.length]);
 
   useEffect(() => {
     if (!ganttResizing) {

@@ -4856,9 +4856,11 @@ body {
 }
 
 .hub-dash-hoverCard__subtitle {
-  margin-top: 0.18rem;
-  color: #8a9099;
-  font-size: 0.72rem;
+  margin-top: 0.22rem;
+  color: #4b5563;
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.25;
 }
 
 .hub-dash-hoverCard__row {
@@ -5152,7 +5154,3 @@ body {
   }
 }
 
-.hub-dash-role__hoverTotal {
-  font-variant-numeric: tabular-nums;
-  user-select: none;
-}

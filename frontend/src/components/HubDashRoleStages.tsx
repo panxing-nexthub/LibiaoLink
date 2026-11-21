@@ -42,7 +42,6 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
   const t = useT();
   const locale = useLocale();
   const [tip, setTip] = useState<DashboardHoverTip | null>(null);
-  const [hoverPerson, setHoverPerson] = useState<string | null>(null);
   const people = stats?.people ?? [];
   if (people.length === 0) {
     return <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>;
@@ -65,7 +64,7 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
         preserveAspectRatio="xMinYMid meet"
         role="img"
         aria-label={t("hub.dash.projects.role.aria", { role: t(ROLE_TITLE_KEYS[role]) })}
-        onMouseLeave={() => { setTip(null); setHoverPerson(null); }}
+        onMouseLeave={() => setTip(null)}
       >
         {ticks.map((value) => value > 0 ? (
           <line key={"grid-" + value} x1={LEFT} y1={AXIS_Y - value * unit} x2={viewW - RIGHT} y2={AXIS_Y - value * unit} stroke="#e8eaee" strokeDasharray="3 4" />
@@ -96,8 +95,8 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
                 height={AXIS_Y - PLOT_TOP + 6}
                 rx={8}
                 fill="transparent"
-                onMouseEnter={(event) => { setHoverPerson(personKey); setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role]))); }}
-                onMouseMove={(event) => { setHoverPerson(personKey); setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role]))); }}
+                onMouseEnter={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
+                onMouseMove={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
               />
               {DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket, stageIndex) => {
                 const count = person.stageCounts[stageIndex] ?? 0;
@@ -116,30 +115,15 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
                       width={barW}
                       height={Math.max(height, 1.5)}
                       fill={DASHBOARD_PROJECT_STAGE_COLORS[bucket]}
-                      onMouseEnter={(event) => { setHoverPerson(null); setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel)); }}
-                      onMouseMove={(event) => { setHoverPerson(null); setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel)); }}
+                      onMouseEnter={(event) => setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
+                      onMouseMove={(event) => setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
                     />
-                    {height >= 11 && hoverPerson !== personKey ? (
+                    {height >= 11 ? (
                       <text x={center} y={y + height / 2 + 3.7} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={bucket === "purchase" ? "#313033" : "#ffffff"} pointerEvents="none">{count}</text>
                     ) : null}
                   </g>
                 );
               })}
-              {hoverPerson === personKey ? (
-                <text
-                  className="hub-dash-role__hoverTotal"
-                  x={center}
-                  y={PLOT_TOP + 18}
-                  textAnchor="middle"
-                  fontSize={Math.max(18, Math.min(24, slotW * 0.14))}
-                  fontWeight={700}
-                  fill="#334155"
-                  stroke="#ffffff"
-                  strokeWidth={4}
-                  paintOrder="stroke"
-                  pointerEvents="none"
-                >{person.total}</text>
-              ) : null}
               <text x={center} y={LABEL_Y} textAnchor="middle" fontSize={11.5} fill={person.isUnassigned ? "#9a5b13" : "#4b5563"}>
                 <title>{rawLabel}</title>
                 {label}

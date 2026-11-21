@@ -15,10 +15,12 @@ export type MeResponse = {
   csrfToken: string;
 };
 
+export type ProjectArchiveKind = "accepted" | "unaccepted";
+
 /**
  * 项目（M2-07 起为服务端数据，映射见 projectApi.ts 的 toUiProject）：
  * 编号、序号与人员字段命名对齐 shared 契约（code / seqNo / managerIds / managerNames）。
- * 主题色不再挂在这里 —— 取字典 projectType 条目的 metadata.accent（dicts.ts 的 typeAccent）。
+ * 主题色不再挂在这里 —— 由 dicts.ts 的 projectAccent 根据类型组合取色。
  */
 export type Project = {
   id: string;
@@ -33,6 +35,7 @@ export type Project = {
   region: string;
   /** 项目类型：契约 projects.projectType 存字典 projectType 的码；主题色由字典 metadata 下发（前端不硬编码）。 */
   projectType: string;
+  projectTypes: string[];
   /** 创建时间（契约 createdAt，展示用「YYYY-MM-DD HH:mm」，Asia/Shanghai）：创建时生成、编辑不修改。 */
   createdAt: string;
   /** 最近活动时间（契约 updatedAt）：主数据变更 / 阶段推进 / 任务变更刷新；「更新时间」排序维度（Push 175 起区间筛选与默认排序都看 createdAt）。 */
@@ -48,8 +51,10 @@ export type Project = {
   version: number;
   /** 当前阶段 key（契约 stageKey）。 */
   stageKey: string;
-  /** 项目状态（契约 status：active / paused / done / archived）。 */
-  status: string;
+  /** 项目状态，兼容旧 API 返回的 done。 */
+  status: ProjectReadStatus;
+  hasOpenPostArchiveTask: boolean;
+  archiveKind: ProjectArchiveKind | null;
   /** 当前登录人在该项目的最终项目权限：管理员 / 所管本项目的项目经理 / 规则 edit 为 edit；其余可见关系为 view。 */
   accessLevel: "edit" | "view";
   /** 兼容旧字段：当前值同 accessLevel；项目级写入口统一改用 accessLevel。 */
@@ -60,24 +65,20 @@ export type Project = {
   deletedBy: string | null;
 };
 
-/** 项目状态取值（契约 projects.status：active / paused / done / archived）。 */
-export type ProjectStatusValue = "active" | "paused" | "done" | "archived";
+/** 项目状态取值（契约 projects.status：active / paused / archived）。 */
+export type ProjectStatusValue = "active" | "paused" | "archived";
+export type ProjectReadStatus = ProjectStatusValue | "done";
 
-/** 项目状态顺序（卡片状态字 / 编辑弹窗四选一 / 地图图例共用同一套口径）。 */
-export const PROJECT_STATUS_VALUES: readonly ProjectStatusValue[] = ["active", "paused", "done", "archived"];
+/** 项目状态的展示顺序。 */
+export const PROJECT_STATUS_VALUES: readonly ProjectStatusValue[] = ["active", "paused", "archived"];
 
 /** 项目状态中文（Push 262：卡片状态字与编辑弹窗同源；与地图图例/操作记录口径一致）。 */
-export const PROJECT_STATUS_TEXT: Record<ProjectStatusValue, string> = {
+export const PROJECT_STATUS_TEXT: Record<ProjectReadStatus, string> = {
   active: "进行中",
   paused: "已暂停",
   done: "已完成",
   archived: "已归档",
 };
-
-/** 契约 status（string）→ 已知取值；未知值回落 null（调用方决定兜底展示 / 收敛）。 */
-export function projectStatusOf(value: string): ProjectStatusValue | null {
-  return (PROJECT_STATUS_VALUES as readonly string[]).includes(value) ? (value as ProjectStatusValue) : null;
-}
 
 /** 状态展示文案：已知取值走中文，未知值回落原文（不吞信息）。 */
 export function projectStatusText(value: string): string {

@@ -34,24 +34,8 @@ class FakeTaskStats {
     done: 0,
     deliveryReady: 0,
   };
-  project = {
-    total: 0,
-    done: 0,
-    deliveryReady: 0,
-    issues: [] as {
-      taskId: string;
-      taskTitle: string;
-      stageKey: string | null;
-      docType: string;
-      required: number;
-      present: number;
-    }[],
-  };
   async countStageTasks(): Promise<{ total: number; done: number; deliveryReady: number }> {
     return this.tasks;
-  }
-  async evaluateProjectDelivery() {
-    return this.project;
   }
   async stageTaskCounts(): Promise<never[]> {
     return [];
@@ -139,56 +123,5 @@ describe("GateService.evaluateStageAdvance（ADR-023 阶段推进门禁）", () 
     const result = await makeService(repo, stats).evaluateStageAdvance(TX, PROJECT, STAGE);
     expect(result.ok).toBe(true);
     expect(result.missing).toEqual([]);
-  });
-});
-
-describe("GateService.evaluateProjectCompletion（项目标记完成门禁）", () => {
-  const PROJECT = "33333333-3333-4333-8333-333333333333";
-
-  it("任务全完成且无交付缺项 → 通过（未配置成果类型的任务不要求文件）", async () => {
-    const stats = new FakeTaskStats();
-    stats.project = { total: 14, done: 14, deliveryReady: 14, issues: [] };
-    const result = await makeService(new FakeGateRepository(), stats).evaluateProjectCompletion(TX, PROJECT);
-    expect(result).toEqual({ ok: true, missing: [] });
-  });
-
-  it("仍有未完成任务 → task_not_done", async () => {
-    const stats = new FakeTaskStats();
-    stats.project = { total: 14, done: 12, deliveryReady: 11, issues: [] };
-    const result = await makeService(new FakeGateRepository(), stats).evaluateProjectCompletion(TX, PROJECT);
-    expect(result.ok).toBe(false);
-    expect(result.missing).toEqual([{ type: "task_not_done", total: 14, done: 12 }]);
-  });
-
-  it("任务已完成但已配置成果文件未上传 → task_delivery_missing（带任务与类型）", async () => {
-    const stats = new FakeTaskStats();
-    stats.project = {
-      total: 2,
-      done: 2,
-      deliveryReady: 1,
-      issues: [
-        {
-          taskId: "task-1",
-          taskTitle: "机械设计",
-          stageKey: "design",
-          docType: "CAD图纸",
-          required: 1,
-          present: 0,
-        },
-      ],
-    };
-    const result = await makeService(new FakeGateRepository(), stats).evaluateProjectCompletion(TX, PROJECT);
-    expect(result.ok).toBe(false);
-    expect(result.missing).toEqual([
-      {
-        type: "task_delivery_missing",
-        taskId: "task-1",
-        taskTitle: "机械设计",
-        stageKey: "design",
-        docType: "CAD图纸",
-        required: 1,
-        present: 0,
-      },
-    ]);
   });
 });

@@ -96,8 +96,9 @@ export function FixedHorizontalScrollbar({
     <div
       ref={(node) => {
         trackRef.current = node;
-        if (node !== null) {
-          node.scrollLeft = scrollRef.current?.scrollLeft ?? 0;
+        const scroller = scrollRef.current;
+        if (node !== null && scroller !== null && Math.abs(node.scrollWidth - scroller.scrollWidth) <= 1) {
+          node.scrollLeft = scroller.scrollLeft;
         }
       }}
       data-fixed-horizontal-scrollbar=""
@@ -108,8 +109,16 @@ export function FixedHorizontalScrollbar({
       className="fixed bottom-0 z-[60] overflow-x-scroll overflow-y-hidden border-t border-zinc-200 bg-white/95 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40"
       onScroll={(event) => {
         const node = scrollRef.current;
-        if (node !== null && Math.abs(node.scrollLeft - event.currentTarget.scrollLeft) > 1) {
-          node.scrollLeft = event.currentTarget.scrollLeft;
+        const track = event.currentTarget;
+        if (node === null) {
+          return;
+        }
+        if (Math.abs(track.scrollWidth - node.scrollWidth) > 1) {
+          measure();
+          return;
+        }
+        if (Math.abs(node.scrollLeft - track.scrollLeft) > 1) {
+          node.scrollLeft = track.scrollLeft;
         }
       }}
     >

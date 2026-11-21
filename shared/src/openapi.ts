@@ -8,6 +8,7 @@ import { StageKeySchema } from "./common/dicts.ts";
 import { ApiErrorSchema } from "./common/errors.ts";
 import {
   ProjectArchiveBodySchema,
+  ProjectUnarchiveBodySchema,
   ProjectArchiveViewSchema,
   ProjectCreateBodySchema,
   ProjectDeliverableTypeCreateBodySchema,
@@ -574,7 +575,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "post",
     path: "/api/v1/projects/{id}/archive",
     tags: ["projects"],
-    summary: "项目归档（门禁：项目内未删除任务全部完成；有未完成任务 409 ARCHIVE_NOT_READY 且 confirm 不可越过；通过后置位并生成引用式清单）",
+    summary: "项目归档：已验收需全部任务完成且含验收任务；异常归档可直接办理，两者均生成清单",
     request: { params: idParams, body: json(ProjectArchiveBodySchema) },
     responses: {
       200: { description: "归档记录与清单（项目进入只读保护：写路径 409 PROJECT_ARCHIVED）", ...json(ProjectArchiveViewSchema) },
@@ -603,7 +604,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     path: "/api/v1/projects/{id}/unarchive",
     tags: ["projects"],
     summary: "归档项目恢复为进行中（仅 archived 可恢复；清归档时点 / 操作人并递增 version，保留最近一次归档清单，写审计）",
-    request: { params: idParams, body: json(ProjectArchiveBodySchema) },
+    request: { params: idParams, body: json(ProjectUnarchiveBodySchema) },
     responses: {
       200: { description: "恢复为进行中后的项目", ...json(ProjectSchema) },
       400: commonErrors[400],

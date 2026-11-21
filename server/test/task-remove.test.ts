@@ -190,7 +190,8 @@ class FakeTaskRepository {
     return { id: row.id, projectId: row.projectId, nodeId: row.nodeId, status: row.status, deliverableTypes: row.deliverableTypes };
   }
 
-  async insert(input: TaskInsertInput, at: Date): Promise<TaskRow> {
+  async insert(input: TaskInsertInput): Promise<TaskRow> {
+    const at = new Date();
     this.inserted.push(input);
     const row = makeRow(NEW_TASK, {
       projectId: input.projectId,

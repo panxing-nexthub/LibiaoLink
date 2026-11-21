@@ -24,9 +24,20 @@ export const ProjectManagementMethodSchema = z
 
 export type ProjectManagementMethod = z.infer<typeof ProjectManagementMethodSchema>;
 
+/**
+ * 项目管理可人工选择的阶段：项目空间九阶段之外增加立项未启动 / 已归档 / 终止。
+ * 不修改项目空间 STAGE_KEYS 与最新阶段自动识别口径。
+ */
+export const PROJECT_MANAGEMENT_STAGE_KEYS = [
+  "not_started",
+  ...STAGE_KEYS,
+  "archived",
+  "terminated",
+] as const;
+
 // 无组件 id 的模块内克隆：给这些字段附加描述时不会回写共享 DateOnly / StageKey 组件。
 const ProjectManagementDateValueSchema = z.iso.date();
-const ProjectManagementStageValueSchema = z.enum(STAGE_KEYS);
+const ProjectManagementStageValueSchema = z.enum(PROJECT_MANAGEMENT_STAGE_KEYS);
 const ProjectManagementMethodValueSchema = z.enum(PROJECT_MANAGEMENT_METHODS);
 
 export const PROJECT_MANAGEMENT_MANAGER_LIMIT = 200;
@@ -62,7 +73,7 @@ export const ProjectManagementRecordSchema = z
     implementationMethod: ProjectManagementMethodValueSchema.nullable().openapi({ description: "实施方式；未填写 = null" }),
     riskReminder: z.string().nullable().openapi({ description: "风险提醒：手填，最长 2000 字；未填写 = null" }),
     region: z.string().openapi({ description: "项目地点字典值；清空时回落为未分类" }),
-    currentStageOverride: ProjectManagementStageValueSchema.nullable().openapi({ description: "项目当前阶段人工覆盖值；null = 使用只读自动识别值" }),
+    currentStageOverride: ProjectManagementStageValueSchema.nullable().openapi({ description: "项目当前阶段人工覆盖值（项目管理十二阶段）；null = 使用只读自动识别值" }),
     startupCompletedAtOverride: ProjectManagementDateValueSchema.nullable().openapi({ description: "启动时间人工覆盖值；null = 使用只读自动识别值" }),
     arrivalDateOverride: ProjectManagementDateValueSchema.nullable().openapi({ description: "到货日期人工覆盖值；null = 使用只读自动识别值" }),
     plannedStartDateOverride: ProjectManagementDateValueSchema.nullable().openapi({ description: "计划实施开始人工覆盖值；null = 使用只读自动识别值" }),

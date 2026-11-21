@@ -521,6 +521,10 @@ export class NotifyGroupService {
         error: "群播报载荷非法（缺 projectId / body 或超长）：" + row.dedupeKey,
       };
     }
+    // 旧喜报可能仍在队列中，而项目已恢复并改为异常归档。
+    if (message.templateCode === "R06_GROUP" && await this.repository.isArchivedWithoutAcceptance(message.projectId)) {
+      return { outcome: "done" };
+    }
     let archived: NotifyDeliveryMessageRow;
     try {
       archived = await this.archive.ensureMessage({

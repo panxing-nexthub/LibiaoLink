@@ -15,7 +15,7 @@ import { changeRequests } from "../../db/schema/change.js";
 import { users } from "../../db/schema/identity.js";
 import { files, fileLinks, fileVersions } from "../../db/schema/files.js";
 import { notifyDeliveries, wecomAibotDmActivations, wecomGroupCandidates, wecomGroups } from "../../db/schema/notify.js";
-import { projectMembers, projects } from "../../db/schema/projects.js";
+import { projectArchives, projectMembers, projects } from "../../db/schema/projects.js";
 import { projectStakeholders, stakeholders } from "../../db/schema/stakeholders.js";
 import { dailyReports, issues } from "../../db/schema/reports.js";
 import { tasks } from "../../db/schema/tasks.js";
@@ -198,6 +198,14 @@ export class NotifyGroupRepository {
       .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
       .limit(1);
     return rows[0]?.managerIds[0] ?? null;
+  }
+
+  async isArchivedWithoutAcceptance(projectId: string): Promise<boolean> {
+    const rows = await this.database.db.select({ id: projects.id }).from(projects)
+      .innerJoin(projectArchives, eq(projectArchives.projectId, projects.id))
+      .where(and(eq(projects.id, projectId), eq(projects.status, "archived"), eq(projectArchives.archiveKind, "unaccepted")))
+      .limit(1);
+    return rows.length > 0;
   }
 
   /**
@@ -525,8 +533,8 @@ export class NotifyGroupRepository {
   }
 
   /**
-   * R06 火箭动画门槛：项目状态为 done，且项目内未删任务全部完成、全部按期。
-   * 项目不存在 / 已软删 / 非 done / 无任务 / 任一完成或按期不满足 = false。
+   * R06 火箭动画门槛：项目已归档，且项目内未删任务全部完成、全部按期。
+   * 项目不存在 / 已软删 / 未完成 / 无任务 / 任一完成或按期不满足 = false。
    */
   async isProjectCompletedWithAllTasksOnTime(
     projectId: string,
@@ -538,7 +546,7 @@ export class NotifyGroupRepository {
       .from(projects)
       .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
       .limit(1);
-    if (projectRows[0]?.status !== "done") {
+    if (projectRows[0]?.status !== "archived") {
       return false;
     }
     return await this.areProjectTasksAllOnTime(projectId, at, client);

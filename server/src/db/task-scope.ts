@@ -1,5 +1,6 @@
 import { and, eq, isNotNull, isNull, ne, not, sql } from "drizzle-orm";
 import type { DbClient } from "./db-client.js";
+import { projects } from "./schema/projects.js";
 import { tasks } from "./schema/tasks.js";
 
 type TaskOrigin = Pick<typeof tasks.$inferSelect, "stageKey" | "nodeId" | "taskNodeId">;
@@ -11,6 +12,17 @@ export function isTemporaryTask(task: TaskOrigin): boolean {
 export function temporaryTaskCondition() {
   return sql`(${tasks.stageKey} is null and ${tasks.nodeId} is null and ${tasks.taskNodeId} is null)`;
 }
+
+// Both timestamps are assigned by PostgreSQL after the project row is locked.
+export const hasOpenPostArchiveTask = sql<boolean>`(
+  ${projects.status} = 'archived' and exists (
+    select 1 from ${tasks}
+    where ${tasks.projectId} = ${projects.id}
+      and ${tasks.createdAt} > ${projects.archivedAt}
+      and ${tasks.deletedAt} is null and ${tasks.status} <> 'done'
+      and ${temporaryTaskCondition()}
+  )
+)`;
 
 export async function hasUnfinishedTemporaryTask(client: DbClient, projectId: string, taskId?: string): Promise<boolean> {
   const rows = await client.select({ id: tasks.id }).from(tasks)

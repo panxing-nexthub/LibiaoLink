@@ -1,3 +1,4 @@
+import { ProjectTypesSchema } from "./projects.ts";
 import { z } from "../zod.ts";
 import { DateTimeSchema, UuidSchema } from "../common/conventions.ts";
 import { StageKeySchema } from "../common/dicts.ts";
@@ -156,6 +157,7 @@ export const ImportProjectPlacementSchema = z
     name: z.string().min(1).max(200).openapi({ description: "项目名（默认取源表名，导入后可改）" }),
     region: z.string().max(64).nullable().openapi({ description: "识别出的地区（标准国家名）；识别不出 = null（面板强制用户选）" }),
     projectType: z.string().max(64).nullable().openapi({ description: "识别出的项目类型（字典码：AIRROB → 飞箱）；识别不出 = null（可留空）" }),
+    projectTypes: z.array(z.string()).describe("文件名中识别的全部类型，按首次出现顺序排列"),
     managerNames: z.array(z.string().max(80)).max(20).openapi({ description: "源表项目经理原文（按全表多数口径补）" }),
   })
   .openapi("ImportProjectPlacement", { description: "项目落位（面板左栏「项目落位」块）" });
@@ -184,6 +186,7 @@ export const ProjectImportCommitBodySchema = z
   .object({
     previewId: UuidSchema,
     region: z.string().min(1).max(64).openapi({ description: "项目地区（region 字典的码 / 标准国家名；必填）" }),
+    projectTypes: ProjectTypesSchema.optional(),
     projectType: z
       .string()
       .max(64)

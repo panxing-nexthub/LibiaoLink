@@ -178,7 +178,7 @@ async function main() {
         projectType: "标准",
         managerIds: [MANAGER_ID],
         stageKey: "install",
-        status: "done",
+        status: "active",
       });
       await db.insert(wecomGroups).values({
         projectId: PROJECT_ID,
@@ -419,22 +419,6 @@ async function main() {
       return "stage trial matched=1 / group message=1";
     });
 
-    await check("R06 项目完成试运行：project.completed + project entityId 命中群消息", async () => {
-      const rows = await db.select().from(automationRules).where(eq(automationRules.code, "R06"));
-      assert.equal(rows.length, 1);
-      assert.equal(rows[0].trigger.kind, "event");
-      assert.equal(rows[0].trigger.topic, "project.completed");
-      await service.patchRule(ADMIN_ID, "R06", { version: rows[0].version, enabled: true });
-      const result = await service.testRule(ADMIN_ID, "R06", { businessDate: BUSINESS_DATE, entityId: PROJECT_ID });
-      assert.equal(result.evaluatedCount, 1);
-      assert.equal(result.matchedCount, 1);
-      assert.equal(result.skippedCount, 0);
-      assert.equal(result.messages.length, 1);
-      assert.equal(result.messages[0].channel, "wecom_group");
-      assert.equal(result.messages[0].template, "R06_GROUP");
-      return "project.completed enabled then trial matched=1 / group message=1";
-    });
-
     await check("事件型试运行缺 entityId：400，主体零读取", async () => {
       const before = await db.select({ value: sql`count(*)::int` }).from(automationRuns);
       await assert.rejects(
@@ -476,6 +460,23 @@ async function main() {
       const after = await counts();
       assert.deepEqual(after, before);
       return "runs=" + before.runs + " / outbox=" + before.outbox + " / audit=" + before.audits;
+    });
+
+    await check("R06 项目完成试运行：project.completed + project entityId 命中群消息", async () => {
+      await db.update(projects).set({ stageKey: "acceptance", status: "archived", archivedAt: NOW, archivedBy: ADMIN_ID }).where(eq(projects.id, PROJECT_ID));
+      const rows = await db.select().from(automationRules).where(eq(automationRules.code, "R06"));
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].trigger.kind, "event");
+      assert.equal(rows[0].trigger.topic, "project.completed");
+      await service.patchRule(ADMIN_ID, "R06", { version: rows[0].version, enabled: true });
+      const result = await service.testRule(ADMIN_ID, "R06", { businessDate: BUSINESS_DATE, entityId: PROJECT_ID });
+      assert.equal(result.evaluatedCount, 1);
+      assert.equal(result.matchedCount, 1);
+      assert.equal(result.skippedCount, 0);
+      assert.equal(result.messages.length, 1);
+      assert.equal(result.messages[0].channel, "wecom_group");
+      assert.equal(result.messages[0].template, "R06_GROUP");
+      return "project.completed enabled then trial matched=1 / group message=1";
     });
 
     await check("运行记录：真表插入 / list total / 详情 / 404", async () => {

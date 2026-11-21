@@ -51,10 +51,11 @@
 - `managerIds` / `managerNames`：项目经理账号快照与只读姓名。
 - `implementationEngineerIds` / `implementationEngineerNames`：实施工程师账号快照与只读姓名，支持多位。
 - `implementationHandedOver`：实施工程师已移交状态；true 时服务端强制 `implementationEngineerIds = []`，格子只显示「已移交」。
-- `implementationMethod`：五种实施方式枚举，未填为 null。
+- `implementationMethod`：契约保留五种实施方式枚举以兼容历史记录；前端当前只提供「安装交付 / 远程-指导 / 现场-指导」三种可选值，`onsite_installation_guidance` / `remote_installation_guidance` 不再可选但历史记录继续可读，未填为 null。
 - `riskReminder`：风险提醒，最长 2000 字，未填为 null。
 - `region`：项目地点字典值，空值回落为 `未分类`。
-- `currentStageOverride` / `startupCompletedAtOverride` / `arrivalDateOverride` / `plannedStartDateOverride` / `plannedEndDateOverride` / `implementationDaysOverride`：人工覆盖值；null = 使用自动识别 / 自动计算值。
+- `currentStageOverride`：项目管理十二阶段 = `not_started` + 项目空间九阶段 + `archived` / `terminated`；新增三种仅用于项目管理人工标注，不写回项目空间。
+- `startupCompletedAtOverride` / `arrivalDateOverride` / `plannedStartDateOverride` / `plannedEndDateOverride` / `implementationDaysOverride`：人工覆盖值；null = 使用自动识别 / 自动计算值。
 - `projectId` / `currentStage` / `startupCompletedAt` / `arrivalDate` / `plannedStartDate` / `plannedEndDate` / `implementationDays`：项目空间只读派生快照，不接收客户端写入；前端按「覆盖值 ?? 自动值」展示，`projectId` 用于项目详情跳转。
 - `version` / `createdAt` / `updatedAt`：乐观锁与时间戳。
 
@@ -64,7 +65,8 @@
 - 人员、实施方式、地点选择后立即保存。
 - 每行保存队列串行执行，避免同一行请求乱序；冲突返回 409 `VERSION_CONFLICT`。
 - 项目编号 / 名称在 `projectId` 非空时显示为项目详情链接；单击或 Enter 打开项目，双击或 F2 进入原有文本编辑。
-- 项目当前阶段 / 启动时间 / 到货日期 / 计划实施日期 / 实施天数均可点击编辑：阶段走九阶段下拉（含「自动识别」），日期走日历（清除即恢复自动），天数走数字编辑（「恢复自动」清除覆盖）。项目编号变化后先清空旧自动快照，保存成功立即回填；人工覆盖值不因编号变化自动清空。
+- 项目当前阶段 / 启动时间 / 到货日期 / 计划实施日期 / 实施天数均可点击编辑：阶段走项目管理十二阶段下拉（含「自动识别」），日期走日历（清除即恢复自动），天数走数字编辑（「恢复自动」清除覆盖）。项目编号变化后先清空旧自动快照，保存成功立即回填；人工覆盖值不因编号变化自动清空。
+- 项目管理顶部视图只保留「表格视图」「甘特-实施」；「看板-项目经理」「看板-实施」已下线。
 - 后台刷新仅合并派生字段，并按 `record.id` 与当前 `code` 双重校验，避免覆盖未保存文本、人工覆盖值或其它字段。
 - 表格初始 6 行；出现数据后，最末数据行下方固定只保留 5 个空行，多余尾部空白行收敛。点击空白格或空白行失焦不会创建记录。
 - POST 拒绝全空请求；PATCH 拒绝保存为全空结果。前端在已有记录被清空后调用 DELETE，服务端列表过滤历史全空记录，刷新不再显示空白记录。

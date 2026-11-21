@@ -8,7 +8,7 @@
  */
 import { apiDownload, apiRequest, apiSend, readAllPages } from "./api";
 import { EMPTY_LIST_QUERY, type ListQueryState } from "./useHashRoute";
-import type { Project } from "./types";
+import type { Project, ProjectArchiveKind, ProjectReadStatus } from "./types";
 
 export type ProjectExportFormat = "xlsx" | "zip";
 
@@ -20,10 +20,13 @@ export type ApiProject = {
   customer: string | null;
   region: string;
   projectType: string;
+  projectTypes?: string[];
   managerIds: string[];
   managerNames: Array<string | null>;
   stageKey: string;
-  status: string;
+  status: ProjectReadStatus;
+  hasOpenPostArchiveTask: boolean;
+  archiveKind: ProjectArchiveKind | null;
   /** 最终项目权限：管理员 / 所管本项目的项目经理 / 规则 edit 为 edit。 */
   accessLevel: "edit" | "view";
   /** 旧客户端兼容字段，当前与 accessLevel 同值。 */
@@ -47,7 +50,8 @@ export type ProjectMapOverviewItem = {
   name: string;
   region: string;
   projectType: string;
-  status: string;
+  projectTypes?: string[];
+  status: ProjectReadStatus;
   accessLevel: "edit" | "view" | null;
 };
 
@@ -148,18 +152,18 @@ export type ProjectWriteInput = {
   code: string;
   name: string;
   region: string;
-  projectType: string;
+  projectTypes: string[];
   managerIds: string[];
   /** 备注（契约 description）：undefined = 不发送；空串 = 新建留空不发送 / 编辑发 null 清空。 */
   remark?: string;
 };
 
 export function createProject(input: ProjectWriteInput): Promise<ApiProject> {
-  const body: { code: string; name: string; region: string; projectType: string; managerIds: string[]; description?: string } = {
+  const body: { code: string; name: string; region: string; projectTypes: string[]; managerIds: string[]; description?: string } = {
     code: input.code,
     name: input.name,
     region: input.region,
-    projectType: input.projectType,
+    projectTypes: input.projectTypes,
     managerIds: input.managerIds,
   };
   // 备注（Push 280）：新建留空不发送（契约 description 可选）；有值才带上。
@@ -170,14 +174,14 @@ export function createProject(input: ProjectWriteInput): Promise<ApiProject> {
 }
 
 /** PATCH 可写状态（契约 ProjectUpdateBody：archived 不接受 PATCH —— 归档只能走归档端点；Push 262 编辑弹窗口径）。 */
-export type ProjectStatusPatch = "active" | "paused" | "done";
+export type ProjectStatusPatch = "active" | "paused";
 
 export function updateProject(id: string, input: ProjectWriteInput, version: number, status?: ProjectStatusPatch): Promise<ApiProject> {
   const body: {
     code: string;
     name: string;
     region: string;
-    projectType: string;
+    projectTypes: string[];
     managerIds: string[];
     version: number;
     status?: ProjectStatusPatch;
@@ -186,7 +190,7 @@ export function updateProject(id: string, input: ProjectWriteInput, version: num
     code: input.code,
     name: input.name,
     region: input.region,
-    projectType: input.projectType,
+    projectTypes: input.projectTypes,
     managerIds: input.managerIds,
     version,
   };
@@ -202,10 +206,11 @@ export function updateProject(id: string, input: ProjectWriteInput, version: num
 
 /**
  * 项目归档（M7-04 · C4-02 / C4-03 · ADR-027；Push 262 编辑弹窗「已归档」接线）：`PATCH` 不收 archived，归档只能走本端点 ——
- * 门禁 = 项目内未删除任务全部完成（未完成 409 ARCHIVE_NOT_READY，confirm=true 不可越过）；
+ * 已验收归档要求全部任务完成且包含验收任务；异常归档保留任务进度；
  * 文件定档 / 必交成果不再阻断。confirm 仅保留为旧客户端兼容字段。
  */
 export type ProjectArchiveResult = {
+  archiveKind: ProjectArchiveKind;
   id: string;
   projectId: string;
   archivedAt: string;
@@ -213,8 +218,8 @@ export type ProjectArchiveResult = {
   archivedByName: string | null;
 };
 
-export function archiveProject(id: string, version: number, confirm: boolean): Promise<ProjectArchiveResult> {
-  return apiSend<ProjectArchiveResult>("/api/v1/projects/" + encodeURIComponent(id) + "/archive", "POST", { version, confirm });
+export function archiveProject(id: string, version: number, archiveKind: ProjectArchiveKind, confirm = false): Promise<ProjectArchiveResult> {
+  return apiSend<ProjectArchiveResult>("/api/v1/projects/" + encodeURIComponent(id) + "/archive", "POST", { version, archiveKind, confirm });
 }
 
 /** 归档项目恢复到进行中：只清归档状态并递增 version，保留最近一次归档清单。 */
@@ -286,6 +291,7 @@ export function toUiProject(view: ApiProject): Project {
     remark: view.description ?? "",
     region: view.region,
     projectType: view.projectType,
+    projectTypes: view.projectTypes ?? [view.projectType],
     createdAt: formatDateTime(view.createdAt),
     updatedAt: formatDateTime(view.updatedAt),
     managerIds: view.managerIds,
@@ -293,6 +299,8 @@ export function toUiProject(view: ApiProject): Project {
     version: view.version,
     stageKey: view.stageKey,
     status: view.status,
+    hasOpenPostArchiveTask: view.hasOpenPostArchiveTask,
+    archiveKind: view.archiveKind ?? null,
     accessLevel: view.accessLevel,
     groupAccessLevel: view.groupAccessLevel,
     deletedAt: view.deletedAt === null ? null : formatDateTime(view.deletedAt),

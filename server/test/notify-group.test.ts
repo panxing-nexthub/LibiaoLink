@@ -87,6 +87,8 @@ function stakeholderRow(overrides: Partial<GroupStakeholderRow> = {}): GroupStak
 }
 
 class FakeGroupRepository {
+  archivedWithoutAcceptance = false;
+  async isArchivedWithoutAcceptance(): Promise<boolean> { return this.archivedWithoutAcceptance; }
   readonly archive = new FakeNotifyDeliveryArchive();
   groups: WecomGroupRow[] = [];
 
@@ -931,6 +933,15 @@ describe("NotifyGroupService.consume（outbox notify.group → 投递 → 三分
     expect(areAllProjectTasksOnTime([row({ actualEnd: null, plannedEnd: null, onTime: true })], at)).toBe(true);
   });
 
+  it("异常归档后跳过已排队的验收喜报和图片", async () => {
+    const { service, repo, aibot } = makeService();
+    repo.archivedWithoutAcceptance = true;
+    repo.groups.push(groupRow({ projectId: PROJECT_ID, chatid: CHATID, activatedAt: AT }));
+    expect(await service.consume(claimedRow(payload({ templateCode: "R06_GROUP" })))).toEqual({ outcome: "done" });
+    expect(aibot.sends).toHaveLength(0);
+    expect(aibot.imageSends).toHaveLength(0);
+  });
+
   it("R06_GROUP：文字送达后追加配置的喜报海报，投递记录累计两条消息", async () => {
     const dir = mkdtempSync(join(tmpdir(), "libiaolink-r06-"));
     const file = join(dir, "喜报.png");
@@ -1295,7 +1306,7 @@ describe("NotifyGroupService.consume（outbox notify.group → 投递 → 三分
     repo.r06PosterData = {
       projectCode: "LBGW-20260331-1459",
       projectName: "UK-VANILLA-AIRROB",
-      status: "done",
+      status: "archived",
       managers: ["贾海洋"],
       participants: ["贾海洋", "张亚庆", "高云"],
       taskTotal: 44,
@@ -1351,7 +1362,7 @@ describe("NotifyGroupService.consume（outbox notify.group → 投递 → 三分
       repo.r06PosterData = {
         projectCode: "LBGW-20260331-1459",
         projectName: "UK-VANILLA-AIRROB",
-        status: "done",
+        status: "archived",
         managers: ["贾海洋"],
         participants: ["贾海洋"],
         taskTotal: 1,

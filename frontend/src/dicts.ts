@@ -148,7 +148,37 @@ export function accentOfItem(item: DictItem | undefined): { color: string; text:
   };
 }
 
-/** 项目类型主题色：按码取字典条目的 accent / accentText（卡片、类型徽标、色点共用）。 */
-export function typeAccent(dicts: Dicts, code: string): { color: string; text: string } {
-  return accentOfItem(dicts.projectType.find((entry) => entry.code === code));
+// 组合键使用排序后的字典码，与勾选顺序、界面语言和项目列表顺序无关。
+const COMBINATION_SWATCHES = new Map<string, DictAccent["key"]>([
+  ["3d分拣,t-sort", "orange"],
+  ["t-sort,飞箱", "violet"],
+  ["3d分拣,飞箱", "cyan"],
+  ["3d分拣,t-sort,飞箱", "pink"],
+]);
+
+/** 单类型沿用字典色；多类型从同一色盘里挑选独立主题色。 */
+export function projectAccent(dicts: Dicts, project: { projectType: string; projectTypes?: readonly string[] }): { color: string; text: string } {
+  const codes = project.projectTypes ?? [project.projectType];
+  if (codes.length < 2) {
+    return accentOfItem(dicts.projectType.find((item) => item.code === project.projectType));
+  }
+
+  const key = codes.map((code) => code.toLowerCase()).sort().join(",");
+  const used = new Set(dicts.projectType.map((item) => accentOfItem(item).color.toLowerCase()));
+  const free = DICT_ACCENT_PALETTE.filter((swatch) => !used.has(swatch.color));
+  const palette = free.length ? free : DICT_ACCENT_PALETTE;
+
+  const preferred = [...COMBINATION_SWATCHES.values()];
+  const spare = palette.filter((swatch) => !preferred.includes(swatch.key));
+  // 优先使用约定色；若已被单类型占用，按固定的组合顺序从空闲色中补位。
+  for (const [combination, swatchKey] of COMBINATION_SWATCHES) {
+    const swatch = palette.find((entry) => entry.key === swatchKey) ?? spare.shift();
+    if (combination === key && swatch) return swatch;
+  }
+
+  // 自定义组合按类型码选色；有限色盘用尽后可复用颜色，标签仍显示完整组合。
+  const choices = spare.length ? spare : palette;
+  let hash = 0;
+  for (const char of key) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0;
+  return choices[hash % choices.length]!;
 }

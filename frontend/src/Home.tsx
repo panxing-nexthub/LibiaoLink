@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
-import { keepLiveOrder } from "./liveSync";
 import { useLiveRefresh } from "./useLiveRefresh";
 import { ApiError } from "./api";
 import { cardBorderOf, cardTintOf, useBackgroundTier, useCardWatermark } from "./backgroundTier";
@@ -17,10 +16,10 @@ import { ProjectModal, type ProjectDraft } from "./components/ProjectModal";
 import { SearchInput } from "./components/SearchInput";
 import { Toast, ToastConfirm } from "./components/Toast";
 import { useFocusTrap } from "./components/useFocusTrap";
-import { dictLabel, typeAccent, type Dicts } from "./dicts";
+import { dictLabel, projectAccent, type Dicts } from "./dicts";
 import { directoryMemberOptions, directoryName, type DirectoryUser } from "./directory";
 import { readStoredSidebarOpen, saveFiltersPref, saveSidebarPref } from "./homePrefs";
-import { EMPTY_FACETS, buildListQuery, fetchProjectFacets, fetchProjectList, fetchProjectMapOverview, toUiProject, type ProjectExportFormat, type ProjectFacets, type ProjectMapOverviewItem } from "./projectApi";
+import { EMPTY_FACETS, buildListQuery, fetchProjectFacets, fetchProjectList, fetchProjectMapOverview, toUiProject, type ApiProject, type ProjectExportFormat, type ProjectFacets, type ProjectMapOverviewItem } from "./projectApi";
 import { newSavedFilterId, sameCriteria } from "./savedFilters";
 import type { FilterCriteria, SavedFilter } from "./savedFilters";
 import { buildListHash, EMPTY_LIST_QUERY, hasListFilters, initialRouteRestored, openProject, replaceListQuery, useHashRoute } from "./useHashRoute";
@@ -123,7 +122,7 @@ function mapOverviewMatchesListRequest(project: ProjectMapOverviewItem, filters:
   if (filters.regions.length > 0 && !filters.regions.includes(project.region)) {
     return false;
   }
-  if (filters.projectTypes.length > 0 && !filters.projectTypes.includes(project.projectType)) {
+  if (filters.projectTypes.length > 0 && !(project.projectTypes ?? [project.projectType]).some((code) => filters.projectTypes.includes(code))) {
     return false;
   }
   if (filters.statuses.length > 0 && !filters.statuses.includes(project.status)) {
@@ -131,6 +130,16 @@ function mapOverviewMatchesListRequest(project: ProjectMapOverviewItem, filters:
   }
   const keyword = filters.q.trim().toLocaleLowerCase();
   return keyword === "" || (project.name + "\n" + project.code).toLocaleLowerCase().includes(keyword);
+}
+
+function projectSpaceCards(rows: ApiProject[]): Project[] {
+  // 各页已按选定的创建时间合并。稳定排序保留每组内的服务端顺序。
+  const priority = (project: Project): number => {
+    if (project.status === "active") return 0;
+    if (project.status === "archived") return project.hasOpenPostArchiveTask ? 0 : 2;
+    return 1;
+  };
+  return rows.map(toUiProject).sort((a, b) => priority(a) - priority(b));
 }
 
 export default function Home({ me, dicts, directory, managerCandidates, dictTools, canManageDicts, canDeleteProject, canCreateProject, canUpdateProject, canExportProject, onExportProject, exportingProjectId, onDeleteProject, onCreate, onEdit, refreshToken, savedFilters, onSavedFiltersChange }: HomeProps) {
@@ -277,7 +286,7 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
       })),
     ]);
     return () => {
-      setItems((previous) => keepLiveOrder(previous, page.items.map(toUiProject)));
+      setItems(projectSpaceCards(page.items));
       setTotal(page.total);
       setFacets({ total: managers.total, region: regions.region, projectType: types.projectType, managerId: managers.managerId, stageKey: regions.stageKey, status: statuses.status });
       setSavedCounts(Object.fromEntries(counts));
@@ -301,7 +310,7 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
         if (cancelled) {
           return;
         }
-        setItems(page.items.map(toUiProject));
+        setItems(projectSpaceCards(page.items));
         setTotal(page.total);
         setFacets({
           total: managerFacets.total,
@@ -451,7 +460,7 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
         activeFilters.statuses,
         (status) => projectStatusTextOf(locale, status),
         PROJECT_STATUS_VALUES.slice(),
-      ),
+      ).filter(({ value }) => value !== "done"),
     [activeFilters.statuses, facets.status, locale],
   );
   const newestDay = useMemo(
@@ -840,63 +849,69 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
         ) : null}
 
         <div className="grid grid-cols-1 gap-6 @md:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
-          {items.map((project) => (
-            <div
-              key={project.id}
-              data-live-row={project.id}
-              role="link"
-              tabIndex={0}
-              aria-label={t("home.openAria", { code: project.code })}
-              onClick={() => openProject(project.id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  openProject(project.id);
-                }
-              }}
-              className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
-            >
-              <Card
-                seqNo={project.seqNo}
-                code={project.code}
-                description={project.description}
-                watermark={cardWatermark ? regionWatermarkText(locale, dicts, project.region) : undefined}
-                watermarkBleed={locale === "zh"}
-                tint={cardTintOf(backgroundTier, typeAccent(dicts, project.projectType).color)}
-                tintBorder={cardBorderOf(backgroundTier, typeAccent(dicts, project.projectType).color)}
-                vividInk={backgroundTier === "vivid"}
-                typeLabel={projectTypeText(locale, dictLabel(dicts, "projectType", project.projectType))}
-                status={project.status}
-                statusText={projectStatusTextOf(locale, project.status)}
-                accentColor={typeAccent(dicts, project.projectType).color}
-                accentText={typeAccent(dicts, project.projectType).text}
-                managerNames={project.managerNames}
-                time={project.createdAt}
-                onEdit={
-                  canUpdateProject && project.accessLevel === "edit"
-                    ? () => {
-                        onEdit(project);
-                      }
-                    : undefined
-                }
-                onExport={
-                  canExportProject && project.accessLevel === "edit"
-                    ? (format) => {
-                        onExportProject(project, format);
-                      }
-                    : undefined
-                }
-                exporting={exportingProjectId === project.id}
-                onDelete={
-                  canDeleteProject && project.accessLevel === "edit"
-                    ? () => {
-                        onDeleteProject(project);
-                      }
-                    : undefined
-                }
-              />
-            </div>
-          ))}
+          {items.map((project) => {
+            const accent = projectAccent(dicts, project);
+            return (
+              <div
+                key={project.id}
+                data-live-row={project.id}
+                role="link"
+                tabIndex={0}
+                aria-label={t("home.openAria", { code: project.code })}
+                aria-describedby={"card-status-" + project.id}
+                onClick={() => openProject(project.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openProject(project.id);
+                  }
+                }}
+                className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+              >
+                <Card
+                  seqNo={project.seqNo}
+                  code={project.code}
+                  description={project.description}
+                  watermark={cardWatermark ? regionWatermarkText(locale, dicts, project.region) : undefined}
+                  watermarkBleed={locale === "zh"}
+                  tint={cardTintOf(backgroundTier, accent.color)}
+                  tintBorder={cardBorderOf(backgroundTier, accent.color)}
+                  vividInk={backgroundTier === "vivid"}
+                  typeLabel={project.projectTypes.map((code) => projectTypeText(locale, dictLabel(dicts, "projectType", code))).join(" + ")}
+                  status={project.status}
+                  hasOpenPostArchiveTask={project.hasOpenPostArchiveTask}
+                  archiveKind={project.archiveKind}
+                  statusId={"card-status-" + project.id}
+                  accentColor={accent.color}
+                  accentText={accent.text}
+                  managerNames={project.managerNames}
+                  time={project.createdAt}
+                  onEdit={
+                    canUpdateProject && project.accessLevel === "edit"
+                      ? () => {
+                          onEdit(project);
+                        }
+                      : undefined
+                  }
+                  onExport={
+                    canExportProject && project.accessLevel === "edit"
+                      ? (format) => {
+                          onExportProject(project, format);
+                        }
+                      : undefined
+                  }
+                  exporting={exportingProjectId === project.id}
+                  onDelete={
+                    canDeleteProject && project.accessLevel === "edit"
+                      ? () => {
+                          onDeleteProject(project);
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+            );
+          })}
         </div>
 
         {total > items.length ? (

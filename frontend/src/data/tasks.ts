@@ -92,6 +92,8 @@ export type ProjectTask = {
   finalizedAt: string | null;
   /** 服务端逐任务能力投影；写回响应缺省时沿用上一行。 */
   capabilities?: TaskCapabilities;
+  /** 项目归档后，除未完成的手工临时任务外均锁定；由项目详情按同一业务口径标记，用于区分归档与普通只读提示。 */
+  archiveLocked?: boolean;
 };
 
 /** 能力缺失（旧响应 / 非任务接口来源）一律按只读处理，避免前端误开写入口。 */
@@ -140,6 +142,16 @@ export function progressStep(progress: number, steps: number = PROGRESS_STEPS): 
 /** 完成态（手动改成非完成态时，实际完成日期要一并清空 —— Push 67 业务定案）。 */
 export function isCompleteStatus(status: TaskStatus): boolean {
   return status === "已完成" || status === "提前完成";
+}
+
+/** 手工临时任务：与服务端 isTemporaryTask 同口径（未归入阶段、无流程节点 / 节点库来源）。 */
+export function isTemporaryTask(task: Pick<ProjectTask, "stageKey" | "nodeId" | "sourceNodeId">): boolean {
+  return task.stageKey === null && task.nodeId === null && task.sourceNodeId === null;
+}
+
+/** 归档项目唯一保留写能力的任务：未完成的手工临时任务。 */
+export function isOpenTemporaryTask(task: Pick<ProjectTask, "stageKey" | "nodeId" | "sourceNodeId" | "status">): boolean {
+  return isTemporaryTask(task) && !isCompleteStatus(task.status);
 }
 
 /** 任务是否已完成（以服务端展示态为准）。 */

@@ -448,7 +448,9 @@ export class ProjectImportService implements OnModuleInit {
     if (region === "") {
       throw new AppError("VALIDATION_FAILED", "项目地区不能为空（源表识别不出时必须由面板选择）");
     }
-    const projectType = body.projectType.trim() === "" ? (placement.projectType ?? "未分类") : body.projectType.trim();
+    // 升级前生成的预览只有 projectType，可以在预览有效期内继续提交。
+    const detectedTypes = placement.projectTypes ?? (placement.projectType ? [placement.projectType] : []);
+    const selectedTypes = body.projectTypes ?? (body.projectType.trim() ? [body.projectType.trim()] : detectedTypes);
 
     // 节点采用预览时的匹配快照，人工选择与冲突处理在上传图片和写入前校验。
     const resolution = await this.resolveAccounts(collectPeople(parse));
@@ -619,7 +621,8 @@ export class ProjectImportService implements OnModuleInit {
           name: placement.name,
           customer: null,
           region,
-          projectType,
+          projectType: selectedTypes[0] ?? "未分类",
+          additionalProjectTypes: selectedTypes.slice(1),
           managerIds,
           stageKey: "presale",
           description: null,
@@ -637,6 +640,7 @@ export class ProjectImportService implements OnModuleInit {
       const imported = await this.flow.importSnapshot(tx, {
         projectId: projectRow.id,
         projectType: projectRow.projectType,
+        additionalProjectTypes: projectRow.additionalProjectTypes,
         at,
       });
       if (projectRow.stageKey !== imported.activeStageKey) {
@@ -839,7 +843,7 @@ export class ProjectImportService implements OnModuleInit {
           { field: "code", from: null, to: projectRow.code },
           { field: "name", from: null, to: projectRow.name },
           { field: "region", from: null, to: projectRow.region },
-          { field: "projectType", from: null, to: projectRow.projectType },
+          { field: "projectTypes", from: null, to: [projectRow.projectType, ...projectRow.additionalProjectTypes] },
           { field: "managerIds", from: null, to: projectRow.managerIds },
           { field: "stageKey", from: null, to: imported.activeStageKey },
         ],

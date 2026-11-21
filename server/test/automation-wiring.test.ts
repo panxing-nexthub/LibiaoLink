@@ -324,7 +324,7 @@ describe("规则事件消费（S7-4 接线 · evaluateEventMessages → notify.m
         projectId: "p-1",
         projectCode: "LBUSA-20261014-002",
         projectName: "美国仓储公司订单",
-        projectStatus: "done",
+        projectStatus: "archived",
         projectVersion: 4,
       }),
     );

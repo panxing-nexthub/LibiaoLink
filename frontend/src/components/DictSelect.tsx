@@ -18,7 +18,7 @@ type DictAddText = {
 };
 
 type DictSelectProps = {  /** 当前值（字典码 / 存量自定义值）。 */
-  value: string;
+  values: string[];
   /** 字典项（GET /api/v1/dicts，已按 sort 升序、只含启用项）。 */
   items: DictItem[];
   ariaLabel: string;
@@ -36,7 +36,7 @@ type DictSelectProps = {  /** 当前值（字典码 / 存量自定义值）。 *
   onDelete?: (code: string) => Promise<string | null>;
   /** 删除按钮的无障碍名（如「删除地区 华东」）。 */
   deleteLabelOf?: (code: string, name: string) => string;
-  onChange: (value: string) => void;
+  onChange: (values: string[]) => void;
 };
 
 /**
@@ -54,7 +54,7 @@ function deleteBlockReason(item: DictItem, inUseText: (n: number) => string): st
 
 function buildOptions(
   items: DictItem[],
-  value: string,
+  values: string[],
   renderContent: ((name: string, item: DictItem | null) => ReactNode) | undefined,
   inUseText: (n: number) => string,
 ): SelectOption[] {
@@ -73,8 +73,8 @@ function buildOptions(
       deleteDisabledReason: deleteBlockReason(item, inUseText)
     });
   }
-  if (value !== "" && !seen.has(value)) {
-    options.push({ value, label: labelOf(value, null), deletable: false });
+  for (const value of values) {
+    if (!seen.has(value)) options.push({ value, label: labelOf(value, null), deletable: false });
   }
   return options;
 }
@@ -104,13 +104,13 @@ function availableAccents(items: DictItem[], options: readonly DictAccent[]): re
  * - 名称校验：非空、≤ DICT_NAME_MAX 字、不含英文逗号（filter[...] 是多值逗号分隔，逗号会被拆成两个筛选值）；
  *   输入的名称已存在时直接选中、不重复添加。
  */
-export function DictSelect({ value, items, ariaLabel, placeholder, renderContent, onAdd, addText, palette, onDelete, deleteLabelOf, onChange }: DictSelectProps) {
+export function DictSelect({ values, items, ariaLabel, placeholder, renderContent, onAdd, addText, palette, onDelete, deleteLabelOf, onChange }: DictSelectProps) {
   const t = useT();
   const locale = useLocale();
   /** 候选 = 字典项（按 sort 升序）→ 当前值兜底（不在字典里的存量值），按值去重。 */
   const options = useMemo(
-    () => buildOptions(items, value, renderContent, (n) => textOf(locale, "dictSelect.inUse", { n })),
-    [items, value, renderContent, locale],
+    () => buildOptions(items, values, renderContent, (n) => textOf(locale, "dictSelect.inUse", { n })),
+    [items, values, renderContent, locale],
   );
   /** 浮层高度估算：选项最多按 8 行 + 顶部「＋ 添加」一行（超出部分列表内滚动）。 */
   const popoverHeight = useMemo(() => {
@@ -130,7 +130,7 @@ export function DictSelect({ value, items, ariaLabel, placeholder, renderContent
   const inputRef = useRef<HTMLInputElement | null>(null);
   /** 打开浮层只把选中项带进可视区一次（用户自己滚过之后不再打扰）。 */
   const listScrollDone = useRef(false);
-  const selected = options.find((option) => option.value === value) ?? null;
+  const optionByCode = new Map(options.map((option) => [option.value, option]));
   const nameOf = (code: string): string => {
     const item = items.find((entry) => entry.code === code);
     return item === undefined ? code : item.name;
@@ -217,7 +217,7 @@ export function DictSelect({ value, items, ariaLabel, placeholder, renderContent
     }
     const existed = options.find((option) => option.value === name);
     if (existed !== undefined) {
-      onChange(existed.value);
+      if (!values.includes(existed.value)) onChange([...values, existed.value]);
       close();
       return;
     }
@@ -237,7 +237,7 @@ export function DictSelect({ value, items, ariaLabel, placeholder, renderContent
       setError(message);
       return;
     }
-    onChange(name);
+    onChange([...values, name]);
     close();
   };
 
@@ -291,10 +291,12 @@ export function DictSelect({ value, items, ariaLabel, placeholder, renderContent
         }}
         className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-left text-sm transition hover:border-zinc-300 hover:bg-zinc-50"
       >
-        {selected === null ? (
+        {values.length === 0 ? (
           <span className="truncate text-zinc-400">{placeholder}</span>
         ) : (
-          <span className="truncate font-medium text-zinc-800">{selected.label}</span>
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-medium text-zinc-800">
+            {values.map((code) => <span key={code}>{optionByCode.get(code)?.label}</span>)}
+          </span>
         )}
         {/* 箭头朝右：与「贴右侧弹出」的落点同向（Push 173）。 */}
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="ml-auto h-4 w-4 shrink-0 -rotate-90 text-zinc-400">
@@ -408,7 +410,7 @@ export function DictSelect({ value, items, ariaLabel, placeholder, renderContent
                   <div className="max-h-[280px] overflow-y-auto">
                     <OptionList
                       options={options}
-                      value={value}
+                      value={values}
                       ariaLabel={ariaLabel}
                       onDeleteOption={
                         onDelete === undefined
@@ -423,8 +425,7 @@ export function DictSelect({ value, items, ariaLabel, placeholder, renderContent
                           : (option) => deleteLabelOf(option.value, nameOf(option.value))
                       }
                       onPick={(next) => {
-                        onChange(next);
-                        close();
+                        onChange(values.includes(next) ? values.filter((code) => code !== next) : [...values, next]);
                       }}
                     />
                   </div>

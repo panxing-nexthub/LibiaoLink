@@ -1,3 +1,13 @@
+> **2026-11-21 17:10 仪表盘新图表鼠标悬停交互（测试机 frontend-only · test-20261121-1710-px-dashboard-hover-744c5034）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `744c5034`；测试机 release = `test-20261121-1710-px-dashboard-hover-744c5034`，previous = `test-20261121-1700-px-dashboard-slide-0bbbd2ad`；staging = `/srv/data/deploy-test-20261121-1710-px-dashboard-hover-744c5034/staging`。
+
+> **改动 / 验收**：项目数量柱、负责人阶段分段、启动年份柱、启动年份饼图及饼图图例统一增加白卡悬停卡与悬停高亮；年份组 / 人员列可显示全部阶段及合计，饼图显示项目数与占比。浮层通过 Portal 固定视口，避免被滑轨裁切；隐藏屏使用 `overflow: clip` 修复程序化滚动串屏。浏览器实测：项目类型柱（2026 / T-sort / 4）、负责人分段（刘安楠 / 售前规划 / 6）、启动年份柱（2026 / 售前规划 / 4）、饼图图例（2026 / 售前规划 / 4 / 80%）。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,606,276 B / SHA-256 `d03eaf83…`、678 文件；`build-info.json` 398 B / `ebbbdfda…`；`frontend-files.sha256` 91,081 B / `6811f464…`；`release-files.sha256` 254 B / `011c5937…`。线上 1009 → 1012 文件，新增 3 个 hashed 资源并原子替换 `index.html`，旧资源保留；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `725fb4d4…`、主包 `assets/index-C9IZSKBC.js` 2,533,866 B / `750a509c…`、CSS `assets/index-BgTBmYNj.css` 245,995 B / `a7d8c0fc…`、ES `assets/es-Di36gr0P.js` `77b24df4…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1710-px-dashboard-hover-744c5034`，前端 133,883,003 B / `be1ff0f8…`、原 manifest 4,606 B / `236b580a…`，SHA256SUMS 3 / 3 通过；新 manifest 4,490 B / `e5914fbc…`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 17:00 仪表盘全部项目与单项目统一滑动切换（测试机 frontend-only · test-20261121-1700-px-dashboard-slide-0bbbd2ad）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `0bbbd2ad`；测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1700-px-dashboard-slide-0bbbd2ad`，previous = `test-20261121-1630-px-dashboard-all-projects-490d5825`；staging = `/srv/data/deploy-test-20261121-1655-px-dashboard-slide-0bbbd2ad/staging`。
 
 > **改动 / 验收**：全部项目改为 6 屏刚体滑轨（问题归纳 / 项目数量 / 项目经理 / 销售负责人 / 规划负责人 / 启动年份），单项目原 6 视图改同一滑轨；滚轮、方向键 / PageUp / PageDown、底部单选按钮均可翻屏，首屏向上仍返回地图、末屏向下停住。浏览器实测全部项目 6 屏与底部切换、单项目「数据总览 → 项目进度」滑动；验后恢复账号偏好（移除 `hubDashProject`、`hubDashView=overview`）。仅前端变更，api / worker / database / shared 未改。

@@ -1,7 +1,6 @@
 import type { TextKey } from "../i18n";
 import { stageText, useLocale, useT } from "../i18n";
 import {
-  DASHBOARD_PROJECT_ROLES,
   DASHBOARD_PROJECT_STAGE_BUCKETS,
   DASHBOARD_PROJECT_STAGE_COLORS,
   dashboardProjectStageLabel,
@@ -99,7 +98,7 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
                       <title>{rawLabel + " · " + stageLabel + " · " + count}</title>
                     </rect>
                     {height >= 11 ? (
-                      <text x={center} y={y + height / 2 + 3.7} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={bucket === "purchase" || bucket === "trial" ? "#313033" : "#ffffff"} pointerEvents="none">{count}</text>
+                      <text x={center} y={y + height / 2 + 3.7} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={bucket === "purchase" ? "#313033" : "#ffffff"} pointerEvents="none">{count}</text>
                     ) : null}
                   </g>
                 );
@@ -116,34 +115,32 @@ function RoleStageChart({ role, stats }: { readonly role: DashboardProjectRole; 
   );
 }
 
-/**
- * 三类负责人 × 最新阶段：三张独立竖排堆叠柱状图，x = 人员，段色 = 最新阶段，段内写项目数。
- * 同一项目同一角色下同一人只计一次；未配置对应负责人的项目落「待分配」列。
- */
-export function HubDashRoleStages({ insights }: { readonly insights: DashboardProjectInsights }) {
+/** 十二个最新阶段色例：负责人页与启动年份页共用（启动年份页自身也有一份，保持图内布局）。 */
+export function HubDashProjectStageLegend() {
   const t = useT();
   const locale = useLocale();
   return (
-    <div className="hub-dash-role-section">
-      <div className="hub-dash-role__legend" aria-label={t("hub.dash.projects.stageLegend")}>
-        {DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket) => (
-          <span key={bucket} className="hub-dash-role__legendItem">
-            <i style={{ background: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }} />
-            {stageText(locale, dashboardProjectStageLabel(bucket))}
-          </span>
-        ))}
-      </div>
-      <div className="hub-dash-role-list">
-        {DASHBOARD_PROJECT_ROLES.map((role) => {
-          const stats = insights.roles.find((item) => item.role === role);
-          return (
-            <section key={role} className="hub-dash-role-card" data-role={role}>
-              <h4 className="hub-dash-role-card__title">{t(ROLE_TITLE_KEYS[role])}</h4>
-              <RoleStageChart role={role} stats={stats} />
-            </section>
-          );
-        })}
-      </div>
+    <div className="hub-dash-role__legend" aria-label={t("hub.dash.projects.stageLegend")}>
+      {DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket) => (
+        <span key={bucket} className="hub-dash-role__legendItem">
+          <i style={{ background: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }} />
+          {stageText(locale, dashboardProjectStageLabel(bucket))}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 单一角色的「人员 × 最新阶段」堆叠柱图，供全部项目滑轨的一屏使用。
+ * 同一项目同一角色同一人去重；未配置对应负责人落「待分配」。
+ */
+export function HubDashRoleStage({ role, insights }: { readonly role: DashboardProjectRole; readonly insights: DashboardProjectInsights }) {
+  const stats = insights.roles.find((item) => item.role === role);
+  return (
+    <div className="hub-dash-role-section hub-dash-role-section--slide">
+      <HubDashProjectStageLegend />
+      <RoleStageChart role={role} stats={stats} />
     </div>
   );
 }

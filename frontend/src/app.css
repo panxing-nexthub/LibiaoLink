@@ -4888,7 +4888,7 @@ body {
 }
 
 .hub-dash-combined__panel[data-panel="project-count"] {
-  flex-grow: 1.45;
+  flex-grow: 1.15;
 }
 
 .hub-dash-combined__panel > .hub-dash-all__heading {

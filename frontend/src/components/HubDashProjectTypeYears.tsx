@@ -5,12 +5,12 @@ import { DASHBOARD_YEAR_WINDOW, DashboardYearNavigator, type DashboardYearKey } 
 import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
 
 const VIEW_W = 1200;
-const VIEW_H = 360;
+const VIEW_H = 280;
 const PLOT_X0 = 88;
 const PLOT_X1 = 1168;
 const PLOT_TOP = 22;
-const AXIS_Y = 296;
-const TICK_LABEL_Y = 322;
+const AXIS_Y = 224;
+const TICK_LABEL_Y = 250;
 const BAR_MAX_W = 46;
 const GROUP_INSET_RATIO = 0.16;
 

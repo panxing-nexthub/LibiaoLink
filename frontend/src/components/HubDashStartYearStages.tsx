@@ -10,13 +10,13 @@ import {
 } from "../data/dashboardProjectInsights";
 
 const BAR_W = 1400;
-const BAR_H = 400;
+const BAR_H = 320;
 const LEFT = 64;
 const RIGHT = 28;
 const TOP = 24;
-const AXIS_Y = 314;
-const LABEL_Y = 338;
-const LABEL_LINE_H = 14;
+const AXIS_Y = 254;
+const LABEL_Y = 276;
+const LABEL_LINE_H = 13;
 const BAR_MAX_W = 58;
 const BAR_INSET_RATIO = 0.22;
 

@@ -1703,41 +1703,57 @@ const PM_GANTT_SCALES: Record<
   year: { labelKey: "pm.gantt.scale.year", dayWidth: 4.5, minDays: 365, paddingDays: 30, gridDays: 30.44 },
 };
 const PM_GANTT_SCALE_KEYS: readonly PmGanttScale[] = ["week", "month", "quarter", "year"];
-const PM_GANTT_BACK_TO_KEYS: Record<PmGanttScale, TextKey> = {
-  week: "pm.gantt.backTo.week",
-  month: "pm.gantt.backTo.month",
-  quarter: "pm.gantt.backTo.quarter",
-  year: "pm.gantt.backTo.year",
+type PmGanttTimeFilter = {
+  startIso: string;
+  endIso: string;
+  period: PmGanttScale;
+  anchorIso: string;
 };
-
-type PmGanttTimeFilter = { startIso: string; endIso: string };
 const PM_GANTT_INACTIVE_STAGE_KEYS = new Set(["not_started", "archived", "terminated"]);
 
-const pmGanttPeriodRangeOf = (scale: PmGanttScale, iso: string): PmGanttTimeFilter => {
+const pmGanttDateWithMonthOffset = (iso: string, offsetMonths: number): string => {
   const date = new Date(pmGanttTimeOf(iso));
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth();
+  const day = date.getUTCDate();
+  const targetMonthEnd = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + offsetMonths + 1, 0),
+  );
+  targetMonthEnd.setUTCDate(Math.min(day, targetMonthEnd.getUTCDate()));
+  return pmGanttIsoOf(targetMonthEnd.getTime());
+};
+
+const pmGanttPeriodRangeOf = (
+  scale: PmGanttScale,
+  anchorIso: string,
+): PmGanttTimeFilter => {
   if (scale === "week") {
-    const startTime = pmGanttTimeOf(iso) - ((date.getUTCDay() + 6) % 7) * PM_GANTT_DAY_MS;
-    return { startIso: pmGanttIsoOf(startTime), endIso: pmGanttIsoOf(startTime + 6 * PM_GANTT_DAY_MS) };
-  }
-  if (scale === "month") {
     return {
-      startIso: pmGanttIsoOf(Date.UTC(year, month, 1)),
-      endIso: pmGanttIsoOf(Date.UTC(year, month + 1, 0)),
+      startIso: pmGanttAddDays(anchorIso, -7),
+      endIso: pmGanttAddDays(anchorIso, 7),
+      period: scale,
+      anchorIso,
     };
   }
-  if (scale === "quarter") {
-    const quarterStart = Math.floor(month / 3) * 3;
-    return {
-      startIso: pmGanttIsoOf(Date.UTC(year, quarterStart, 1)),
-      endIso: pmGanttIsoOf(Date.UTC(year, quarterStart + 3, 0)),
-    };
-  }
+  const monthOffset = scale === "month" ? 1 : scale === "quarter" ? 3 : 12;
   return {
-    startIso: pmGanttIsoOf(Date.UTC(year, 0, 1)),
-    endIso: pmGanttIsoOf(Date.UTC(year, 11, 31)),
+    startIso: pmGanttDateWithMonthOffset(anchorIso, -monthOffset),
+    endIso: pmGanttDateWithMonthOffset(anchorIso, monthOffset),
+    period: scale,
+    anchorIso,
   };
+};
+
+const pmGanttShiftedPeriodRangeOf = (
+  range: PmGanttTimeFilter,
+  direction: -1 | 1,
+): PmGanttTimeFilter => {
+  if (range.period === "week") {
+    return pmGanttPeriodRangeOf(range.period, pmGanttAddDays(range.anchorIso, direction * 7));
+  }
+  const monthOffset = range.period === "month" ? 1 : range.period === "quarter" ? 3 : 12;
+  return pmGanttPeriodRangeOf(
+    range.period,
+    pmGanttDateWithMonthOffset(range.anchorIso, direction * monthOffset),
+  );
 };
 
 const pmGanttRowIntersectsRange = (row: PmRow, range: PmGanttTimeFilter): boolean => {
@@ -2426,8 +2442,6 @@ function PmImplementationGantt({
   const [ganttTimeFilter, setGanttTimeFilter] = useState<PmGanttTimeFilter | null>(null);
   const [ganttOnlyInProgress, setGanttOnlyInProgress] = useState(false);
   const [ganttTimeFilterOpen, setGanttTimeFilterOpen] = useState(false);
-  const [ganttTimeFilterDraftStart, setGanttTimeFilterDraftStart] = useState("");
-  const [ganttTimeFilterDraftEnd, setGanttTimeFilterDraftEnd] = useState("");
   const ganttTimeFilterPopoverRef = useRef<HTMLDivElement | null>(null);
   const ganttFilteredRows = useMemo(
     () =>
@@ -2575,7 +2589,6 @@ function PmImplementationGantt({
   const ganttScrollShellRef = useRef<HTMLDivElement | null>(null);
   const ganttScrollViewportRef = useRef<HTMLDivElement | null>(null);
   const [ganttScrollLeft, setGanttScrollLeft] = useState(0);
-  const [ganttScrollMax, setGanttScrollMax] = useState(0);
   const [ganttPanActive, setGanttPanActive] = useState(false);
   const ganttPanRef = useRef<{
     pointerId: number;
@@ -2623,25 +2636,34 @@ function PmImplementationGantt({
       return next;
     });
   };
+  const applyGanttPeriodTimeFilter = (
+    scale: PmGanttScale,
+    closePopover = true,
+  ): void => {
+    const range = pmGanttPeriodRangeOf(scale, pmGanttTodayIso());
+    setGanttTimeFilter(range);
+    setGanttAnchorIso(range.startIso);
+    if (closePopover) {
+      setGanttTimeFilterOpen(false);
+    }
+    requestGanttScroll(range.startIso);
+  };
+  const shiftGanttTimeFilter = (direction: -1 | 1): void => {
+    if (ganttTimeFilter === null) {
+      return;
+    }
+    const range = pmGanttShiftedPeriodRangeOf(ganttTimeFilter, direction);
+    setGanttTimeFilter(range);
+    setGanttAnchorIso(range.startIso);
+    requestGanttScroll(range.startIso);
+  };
   const goToGanttCurrent = (): void => {
     const today = pmGanttTodayIso();
-    if (
-      ganttTimeFilter !== null &&
-      (today < ganttTimeFilter.startIso || today > ganttTimeFilter.endIso)
-    ) {
-      setGanttTimeFilter(null);
+    if (ganttTimeFilter !== null) {
+      setGanttTimeFilter(pmGanttPeriodRangeOf(ganttTimeFilter.period, today));
     }
     setGanttAnchorIso(today);
     requestGanttScroll(today);
-  };
-  const applyGanttTimeFilter = (range: PmGanttTimeFilter): void => {
-    if (range.startIso === "" || range.endIso === "" || range.startIso > range.endIso) {
-      return;
-    }
-    setGanttTimeFilter(range);
-    setGanttAnchorIso(range.startIso);
-    setGanttTimeFilterOpen(false);
-    requestGanttScroll(range.startIso);
   };
   const clearGanttTimeFilter = (): void => {
     const today = pmGanttTodayIso();
@@ -2650,20 +2672,16 @@ function PmImplementationGantt({
     setGanttTimeFilterOpen(false);
     requestGanttScroll(today);
   };
-  const applyGanttPeriodTimeFilter = (scale: PmGanttScale): void => {
-    applyGanttTimeFilter(pmGanttPeriodRangeOf(scale, pmGanttTodayIso()));
+  const selectGanttPeriodMode = (): void => {
+    if (ganttTimeFilter === null) {
+      applyGanttPeriodTimeFilter(ganttScale, false);
+    }
   };
   const openGanttTimeFilter = (): void => {
     if (ganttTimeFilterOpen) {
       setGanttTimeFilterOpen(false);
       return;
     }
-    const initial = ganttTimeFilter ?? {
-      startIso: ganttVisibleRange.startIso,
-      endIso: ganttVisibleRange.endIso,
-    };
-    setGanttTimeFilterDraftStart(initial.startIso);
-    setGanttTimeFilterDraftEnd(initial.endIso);
     setGanttTimeFilterOpen(true);
   };
 
@@ -2715,7 +2733,6 @@ function PmImplementationGantt({
         }
         setGanttScrollLeft(viewport.scrollLeft);
         setGanttViewportWidth(viewport.clientWidth);
-        setGanttScrollMax(Math.max(0, viewport.scrollWidth - viewport.clientWidth));
       });
     };
     sync();
@@ -2832,7 +2849,7 @@ function PmImplementationGantt({
         ganttScrollViewportRef.current = null;
       }
     };
-  }, []);
+  }, [groups.length]);
 
   useEffect(() => {
     if (!ganttResizing) {
@@ -2988,19 +3005,6 @@ function PmImplementationGantt({
       resetGanttWidth();
     }
   };
-
-  const ganttImplementationEndIso = useMemo(() => {
-    const projectEnds = groups.flatMap((group) =>
-      group.items.flatMap((item) => (item.end === null ? [] : [item.end])),
-    );
-    if (projectEnds.length === 0) {
-      return null;
-    }
-    const latest = projectEnds.reduce((current, end) => (end > current ? end : current));
-    return ganttTimeFilter !== null && latest > ganttTimeFilter.endIso
-      ? ganttTimeFilter.endIso
-      : latest;
-  }, [groups, ganttTimeFilter]);
 
   const timeline = useMemo(() => {
     const today = pmGanttTodayIso();
@@ -3227,59 +3231,34 @@ function PmImplementationGantt({
     ganttVisibleRange.startIso,
     ganttVisibleRange.endIso,
   );
-  const ganttMaxScroll = ganttScrollMax;
-  const ganttNavigationMaxScroll = useMemo(() => {
-    if (
-      ganttImplementationEndIso === null ||
-      ganttTimelineViewportWidth <= 0 ||
-      timeline.days.length === 0
-    ) {
-      return ganttScrollMax;
-    }
-    const endIndex = timeline.days.findIndex((day) => day.iso >= ganttImplementationEndIso);
-    const lastEndIndex = endIndex < 0 ? timeline.days.length - 1 : endIndex;
-    const endRight = (lastEndIndex + 1) * ganttDayWidth;
-    return Math.max(
-      0,
-      Math.min(ganttScrollMax, endRight - ganttTimelineViewportWidth),
-    );
-  }, [
-    ganttDayWidth,
-    ganttImplementationEndIso,
-    ganttScrollMax,
-    ganttTimelineViewportWidth,
-    timeline.days,
-  ]);
-  const ganttCanPagePrevious = ganttScrollLeft > 1;
-  const ganttCanPageNext = ganttScrollLeft < ganttNavigationMaxScroll - 1;
   const ganttVisibleRangeAriaLabel = t("pm.gantt.visibleRange", {
     start: ganttVisibleRange.startIso,
     end: ganttVisibleRange.endIso,
   });
-  const ganttTimeFilterText =
+  const ganttTimeFilterRangeText =
     ganttTimeFilter === null
-      ? t("pm.gantt.timeFilter.all")
+      ? null
       : pmGanttVisibleRangeLabel(ganttTimeFilter.startIso, ganttTimeFilter.endIso);
-  const ganttTimeFilterAriaLabel = t("pm.gantt.timeFilter") + ": " + ganttTimeFilterText;
-  const ganttTimeFilterDraftValid =
-    ganttTimeFilterDraftStart !== "" &&
-    ganttTimeFilterDraftEnd !== "" &&
-    ganttTimeFilterDraftStart <= ganttTimeFilterDraftEnd;
-  const scrollGanttByPage = (direction: -1 | 1): void => {
-    const viewport = ganttScrollViewportRef.current;
-    if (viewport === null || viewport.clientWidth <= 0) {
-      return;
-    }
-    const visibleTimelineWidth = Math.max(0, viewport.clientWidth - ganttTableWidth);
-    const step = Math.max(ganttDayWidth * 7, visibleTimelineWidth * 0.85);
-    const maxScroll = direction > 0 ? ganttNavigationMaxScroll : ganttMaxScroll;
-    setGanttScrollLeft(
-      pmGanttSetScrollLeft(
-        viewport,
-        pmGanttClampWidth(viewport.scrollLeft + direction * step, 0, maxScroll),
-      ),
-    );
-  };
+  const ganttTimeFilterPeriodLabel =
+    ganttTimeFilter === null
+      ? null
+      : t(PM_GANTT_SCALES[ganttTimeFilter.period].labelKey);
+  const ganttTimeFilterText =
+    ganttTimeFilter === null || ganttTimeFilterRangeText === null
+      ? t("pm.gantt.timeFilter.all")
+      : t("pm.gantt.timeFilter.period") + " · " + ganttTimeFilterRangeText;
+  const ganttTimeFilterAriaLabel =
+    ganttTimeFilter === null ||
+    ganttTimeFilterRangeText === null ||
+    ganttTimeFilterPeriodLabel === null
+      ? t("pm.gantt.timeFilter") + ": " + ganttTimeFilterText
+      : t("pm.gantt.timeFilter") +
+        ": " +
+        t("pm.gantt.timeFilter.period") +
+        " · " +
+        ganttTimeFilterPeriodLabel +
+        ", " +
+        ganttTimeFilterRangeText;
 
   const ganttViewportReferenceIndex =
     timeline.days.length === 0
@@ -3299,10 +3278,16 @@ function PmImplementationGantt({
       ? ganttAnchorIso
       : timeline.days[ganttViewportReferenceIndex].iso;
   const selectGanttScale = (nextScale: PmGanttScale): void => {
-    const referenceIso = ganttViewportReferenceIso;
+    const referenceIso = ganttTimeFilter?.anchorIso ?? ganttViewportReferenceIso;
     setGanttScale(nextScale);
     setGanttAnchorIso(referenceIso);
     setSelectedGanttColumnKey(null);
+    if (ganttTimeFilter !== null) {
+      const range = pmGanttPeriodRangeOf(nextScale, referenceIso);
+      setGanttTimeFilter(range);
+      requestGanttScroll(range.startIso);
+      return;
+    }
     requestGanttScroll(referenceIso);
   };
 
@@ -3432,6 +3417,8 @@ function PmImplementationGantt({
       data-project-management-gantt-timeline-end={timeline.days[timeline.days.length - 1]?.iso ?? timeline.startIso}
       data-project-management-gantt-time-filter-start={ganttTimeFilter?.startIso ?? ""}
       data-project-management-gantt-time-filter-end={ganttTimeFilter?.endIso ?? ""}
+      data-project-management-gantt-time-filter-period={ganttTimeFilter?.period ?? ""}
+      data-project-management-gantt-time-filter-anchor={ganttTimeFilter?.anchorIso ?? ""}
       data-project-management-gantt-only-in-progress={ganttOnlyInProgress ? "true" : "false"}
       className="min-w-0"
       style={ganttCssVariables}
@@ -3454,11 +3441,11 @@ function PmImplementationGantt({
           >
             <button
               type="button"
-              data-project-management-gantt-page-previous="true"
-              aria-label={t("pm.gantt.previousWindow")}
-              title={t("pm.gantt.previousWindow")}
-              disabled={!ganttCanPagePrevious}
-              onClick={() => scrollGanttByPage(-1)}
+              data-project-management-gantt-period-previous="true"
+              aria-label={t("pm.gantt.previousPeriod")}
+              title={t("pm.gantt.previousPeriod")}
+              disabled={ganttTimeFilter === null}
+              onClick={() => shiftGanttTimeFilter(-1)}
               className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
               style={{ width: ganttMetrics.toolbarControlHeight, height: ganttMetrics.toolbarControlHeight }}
             >
@@ -3481,7 +3468,6 @@ function PmImplementationGantt({
                 aria-expanded={ganttTimeFilterOpen}
                 aria-haspopup="dialog"
                 aria-label={ganttTimeFilterAriaLabel}
-                title={t("pm.gantt.timeFilter.hint")}
                 onClick={openGanttTimeFilter}
                 className={
                   "flex min-w-[132px] items-center justify-center gap-1 whitespace-nowrap rounded-md px-2 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " +
@@ -3510,82 +3496,55 @@ function PmImplementationGantt({
                 >
                   <div>
                     <p className="text-xs font-semibold text-zinc-800">{t("pm.gantt.timeFilter")}</p>
-                    <p className="mt-0.5 text-[11px] text-zinc-500">{t("pm.gantt.timeFilter.hint")}</p>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <label className="min-w-0 text-[11px] font-medium text-zinc-600">
-                      <span className="mb-1 block">{t("pm.gantt.timeFilter.start")}</span>
-                      <input
-                        type="date"
-                        value={ganttTimeFilterDraftStart}
-                        max={ganttTimeFilterDraftEnd || undefined}
-                        onChange={(event) => setGanttTimeFilterDraftStart(event.currentTarget.value)}
-                        className="h-9 w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-2 text-xs text-zinc-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-500/30"
-                      />
-                    </label>
-                    <label className="min-w-0 text-[11px] font-medium text-zinc-600">
-                      <span className="mb-1 block">{t("pm.gantt.timeFilter.end")}</span>
-                      <input
-                        type="date"
-                        value={ganttTimeFilterDraftEnd}
-                        min={ganttTimeFilterDraftStart || undefined}
-                        onChange={(event) => setGanttTimeFilterDraftEnd(event.currentTarget.value)}
-                        className="h-9 w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-2 text-xs text-zinc-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-500/30"
-                      />
-                    </label>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {PM_GANTT_SCALE_KEYS.map((periodScale) => (
-                      <button
-                        key={periodScale}
-                        type="button"
-                        data-project-management-gantt-time-filter-preset={periodScale}
-                        onClick={() => applyGanttPeriodTimeFilter(periodScale)}
-                        className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] font-medium text-zinc-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-                      >
-                        {t(PM_GANTT_BACK_TO_KEYS[periodScale])}
-                      </button>
-                    ))}
-                  </div>
-                  {ganttTimeFilterDraftStart !== "" &&
-                  ganttTimeFilterDraftEnd !== "" &&
-                  ganttTimeFilterDraftStart > ganttTimeFilterDraftEnd ? (
-                    <p className="text-[11px] text-rose-600">{t("pm.gantt.timeFilter.invalid")}</p>
-                  ) : null}
-                  <div className="flex items-center justify-end gap-2">
                     <button
                       type="button"
-                      data-project-management-gantt-time-filter-clear="true"
+                      data-project-management-gantt-time-filter-all="true"
+                      aria-pressed={ganttTimeFilter === null}
                       onClick={clearGanttTimeFilter}
-                      className="rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                      className={
+                        "h-9 rounded-lg border px-3 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " +
+                        (ganttTimeFilter === null
+                          ? "border-blue-200 bg-blue-50 text-blue-700"
+                          : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900")
+                      }
                     >
                       {t("pm.gantt.timeFilter.all")}
                     </button>
                     <button
                       type="button"
-                      data-project-management-gantt-time-filter-apply="true"
-                      disabled={!ganttTimeFilterDraftValid}
-                      onClick={() =>
-                        applyGanttTimeFilter({
-                          startIso: ganttTimeFilterDraftStart,
-                          endIso: ganttTimeFilterDraftEnd,
-                        })
+                      data-project-management-gantt-time-filter-period-mode="true"
+                      aria-pressed={ganttTimeFilter !== null}
+                      onClick={selectGanttPeriodMode}
+                      className={
+                        "h-9 rounded-lg border px-3 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " +
+                        (ganttTimeFilter !== null
+                          ? "border-blue-200 bg-blue-50 text-blue-700"
+                          : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900")
                       }
-                      className="rounded-md bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:bg-zinc-300"
                     >
-                      {t("pm.gantt.timeFilter.apply")}
+                      {t("pm.gantt.timeFilter.period")}
                     </button>
                   </div>
+                  {ganttTimeFilter !== null && ganttTimeFilterRangeText !== null ? (
+                    <p
+                      data-project-management-gantt-time-filter-current-range="true"
+                      className="rounded-md bg-zinc-50 px-2 py-1.5 text-[11px] tabular-nums text-zinc-600"
+                    >
+                      {t("pm.gantt.timeFilter.currentRange", { range: ganttTimeFilterRangeText })}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
             </div>
             <button
               type="button"
-              data-project-management-gantt-page-next="true"
-              aria-label={t("pm.gantt.nextWindow")}
-              title={t("pm.gantt.nextWindow")}
-              disabled={!ganttCanPageNext}
-              onClick={() => scrollGanttByPage(1)}
+              data-project-management-gantt-period-next="true"
+              aria-label={t("pm.gantt.nextPeriod")}
+              title={t("pm.gantt.nextPeriod")}
+              disabled={ganttTimeFilter === null}
+              onClick={() => shiftGanttTimeFilter(1)}
               className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
               style={{ width: ganttMetrics.toolbarControlHeight, height: ganttMetrics.toolbarControlHeight }}
             >
@@ -3599,16 +3558,6 @@ function PmImplementationGantt({
               </svg>
             </button>
           </div>
-          <button
-            type="button"
-            data-project-management-gantt-back-to-month-filter="true"
-            disabled={ganttTimeFilter === null}
-            onClick={() => applyGanttPeriodTimeFilter("month")}
-            className="rounded-md border border-zinc-200 bg-white px-2.5 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium text-zinc-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-zinc-100 disabled:bg-zinc-50 disabled:text-zinc-300"
-            style={{ height: ganttMetrics.toolbarControlHeight }}
-          >
-            {t("pm.gantt.backTo.month")}
-          </button>
           <button
             type="button"
             data-project-management-gantt-only-in-progress="true"

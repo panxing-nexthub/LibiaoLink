@@ -1,4 +1,55 @@
 ***
+
+> **2026-11-21 11:25 项目管理甘特-实施时间筛选弹层说明文案精简（正式机 frontend-only · prod-20261121-1121-px-pm-gantt-filter-copy-eb766751）**：代码来源 main `eb766751`（PR [#984](https://github.com/panxing-nexthub/LibiaoLink/pull/984)；功能 PR [#983](https://github.com/panxing-nexthub/LibiaoLink/pull/983)）。正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261121-1121-px-pm-gantt-filter-copy-eb766751`，previous live = `prod-20261121-0015-px-pm-gantt-nav-click-c166cf6c`；staging = `/srv/data/deploy-prod-20261121-1121-px-pm-gantt-filter-copy-eb766751/staging`，备份 = `/srv/data/backups/before-prod-20261121-1121-px-pm-gantt-filter-copy-eb766751`。
+>
+> **改动 / 验收**：移除时间筛选弹层内「默认显示全部项目；选择周期范围后，以今天为中心向前后展开」与「范围跟随右侧时间刻度，当前为「周 / 月 / 季 / 年」」两段说明，并移除触发按钮旧悬停提示；保留「全部显示 / 周期范围」、当前范围和右侧时间刻度。正式站真实 Chrome 强制加载新 bundle 后，弹层只剩标题、两个模式和当前范围，两段旧说明与旧 title 均不存在；周期模式显示 `当前范围：10-21 – 12-21`。仅前端展示调整，无 API、字段、权限、DDL 或迁移变化。
+>
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,596,707 B / SHA-256 `1fa0b2d8…` / 692 归档条目 / 678 文件；`build-info.json` 1,437 B / `87f45708…`；`frontend-files.sha256` 91,081 B / `18f60a86…`；`release-files.sha256` 257 B / `179878d6…`，发布件 3 / 3 校验通过。按内容哈希增量替换 `index.html`、`assets/index-BGCcE2Xl.js`、`assets/index-Dso_MpaA.css`、`assets/es-Do5WEFYI.js`；旧 hashed 资源全部保留，线上 1,458 → 1,461 文件，staging / live 均 678 / 678 哈希通过。
+>
+> **验证 / 备份 / 清单**：正式机 `/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；web / api / worker / postgres / minio / CAD / SVG preview / OnlyOffice 八个容器 healthy，RestartCount 0、OOM false，未重启后端；公网新主包、CSS、ES 分块哈希与构建逐字节一致，旧主包 / CSS / ES 分块仍 200。备份 94,477,321 B / SHA-256SUMS `4ab53dad…`，3 / 3 校验通过；新 `RELEASE_MANIFEST.json` 5,821 B / `6a760af9…`，`root:root 644` 原子替换。
+>
+> **边界 / 回滚**：仅正式机前端 dist、release manifest、staging 与备份；无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。回滚恢复本次 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 11:12 项目管理甘特-实施时间筛选弹层说明文案精简（测试机 frontend-only · test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4）**：代码来源 PR [#983](https://github.com/panxing-nexthub/LibiaoLink/pull/983)（CI 6 / 6，run `44859626902`，squash 合入 main `8ace67c4`）。测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4`，previous live = `test-20261121-1054-px-pm-gantt-period-anchor-a770ef7b`；staging = `/srv/data/deploy-test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4/staging`，备份 = `/srv/data/backups/before-test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4`。
+>
+> **改动 / 验收**：移除弹层内「默认显示全部项目；选择周期范围后，以今天为中心向前后展开」与「范围跟随右侧时间刻度，当前为「周 / 月 / 季 / 年」」两段说明，并移除触发按钮旧悬停提示；保留「全部显示 / 周期范围」、当前范围和右侧时间刻度。仅前端展示调整，无 API、字段、权限、DDL 或迁移变化。
+>
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,596,765 B / SHA-256 `fde8b81e…` / 692 归档条目 / 678 文件；`build-info.json` 1,391 B / `42dd2f26…`；`frontend-files.sha256` 91,081 B / `f6ad4d20…`；`release-files.sha256` 257 B / `2668c740…`，发布件 3 / 3 校验通过。按内容哈希增量替换 `index.html`、`assets/index-BGCcE2Xl.js`、`assets/es-Do5WEFYI.js`；CSS 与当时线上同哈希未重复替换，旧 hashed 资源全部保留；线上 995 → 997 文件，staging / live 均 678 / 678 哈希通过。
+>
+> **验证 / 备份 / 清单**：测试机 `/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；web / api / worker / postgres / minio / CAD / SVG preview 等八个核心容器 healthy，RestartCount 0、OOM false，未重启后端。真实账号 Chrome 复验弹层正文只剩「时间筛选」「全部显示」「周期范围」「当前范围：10-21 – 12-21」，旧说明文字与按钮 `title` 均为空；切周后范围仍为 `2026-11-14 – 2026-11-28`。备份 129,286,012 B / SHA-256SUMS `579e6f03…`，3 / 3 校验通过；新 `RELEASE_MANIFEST.json` 6,551 B / `e82db70d…`，`root:root 644` 原子替换。
+>
+> **边界 / 回滚**：仅测试机前端 dist、release manifest、staging 与备份；正式机 `10.1.103.44` 未触碰。无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。回滚恢复本次 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 10:46 项目管理甘特-实施周期范围与右侧时间刻度去重（测试机 frontend-only · test-20261121-1046-px-pm-gantt-period-scale-dedupe-1e9b4c37）**：代码来源 PR [#980](https://github.com/panxing-nexthub/LibiaoLink/pull/980)（CI 6 / 6，run `44857250082`，squash 合入 main `1e9b4c37`）。测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1046-px-pm-gantt-period-scale-dedupe-1e9b4c37`，previous live = `test-20261121-1028-px-pm-gantt-period-filter-8f44112e`；staging = `/srv/data/deploy-test-20261121-1046-px-pm-gantt-period-scale-dedupe-1e9b4c37/staging`，备份 = `/srv/data/backups/before-test-20261121-1046-px-pm-gantt-period-scale-dedupe-1e9b4c37`。
+>
+> **改动 / 验收**：时间筛选弹层只保留「全部显示 / 周期范围」两个入口；周期范围直接沿用右侧当前时间刻度，弹层不再重复展示周 / 月 / 季 / 年档位；触发按钮同步显示具体起止日期，上一周期 / 下一周期与今天保留，全部显示时两侧箭头禁用。验证时切换周 / 月 / 季 / 年范围与提示同步、按钮显示具体日期，但切档锚点仍取当前视口中心；该问题已由随后的 1054 修复。
+>
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,597,188 B / SHA-256 `c2b9948a…` / 692 归档条目 / 678 文件；`build-info.json` 1,405 B / `9e2b049e…`；`frontend-files.sha256` 91,081 B / `811edb4a…`；`release-files.sha256` 257 B / `a4e6172f…`，发布件 3 / 3 校验通过。按内容哈希增量替换 `index.html`、`assets/index-DyEHvgJ2.js`、`assets/es-CBYoBuSp.js`；CSS 与当时线上同哈希未重复替换，旧 hashed 资源全部保留；线上 991 → 993 文件，staging / live 均 678 / 678 哈希通过。
+>
+> **验证 / 备份 / 清单补记**：测试机 `/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；相关容器 healthy，RestartCount 0、OOM false，未重启后端。真实账号 Chrome 验证默认「全部显示」、弹层仅两种入口、按钮显示具体范围。备份 127,524,673 B / SHA-256SUMS `847774c5…`，3 / 3 业务备份文件校验通过。该中间发布上线时未更新 `RELEASE_MANIFEST.json`；1054 发布已按实际前一版 1046 写入 previousRelease，并保留 previousManifestRelease = 1028。
+>
+> **边界 / 回滚**：仅测试机前端 dist、staging 与备份；正式机 `10.1.103.44` 未触碰。无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。回滚恢复本次 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 10:54 项目管理甘特-实施周期范围保持原锚点（测试机 frontend-only · test-20261121-1054-px-pm-gantt-period-anchor-a770ef7b）**：代码来源 PR [#981](https://github.com/panxing-nexthub/LibiaoLink/pull/981)（CI 6 / 6，run `44858122017`，squash 合入 main `a770ef7b`）。测试机 release = `test-20261121-1054-px-pm-gantt-period-anchor-a770ef7b`，previous live = `test-20261121-1046-px-pm-gantt-period-scale-dedupe-1e9b4c37`，previous manifest = `test-20261121-1028-px-pm-gantt-period-filter-8f44112e`；staging = `/srv/data/deploy-test-20261121-1054-px-pm-gantt-period-anchor-a770ef7b/staging`，备份 = `/srv/data/backups/before-test-20261121-1054-px-pm-gantt-period-anchor-a770ef7b`。
+>
+> **改动 / 验收**：切换右侧周 / 月 / 季 / 年刻度时，周期筛选改为保留原周期锚点重新计算范围，不再取当前视口中心；首次选择周期范围以今天为锚点，前后翻页后以翻页后的锚点为准。弹层仍仅「全部显示 / 周期范围」两项，按钮继续显示具体起止日期；全部显示时箭头禁用。
+>
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,596,925 B / SHA-256 `9fda5a81…` / 692 归档条目 / 678 文件；`build-info.json` 1,411 B / `54c7b222…`；`frontend-files.sha256` 91,081 B / `e6cb6e72…`；`release-files.sha256` 257 B / `3483b7ee…`，发布件 3 / 3 校验通过。按内容哈希增量替换 `index.html`、`assets/index-DlLIoQWp.js`、`assets/es-D83hf1vN.js`；CSS 与当时线上同哈希未重复替换，旧 hashed 资源全部保留；线上 993 → 995 文件，staging / live 均 678 / 678 哈希通过。
+>
+> **验证 / 备份 / 清单**：测试机 `/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；web / api / worker / postgres / minio / CAD / SVG preview 等八个核心容器 healthy，RestartCount 0、OOM false，未重启后端。真实账号 Chrome 复验：弹层仅两种入口且无重复档位；月 `2026-10-21 – 2026-12-21`、周 `2026-11-14 – 2026-11-28`、季 `2026-08-21 – 2027-02-21`、年 `2025-11-21 – 2027-11-21` 均以今天 `2026-11-21` 为锚点；上一周期切换后「今天」恢复正确；全部显示时前后箭头禁用。备份 128,412,594 B / SHA-256SUMS `ee9534b0…`，3 / 3 校验通过；新 `RELEASE_MANIFEST.json` 7,082 B / `e6afe041…`，`root:root 644` 原子替换。
+>
+> **边界 / 回滚**：仅测试机 `10.1.104.44` 前端 dist、release manifest、staging 与备份；正式机 `10.1.103.44` 未触碰。无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。回滚恢复本次 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`；稳定回退基线为 1046 发布备份。
+
+> **2026-11-21 10:28 项目管理甘特-实施周期范围筛选简化与空结果视口修复（测试机 frontend-only · test-20261121-1028-px-pm-gantt-period-filter-8f44112e）**：代码来源 PR [#977](https://github.com/panxing-nexthub/LibiaoLink/pull/977)（CI 6 / 6，main `d88ae635`）与修复 PR [#978](https://github.com/panxing-nexthub/LibiaoLink/pull/978)（CI 6 / 6，main `8f44112e`）。测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1028-px-pm-gantt-period-filter-8f44112e`，previous live = `test-20261121-1017-px-pm-gantt-period-filter-d88ae635`（中间构建），previous manifest = `test-20261121-0045-px-pm-gantt-time-filter-b947dc3a`；staging = `/srv/data/deploy-test-20261121-1028-px-pm-gantt-period-filter-8f44112e/staging`，备份 = `/srv/data/backups/before-test-20261121-1028-px-pm-gantt-period-filter-8f44112e`。
+>
+> **改动 / 验收**：时间筛选默认「全部显示」，弹层只保留「全部显示 / 周期范围」；周期范围以今天为中心，周 / 月 / 季 / 年分别为前后 7 天 / 1 个月 / 3 个月 / 12 个月，上一 / 下一周期按档位整体移动，「全部显示」下箭头禁用。周期内无项目导致甘特主体卸载后，切回全部显示会重新绑定横向滚动容器，恢复日期标题、滚动条和项目行同步。
+>
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,597,112 B / SHA-256 `e3ab1c15…` / 692 归档条目 / 678 文件；`build-info.json` 1,411 B / `bc7f2557…`；`frontend-files.sha256` 91,081 B / `15f0a2dc…`；`release-files.sha256` 257 B / `b09049d9…`，发布件 3 / 3 校验通过。按内容哈希增量替换 `index.html`、`assets/index-B9B51REz.js`、`assets/es-Ba_o1HJ1.js`，CSS 与当前线上同哈希未重复替换，旧 hashed 资源全部保留；线上 989 → 991 文件，staging / live 均 678 / 678 哈希通过。
+>
+> **验证 / 备份 / 清单**：测试机 `/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；八个核心容器 healthy，RestartCount 0、OOM false，未重启后端。真实账号 Chrome 复验：默认全部显示、弹层仅两种入口；月范围 `2026-10-21 – 2026-12-21`，上一周期 `2026-09-21 – 2026-11-21`，下一周期恢复；周范围 `2026-11-14 – 2026-11-28` 为空，切回全部显示后日期标题 `2026-10-16 至 2026-11-21`、横向滚动与项目行恢复，控制台无应用错误。备份 126,643,427 B / SHA-256SUMS `ea9ffb28…`，3 / 3 校验通过；新 `RELEASE_MANIFEST.json` 7,313 B / `92460774…`，`root:root 644` 原子替换。
+>
+> **边界 / 回滚**：仅测试机前端 dist、release manifest、staging 与备份；正式机 `10.1.103.44` 未触碰。无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。回滚恢复本次 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`；稳定回退基线为 `/srv/data/backups/before-test-20261121-1017-px-pm-gantt-period-filter-d88ae635`（b947）。
+
 > **2026-11-21 00:45 项目管理甘特-实施时间范围筛选与仅显示进行中（测试机 frontend-only · test-20261121-0045-px-pm-gantt-time-filter-b947dc3a）**：代码来源 PR [#973](https://github.com/panxing-nexthub/LibiaoLink/pull/973)，PR CI 6 / 6，squash 合入 main `b947dc3a`。测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-0045-px-pm-gantt-time-filter-b947dc3a`，previous = `test-20261121-0015-px-pm-gantt-nav-click-c166cf6c`；staging = `/srv/data/deploy-test-20261121-0045-px-pm-gantt-time-filter-b947dc3a/staging`，备份 = `/srv/data/backups/before-test-20261121-0045-px-pm-gantt-time-filter-b947dc3a`。
 >
 > **改动 / 验收**：甘特-实施默认显示全部项目；日期导航入口显示「全部显示」，点击后可按开始 / 结束日期筛选，并提供回到本周 / 本月 / 本季 / 今年快捷范围；「回到本月」仅在已有时间筛选时启用，「今天」保留在右侧。左侧新增「仅显示进行中」，排除「立项未启动 / 终止 / 已归档」。时间筛选按项目计划实施起止日期与所选范围是否相交筛选项目，并将时间轴收紧到筛选范围，跨边界项目条裁切展示；未筛选时时间轴不再在最后一项之后扩展空白，向后翻页止于当前项目最晚实施结束日期。

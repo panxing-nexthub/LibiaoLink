@@ -1,3 +1,13 @@
+> **2026-11-21 23:56 全部项目图表点击下钻（测试机 full-stack · test-20261121-2356-px-dashboard-drilldown-3c28151d）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `3c28151d`；release = `test-20261121-2356-px-dashboard-drilldown-3c28151d`，previous = `test-20261121-2355-px-dashboard-issue-heading-b60c2906`；staging = `/srv/data/deploy-test-20261121-2356-px-dashboard-drilldown-3c28151d/staging`。本轮同时带回上一提交的问题归纳标题精简。
+
+> **改动 / 验收**：项目统计柱 / 折线点、项目当前阶段柱、项目经理 / 销售负责人 / 规划负责人阶段分段与人员柱底、问题归纳柱均可打开卡片式「数据详情」。项目列表固定长列表不折叠，展示项目类型 / 编号 / 名称 / 项目经理 / 启动时间，阶段与负责人页补当前阶段；问题详情按项目折叠，展开显示命中「状态 × 归类」的问题正文、状态、责任人、提出时间、归类与解决方案。shared typecheck / generate / check 通过，server typecheck / build 与全量 tests 2021 passed / 75 skipped，frontend typecheck / build 通过；Chrome 实测项目统计 4 项、当前阶段 9 项、项目经理 8 项、销售负责人 2 项，问题折叠组 2 条展开正常，Esc 关闭正常，console error 0。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,612,646 B / SHA-256 `1bdb6c11…`、678 文件；`server-dist.tar.gz` 1,350,403 B / `169ad0c2…`；`shared-dist.tar.gz` 274,073 B / `9ecf43fe…`。线上前端 1085 → 1088 文件并原子替换 `index.html`，server / shared dist 原子换装后强制重建 api / worker / web；server 795 文件、shared 120 文件，与发布件一致。API 响应新增只读 `project-insights.projects[]` 与 `issues.details[]`，无数据库迁移。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `80a61af8…`、主包 `assets/index-BZG4ucZX.js` 2,553,902 B / `f99627f5…`、CSS `assets/index-tBO65ifa.css` 259,765 B / `4c8617d9…`、ES `assets/es-D0qhV5SL.js` 428,098 B / `634b1758…`；`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true，未登录下钻 API 401；web / api / worker healthy，RestartCount 0、OOM false，近 10 分钟 ERROR / FATAL 0。备份 `/srv/data/backups/before-test-20261121-2356-px-dashboard-drilldown-3c28151d`，161,276,759 B / 8 文件 / SHA256SUMS `01982850…`；前端 159,624,929 B / `f449f246…`、server 1,351,872 B / `85697017…`、shared 295,401 B / `9545ad13…`、原 manifest 3,896 B / `9ecaed40…`。新 `RELEASE_MANIFEST.json` 7,163 B / `eb0b4aec…`，`root:root 644` 原子替换。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无数据库结构 / 迁移 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份的 frontend / server / shared dist 与原 manifest，再 `docker compose up -d --force-recreate --no-deps api worker web`。
+
 > **2026-11-21 23:50 仪表盘柱状图动态轴适配（测试机 frontend-only · test-20261121-2350-px-dashboard-axis-fit-b2cb7560）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `b2cb7560`；release = `test-20261121-2350-px-dashboard-axis-fit-b2cb7560`，previous = `test-20261121-2340-px-dashboard-filter-memory-f4086a48`；staging = `/srv/data/deploy-test-20261121-2350-px-dashboard-axis-fit-b2cb7560/staging`。
 
 > **改动 / 验收**：新增统一纵轴算法，最高值预留约 8% 顶部空间，采用 1 / 2 / 5 × 10^n 整数整齐步长；覆盖项目进度、问题原因、项目统计、负责人阶段、项目当前阶段、交付时间。去掉柱顶数字的坐标区 clamp，最高值 9 时纵轴为 0 / 5 / 10，数字 bottom=179.8px 小于柱顶 top=184.0px，不再重合。frontend `npm run typecheck` / `npm run build` 通过。

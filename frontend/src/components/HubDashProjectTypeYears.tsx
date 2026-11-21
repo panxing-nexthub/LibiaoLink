@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DASHBOARD_PROJECT_TYPE_COLORS, DASHBOARD_PROJECT_TYPES, type DashboardProjectInsights, type DashboardProjectTypeCode } from "../data/dashboardProjectInsights";
 import { useT } from "../i18n";
+import { DASHBOARD_YEAR_WINDOW, DashboardYearNavigator, type DashboardYearKey } from "./DashboardYearNavigator";
 import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
 
 const VIEW_W = 1200;
@@ -12,9 +13,8 @@ const AXIS_Y = 296;
 const TICK_LABEL_Y = 322;
 const BAR_MAX_W = 46;
 const GROUP_INSET_RATIO = 0.16;
-const YEAR_WINDOW = 5;
 
-type YearKey = number | null;
+type YearKey = DashboardYearKey;
 
 function axisOf(maxValue: number): { max: number; step: number } {
   if (maxValue <= 5) return { max: Math.max(1, maxValue), step: 1 };
@@ -26,20 +26,9 @@ function axisOf(maxValue: number): { max: number; step: number } {
 function yearKey(year: YearKey): string { return year === null ? "unknown" : String(year); }
 function includesYear(years: readonly YearKey[], year: YearKey): boolean { return years.some((item) => item === year); }
 
-function YearArrowIcon({ direction }: { readonly direction: "left" | "right" }) {
-  return (
-    <svg viewBox="0 0 1662 1024" aria-hidden="true" focusable="false" className="hub-dash-project-types__arrowIcon">
-      <g transform={direction === "left" ? "translate(1662 0) scale(-1 1)" : undefined}>
-        <path d="M1110.10503692 502.370245c0 15.073971-5.024657 25.123286-15.068947 35.167575l-452.128698 452.128698c-20.098629 20.098629-50.236522 20.098629-70.33515 0-20.088579-20.093604-20.088579-50.23652199 0-70.330126l416.966147-416.966147-416.966147-416.971172c-20.088579-20.088579-20.088579-50.23652199 0-70.325102 20.098629-20.098629 50.236522-20.098629 70.33515 0L1095.03608992 467.202669c10.04429 10.04429 15.06894699 20.088579 15.068947 35.167576z" fill="currentColor" />
-        <path d="M1063.16653992 516.16359421c0 6.51192663-2.1713659 10.85465844-6.51192663 15.19521916l-195.38385183 195.38385183c-8.68546405 8.68546405-21.70931687 8.68546405-30.39478049 0-8.68112102-8.68329253-8.68112102-21.70931687 0-30.3926094L1011.06461365 516.16359421l-180.18863268-180.1929757c-8.68112102-8.68112102-8.68112102-21.70931687 1e-8-30.39043789 8.68546405-8.68546405 21.70931687-8.68546405 30.39478048 0L1056.65461329 500.96403245c4.34056072 4.34273181 6.51192663 8.68329253 6.51192663 15.19956176z" fill="currentColor" />
-      </g>
-    </svg>
-  );
-}
-
 /**
  * 「全部项目」项目数量统计：x = 启动年份，每组三根柱 = T-sort / 3D分拣 / 飞箱。
- * 年份与类型均可点击筛选；年份默认最近 3 年，左右按钮切换年份窗口；最左侧「全选」为液态玻璃按钮。
+ * 年份与类型均可点击筛选；年份默认最近 5 年，左右按钮切换年份窗口；最左侧「全选」为液态玻璃按钮。
  * 悬停年份阴影区时，在区域中央显示当前可见类型的粗体项目总数。
  */
 export function HubDashProjectTypeYears({ insights }: { readonly insights: DashboardProjectInsights }) {
@@ -48,9 +37,9 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
   const numericYears = [...new Set(rows.map((row) => row.year).filter((year): year is number => year !== null))].sort((left, right) => left - right);
   const hasUnknownYear = rows.some((row) => row.year === null);
   const allYears: YearKey[] = hasUnknownYear ? [...numericYears, null] : [...numericYears];
-  const [selectedYears, setSelectedYears] = useState<YearKey[]>(() => numericYears.slice(-YEAR_WINDOW));
+  const [selectedYears, setSelectedYears] = useState<YearKey[]>(() => numericYears.slice(-DASHBOARD_YEAR_WINDOW));
   const [visibleTypes, setVisibleTypes] = useState<DashboardProjectTypeCode[]>([...DASHBOARD_PROJECT_TYPES]);
-  const [yearWindowStart, setYearWindowStart] = useState(() => Math.max(0, numericYears.length - YEAR_WINDOW));
+  const [yearWindowStart, setYearWindowStart] = useState(() => Math.max(0, numericYears.length - DASHBOARD_YEAR_WINDOW));
   const [tip, setTip] = useState<DashboardHoverTip | null>(null);
   const [hoverYear, setHoverYear] = useState<string | null>(null);
 
@@ -67,7 +56,6 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
   const groupGap = itemW - barW;
   const ticks: number[] = [];
   for (let value = 0; value <= tickMax; value += step) ticks.push(value);
-  const visibleYearChars = numericYears.slice(yearWindowStart, yearWindowStart + YEAR_WINDOW);
   const allSelected = allYears.length > 0 && allYears.every((year) => includesYear(selectedYears, year));
   const toggleYear = (year: YearKey): void => setSelectedYears((current) => includesYear(current, year) ? current.filter((item) => item !== year) : [...current, year]);
   const toggleType = (type: DashboardProjectTypeCode): void => setVisibleTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type]);
@@ -78,22 +66,14 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
       <div className="hub-dash-project-types__controls">
         <div className="hub-dash-project-types__yearLine">
           <button type="button" className="hub-dash-project-types__selectAll" data-active={allSelected ? "true" : "false"} aria-pressed={allSelected} onClick={() => setSelectedYears(allSelected ? [] : [...allYears])}>{t("hub.dash.projects.selectAll")}</button>
-          <div className="hub-dash-project-types__yearNavigator">
-            <button type="button" className="hub-dash-project-types__arrow" disabled={yearWindowStart <= 0} aria-label={t("hub.dash.projects.yearPrev")} onClick={() => setYearWindowStart((start) => Math.max(0, start - YEAR_WINDOW))}><YearArrowIcon direction="left" /></button>
-            <div className="hub-dash-project-types__yearChips">
-              {visibleYearChars.map((year) => (
-                <button key={year} type="button" className="hub-dash-project-types__yearChip" data-active={includesYear(selectedYears, year) ? "true" : "false"} aria-pressed={includesYear(selectedYears, year)} onClick={() => toggleYear(year)}>
-                  <i /><span>{year}</span>
-                </button>
-              ))}
-              {hasUnknownYear ? (
-                <button type="button" className="hub-dash-project-types__yearChip" data-active={includesYear(selectedYears, null) ? "true" : "false"} aria-pressed={includesYear(selectedYears, null)} onClick={() => toggleYear(null)}>
-                  <i /><span>{t("hub.dash.projects.unknownYear")}</span>
-                </button>
-              ) : null}
-            </div>
-            <button type="button" className="hub-dash-project-types__arrow" disabled={yearWindowStart + YEAR_WINDOW >= numericYears.length} aria-label={t("hub.dash.projects.yearNext")} onClick={() => setYearWindowStart((start) => Math.min(Math.max(0, numericYears.length - YEAR_WINDOW), start + YEAR_WINDOW))}><YearArrowIcon direction="right" /></button>
-          </div>
+          <DashboardYearNavigator
+            numericYears={numericYears}
+            hasUnknownYear={hasUnknownYear}
+            selectedYears={selectedYears}
+            onToggleYear={toggleYear}
+            windowStart={yearWindowStart}
+            onWindowStartChange={setYearWindowStart}
+          />
         </div>
         <div className="hub-dash-project-types__typeLine">
           {DASHBOARD_PROJECT_TYPES.map((type) => {

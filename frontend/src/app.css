@@ -4672,6 +4672,20 @@ body {
   animation: ll-hub-bar-in 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.hub-dash-project-types__line {
+  animation: ll-hub-fade-in 520ms ease-out both;
+}
+
+.hub-dash-project-types__point {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ll-hub-pie-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hub-dash-project-types__pointHit {
+  cursor: pointer;
+}
+
 .hub-dash-project-types__num,
 .hub-dash-start-stage__num {
   animation: ll-hub-num-in 320ms ease-out both;
@@ -4763,6 +4777,8 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .hub-dash-project-types__bar,
+  .hub-dash-project-types__line,
+  .hub-dash-project-types__point,
   .hub-dash-role__segment,
   .hub-dash-start-year__segment,
   .hub-dash-start-stage__bar,
@@ -5108,6 +5124,11 @@ body {
   transform: translateY(-50%);
 }
 
+.hub-dash-project-types__chartToggle {
+  left: auto;
+  right: 0;
+}
+
 .hub-dash-project-types__selectAll[data-active="true"] {
   border-color: rgb(147 197 253 / 0.9);
   background: linear-gradient(135deg, rgb(239 246 255 / 0.9), rgb(191 219 254 / 0.5));
@@ -5246,6 +5267,10 @@ body {
   .hub-dash-project-types__selectAll {
     position: static;
     transform: none;
+  }
+
+  .hub-dash-project-types__chartToggle {
+    margin-left: auto;
   }
 
   .hub-dash-project-types__yearNavigator {

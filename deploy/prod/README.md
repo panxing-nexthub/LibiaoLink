@@ -1,3 +1,13 @@
+> **2026-11-21 21:05 负责人图阶段图例可筛选与全选（测试机 frontend-only · test-20261121-2105-px-dashboard-role-stage-filter-b332be0a）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `b332be0a`；release = `test-20261121-2105-px-dashboard-role-stage-filter-b332be0a`，previous = `test-20261121-2040-px-dashboard-stage-axis-8d0aa965`；staging = `/srv/data/deploy-test-20261121-2105-px-dashboard-role-stage-filter-b332be0a/staging`。
+
+> **改动 / 验收**：项目经理、销售负责人、规划负责人三页的阶段图例改为可点击显隐，隐藏项色块 / 文案变灰；图例左侧新增「全选」，可在全部显示与全部隐藏间切换。隐藏阶段不绘制，纵轴、人员阴影悬停明细与合计同步重算；全部隐藏时保留图例和空状态。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 12 个阶段按钮、单项关闭后分段 29→26、合计 21→20、全选清空与恢复、768 宽度换行；线上主包断言命中 `hub-dash-role__legendBar` / `hub-dash-role__selectAll` / `hub-dash-role__legendItem`。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,606,113 B / SHA-256 `015d5c9a…`、678 文件；`build-info.json` 365 B / `9238685b…`；`frontend-files.sha256` 92,437 B / `b7d670ed…`；`release-files.sha256` 254 B / `b61a3f60…`。线上 1037 → 1040 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `4c761e57…`、主包 `assets/index-BVmMcJH_.js` 2,535,869 B / `bf4460b8…`、CSS `assets/index-DVjb2hWS.css` 250,722 B / `cf5c4b74…`、ES `assets/es-BtIvGOZy.js` 428,098 B / `7a6581ad…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2105-px-dashboard-role-stage-filter-b332be0a`，前端 143,101,087 B / `7b96d5de…`、原 manifest 4,076 B / `d61b284e…`，SHA256SUMS 3 / 3 通过；新 manifest 4,104 B / `6f576008…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 20:40 最新阶段图横轴改为阶段并移除饼图（测试机 frontend-only · test-20261121-2040-px-dashboard-stage-axis-8d0aa965）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `8d0aa965`；release = `test-20261121-2040-px-dashboard-stage-axis-8d0aa965`，previous = `test-20261121-1805-px-dashboard-five-years-f3db362e`；staging = `/srv/data/deploy-test-20261121-2040-px-dashboard-stage-axis-8d0aa965/staging`。
 
 > **改动 / 验收**：全部项目第 6 屏改名为「最新阶段项目数量」，横轴固定九大阶段 + 异常归档 / 验收归档 / 归档-临时任务，纵轴项目数；年份改为与项目数量图一致的方块多选 + 5 年分页，默认近 5 年、未记录独立可筛；移除柱状图顶部阶段图例和右侧环形饼图，保留柱 / 年份阴影悬停白卡；底部标签同步为「最新阶段」。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 12 类横轴、年份开关、悬停明细及 1600 / 1366 / 768 宽度；线上主包字符串断言命中新标题 / 年份说明 / 12 类阶段，旧饼图 DOM class 为 0。

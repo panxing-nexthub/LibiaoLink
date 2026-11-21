@@ -1,3 +1,13 @@
+> **2026-11-21 23:20 项目统计更名并调整为第一页（测试机 frontend-only · test-20261121-2320-px-dashboard-project-stats-first-84a26a65）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `84a26a65`；release = `test-20261121-2320-px-dashboard-project-stats-first-84a26a65`，previous = `test-20261121-2310-px-dashboard-line-motion-7eff6c71`；staging = `/srv/data/deploy-test-20261121-2320-px-dashboard-project-stats-first-84a26a65/staging`。
+
+> **改动 / 验收**：上方标题及底部入口改为「项目统计」，下方标题改为「项目当前阶段」，相关 aria 文案同步；页面顺序改为项目统计、问题归纳、项目经理、销售负责人、规划负责人，进入全部项目默认落在第一页。frontend `npm run typecheck` / `npm run build` 通过；线上 bundle 命中「项目统计」×4、「项目当前阶段」×4。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,443 B / SHA-256 `6636c40e…`、678 文件；`build-info.json` 393 B / `330f1214…`；`frontend-files.sha256` 92,437 B / `58089fd7…`；`release-files.sha256` 254 B / `5d3270ad…`。线上 1076 → 1078 文件（CSS 沿用同哈希），新增 2 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `4c5975aa…`、主包 `assets/index-dTWaa5Cj.js` 2,539,888 B / `1823fe08…`、CSS `assets/index-DhDIKdxP.css` 254,044 B / `25d059a3…`、ES `assets/es-CmkBpMiE.js` 428,098 B / `ea1e4639…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2320-px-dashboard-project-stats-first-84a26a65`，前端 156,008,107 B / `053a3601…`、原 manifest 4,074 B / `9370c2a8…`，SHA256SUMS 3 / 3 通过；新 manifest 4,077 B / `6d770a84…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 23:10 折线图切换动画（测试机 frontend-only · test-20261121-2310-px-dashboard-line-motion-7eff6c71）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `7eff6c71`；release = `test-20261121-2310-px-dashboard-line-motion-7eff6c71`，previous = `test-20261121-2300-px-dashboard-line-focus-4324c597`；staging = `/srv/data/deploy-test-20261121-2310-px-dashboard-line-motion-7eff6c71/staging`。
 
 > **改动 / 验收**：折线 720ms 从左到右绘制、三条线错峰 90ms；数据点 380ms 依次弹出（首点 240ms、年份间隔 65ms），数字再延迟 120ms；折线聚焦容器 420ms 淡入；切回柱状图恢复柱体入场动画。frontend `npm run typecheck` / `npm run build` 通过，本地浏览器已确认 dashoffset 与延迟生效。

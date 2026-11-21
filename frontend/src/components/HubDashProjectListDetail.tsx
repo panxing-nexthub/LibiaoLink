@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { DashboardProjectSummary } from "../data/dashboardProjectInsights";
 import { dashboardProjectStageLabel } from "../data/dashboardProjectInsights";
 import { stageText, useLocale, useT } from "../i18n";
+import { projectViewHref } from "../useHashRoute";
 import { useFocusTrap } from "./useFocusTrap";
 
 /**
@@ -84,26 +85,33 @@ export function HubDashProjectListDetail({ rows, context, showStage, onClose }: 
             <span className="hub-dash-project-list-detail__count">{t("hub.dash.projects.detail.count", { n: cards.length })}</span>
           </label>
           <div className="hub-dash-project-list-detail__scroll">
-            <div className="hub-dash-project-list-detail__grid" data-show-stage={showStage ? "true" : "false"} role="table" aria-label={t("hub.dash.detail.title")}>
-              <div className="hub-dash-project-list-detail__headRow" role="row">
-                <span role="columnheader">{t("import.field.type")}</span>
-                <span role="columnheader">{t("pm.column.code")}</span>
-                <span role="columnheader">{t("pm.column.name")}</span>
-                <span role="columnheader">{t("pm.column.manager")}</span>
-                {showStage ? <span role="columnheader">{t("hub.dash.projects.currentStageShort")}</span> : null}
-                <span role="columnheader">{t("hub.dash.projects.startupTime")}</span>
+            <div className="hub-dash-project-list-detail__grid" data-show-stage={showStage ? "true" : "false"}>
+              <div className="hub-dash-project-list-detail__headRow">
+                <span>{t("import.field.type")}</span>
+                <span>{t("pm.column.code")}</span>
+                <span>{t("pm.column.name")}</span>
+                <span>{t("pm.column.manager")}</span>
+                {showStage ? <span>{t("hub.dash.projects.currentStageShort")}</span> : null}
+                <span>{t("hub.dash.projects.startupTime")}</span>
               </div>
               {cards.map((card) => (
-                <div key={card.row.id} className="hub-dash-project-list-detail__row" role="row" data-project-code={card.row.code}>
-                  <span className="hub-dash-project-list-detail__cell hub-dash-project-list-detail__types" role="cell">
+                <a
+                  key={card.row.id}
+                  className="hub-dash-project-list-detail__row"
+                  data-project-code={card.row.code}
+                  href={projectViewHref(card.row.id, "overview")}
+                  aria-label={t("ws.openProject.title", { name: card.row.name, code: card.row.code })}
+                  title={t("ws.openProject.title", { name: card.row.name, code: card.row.code })}
+                >
+                  <span className="hub-dash-project-list-detail__cell hub-dash-project-list-detail__types">
                     {card.types.map((type) => <i key={type} data-type={type}>{type}</i>)}
                   </span>
-                  <span className="hub-dash-project-list-detail__cell" role="cell"><span className="hub-dash-detail__chip">{card.row.code}</span></span>
-                  <span className="hub-dash-project-list-detail__cell hub-dash-project-list-detail__name" role="cell" title={card.row.name}>{card.row.name}</span>
-                  <span className="hub-dash-project-list-detail__cell" role="cell" title={card.managers}>{card.managers}</span>
-                  {showStage ? <span className="hub-dash-project-list-detail__cell" role="cell" title={card.stage}>{card.stage}</span> : null}
-                  <span className="hub-dash-project-list-detail__cell hub-dash-detail__date" role="cell">{card.startup}</span>
-                </div>
+                  <span className="hub-dash-project-list-detail__cell"><span className="hub-dash-detail__chip">{card.row.code}</span></span>
+                  <span className="hub-dash-project-list-detail__cell hub-dash-project-list-detail__name">{card.row.name}</span>
+                  <span className="hub-dash-project-list-detail__cell" title={card.managers}>{card.managers}</span>
+                  {showStage ? <span className="hub-dash-project-list-detail__cell" title={card.stage}>{card.stage}</span> : null}
+                  <span className="hub-dash-project-list-detail__cell hub-dash-detail__date">{card.startup}</span>
+                </a>
               ))}
               {cards.length === 0 ? <div className="hub-dash-project-list-detail__empty">{t("hub.dash.pickEmpty")}</div> : null}
             </div>

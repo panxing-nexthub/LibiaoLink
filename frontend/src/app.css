@@ -5499,14 +5499,17 @@ body {
 }
 
 .hub-dash-project-list-detail__row {
+  position: relative;
   min-height: 3.4rem;
   margin-top: 0.45rem;
-  padding: 0.65rem 0.8rem;
+  padding: 0.65rem 2.35rem 0.65rem 0.8rem;
   border: 1px solid #e7eaee;
   border-radius: 0.65rem;
   background: #ffffff;
   color: #30363d;
   font-size: 0.82rem;
+  text-decoration: none;
+  cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 
@@ -5514,6 +5517,29 @@ body {
   border-color: #cfd9e6;
   background: #fbfdff;
   box-shadow: 0 8px 22px -20px rgb(15 23 42 / 0.45);
+}
+
+.hub-dash-project-list-detail__row:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.hub-dash-project-list-detail__row::after {
+  content: "›";
+  position: absolute;
+  top: 50%;
+  right: 0.85rem;
+  color: #9aa6b5;
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1;
+  transform: translateY(-50%);
+  transition: color 140ms ease, transform 140ms ease;
+}
+
+.hub-dash-project-list-detail__row:hover::after {
+  color: #3b82f6;
+  transform: translate(2px, -50%);
 }
 
 .hub-dash-project-list-detail__cell {

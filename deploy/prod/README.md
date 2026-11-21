@@ -1,3 +1,13 @@
+> **2026-11-21 22:30 类型图例上移释放纵轴空间（测试机 frontend-only · test-20261121-2230-px-dashboard-legend-row-cff6a383）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `cff6a383`；release = `test-20261121-2230-px-dashboard-legend-row-cff6a383`，previous = `test-20261121-2220-px-dashboard-fill-charts-56128a83`；staging = `/srv/data/deploy-test-20261121-2230-px-dashboard-legend-row-cff6a383/staging`。
+
+> **改动 / 验收**：项目数量图类型图例移到年份导航同一行右侧，年份导航保持居中；窄于 1100px 时图例回落年份导航下方。项目数量图绘图区高度由 353.1px 增至 383.7px，纵轴多出约 30.6px。frontend `npm run typecheck` / `npm run build` 通过。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,171 B / SHA-256 `fbe0ab0b…`、678 文件；`build-info.json` 361 B / `e803dc29…`；`frontend-files.sha256` 92,437 B / `f3935622…`；`release-files.sha256` 254 B / `23139b51…`。线上 1062 → 1065 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `0bf6c1f4…`、主包 `assets/index-CxmhPkYQ.js` 2,539,346 B / `32c4be41…`、CSS `assets/index-9__paoL7.css` 253,561 B / `6af5f1ec…`、ES `assets/es-wsDeVG7N.js` 428,098 B / `076b8cb1…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2230-px-dashboard-legend-row-cff6a383`，前端 151,400,424 B / `a8e51462…`、原 manifest 4,045 B / `1b1fe435…`，SHA256SUMS 3 / 3 通过；新 manifest 4,049 B / `b517f041…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 22:20 合并页图表撑满可用画布（测试机 frontend-only · test-20261121-2220-px-dashboard-fill-charts-56128a83）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `56128a83`；release = `test-20261121-2220-px-dashboard-fill-charts-56128a83`，previous = `test-20261121-2210-px-dashboard-balanced-panels-744ad7e0`；staging = `/srv/data/deploy-test-20261121-2220-px-dashboard-fill-charts-56128a83/staging`。
 
 > **改动 / 验收**：项目数量图 viewBox 高度 360 → 280，项目阶段图 400 → 320，使两图在现有面板内横向撑满；1600×1000 两图绘图区约 353 / 364px，1366×768 约 229 / 256px，均完整显示。frontend `npm run typecheck` / `npm run build` 通过。

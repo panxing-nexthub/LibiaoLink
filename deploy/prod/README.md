@@ -1,3 +1,15 @@
+> **2026-11-21 14:55–15:00 项目空间-兼容旧 API 已完成状态（正式机 frontend-only · prod-20261121-1455-px-project-legacy-done-e3e26632）**：代码来源 main `e3e26632`（功能 PR [#976](https://github.com/panxing-nexthub/LibiaoLink/pull/976) squash `9df209a0`；#938 仅补齐发布记录文档）。正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261121-1455-px-project-legacy-done-e3e26632`，previous = `prod-20261121-1121-px-pm-gantt-filter-copy-eb766751`；staging = `/srv/data/deploy-prod-20261121-1455-px-project-legacy-done-e3e26632/staging`，备份 = `/srv/data/backups/before-prod-20261121-1455-px-project-legacy-done-e3e26632`。
+>
+> **改动 / 构建**：从 `origin/main e3e26632` 的干净工作区构建。前端读模型兼容旧 API 的 `done`：卡片、地图、项目详情和编辑弹窗显示「已完成」；编辑旧 done 项目且不修改状态时 PATCH 省略 `status`；补充状态样式与中 / 英 / 日 / 韩文案。不新增状态值、不改筛选 / 写入契约 / 数据库约束。`npm run typecheck`、`npm run build` 通过，前端 678 文件。
+>
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,597,297 B / SHA-256 `2cd697d3…` / 692 归档条目 / 678 文件；`build-info.json` 1,407 B / `45585ea3…`；`frontend-files.sha256` 91,081 B / `ffcdbbb2…`；`release-files.sha256` 257 B / `b3a970ac…`，发布件 3 / 3 校验通过。按内容哈希原子替换 `index.html`、`assets/index-D1z0v-TS.js`、`assets/index-BbfRK8MA.css`、`assets/es-D-_S1q-1.js`；线上 1,461 → 1,464 文件，旧 hashed 资源全部保留。staging / live 均 678 / 678 哈希通过。
+>
+> **验证 / 备份 / 清单**：正式机 `/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；web / api / worker / postgres / minio / CAD / SVG preview / OnlyOffice 八个核心容器 healthy，RestartCount 0、OOM false，api / worker / web 近 10 分钟 `ERROR|FATAL` 为 0，未重启后端。公网 `index.html` 522 B / `d66e3bc4…`、主包 `assets/index-D1z0v-TS.js` 2,502,566 B / `68ec31da…`、CSS `assets/index-BbfRK8MA.css` 236,754 B / `6aaf69e4…`、ES 分包 `assets/es-D-_S1q-1.js` 428,098 B / `83a3505a…` 与构建逐字节一致，上一版主包 / CSS / ES 仍 200。备份 95,413,557 B / SHA-256SUMS `670d04ca…`，3 / 3 校验通过；新 `RELEASE_MANIFEST.json` 6,376 B / `42cdebb5…`，`root:root 644` 原子替换。
+>
+> **边界 / 回滚**：仅正式机 `10.1.103.44` 前端 dist、release manifest、staging 与备份；测试机 `10.1.104.44` 未重复部署。无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。回滚恢复 backup 的 `frontend-dist-before.tar.gz` 到 `/opt/libiaolink/frontend` 并恢复 `RELEASE_MANIFEST.json.before`，静态资源回滚无需重启 web。
+
+***
+
 > **2026-11-21 14:10 项目空间-兼容旧 API 已完成状态（测试机 frontend-only · test-20261121-1408-px-project-legacy-done-62880b75）**：代码来源 PR [#976](https://github.com/panxing-nexthub/LibiaoLink/pull/976)（wmj `4cc17cbb`）叠加 main `b98670a7`；构建分支 `codex/project-legacy-done-test-20261121` @ `62880b75`，PR 尚未合入。测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1408-px-project-legacy-done-62880b75`，previous = `test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4`；staging = `/srv/data/deploy-test-20261121-1408-px-project-legacy-done-62880b75/staging`，备份 = `/srv/data/backups/before-test-20261121-1408-px-project-legacy-done-62880b75`。
 >
 > **改动 / 验收**：前端读模型接受旧 API 的 `done`，列表、回收站、地图、项目详情与编辑弹窗按「已完成」展示；编辑旧 done 项目且不修改状态时 PATCH 省略 `status`。现行状态筛选、写入契约、数据库约束与迁移未改。frontend `npm run typecheck` / `npm run build`、回放脚本 `node --check` 与 `git diff --check` 通过；PR #976 的旧 done 浏览器回放已在本地 Chrome + 隔离 PostgreSQL 通过 5 / 5。

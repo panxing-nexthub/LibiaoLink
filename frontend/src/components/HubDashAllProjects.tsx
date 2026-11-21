@@ -78,7 +78,6 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
         <div className="hub-dash-all__slideCard">
         <div className="hub-dash-all__heading">
           <h3>{t("hub.dash.projects.role.manager")}</h3>
-          <p>{t("hub.dash.projects.role.subtitle")}</p>
         </div>
         <div className="hub-dash-all__roleBody">
           {analyticsReady ? <HubDashRoleStage role="manager" insights={insights} /> : analyticsFallback}
@@ -90,7 +89,6 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
         <div className="hub-dash-all__slideCard">
         <div className="hub-dash-all__heading">
           <h3>{t("hub.dash.projects.role.sales")}</h3>
-          <p>{t("hub.dash.projects.role.subtitle")}</p>
         </div>
         <div className="hub-dash-all__roleBody">
           {analyticsReady ? <HubDashRoleStage role="sales" insights={insights} /> : analyticsFallback}
@@ -102,7 +100,6 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
         <div className="hub-dash-all__slideCard">
         <div className="hub-dash-all__heading">
           <h3>{t("hub.dash.projects.role.planning")}</h3>
-          <p>{t("hub.dash.projects.role.subtitle")}</p>
         </div>
         <div className="hub-dash-all__roleBody">
           {analyticsReady ? <HubDashRoleStage role="planning" insights={insights} /> : analyticsFallback}

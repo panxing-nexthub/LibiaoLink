@@ -5151,3 +5151,8 @@ body {
     gap: 0.4rem 0.9rem;
   }
 }
+
+.hub-dash-role__hoverTotal {
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}

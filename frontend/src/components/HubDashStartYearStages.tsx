@@ -173,7 +173,7 @@ function StageBars({ insights, selectedYears }: {
 /**
  * 最新阶段 × 启动年份：
  * x = 九大阶段 + 异常归档 / 验收归档 / 归档-临时任务，y = 项目数；
- * 年份使用与项目数量图一致的多选方块筛选，悬停柱体显示所选年份的明细。
+ * 年份使用与项目统计图一致的多选方块筛选，悬停柱体显示所选年份的明细。
  */
 export function HubDashStartYearStages({ insights }: { readonly insights: DashboardProjectInsights }) {
   const t = useT();

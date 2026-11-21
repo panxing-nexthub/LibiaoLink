@@ -782,8 +782,8 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, i
       <div className="hub-dash-switch" data-all-projects={pickedId === null ? "true" : undefined}>
         {pickedId === null ? (
           <>
-            <DashViewSwitch view="projects-issues" checked={allSlide === 0} label={t("hub.dash.projects.nav.issues")} onSelect={() => goToPage(0)} />
-            <DashViewSwitch view="projects-types" checked={allSlide === 1} label={t("hub.dash.projects.nav.types")} onSelect={() => goToPage(1)} />
+            <DashViewSwitch view="projects-types" checked={allSlide === 0} label={t("hub.dash.projects.nav.types")} onSelect={() => goToPage(0)} />
+            <DashViewSwitch view="projects-issues" checked={allSlide === 1} label={t("hub.dash.projects.nav.issues")} onSelect={() => goToPage(1)} />
             <DashViewSwitch view="projects-manager" checked={allSlide === 2} label={t("hub.dash.projects.role.manager")} onSelect={() => goToPage(2)} />
             <DashViewSwitch view="projects-sales" checked={allSlide === 3} label={t("hub.dash.projects.role.sales")} onSelect={() => goToPage(3)} />
             <DashViewSwitch view="projects-planning" checked={allSlide === 4} label={t("hub.dash.projects.role.planning")} onSelect={() => goToPage(4)} />

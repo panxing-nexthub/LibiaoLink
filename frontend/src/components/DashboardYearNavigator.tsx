@@ -27,7 +27,7 @@ function YearArrowIcon({ direction }: { readonly direction: "left" | "right" }) 
 
 /**
  * 年份多选筛选条：蓝色方块 = 已选，灰色方块 = 未选。
- * 样式复用项目数量图的年份控件，保证全部项目各屏手感一致。
+ * 样式复用项目统计图的年份控件，保证全部项目各屏手感一致。
  */
 export function DashboardYearNavigator({
   numericYears,

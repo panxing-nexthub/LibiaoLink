@@ -29,7 +29,7 @@ function yearKey(year: YearKey): string { return year === null ? "unknown" : Str
 function includesYear(years: readonly YearKey[], year: YearKey): boolean { return years.some((item) => item === year); }
 
 /**
- * 「全部项目」项目数量统计：x = 启动年份，柱状图为每组三根柱，折线图为三条按年份连接的趋势线。
+ * 「全部项目」项目统计：x = 启动年份，柱状图为每组三根柱，折线图为三条按年份连接的趋势线。
  * 年份与类型均可点击筛选；年份默认最近 5 年，左右按钮切换年份窗口；最左侧「全选」为液态玻璃按钮。
  * 右侧按钮切换柱状图 / 折线图；两种图形共用年份、类型筛选和悬停统计。
  */

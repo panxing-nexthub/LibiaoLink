@@ -12,8 +12,8 @@ import { Loader } from "./Loader";
 type LoadingState = "idle" | "loading" | "ready" | "failed";
 
 /**
- * 仪表盘「全部项目」五屏滑轨（2026-11-21：项目数量与项目阶段合并为同一屏上下排布）：
- * ① 问题原因归纳；② 项目数量 + 项目阶段；③ 项目经理阶段；④ 销售负责人阶段；⑤ 规划负责人阶段。
+ * 仪表盘「全部项目」五屏滑轨（2026-11-21：项目统计与项目当前阶段合并为同一屏上下排布）：
+ * ① 项目统计 + 项目当前阶段；② 问题原因归纳；③ 项目经理阶段；④ 销售负责人阶段；⑤ 规划负责人阶段。
  * 每屏占满内容区，滚轮 / 键盘 / 底部切换共同驱动同一刚体滑轨。
  */
 export function HubDashAllProjects({ activeSlide, issues, issuesState, insights, insightsState, onIssueTip, onIssueRowTip, onLeave }: {
@@ -35,6 +35,29 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
     : <div className="hub-dash-state"><Loader /></div>;
   return (
     <HubDashSlideDeck activeIndex={activeSlide} allProjects>
+      <section className="hub-dash-all__slide" data-section="project-stats">
+        <div className="hub-dash-all__slideCard hub-dash-all__slideCard--stacked">
+          <div className="hub-dash-combined" data-line-expanded={lineExpanded ? "true" : "false"}>
+            <section className="hub-dash-combined__panel" data-panel="project-count">
+              <div className="hub-dash-all__heading">
+                <h3>{t("hub.dash.projects.typeYear.title")}</h3>
+              </div>
+              <div className="hub-dash-combined__chart">
+                {analyticsReady ? <HubDashProjectTypeYears insights={insights} expanded={lineExpanded} onChartTypeChange={setProjectChartType} /> : analyticsFallback}
+              </div>
+            </section>
+            <section className="hub-dash-combined__panel" data-panel="project-stage" aria-hidden={lineExpanded}>
+              <div className="hub-dash-all__heading">
+                <h3>{t("hub.dash.projects.startYear.title")}</h3>
+              </div>
+              <div className="hub-dash-combined__chart">
+                {analyticsReady ? <HubDashStartYearStages insights={insights} /> : analyticsFallback}
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
       <section className="hub-dash-all__slide" data-section="issues">
         <div className="hub-dash-all__slideCard">
           <div className="hub-dash-all__heading">
@@ -60,29 +83,6 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
             ) : (
               <div className="hub-dash-state"><Loader /></div>
             )}
-          </div>
-        </div>
-      </section>
-
-      <section className="hub-dash-all__slide" data-section="project-stats">
-        <div className="hub-dash-all__slideCard hub-dash-all__slideCard--stacked">
-          <div className="hub-dash-combined" data-line-expanded={lineExpanded ? "true" : "false"}>
-            <section className="hub-dash-combined__panel" data-panel="project-count">
-              <div className="hub-dash-all__heading">
-                <h3>{t("hub.dash.projects.typeYear.title")}</h3>
-              </div>
-              <div className="hub-dash-combined__chart">
-                {analyticsReady ? <HubDashProjectTypeYears insights={insights} expanded={lineExpanded} onChartTypeChange={setProjectChartType} /> : analyticsFallback}
-              </div>
-            </section>
-            <section className="hub-dash-combined__panel" data-panel="project-stage" aria-hidden={lineExpanded}>
-              <div className="hub-dash-all__heading">
-                <h3>{t("hub.dash.projects.startYear.title")}</h3>
-              </div>
-              <div className="hub-dash-combined__chart">
-                {analyticsReady ? <HubDashStartYearStages insights={insights} /> : analyticsFallback}
-              </div>
-            </section>
           </div>
         </div>
       </section>

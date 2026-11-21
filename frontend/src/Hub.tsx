@@ -461,7 +461,7 @@ export default function Hub({ me, routeView, rememberedView, onViewChange, remem
               <HubMap distribution={distribution} note={noteText} />
             </div>
             <div data-view="dashboard" data-hub-deck-cell="dashboard" className={deckCellClass + " " + dashSideClass}>
-              <HubDashboard data={dash} state={dashState} issues={issues} issuesState={issuesState} onNeedIssues={ensureIssues} insights={projectInsights} insightsState={projectInsightsState} onNeedProjectInsights={ensureProjectInsights} words={words} wordsState={wordsState} onNeedWords={ensureWords} rememberedDashProject={rememberedDashProject} onDashProjectChange={onDashProjectChange} rememberedDashView={rememberedDashView} onDashViewChange={onDashViewChange} />
+              <HubDashboard viewerId={me.user.id ?? "unknown"} data={dash} state={dashState} issues={issues} issuesState={issuesState} onNeedIssues={ensureIssues} insights={projectInsights} insightsState={projectInsightsState} onNeedProjectInsights={ensureProjectInsights} words={words} wordsState={wordsState} onNeedWords={ensureWords} rememberedDashProject={rememberedDashProject} onDashProjectChange={onDashProjectChange} rememberedDashView={rememberedDashView} onDashViewChange={onDashViewChange} />
             </div>
           </div>
           <nav className="hub-deck-dots" aria-label={t("hub.dots.label")}>

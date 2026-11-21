@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { stageText, useLocale, useT } from "../i18n";
+import { usePersistentDashboardFilter } from "../dashboardFilterStorage";
 import { DASHBOARD_YEAR_WINDOW, DashboardYearNavigator, type DashboardYearKey } from "./DashboardYearNavigator";
 import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
 import {
@@ -175,22 +176,44 @@ function StageBars({ insights, selectedYears }: {
  * x = 九大阶段 + 异常归档 / 验收归档 / 归档-临时任务，y = 项目数；
  * 年份使用与项目统计图一致的多选方块筛选，悬停柱体显示所选年份的明细。
  */
-export function HubDashStartYearStages({ insights }: { readonly insights: DashboardProjectInsights }) {
+export function HubDashStartYearStages({ insights, storageKeyPrefix }: {
+  readonly insights: DashboardProjectInsights;
+  /** 全部项目仪表盘传入时，按账号记住当前阶段图的年份筛选。 */
+  readonly storageKeyPrefix?: string;
+}) {
   const t = useT();
   const rows = insights.startYearStages;
   const numericYears = [...new Set(rows.map((row) => row.year).filter((year): year is number => year !== null))].sort((left, right) => left - right);
   const hasUnknownYear = rows.some((row) => row.year === null);
-  const [selectedYears, setSelectedYears] = useState<DashboardYearKey[]>(() => {
-    const recentYears = numericYears.slice(-DASHBOARD_YEAR_WINDOW);
-    return recentYears.length > 0 ? recentYears : hasUnknownYear ? [null] : [];
-  });
-  const [yearWindowStart, setYearWindowStart] = useState(() => Math.max(0, numericYears.length - DASHBOARD_YEAR_WINDOW));
+  const allYears: DashboardYearKey[] = hasUnknownYear ? [...numericYears, null] : [...numericYears];
+  const [selectedYears, setSelectedYears] = usePersistentDashboardFilter<DashboardYearKey[]>(
+    storageKeyPrefix ? storageKeyPrefix + ".selectedYears" : null,
+    () => {
+      const recentYears = numericYears.slice(-DASHBOARD_YEAR_WINDOW);
+      return recentYears.length > 0 ? recentYears : hasUnknownYear ? [null] : [];
+    },
+    (value): value is DashboardYearKey[] => Array.isArray(value) && value.every((item) => item === null || typeof item === "number"),
+  );
+  const [yearWindowStart, setYearWindowStart] = usePersistentDashboardFilter<number>(
+    storageKeyPrefix ? storageKeyPrefix + ".yearWindowStart" : null,
+    () => Math.max(0, numericYears.length - DASHBOARD_YEAR_WINDOW),
+    (value): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0,
+  );
   if (rows.length === 0) return <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>;
+  const allSelected = allYears.length > 0 && allYears.every((year) => includesYear(selectedYears, year));
   const toggleYear = (year: DashboardYearKey): void => setSelectedYears((current) =>
     includesYear(current, year) ? current.filter((item) => item !== year) : [...current, year]);
+  const toggleAllYears = (): void => setSelectedYears(allSelected ? [] : [...allYears]);
   return (
     <div className="hub-dash-start">
       <div className="hub-dash-start__yearFilter">
+        <button
+          type="button"
+          className="hub-dash-project-types__selectAll hub-dash-start__selectAll"
+          data-active={allSelected ? "true" : "false"}
+          aria-pressed={allSelected}
+          onClick={toggleAllYears}
+        >{t("hub.dash.projects.selectAll")}</button>
         <DashboardYearNavigator
           numericYears={numericYears}
           hasUnknownYear={hasUnknownYear}

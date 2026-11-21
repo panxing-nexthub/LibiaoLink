@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DASHBOARD_PROJECT_TYPE_COLORS, DASHBOARD_PROJECT_TYPES, type DashboardProjectInsights, type DashboardProjectTypeCode } from "../data/dashboardProjectInsights";
 import { useT } from "../i18n";
+import { usePersistentDashboardFilter } from "../dashboardFilterStorage";
 import { DASHBOARD_YEAR_WINDOW, DashboardYearNavigator, type DashboardYearKey } from "./DashboardYearNavigator";
 import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
 
@@ -33,31 +34,48 @@ function includesYear(years: readonly YearKey[], year: YearKey): boolean { retur
  * 年份与类型均可点击筛选；年份默认最近 5 年，左右按钮切换年份窗口；最左侧「全选」为液态玻璃按钮。
  * 右侧按钮切换柱状图 / 折线图；两种图形共用年份、类型筛选和悬停统计。
  */
-export function HubDashProjectTypeYears({ insights, expanded = false, onChartTypeChange }: {
+export function HubDashProjectTypeYears({ insights, expanded = false, onChartTypeChange, storageKeyPrefix }: {
   readonly insights: DashboardProjectInsights;
   readonly expanded?: boolean;
   readonly onChartTypeChange?: (chartType: DashboardProjectChartKind) => void;
+  /** 全部项目仪表盘传入时，按账号记住年份 / 类型 / 图表类型筛选。 */
+  readonly storageKeyPrefix?: string;
 }) {
   const t = useT();
   const rows = insights.typeByYear;
   const numericYears = [...new Set(rows.map((row) => row.year).filter((year): year is number => year !== null))].sort((left, right) => left - right);
   const hasUnknownYear = rows.some((row) => row.year === null);
   const allYears: YearKey[] = hasUnknownYear ? [...numericYears, null] : [...numericYears];
-  const [selectedYears, setSelectedYears] = useState<YearKey[]>(() => numericYears.slice(-DASHBOARD_YEAR_WINDOW));
-  const [visibleTypes, setVisibleTypes] = useState<DashboardProjectTypeCode[]>([...DASHBOARD_PROJECT_TYPES]);
-  const [yearWindowStart, setYearWindowStart] = useState(() => Math.max(0, numericYears.length - DASHBOARD_YEAR_WINDOW));
-  const [chartType, setChartType] = useState<ChartKind>("bar");
+  const [selectedYears, setSelectedYears] = usePersistentDashboardFilter<YearKey[]>(
+    storageKeyPrefix ? storageKeyPrefix + ".selectedYears" : null,
+    () => numericYears.slice(-DASHBOARD_YEAR_WINDOW),
+    (value): value is YearKey[] => Array.isArray(value) && value.every((item) => item === null || typeof item === "number"),
+  );
+  const [visibleTypes, setVisibleTypes] = usePersistentDashboardFilter<DashboardProjectTypeCode[]>(
+    storageKeyPrefix ? storageKeyPrefix + ".visibleTypes" : null,
+    () => [...DASHBOARD_PROJECT_TYPES],
+    (value): value is DashboardProjectTypeCode[] => Array.isArray(value) && value.every((item) => DASHBOARD_PROJECT_TYPES.includes(item as DashboardProjectTypeCode)),
+  );
+  const [yearWindowStart, setYearWindowStart] = usePersistentDashboardFilter<number>(
+    storageKeyPrefix ? storageKeyPrefix + ".yearWindowStart" : null,
+    () => Math.max(0, numericYears.length - DASHBOARD_YEAR_WINDOW),
+    (value): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0,
+  );
+  const [chartType, setChartType] = usePersistentDashboardFilter<ChartKind>(
+    storageKeyPrefix ? storageKeyPrefix + ".chartType" : null,
+    "bar",
+    (value): value is ChartKind => value === "bar" || value === "line",
+  );
   const [tip, setTip] = useState<DashboardHoverTip | null>(null);
   const [hoverYear, setHoverYear] = useState<string | null>(null);
   const expandedLine = expanded && chartType === "line";
   const viewH = expandedLine ? 520 : VIEW_H;
   const axisY = expandedLine ? 430 : AXIS_Y;
   const tickLabelY = expandedLine ? 458 : TICK_LABEL_Y;
-  const chartToggle = (): void => {
-    const next = chartType === "bar" ? "line" : "bar";
-    setChartType(next);
-    onChartTypeChange?.(next);
-  };
+  useEffect(() => {
+    onChartTypeChange?.(chartType);
+  }, [chartType, onChartTypeChange]);
+  const chartToggle = (): void => setChartType((current) => current === "bar" ? "line" : "bar");
 
   if (rows.length === 0) return <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>;
 

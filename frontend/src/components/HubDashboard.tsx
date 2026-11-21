@@ -237,7 +237,9 @@ function DashViewSwitch({ view, checked, label, onSelect }: {
     </label>
   );
 }
-export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, insights, insightsState, onNeedProjectInsights, words, wordsState, onNeedWords, rememberedDashProject, onDashProjectChange, rememberedDashView, onDashViewChange }: {
+export function HubDashboard({ viewerId, data, state, issues, issuesState, onNeedIssues, insights, insightsState, onNeedProjectInsights, words, wordsState, onNeedWords, rememberedDashProject, onDashProjectChange, rememberedDashView, onDashViewChange }: {
+  /** 当前登录账号 id：仪表盘筛选记忆按账号隔离。 */
+  viewerId: string;
   data: DashboardDataset | null;
   state: HubDashboardState;
   /** 「问题」视图数据（Push 344 · 懒加载：首次切到「问题」时才拉；null = 还没拉）。 */
@@ -667,6 +669,7 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, i
       <div className="hub-dash-viewport" data-hub-dash-viewport="" data-hub-dash-all-projects={pickedId === null ? "true" : undefined}>
         {pickedId === null ? (
           <HubDashAllProjects
+            viewerId={viewerId}
             activeSlide={allSlide}
             issues={issuesView}
             issuesState={issuesState}

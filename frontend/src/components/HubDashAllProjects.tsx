@@ -1,6 +1,7 @@
 import { useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { DashboardIssues } from "../data/dashboardProgress";
 import type { DashboardProjectInsights } from "../data/dashboardProjectInsights";
+import { dashboardFilterKey } from "../dashboardFilterStorage";
 import { useT } from "../i18n";
 import { HubDashIssues, type DashboardIssueRow } from "./HubDashIssues";
 import { HubDashProjectTypeYears, type DashboardProjectChartKind } from "./HubDashProjectTypeYears";
@@ -16,7 +17,8 @@ type LoadingState = "idle" | "loading" | "ready" | "failed";
  * ① 项目统计 + 项目当前阶段；② 问题原因归纳；③ 项目经理阶段；④ 销售负责人阶段；⑤ 规划负责人阶段。
  * 每屏占满内容区，滚轮 / 键盘 / 底部切换共同驱动同一刚体滑轨。
  */
-export function HubDashAllProjects({ activeSlide, issues, issuesState, insights, insightsState, onIssueTip, onIssueRowTip, onLeave }: {
+export function HubDashAllProjects({ viewerId, activeSlide, issues, issuesState, insights, insightsState, onIssueTip, onIssueRowTip, onLeave }: {
+  readonly viewerId: string;
   readonly activeSlide: number;
   readonly issues: DashboardIssues | null;
   readonly issuesState: LoadingState;
@@ -43,7 +45,7 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
                 <h3>{t("hub.dash.projects.typeYear.title")}</h3>
               </div>
               <div className="hub-dash-combined__chart">
-                {analyticsReady ? <HubDashProjectTypeYears insights={insights} expanded={lineExpanded} onChartTypeChange={setProjectChartType} /> : analyticsFallback}
+                {analyticsReady ? <HubDashProjectTypeYears insights={insights} expanded={lineExpanded} onChartTypeChange={setProjectChartType} storageKeyPrefix={dashboardFilterKey(viewerId, "project")} /> : analyticsFallback}
               </div>
             </section>
             <section className="hub-dash-combined__panel" data-panel="project-stage" aria-hidden={lineExpanded}>
@@ -51,7 +53,7 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
                 <h3>{t("hub.dash.projects.startYear.title")}</h3>
               </div>
               <div className="hub-dash-combined__chart">
-                {analyticsReady ? <HubDashStartYearStages insights={insights} /> : analyticsFallback}
+                {analyticsReady ? <HubDashStartYearStages insights={insights} storageKeyPrefix={dashboardFilterKey(viewerId, "stage")} /> : analyticsFallback}
               </div>
             </section>
           </div>
@@ -72,6 +74,7 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
                 <HubDashIssues
                   issues={issues}
                   canDrill={false}
+                  filterStorageKey={dashboardFilterKey(viewerId, "issues.categories")}
                   onTip={onIssueTip}
                   onRowTip={onIssueRowTip}
                   onLeave={onLeave}
@@ -93,7 +96,7 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
             <h3>{t("hub.dash.projects.role.manager")}</h3>
           </div>
           <div className="hub-dash-all__roleBody">
-            {analyticsReady ? <HubDashRoleStage role="manager" insights={insights} /> : analyticsFallback}
+            {analyticsReady ? <HubDashRoleStage role="manager" insights={insights} storageKeyPrefix={dashboardFilterKey(viewerId, "role.manager")} /> : analyticsFallback}
           </div>
         </div>
       </section>
@@ -104,7 +107,7 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
             <h3>{t("hub.dash.projects.role.sales")}</h3>
           </div>
           <div className="hub-dash-all__roleBody">
-            {analyticsReady ? <HubDashRoleStage role="sales" insights={insights} /> : analyticsFallback}
+            {analyticsReady ? <HubDashRoleStage role="sales" insights={insights} storageKeyPrefix={dashboardFilterKey(viewerId, "role.sales")} /> : analyticsFallback}
           </div>
         </div>
       </section>
@@ -115,7 +118,7 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
             <h3>{t("hub.dash.projects.role.planning")}</h3>
           </div>
           <div className="hub-dash-all__roleBody">
-            {analyticsReady ? <HubDashRoleStage role="planning" insights={insights} /> : analyticsFallback}
+            {analyticsReady ? <HubDashRoleStage role="planning" insights={insights} storageKeyPrefix={dashboardFilterKey(viewerId, "role.planning")} /> : analyticsFallback}
           </div>
         </div>
       </section>

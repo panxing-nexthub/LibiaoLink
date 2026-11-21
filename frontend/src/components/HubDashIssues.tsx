@@ -1,6 +1,7 @@
 import { useState, type MouseEvent as ReactMouseEvent } from "react";
 import { DASHBOARD_ISSUE_COLORS, dashboardIssueKey, type DashboardIssues } from "../data/dashboardProgress";
 import { fieldText, statusText, useLocale, useT } from "../i18n";
+import { usePersistentDashboardFilter } from "../dashboardFilterStorage";
 
 /**
  * 仪表盘「问题」分组柱状图（Push 344 · 业务口径 2026-10-16「现在做这个问题 效果和上面做的一样」）：
@@ -30,10 +31,6 @@ const LEGEND_FONT = 16;
 const LEGEND_SWATCH = 14;
 const LEGEND_ITEM_GAP = 44;
 const LEGEND_AREA_LEFT = 94;
-const SELECT_ALL_X = 14;
-const SELECT_ALL_Y = 2;
-const SELECT_ALL_W = 62;
-const SELECT_ALL_H = 28;
 /** 柱宽上限与柱间距比例（一组里柱子越多 / 组越窄，柱越窄）。 */
 const BAR_MAX_W = 46;
 const BAR_GAP_RATIO = 0.32;
@@ -67,8 +64,10 @@ function textWidthOf(text: string, fontSize: number): number {
 /** 一组柱子里的分类行（只含有数据的归类）。 */
 export type DashboardIssueRow = { readonly category: string; readonly count: number };
 
-export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPick, fontScale = 1 }: {
+export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPick, filterStorageKey, fontScale = 1 }: {
   readonly issues: DashboardIssues;
+  /** 全部项目仪表盘传入时按账号记住分类显隐；单项目不传。 */
+  readonly filterStorageKey?: string;
   /** 选中具体项目才可点柱（开「数据详情」）；「全部项目」下光标保持箭头、不给来源。 */
   readonly canDrill: boolean;
   /** 悬停柱：父组件把鼠标位置换算成白卡坐标并出浮层卡（状态名 + 归类 + 条数）。 */
@@ -86,7 +85,12 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
   const locale = useLocale();
   /** 悬停中的状态组（整组铺浅灰底，与参考图二同款）。 */
   const [hover, setHover] = useState<string | null>(null);
-  const [visibleCategories, setVisibleCategories] = useState<string[]>(() => [...issues.categories]);
+  const [visibleCategories, setVisibleCategories] = usePersistentDashboardFilter<string[]>(
+    filterStorageKey ?? null,
+    () => [...issues.categories],
+    (value): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string"),
+  );
+  const activeVisibleCategories = issues.categories.filter((category) => visibleCategories.includes(category));
   /** 总览字号倍率（见上）：字号与随之变化的排版量都从这里取；倍率 1 时与旧值逐值一致。 */
   const fs = fontScale;
   const legendBaseFont = LEGEND_FONT * fs;
@@ -96,8 +100,9 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
   if (issues.states.length === 0 || issues.categories.length === 0) {
     return null;
   }
-  const allSelected = issues.categories.length === visibleCategories.length
-    && issues.categories.every((category) => visibleCategories.includes(category));
+  const allSelected = issues.categories.length > 0
+    && issues.categories.length === activeVisibleCategories.length
+    && issues.categories.every((category) => activeVisibleCategories.includes(category));
   const toggleCategory = (category: string): void => {
     onLeave();
     setVisibleCategories((current) => current.includes(category)
@@ -110,7 +115,7 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
   };
   /** 行 = 状态 × 可见归类 的计数矩阵（0 条不画柱、也不进浮层卡）。 */
   const groups = issues.states.map((state) => {
-    const rows = visibleCategories
+    const rows = activeVisibleCategories
       .map((category) => ({ category, count: issues.counts.get(dashboardIssueKey(state, category)) ?? 0 }))
       .filter((row) => row.count > 0);
     return { state, rows };
@@ -119,7 +124,7 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
   const { max: tickMax, step } = axisOf(Math.max(maxBar, 1));
   const unit = (AXIS_Y - PLOT_TOP) / tickMax;
   const groupW = PLOT_W / issues.states.length;
-  const barW = Math.min(BAR_MAX_W, (groupW * 0.68) / Math.max(visibleCategories.length, 1));
+  const barW = Math.min(BAR_MAX_W, (groupW * 0.68) / Math.max(activeVisibleCategories.length, 1));
   const barGap = barW * BAR_GAP_RATIO;
   const ticks: number[] = [];
   for (let value = 0; value <= tickMax; value += step) {
@@ -137,30 +142,20 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
   const legendTotal = legendWidths.reduce((sum, width) => sum + width, 0) + LEGEND_ITEM_GAP * Math.max(legendWidths.length - 1, 0);
   let legendX = LEGEND_AREA_LEFT + Math.max(0, VIEW_W - LEGEND_AREA_LEFT - 20 - legendTotal) / 2;
   issues.categories.forEach((category, index) => {
-    legendItems.push({ category, text: fieldText(locale, category), x: legendX, active: visibleCategories.includes(category) });
+    legendItems.push({ category, text: fieldText(locale, category), x: legendX, active: activeVisibleCategories.includes(category) });
     legendX += legendWidths[index] + LEGEND_ITEM_GAP;
   });
   return (
-    <svg className="hub-dash-issues" viewBox={"0 0 " + VIEW_W + " " + VIEW_H} preserveAspectRatio="xMidYMid meet" role="img" aria-label={t("hub.dash.issues.aria")} onMouseLeave={() => { setHover(null); onLeave(); }}>
-      <g
-        className="hub-dash-issues__selectAll"
+    <div className="hub-dash-issues-wrap">
+      <button
+        type="button"
+        className="hub-dash-project-types__selectAll hub-dash-issues__selectAllButton"
         data-active={allSelected ? "true" : "false"}
-        role="button"
-        tabIndex={0}
-        aria-label={t("hub.dash.projects.selectAll")}
         aria-pressed={allSelected}
         onClick={toggleAll}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            toggleAll();
-          }
-        }}
-      >
-        <rect className="hub-dash-issues__selectAllBg" x={SELECT_ALL_X} y={SELECT_ALL_Y} width={SELECT_ALL_W} height={SELECT_ALL_H} rx={9} />
-        <text className="hub-dash-issues__selectAllText" x={SELECT_ALL_X + SELECT_ALL_W / 2} y={SELECT_ALL_Y + 19} textAnchor="middle" fontSize={13} fontWeight={650}>{t("hub.dash.projects.selectAll")}</text>
-      </g>
-      {legendItems.map((item) => (
+      >{t("hub.dash.projects.selectAll")}</button>
+      <svg className="hub-dash-issues" viewBox={"0 0 " + VIEW_W + " " + VIEW_H} preserveAspectRatio="xMidYMid meet" role="img" aria-label={t("hub.dash.issues.aria")} onMouseLeave={() => { setHover(null); onLeave(); }}>
+            {legendItems.map((item) => (
         <g
           key={"legend-" + item.category}
           className="hub-dash-issues__legendItem"
@@ -191,7 +186,7 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
       {groups.map((group, groupIndex) => {
         const gx = PLOT_X0 + groupW * groupIndex;
         const center = gx + groupW / 2;
-        const totalW = visibleCategories.length * barW + Math.max(visibleCategories.length - 1, 0) * barGap;
+        const totalW = activeVisibleCategories.length * barW + Math.max(activeVisibleCategories.length - 1, 0) * barGap;
         const startX = center - totalW / 2;
         return (
           <g key={group.state}>
@@ -207,7 +202,7 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
               onMouseMove={(event) => { if (group.rows.length > 0) onRowTip(event, group.state, group.rows); }}
               onMouseLeave={() => { setHover(null); onLeave(); }}
             />
-            {visibleCategories.map((category, seriesIndex) => {
+            {activeVisibleCategories.map((category, seriesIndex) => {
               const count = issues.counts.get(dashboardIssueKey(group.state, category)) ?? 0;
               if (count === 0) {
                 return null;
@@ -243,6 +238,7 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
           </g>
         );
       })}
-    </svg>
+      </svg>
+    </div>
   );
 }

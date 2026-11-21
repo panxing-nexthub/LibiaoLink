@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { TextKey } from "../i18n";
 import { stageText, useLocale, useT } from "../i18n";
+import { usePersistentDashboardFilter } from "../dashboardFilterStorage";
 import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
 import {
   DASHBOARD_PROJECT_STAGE_BUCKETS,
@@ -196,9 +197,19 @@ export function HubDashProjectStageLegend({ visibleStages, onToggleStage, onSele
  * 同一项目同一角色同一人去重；未配置对应负责人落「待分配」。
  * 阶段图例可逐项显隐，隐藏阶段不再绘制，合计与纵轴按可见阶段重算。
  */
-export function HubDashRoleStage({ role, insights }: { readonly role: DashboardProjectRole; readonly insights: DashboardProjectInsights }) {
+export function HubDashRoleStage({ role, insights, storageKeyPrefix }: {
+  readonly role: DashboardProjectRole;
+  readonly insights: DashboardProjectInsights;
+  /** 全部项目仪表盘传入时，按账号记住该角色页的阶段显隐。 */
+  readonly storageKeyPrefix?: string;
+}) {
   const stats = insights.roles.find((item) => item.role === role);
-  const [visibleStages, setVisibleStages] = useState<DashboardProjectStageBucket[]>(() => [...DASHBOARD_PROJECT_STAGE_BUCKETS]);
+  const [visibleStages, setVisibleStages] = usePersistentDashboardFilter<DashboardProjectStageBucket[]>(
+    storageKeyPrefix ? storageKeyPrefix + ".visibleStages" : null,
+    () => [...DASHBOARD_PROJECT_STAGE_BUCKETS],
+    (value): value is DashboardProjectStageBucket[] => Array.isArray(value)
+      && value.every((item) => DASHBOARD_PROJECT_STAGE_BUCKETS.includes(item as DashboardProjectStageBucket)),
+  );
   const allSelected = visibleStages.length === DASHBOARD_PROJECT_STAGE_BUCKETS.length;
   const toggleStage = (stage: DashboardProjectStageBucket): void => setVisibleStages((current) =>
     current.includes(stage) ? current.filter((item) => item !== stage) : [...current, stage]);

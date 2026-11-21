@@ -18,6 +18,7 @@
  * 用法：node scripts/ui-project-status-e2e.mjs
  * 仅回放旧 API 已完成项目：node scripts/ui-project-status-e2e.mjs --legacy-done
  * 仅回放编辑并归档：node scripts/ui-project-status-e2e.mjs --archive-update
+ * 仅回放恢复归档和恢复后的编辑：node scripts/ui-project-status-e2e.mjs --archive-restore
  *   可覆盖的环境变量：FRONTEND_BASE / API_BASE / DATABASE_URL / CHROME_PATH / CDP_PORT / REPLAY_USER / PG_MODULE / SHOT_DIR
  */
 
@@ -402,6 +403,67 @@ async function runArchiveUpdateReplay() {
     JSON.stringify({ closed, status: archived.status, name: archived.name, archiveKind: record?.archive_kind, actions }));
 }
 
+async function runArchiveRestoreReplay() {
+  const readFields = async () => (await db.query(
+    "select code, name, manager_ids, region, project_type, additional_project_types, description from projects where id = $1",
+    [throwId],
+  )).rows[0];
+  const initial = await projectRowOf(throwId);
+  const initialFields = await readFields();
+  const archive = await apiCall("POST", "/api/v1/projects/" + throwId + "/archive", {
+    version: initial.version,
+    archiveKind: "unaccepted",
+  });
+  if (archive.status !== 200) throw new Error("准备归档项目失败：" + archive.status + " " + j(archive.body));
+
+  await page.send("Emulation.setDeviceMetricsOverride", { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await page.send("Page.navigate", { url: FRONTEND + "/#/projects" });
+  const cardVisible = "Array.from(document.querySelectorAll('.project-card h1')).some((node) => node.textContent.trim() === " + j(throwCode) + ")";
+  if (!await waitFor(cardVisible, 20000) || !await openEditFor(throwCode)) throw new Error("已归档项目的编辑入口不可用");
+
+  const nameInput = "input[placeholder='如 中国包裹分拣']";
+  const selectors = [
+    "input[placeholder='如 CNBJ-20260708-0001']",
+    nameInput,
+    "button[aria-label='选择项目经理']",
+    "button[aria-label='选择项目地区']",
+    "button[aria-label='选择项目类型']",
+    "textarea",
+  ].map((selector) => "#project-modal-form " + selector);
+  const fieldStates = () => ev(j(selectors) + ".map((selector) => document.querySelector(selector)?.matches(':disabled') ?? null)");
+  const beforeSelection = await fieldStates();
+  await clickSelector("[data-project-status-option='active']");
+  const afterSelection = await fieldStates();
+  check("归档项目的六个基本字段始终只读，包括选中进行中之后",
+    [...beforeSelection, ...afterSelection].every((disabled) => disabled === true), j({ beforeSelection, afterSelection }));
+
+  await clickSelector(submitSel);
+  const closed = "document.querySelector(" + j(editDialogSel) + ") === null";
+  const restored = await waitFor(closed, 12000);
+  const restoredRow = await projectRowOf(throwId);
+  const restoredFields = await readFields();
+  check("恢复后关闭弹窗，项目进入进行中且基本字段保留原值",
+    restored && restoredRow.status === "active" && j(restoredFields) === j(initialFields),
+    j({ restored, status: restoredRow.status, fieldsPreserved: j(restoredFields) === j(initialFields) }));
+
+  if (!restored) return;
+  const activeBadge = '[data-live-row="' + throwId + '"] [data-card-status="active"]';
+  const activeCard = "document.querySelector(" + j(activeBadge) + ") !== null";
+  if (!await waitFor(activeCard, 12000) || !await openEditFor(throwCode)) throw new Error("恢复后的普通编辑入口不可用");
+  const editableFields = await fieldStates();
+  const changedName = "回放-恢复后编辑-" + stamp;
+  const nameSelector = "#project-modal-form " + nameInput;
+  await clickSelector(nameSelector);
+  await ev("document.querySelector(" + j(nameSelector) + ").select()");
+  await page.send("Input.insertText", { text: changedName });
+  await clickSelector(submitSel);
+  const saved = await waitFor(closed, 12000);
+  const edited = await projectRowOf(throwId);
+  check("恢复后普通编辑的六个基本字段可用且名称修改落库",
+    editableFields.every((disabled) => disabled === false) && saved && edited.name === changedName && edited.status === "active",
+    j({ editableFields, saved, name: edited.name, status: edited.status }));
+}
+
 async function runProjectStatusReplay() {
   // ---------- ① 卡片状态字 ----------
   await page.send("Emulation.setDeviceMetricsOverride", { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false });
@@ -706,6 +768,8 @@ try {
     await runLegacyDoneReplay();
   } else if (process.argv.includes("--archive-update")) {
     await runArchiveUpdateReplay();
+  } else if (process.argv.includes("--archive-restore")) {
+    await runArchiveRestoreReplay();
   } else {
     await runProjectStatusReplay();
   }

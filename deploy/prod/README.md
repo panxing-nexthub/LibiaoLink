@@ -1,3 +1,13 @@
+> **2026-11-21 23:50 仪表盘柱状图动态轴适配（测试机 frontend-only · test-20261121-2350-px-dashboard-axis-fit-b2cb7560）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `b2cb7560`；release = `test-20261121-2350-px-dashboard-axis-fit-b2cb7560`，previous = `test-20261121-2340-px-dashboard-filter-memory-f4086a48`；staging = `/srv/data/deploy-test-20261121-2350-px-dashboard-axis-fit-b2cb7560/staging`。
+
+> **改动 / 验收**：新增统一纵轴算法，最高值预留约 8% 顶部空间，采用 1 / 2 / 5 × 10^n 整数整齐步长；覆盖项目进度、问题原因、项目统计、负责人阶段、项目当前阶段、交付时间。去掉柱顶数字的坐标区 clamp，最高值 9 时纵轴为 0 / 5 / 10，数字 bottom=179.8px 小于柱顶 top=184.0px，不再重合。frontend `npm run typecheck` / `npm run build` 通过。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,608,161 B / SHA-256 `e8f95c9a…`、678 文件；`build-info.json` 378 B / `659d7124…`；`frontend-files.sha256` 92,437 B / `a7d4ba59…`；`release-files.sha256` 254 B / `8ad13106…`。线上 1081 → 1083 文件（CSS 沿用同哈希），新增 2 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `de5bf2cd…`、主包 `assets/index-Ba_ezHwp.js` 2,540,533 B / `c460ac50…`、CSS `assets/index-DCI9uLXa.css` 254,336 B / `ab7cc7bf…`、ES `assets/es-D8bSPlm1.js` 428,098 B / `2bc75199…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2350-px-dashboard-axis-fit-b2cb7560`，前端 157,840,862 B / `f8e55b34…`、原 manifest 4,379 B / `0cbc8785…`，SHA256SUMS 3 / 3 通过；新 manifest 4,071 B / `8fcc1c48…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 23:40 仪表盘全选统一与筛选记忆（测试机 frontend-only · test-20261121-2340-px-dashboard-filter-memory-f4086a48）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `f4086a48`；release = `test-20261121-2340-px-dashboard-filter-memory-f4086a48`，previous = `test-20261121-2320-px-dashboard-project-stats-first-84a26a65`；staging = `/srv/data/deploy-test-20261121-2340-px-dashboard-filter-memory-f4086a48/staging`。
 
 > **改动 / 验收**：问题原因归纳、项目统计、项目当前阶段三处全选统一放到最左并使用同一玻璃按钮；项目当前阶段新增年份全选。全部项目仪表盘筛选按 viewerId 存 localStorage：问题分类、项目年份 / 类型 / 窗口 / 柱线模式、负责人阶段显隐、当前阶段年份 / 窗口，刷新后保持。frontend `npm run typecheck` / `npm run build` 通过；本地夹具刷新后上述筛选和折线聚焦状态全部保持。

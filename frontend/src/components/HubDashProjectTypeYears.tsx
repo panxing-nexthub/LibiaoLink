@@ -80,7 +80,7 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
   return (
     <div className="hub-dash-project-types-wrap">
       <div className="hub-dash-project-types__controls">
-        <div className="hub-dash-project-types__yearLine">
+        <div className="hub-dash-project-types__filterGrid">
           <div className="hub-dash-project-types__leftControls">
             <button type="button" className="hub-dash-project-types__selectAll" data-active={allSelected ? "true" : "false"} aria-pressed={allSelected} onClick={() => setSelectedYears(allSelected ? [] : [...allYears])}>{t("hub.dash.projects.selectAll")}</button>
             <button
@@ -92,24 +92,26 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
               onClick={() => setChartType((current) => current === "bar" ? "line" : "bar")}
             >{chartType === "bar" ? t("hub.dash.projects.typeYear.viewLine") : t("hub.dash.projects.typeYear.viewBar")}</button>
           </div>
-          <DashboardYearNavigator
-            numericYears={numericYears}
-            hasUnknownYear={hasUnknownYear}
-            selectedYears={selectedYears}
-            onToggleYear={toggleYear}
-            windowStart={yearWindowStart}
-            onWindowStartChange={setYearWindowStart}
-          />
-        </div>
-        <div className="hub-dash-project-types__typeLine">
-          {DASHBOARD_PROJECT_TYPES.map((type) => {
-            const active = visibleTypes.includes(type);
-            return (
-              <button key={type} type="button" className="hub-dash-project-types__typeChip" data-active={active ? "true" : "false"} aria-pressed={active} onClick={() => toggleType(type)}>
-                <i style={{ background: active ? DASHBOARD_PROJECT_TYPE_COLORS[type] : "#c9ced6" }} /><span>{type}</span>
-              </button>
-            );
-          })}
+          <div className="hub-dash-project-types__rightFilters">
+            <DashboardYearNavigator
+              numericYears={numericYears}
+              hasUnknownYear={hasUnknownYear}
+              selectedYears={selectedYears}
+              onToggleYear={toggleYear}
+              windowStart={yearWindowStart}
+              onWindowStartChange={setYearWindowStart}
+            />
+            <div className="hub-dash-project-types__typeLine">
+              {DASHBOARD_PROJECT_TYPES.map((type) => {
+                const active = visibleTypes.includes(type);
+                return (
+                  <button key={type} type="button" className="hub-dash-project-types__typeChip" data-active={active ? "true" : "false"} aria-pressed={active} onClick={() => toggleType(type)}>
+                    <i style={{ background: active ? DASHBOARD_PROJECT_TYPE_COLORS[type] : "#c9ced6" }} /><span>{type}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 

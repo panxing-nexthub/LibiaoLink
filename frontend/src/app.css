@@ -4916,13 +4916,6 @@ body {
   gap: 0.35rem;
 }
 
-.hub-dash-combined__panel .hub-dash-project-types__typeLine {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
 .hub-dash-combined__panel .hub-dash-start {
   gap: 0.35rem;
 }
@@ -5161,31 +5154,36 @@ body {
   min-width: 0;
 }
 
-.hub-dash-project-types__yearLine {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.42rem;
+.hub-dash-project-types__filterGrid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.35rem 0.55rem;
+  align-items: start;
   min-width: 0;
-  min-height: 68px;
 }
 
 .hub-dash-project-types__leftControls {
-  position: absolute;
-  left: 0;
-  top: 50%;
   z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.25rem;
-  transform: translateY(-50%);
 }
 
 .hub-dash-project-types__leftControls > .hub-dash-project-types__selectAll {
   position: static;
   transform: none;
+}
+
+.hub-dash-project-types__rightFilters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.hub-dash-project-types__rightFilters > .hub-dash-project-types__yearNavigator {
+  min-height: 29px;
 }
 
 .hub-dash-project-types__yearNavigator {
@@ -5360,26 +5358,8 @@ body {
   user-select: none;
 }
 
-@media (max-width: 1100px) {
-  .hub-dash-combined__panel .hub-dash-project-types__typeLine {
-    position: static;
-    transform: none;
-  }
-}
-
 @media (max-width: 639.98px) {
-  .hub-dash-project-types__yearLine {
-    flex-wrap: wrap;
-    gap: 0.28rem;
-    min-height: 0;
-  }
-
   .hub-dash-project-types__selectAll {
-    position: static;
-    transform: none;
-  }
-
-  .hub-dash-project-types__leftControls {
     position: static;
     transform: none;
   }

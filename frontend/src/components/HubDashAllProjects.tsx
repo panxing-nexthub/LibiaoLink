@@ -67,7 +67,6 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
         <div className="hub-dash-all__slideCard">
         <div className="hub-dash-all__heading">
           <h3>{t("hub.dash.projects.typeYear.title")}</h3>
-          <p>{t("hub.dash.projects.typeYear.subtitle")}</p>
         </div>
         <div className="hub-dash-all__chart">
           {analyticsReady ? <HubDashProjectTypeYears insights={insights} /> : analyticsFallback}

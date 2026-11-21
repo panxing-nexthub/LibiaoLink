@@ -3725,6 +3725,59 @@
           "total"
         ]
       },
+      "DashboardProjectAnalyticsResponse": {
+        "type": "object",
+        "properties": {
+          "totalProjects": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "projectTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "固定顺序：T-sort / 3D分拣 / 飞箱"
+          },
+          "stageBuckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardProjectStageBucket"
+            },
+            "description": "固定顺序：九阶段 + 异常归档 / 验收归档 / 归档-临时任务"
+          },
+          "typeByYear": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardProjectTypeYear"
+            },
+            "description": "年份升序，未记录启动时间置末；多类型项目在每个命中类型各计一次"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardProjectRoleStats"
+            },
+            "description": "固定顺序：项目经理 / 销售负责人 / 规划负责人"
+          },
+          "startYearStages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardProjectStartYearStage"
+            },
+            "description": "年份升序，未记录启动时间置末"
+          }
+        },
+        "required": [
+          "totalProjects",
+          "projectTypes",
+          "stageBuckets",
+          "typeByYear",
+          "roles",
+          "startYearStages"
+        ],
+        "description": "全部项目维度聚合读面（项目数量 / 负责人 / 启动年份 × 最新阶段）"
+      },
       "DashboardProjectProgress": {
         "type": "object",
         "properties": {
@@ -3753,6 +3806,160 @@
           "projectName",
           "managerNames",
           "summary"
+        ]
+      },
+      "DashboardProjectRole": {
+        "type": "string",
+        "enum": [
+          "manager",
+          "sales",
+          "planning"
+        ],
+        "description": "manager = 项目经理，sales = 销售负责人，planning = 规划负责人"
+      },
+      "DashboardProjectRolePerson": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "人员账号 id；待分配 = null"
+              }
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "人员显示名；账号姓名缺失 = null"
+          },
+          "isUnassigned": {
+            "type": "boolean"
+          },
+          "stageCounts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "与 stageBuckets 同序的项目数量"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "personId",
+          "name",
+          "isUnassigned",
+          "stageCounts",
+          "total"
+        ]
+      },
+      "DashboardProjectRoleStats": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/DashboardProjectRole"
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardProjectRolePerson"
+            },
+            "description": "按项目总数降序；待分配行（若有）置末"
+          }
+        },
+        "required": [
+          "role",
+          "people"
+        ]
+      },
+      "DashboardProjectStageBucket": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/StageKey"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "archive_exception",
+              "archive_accepted",
+              "archive_temporary"
+            ]
+          }
+        ],
+        "description": "项目最新阶段桶：九阶段 key，或 archive_exception / archive_accepted / archive_temporary"
+      },
+      "DashboardProjectStartYearStage": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1900,
+            "maximum": 9999,
+            "description": "启动年份；null = 未记录启动时间"
+          },
+          "stageCounts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "与 stageBuckets 同序的项目数量"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "year",
+          "stageCounts",
+          "total"
+        ]
+      },
+      "DashboardProjectTypeYear": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1900,
+            "maximum": 9999,
+            "description": "启动年份；null = 项目启动任务未完成 / 无启动时间"
+          },
+          "counts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "与 projectTypes 同序的三类项目数量"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "year",
+          "counts",
+          "total"
         ]
       },
       "DashboardStatus": {
@@ -26620,6 +26827,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DashboardProgressResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证（AUTH_REQUIRED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/project-insights": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "全部项目维度聚合：启动年份 × 项目类型、三类负责人 × 最新阶段、启动年份 × 最新阶段",
+        "responses": {
+          "200": {
+            "description": "项目维度聚合（按会话用户项目可见性过滤；只下发统计不下发明细）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProjectAnalyticsResponse"
                 }
               }
             }

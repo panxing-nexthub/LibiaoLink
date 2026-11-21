@@ -11,10 +11,12 @@ import {
   type DashboardWordDetail,
 } from "../dashboardApi";
 import { isChangeWordHit } from "../data/changeWords";
+import type { DashboardProjectInsights } from "../data/dashboardProjectInsights";
 import { DASHBOARD_BINS, DASHBOARD_ISSUE_COLORS, isIssueInCell, isTaskInCell, isTaskInDeliveryBucket, isTaskPendingDelivery, type DashboardDeliveryBucket, type DashboardStatusSlice, type HubDashView } from "../data/dashboardProgress";
 import type { TaskStatus } from "../data/tasks";
 import { fieldText, statusText, useLocale, useT } from "../i18n";
 import { displayStatusLabel } from "../taskApi";
+import { HubDashAllProjects } from "./HubDashAllProjects";
 import { HubDashDelivery } from "./HubDashDelivery";
 import { HubDashDetail } from "./HubDashDetail";
 import { HubDashDetailLoading } from "./HubDashDetailLoading";
@@ -234,7 +236,7 @@ function DashViewSwitch({ view, checked, label, onSelect }: {
     </label>
   );
 }
-export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, words, wordsState, onNeedWords, rememberedDashProject, onDashProjectChange, rememberedDashView, onDashViewChange }: {
+export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, insights, insightsState, onNeedProjectInsights, words, wordsState, onNeedWords, rememberedDashProject, onDashProjectChange, rememberedDashView, onDashViewChange }: {
   data: DashboardDataset | null;
   state: HubDashboardState;
   /** 「问题」视图数据（Push 344 · 懒加载：首次切到「问题」时才拉；null = 还没拉）。 */
@@ -243,6 +245,12 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
   issuesState: "idle" | "loading" | "ready" | "failed";
   /** 请求拉「问题」读面（首次切到「问题」视图 / 失败后重试）。 */
   onNeedIssues: () => void;
+  /** 「全部项目」项目维度聚合（启动年份 / 类型 / 三类负责人 / 最新阶段；单项目不使用）。 */
+  insights: DashboardProjectInsights | null;
+  /** 项目维度聚合读面状态：idle / loading / ready / failed。 */
+  insightsState: "idle" | "loading" | "ready" | "failed";
+  /** 请求拉项目维度聚合（全部项目总览懒加载 / 失败后重试）。 */
+  onNeedProjectInsights: () => void;
   /** 「词频图」视图数据（Push 353 · 懒加载：首次切到「词频图」时才拉；null = 还没拉）。 */
   words: DashboardWordDataset | null;
   /** 「词频图」读面状态：idle = 还没拉过 / loading / ready / failed（切走再切回会重试）。 */
@@ -287,13 +295,18 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
   }, [rememberedDashView]);
   /** 「问题 / 词频图」读面懒加载（Push 344 / Push 353；Push 358 起「数据总览」同拉这两份）：切到对应视图时拉；首屏直接落在该视图（常驻视图）也拉。 */
   useEffect(() => {
+    if (pickedId === null) {
+      onNeedIssues();
+      onNeedProjectInsights();
+      return;
+    }
     if (view === "issues" || view === "overview") {
       onNeedIssues();
     }
     if (view === "wordcloud" || view === "overview") {
       onNeedWords();
     }
-  }, [view, onNeedIssues, onNeedWords]);
+  }, [pickedId, view, onNeedIssues, onNeedProjectInsights, onNeedWords]);
   /** 常驻的项目已不存在（被删）：界面回落「全部项目」，并把账号偏好一并清掉（只清一次）。 */
   useEffect(() => {
     if (pickedId !== null && data !== null && !data.byProject.has(pickedId)) {
@@ -551,7 +564,7 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
   };
   const head = (
     <div className="hub-dash-head">
-      <span className="hub-dash-title">{view === "overview" ? t("hub.dash.overview.title") : view === "progress" ? t("hub.dash.title") : view === "status" ? t("hub.dash.status.title") : view === "issues" ? t("hub.dash.issues.title") : view === "delivery" ? t("hub.dash.delivery.title") : t("hub.dash.wordcloud.title")}</span>
+      <span className="hub-dash-title">{pickedId === null ? t("hub.dash.projects.title") : view === "overview" ? t("hub.dash.overview.title") : view === "progress" ? t("hub.dash.title") : view === "status" ? t("hub.dash.status.title") : view === "issues" ? t("hub.dash.issues.title") : view === "delivery" ? t("hub.dash.delivery.title") : t("hub.dash.wordcloud.title")}</span>
       <span className="hub-dash-sep" aria-hidden="true">
         •
       </span>
@@ -568,19 +581,29 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
       </div>
     </div>
   );
-  if (progress.totalTasks === 0) {
+  if (pickedId !== null && progress.totalTasks === 0) {
     return (
-      <div ref={wrapRef} data-hub-dash-view={view} className="hub-dash-wrap">
+      <div ref={wrapRef} data-hub-dash-view={view} data-hub-dash-all-projects={pickedId === null ? "true" : undefined} className="hub-dash-wrap">
         {head}
         <div className="hub-dash-state">{t("hub.dash.empty")}</div>
       </div>
     );
   }
   return (
-    <div ref={wrapRef} data-hub-dash-view={view} className="hub-dash-wrap">
+    <div ref={wrapRef} data-hub-dash-view={view} data-hub-dash-all-projects={pickedId === null ? "true" : undefined} className="hub-dash-wrap">
       {head}
-      <div className="hub-dash-viewport" data-hub-dash-viewport="">
-      {view === "overview" ? (
+      <div className="hub-dash-viewport" data-hub-dash-viewport="" data-hub-dash-all-projects={pickedId === null ? "true" : undefined}>
+      {pickedId === null ? (
+        <HubDashAllProjects
+          issues={issuesView}
+          issuesState={issuesState}
+          insights={insights}
+          insightsState={insightsState}
+          onIssueTip={showIssueTip}
+          onIssueRowTip={showIssueRowTip}
+          onLeave={() => setTip(null)}
+        />
+      ) : view === "overview" ? (
         <HubDashOverview
           progress={progress}
           status={statusView}
@@ -676,6 +699,7 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
         </div>
       )}
       </div>
+      {pickedId !== null ? (
       <div className="hub-dash-switch">
         <DashViewSwitch view="overview" checked={view === "overview"} label={t("hub.dash.overview.title")} onSelect={() => switchView("overview")} />
         <DashViewSwitch view="progress" checked={view === "progress"} label={t("hub.dash.title")} onSelect={() => switchView("progress")} />
@@ -684,6 +708,7 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
         <DashViewSwitch view="delivery" checked={view === "delivery"} label={t("hub.dash.delivery.title")} onSelect={() => switchView("delivery")} />
         <DashViewSwitch view="wordcloud" checked={view === "wordcloud"} label={t("hub.dash.wordcloud.title")} onSelect={() => switchView("wordcloud")} />
       </div>
+      ) : null}
       {tip !== null ? (
         tip.kind === "bin" ? (
           <div className="hub-dash-tip" style={{ left: tip.left, top: tip.top }}>

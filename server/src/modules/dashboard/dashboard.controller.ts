@@ -3,6 +3,7 @@ import type {
   DashboardChangeWordsResponse,
   DashboardIssuesResponse,
   DashboardProgressResponse,
+  DashboardProjectAnalyticsResponse,
 } from "@libiaolink/contracts";
 import { CurrentActorId, SessionGuard } from "../identity/index.js";
 import { GroupAccessGuard, RequireAccessPage } from "../permission/index.js";
@@ -22,6 +23,12 @@ export class DashboardController {
   @Get("progress")
   progress(@CurrentActorId() actorId: string): Promise<DashboardProgressResponse> {
     return this.dashboard.progress(actorId);
+  }
+
+  /** 全部项目维度聚合（启动年份 × 项目类型、三类负责人 × 最新阶段、启动年份 × 最新阶段）。 */
+  @Get("project-insights")
+  projectInsights(@CurrentActorId() actorId: string): Promise<DashboardProjectAnalyticsResponse> {
+    return this.dashboard.projectInsights(actorId);
   }
 
   /** 问题分布聚合（按视图懒加载；明细下钻走项目问题接口）。 */

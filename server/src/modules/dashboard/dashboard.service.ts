@@ -3,16 +3,19 @@ import type {
   DashboardChangeWordsResponse,
   DashboardIssuesResponse,
   DashboardProgressResponse,
+  DashboardProjectAnalyticsResponse,
   DashboardTaskSummary,
 } from "@libiaolink/contracts";
 import { PermissionService } from "../permission/index.js";
 import { DashboardRepository, type DashboardChangeRow, type DashboardIssueRow } from "./dashboard.repository.js";
 import {
   addTaskBucket,
+  buildProjectAnalytics,
   buildChangeWords,
   buildIssues,
   emptyChangeWords,
   emptyIssues,
+  emptyProjectAnalytics,
   emptyTaskAggregate,
   shanghaiToday,
   taskSummaryOf,
@@ -56,6 +59,18 @@ export class DashboardService {
         summary: taskSummaryOf(byProject.get(project.id) ?? emptyTaskAggregate(project.id)),
       })),
     };
+  }
+
+  /** 全部项目维度聚合：启动年份 × 项目类型、三类负责人 × 最新阶段、启动年份 × 最新阶段。 */
+  async projectInsights(actorId: string): Promise<DashboardProjectAnalyticsResponse> {
+    const scope = await this.permission.projectScope(actorId);
+    const projects = await this.repository.listAnalyticsProjects(scope);
+    if (projects.length === 0) return emptyProjectAnalytics();
+    const [roleTasks, startups] = await Promise.all([
+      this.repository.listProjectRoleTasks(scope),
+      this.repository.listProjectStartupDates(scope),
+    ]);
+    return buildProjectAnalytics(projects, roleTasks, startups);
   }
 
   async issues(actorId: string): Promise<DashboardIssuesResponse> {

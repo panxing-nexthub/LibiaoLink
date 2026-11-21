@@ -4259,3 +4259,407 @@ body {
 [data-project-management-grid-editor] [contenteditable]:focus[data-project-management-code] {
   white-space: nowrap !important;
 }
+
+
+/* ===== 仪表盘「全部项目」长页（2026-11-21） =====
+   全部项目不再挤进一屏：视口内纵向滚动，每个统计类型一张通栏卡片；
+   单项目视图仍沿用原六视图与底部切换，不受本段影响。 */
+[data-hub-dash-all-projects] .hub-dash-viewport {
+  display: block;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+[data-hub-dash-all-projects] .hub-dash-head {
+  flex: 0 0 auto;
+}
+
+.hub-dash-all {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  min-width: 0;
+  padding: 0.15rem 3.33% 1.5rem;
+}
+
+.hub-dash-all__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-width: 0;
+  min-height: max(30rem, calc(100dvh - 12rem));
+  padding: 1.1rem 1.25rem 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px -38px rgb(15 23 42 / 0.38);
+}
+
+.hub-dash-all__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.85rem;
+}
+
+.hub-dash-all__heading h3 {
+  margin: 0;
+  color: #1f2329;
+  font-size: 1.08rem;
+  font-weight: 700;
+}
+
+.hub-dash-all__heading p {
+  margin: 0;
+  color: #8a9099;
+  font-size: 0.78rem;
+}
+
+.hub-dash-all__chart {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.hub-dash-all__chart > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.hub-dash-all__chart--issues {
+  min-height: 26rem;
+}
+
+.hub-dash-all__chart--issues > svg {
+  height: 100%;
+  min-height: 26rem;
+}
+
+.hub-dash-project-types {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 20rem;
+}
+
+.hub-dash-role-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.hub-dash-role__legend,
+.hub-dash-start__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem 0.95rem;
+  align-items: center;
+}
+
+.hub-dash-role__legend {
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.hub-dash-role__legendItem,
+.hub-dash-start__legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  color: #4b5563;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.hub-dash-role__legendItem i,
+.hub-dash-start__legendItem i {
+  display: block;
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 2px;
+}
+
+.hub-dash-role-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.hub-dash-role-card {
+  min-width: 0;
+  padding: 0.7rem 0.85rem 0.35rem;
+  border: 1px solid #edf0f3;
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.hub-dash-role-card__title {
+  margin: 0 0 0.15rem;
+  color: #374151;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.hub-dash-role__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.hub-dash-role {
+  display: block;
+  height: auto;
+}
+
+.hub-dash-role__segment,
+.hub-dash-start-year__segment {
+  transition: filter 150ms ease;
+}
+
+.hub-dash-role__segment:hover,
+.hub-dash-start-year__year:hover .hub-dash-start-year__segment {
+  filter: brightness(0.93);
+}
+
+.hub-dash-start {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.hub-dash-start__toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.hub-dash-start__years {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.hub-dash-start__years button {
+  padding: 0.25rem 0.72rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #f8f9fb;
+  color: #4b5563;
+  font-size: 0.76rem;
+  font-weight: 550;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.hub-dash-start__years button:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.hub-dash-start__years button[data-active="true"] {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.hub-dash-start__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(20rem, 0.8fr);
+  gap: 0.9rem;
+  align-items: stretch;
+}
+
+.hub-dash-start__bars,
+.hub-dash-start__pie {
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #edf0f3;
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.hub-dash-start-year {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.hub-dash-start-year__year {
+  cursor: pointer;
+  outline: none;
+}
+
+.hub-dash-start-year__year:focus-visible rect:first-of-type {
+  stroke: #93c5fd;
+  stroke-width: 2;
+}
+
+.hub-dash-start-pie {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  height: 100%;
+}
+
+.hub-dash-start-pie > svg {
+  display: block;
+  flex: 0 1 18rem;
+  width: min(100%, 18rem);
+  height: auto;
+  min-width: 12rem;
+}
+
+.hub-dash-start-pie__list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.28rem;
+  min-width: 0;
+  max-height: 22rem;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.hub-dash-start-pie__row {
+  display: grid;
+  grid-template-columns: 0.58rem minmax(0, 1fr) auto auto;
+  gap: 0.36rem;
+  align-items: center;
+  color: #4b5563;
+  font-size: 0.72rem;
+}
+
+.hub-dash-start-pie__row i {
+  display: block;
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 2px;
+}
+
+.hub-dash-start-pie__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-dash-start-pie__count,
+.hub-dash-start-pie__share {
+  color: #374151;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-dash-start-pie__share {
+  min-width: 2.2rem;
+  color: #9aa0a6;
+  text-align: right;
+}
+
+.hub-dash-project-types__bar,
+.hub-dash-role__segment,
+.hub-dash-start-year__segment {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: ll-hub-bar-in 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hub-dash-project-types__num {
+  animation: ll-hub-num-in 320ms ease-out both;
+}
+
+.hub-dash-start-pie__segment {
+  transform-box: view-box;
+  transform-origin: 160px 160px;
+  animation: ll-hub-pie-in 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (max-width: 1023.98px) {
+  [data-hub-dash-all-projects] .hub-dash-viewport {
+    overflow-y: auto !important;
+  }
+
+  .hub-dash-all {
+    gap: 0.8rem;
+    padding: 0.25rem 0.25rem 1.25rem;
+  }
+
+  .hub-dash-all__section {
+    min-height: auto;
+    padding: 0.85rem;
+  }
+
+  .hub-dash-all__heading h3 {
+    font-size: 1rem;
+  }
+
+  .hub-dash-all__heading p {
+    font-size: 0.74rem;
+  }
+
+  .hub-dash-start__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hub-dash-start-pie {
+    min-height: 18rem;
+  }
+}
+
+@media (max-width: 639.98px) {
+  .hub-dash-all__section {
+    padding: 0.7rem 0.55rem;
+  }
+
+  .hub-dash-all__chart--issues,
+  .hub-dash-all__chart--issues > svg {
+    min-height: 21rem;
+  }
+
+  .hub-dash-role__legend,
+  .hub-dash-start__legend {
+    gap: 0.35rem 0.65rem;
+  }
+
+  .hub-dash-role__legendItem,
+  .hub-dash-start__legendItem {
+    font-size: 0.68rem;
+  }
+
+  .hub-dash-role-card {
+    padding: 0.6rem 0.55rem 0.25rem;
+  }
+
+  .hub-dash-start-pie {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hub-dash-start-pie > svg {
+    align-self: center;
+    flex-basis: auto;
+    max-height: 15rem;
+  }
+
+  .hub-dash-start-pie__list {
+    width: 100%;
+    max-height: 16rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-dash-project-types__bar,
+  .hub-dash-role__segment,
+  .hub-dash-start-year__segment,
+  .hub-dash-project-types__num,
+  .hub-dash-start-pie__segment {
+    animation: none;
+  }
+}

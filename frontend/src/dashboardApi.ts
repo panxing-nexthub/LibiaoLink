@@ -7,6 +7,7 @@
  */
 import { apiRequest } from "./api";
 import type { DashboardChangeWords } from "./data/changeWords";
+import type { DashboardProjectInsights } from "./data/dashboardProjectInsights";
 import {
   dashboardIssueKey,
   type DashboardDelivery,
@@ -143,6 +144,11 @@ export async function fetchDashboardIssues(): Promise<DashboardIssueDataset> {
     byProject.set(project.projectId, toDashboardIssues(project.issues));
   }
   return { all: toDashboardIssues(response.all), byProject };
+}
+
+/** 全部项目维度聚合（默认「全部项目」总览页懒加载；单项目视图不使用）。 */
+export async function fetchDashboardProjectInsights(): Promise<DashboardProjectInsights> {
+  return apiRequest<DashboardProjectInsights>("/api/v1/dashboard/project-insights");
 }
 
 /** 仪表盘变更原因词频（首次切到「词频图」/「数据总览」时懒加载）。 */

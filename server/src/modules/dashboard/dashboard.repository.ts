@@ -4,9 +4,10 @@ import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
 import { users } from "../../db/schema/identity.js";
-import { projects } from "../../db/schema/projects.js";
+import { projectArchives, projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
 import { tasks } from "../../db/schema/tasks.js";
+import { hasOpenPostArchiveTask } from "../../db/task-scope.js";
 import type { ProjectScopeFilter } from "../permission/index.js";
 
 /**
@@ -19,6 +20,34 @@ export interface DashboardProjectRow {
   id: string;
   name: string;
   managerNames: (string | null)[] | null;
+}
+
+/** 全部项目维度统计的项目行（2026-11-21；只读，不暴露项目详情）。 */
+export interface DashboardAnalyticsProjectRow {
+  id: string;
+  projectType: string;
+  additionalProjectTypes: string[];
+  stageKey: string;
+  status: string;
+  managerIds: string[];
+  managerNames: (string | null)[] | null;
+  archiveKind: "accepted" | "unaccepted" | null;
+  hasOpenPostArchiveTask: boolean;
+}
+
+/** 合同签署 / 技术协议定档任务负责人行（用于销售负责人 / 规划负责人聚合）。 */
+export interface DashboardProjectRoleTaskRow {
+  projectId: string;
+  title: string;
+  titleEn: string | null;
+  ownerIds: string[];
+  ownerNames: (string | null)[] | null;
+}
+
+/** 项目启动任务实际完成日期（多条取最晚，用于启动年份）。 */
+export interface DashboardProjectStartupRow {
+  projectId: string;
+  startupCompletedAt: string | null;
 }
 
 export interface DashboardTaskBucketRow {
@@ -46,6 +75,13 @@ const MANAGER_NAMES_SQL = sql<(string | null)[] | null>`(
   select array_agg(u.display_name order by m.ord)
   from unnest(${projects.managerIds}) with ordinality as m(uid, ord)
   left join ${users} u on u.id = m.uid
+)`;
+
+/** 任务负责人姓名数组：与 owner_ids 同下标；缺失 / 停用用户该位为 null。 */
+const OWNER_NAMES_SQL = sql<(string | null)[] | null>`(
+  select array_agg(u.display_name order by o.ord)
+  from unnest(${tasks.ownerIds}) with ordinality as o(uid, ord)
+  left join ${users} u on u.id = o.uid
 )`;
 
 /**
@@ -114,6 +150,76 @@ export class DashboardRepository {
       .from(projects)
       .where(and(...conditions))
       .orderBy(desc(projects.createdAt), asc(projects.seqNo));
+  }
+
+  /** 全部项目维度统计的项目行：类型 / 最新阶段 / 归档状态 / 项目经理。 */
+  async listAnalyticsProjects(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardAnalyticsProjectRow[]> {
+    if (scope.kind === "ids" && scope.ids.length === 0) return [];
+    const conditions: SQL[] = [isNull(projects.deletedAt), ...scopeCondition(projects.id, scope)];
+    return client
+      .select({
+        id: projects.id,
+        projectType: projects.projectType,
+        additionalProjectTypes: projects.additionalProjectTypes,
+        stageKey: projects.stageKey,
+        status: projects.status,
+        managerIds: projects.managerIds,
+        managerNames: MANAGER_NAMES_SQL,
+        archiveKind: projectArchives.archiveKind,
+        hasOpenPostArchiveTask,
+      })
+      .from(projects)
+      .leftJoin(projectArchives, eq(projectArchives.projectId, projects.id))
+      .where(and(...conditions))
+      .orderBy(desc(projects.createdAt), asc(projects.seqNo));
+  }
+
+  /** 合同签署 / 技术协议定档任务的负责人；多任务、多负责人原样返回，由纯规则去重。 */
+  async listProjectRoleTasks(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardProjectRoleTaskRow[]> {
+    if (scope.kind === "ids" && scope.ids.length === 0) return [];
+    const conditions: SQL[] = [
+      isNull(tasks.deletedAt),
+      isNull(projects.deletedAt),
+      sql`(
+        btrim(${tasks.title}) in ('合同签署', '技术协议定档')
+        or lower(btrim(coalesce(${tasks.titleEn}, ''))) in ('contract signing', 'technical agreement finalization')
+      )`,
+      ...scopeCondition(tasks.projectId, scope),
+    ];
+    return client
+      .select({
+        projectId: tasks.projectId,
+        title: tasks.title,
+        titleEn: tasks.titleEn,
+        ownerIds: tasks.ownerIds,
+        ownerNames: OWNER_NAMES_SQL,
+      })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(and(...conditions));
+  }
+
+  /** 每个项目的启动时间 =「项目启动 / Project Startup」任务实际完成日期最晚值。 */
+  async listProjectStartupDates(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardProjectStartupRow[]> {
+    if (scope.kind === "ids" && scope.ids.length === 0) return [];
+    const conditions: SQL[] = [
+      isNull(tasks.deletedAt),
+      isNull(projects.deletedAt),
+      sql`(
+        btrim(${tasks.title}) = '项目启动'
+        or lower(btrim(coalesce(${tasks.titleEn}, ''))) = 'project startup'
+      )`,
+      ...scopeCondition(tasks.projectId, scope),
+    ];
+    return client
+      .select({
+        projectId: tasks.projectId,
+        startupCompletedAt: sql<string | null>`max(${tasks.actualEnd})`,
+      })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(and(...conditions))
+      .groupBy(tasks.projectId);
   }
 
   /** 任务桶：项目 × 阶段 × 进度档 × 展示态 × 交付桶一次 GROUP BY，任务只取未软删行。 */

@@ -5,9 +5,10 @@ import { AppHeader } from "./components/AppHeader";
 import { HubDashboard, type HubDashboardState } from "./components/HubDashboard";
 import { HubMap } from "./components/HubMap";
 import type { DashboardDataset, DashboardIssueDataset, DashboardWordDataset } from "./dashboardApi";
+import type { DashboardProjectInsights } from "./data/dashboardProjectInsights";
 import type { HubDashView } from "./data/dashboardProgress";
 import { buildMapDistribution, type HubMapDistribution } from "./data/mapProjects";
-import { fetchDashboardChangeWords, fetchDashboardIssues, fetchDashboardProgress } from "./dashboardApi";
+import { fetchDashboardChangeWords, fetchDashboardIssues, fetchDashboardProgress, fetchDashboardProjectInsights } from "./dashboardApi";
 import { loadDicts } from "./dicts";
 import { fetchProjectMapOverview } from "./projectApi";
 import { replaceHubView, type HubView } from "./useHashRoute";
@@ -114,6 +115,9 @@ export default function Hub({ me, routeView, rememberedView, onViewChange, remem
   /** 「问题」视图数据（Push 344 · 懒加载：首次切到「问题」视图才拉，不加重仪表盘首屏；取数见 dashboardApi.ts）。 */
   const [issues, setIssues] = useState<DashboardIssueDataset | null>(null);
   const [issuesState, setIssuesState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
+  /** 「全部项目」项目维度聚合（启动年份 / 类型 / 三类负责人 / 最新阶段；单项目不加载）。 */
+  const [projectInsights, setProjectInsights] = useState<DashboardProjectInsights | null>(null);
+  const [projectInsightsState, setProjectInsightsState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
   /** 「词频图」视图数据（Push 353 · 懒加载：首次切到「词频图」视图才拉；取数见 dashboardApi.ts）。 */
   const [words, setWords] = useState<DashboardWordDataset | null>(null);
   const [wordsState, setWordsState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
@@ -124,6 +128,8 @@ export default function Hub({ me, routeView, rememberedView, onViewChange, remem
   const dashLoadingRef = useRef(false);
   const issuesStateRef = useRef<"idle" | "loading" | "ready" | "failed">("idle");
   const issuesLoadingRef = useRef(false);
+  const projectInsightsStateRef = useRef<"idle" | "loading" | "ready" | "failed">("idle");
+  const projectInsightsLoadingRef = useRef(false);
   const wordsStateRef = useRef<"idle" | "loading" | "ready" | "failed">("idle");
   const wordsLoadingRef = useRef(false);
   /** 地图里的项目名是手打文本：数据到达 / 切到日韩时按当前语言提前机翻。 */
@@ -146,6 +152,11 @@ export default function Hub({ me, routeView, rememberedView, onViewChange, remem
     setIssuesState(next);
   }, []);
 
+  const updateProjectInsightsState = useCallback((next: "idle" | "loading" | "ready" | "failed") => {
+    projectInsightsStateRef.current = next;
+    setProjectInsightsState(next);
+  }, []);
+
   const updateWordsState = useCallback((next: "idle" | "loading" | "ready" | "failed") => {
     wordsStateRef.current = next;
     setWordsState(next);
@@ -164,6 +175,15 @@ export default function Hub({ me, routeView, rememberedView, onViewChange, remem
   const pullIssues = useCallback(async (): Promise<DashboardIssueDataset | null> => {
     try {
       return await fetchDashboardIssues();
+    } catch {
+      return null;
+    }
+  }, []);
+
+  /** 拉全部项目维度聚合（纯取数、不落状态）：首次 / 失败重试 / 变更静默刷新共用。 */
+  const pullProjectInsights = useCallback(async (): Promise<DashboardProjectInsights | null> => {
+    try {
+      return await fetchDashboardProjectInsights();
     } catch {
       return null;
     }
@@ -196,6 +216,25 @@ export default function Hub({ me, routeView, rememberedView, onViewChange, remem
       updateIssuesState("ready");
     })();
   }, [pullIssues, updateIssuesState]);
+
+  /** 「全部项目」总览需要项目维度聚合：首次落该页 / 失败后重试时拉。 */
+  const ensureProjectInsights = useCallback(() => {
+    if (projectInsightsStateRef.current === "ready" || projectInsightsLoadingRef.current) {
+      return;
+    }
+    projectInsightsLoadingRef.current = true;
+    updateProjectInsightsState("loading");
+    void (async () => {
+      const data = await pullProjectInsights();
+      projectInsightsLoadingRef.current = false;
+      if (data === null) {
+        updateProjectInsightsState("failed");
+        return;
+      }
+      setProjectInsights(data);
+      updateProjectInsightsState("ready");
+    })();
+  }, [pullProjectInsights, updateProjectInsightsState]);
 
   /** 首次切到「词频图」视图时拉变更记录 / 用户目录读面（Push 353 · 懒加载：不进仪表盘首屏那一轮取数）。 */
   const ensureWords = useCallback(() => {
@@ -382,6 +421,8 @@ export default function Hub({ me, routeView, rememberedView, onViewChange, remem
     const nextIssues = issuesStateRef.current === "ready" ? ((await pullIssues()) ?? issues) : issues;
     /** 词频图读面只在已经拉过（ready）后跟着静默刷新（没切过「词频图」视图就不预拉）。 */
     const nextWords = wordsStateRef.current === "ready" ? ((await pullWords()) ?? words) : words;
+    /** 项目维度聚合只在全部项目页已经拉过后跟着静默刷新。 */
+    const nextProjectInsights = projectInsightsStateRef.current === "ready" ? ((await pullProjectInsights()) ?? projectInsights) : projectInsights;
     return () => {
       setDistribution(buildMapDistribution(overview.items, dicts));
       setNote(overview.items.length < overview.total ? { kind: "capped", n: overview.items.length, total: overview.total } : "none");
@@ -393,6 +434,9 @@ export default function Hub({ me, routeView, rememberedView, onViewChange, remem
       }
       if (nextWords !== words) {
         setWords(nextWords);
+      }
+      if (nextProjectInsights !== projectInsights) {
+        setProjectInsights(nextProjectInsights);
       }
     };
   }, "hub", distribution !== null);
@@ -417,7 +461,7 @@ export default function Hub({ me, routeView, rememberedView, onViewChange, remem
               <HubMap distribution={distribution} note={noteText} />
             </div>
             <div data-view="dashboard" data-hub-deck-cell="dashboard" className={deckCellClass + " " + dashSideClass}>
-              <HubDashboard data={dash} state={dashState} issues={issues} issuesState={issuesState} onNeedIssues={ensureIssues} words={words} wordsState={wordsState} onNeedWords={ensureWords} rememberedDashProject={rememberedDashProject} onDashProjectChange={onDashProjectChange} rememberedDashView={rememberedDashView} onDashViewChange={onDashViewChange} />
+              <HubDashboard data={dash} state={dashState} issues={issues} issuesState={issuesState} onNeedIssues={ensureIssues} insights={projectInsights} insightsState={projectInsightsState} onNeedProjectInsights={ensureProjectInsights} words={words} wordsState={wordsState} onNeedWords={ensureWords} rememberedDashProject={rememberedDashProject} onDashProjectChange={onDashProjectChange} rememberedDashView={rememberedDashView} onDashViewChange={onDashViewChange} />
             </div>
           </div>
           <nav className="hub-deck-dots" aria-label={t("hub.dots.label")}>

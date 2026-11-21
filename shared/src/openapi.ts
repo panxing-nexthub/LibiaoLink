@@ -110,7 +110,7 @@ import {
   IssueUpdateBodySchema,
 } from "./modules/issues.ts";
 import { WorkspaceResponseSchema } from "./modules/workspace.ts";
-import { DashboardChangeWordsResponseSchema, DashboardIssuesResponseSchema, DashboardProgressResponseSchema } from "./modules/dashboard.ts";
+import { DashboardChangeWordsResponseSchema, DashboardIssuesResponseSchema, DashboardProgressResponseSchema, DashboardProjectAnalyticsResponseSchema } from "./modules/dashboard.ts";
 import {
   SavedViewSchema,
   ViewCreateBodySchema,
@@ -2280,6 +2280,17 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     summary: "仪表盘任务聚合：项目进度（阶段 × 进度五档）/ 任务状态 / 交付时间；一次返回全部可见项目与逐项目统计",
     responses: {
       200: { description: "任务聚合（按会话用户项目可见性过滤）", ...json(DashboardProgressResponseSchema) },
+      401: commonErrors[401],
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/dashboard/project-insights",
+    tags: ["dashboard"],
+    summary: "全部项目维度聚合：启动年份 × 项目类型、三类负责人 × 最新阶段、启动年份 × 最新阶段",
+    responses: {
+      200: { description: "项目维度聚合（按会话用户项目可见性过滤；只下发统计不下发明细）", ...json(DashboardProjectAnalyticsResponseSchema) },
       401: commonErrors[401],
     },
   });

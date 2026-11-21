@@ -9512,6 +9512,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/project-insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 全部项目维度聚合：启动年份 × 项目类型、三类负责人 × 最新阶段、启动年份 × 最新阶段 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 项目维度聚合（按会话用户项目可见性过滤；只下发统计不下发明细） */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DashboardProjectAnalyticsResponse"];
+                    };
+                };
+                /** @description 未认证（AUTH_REQUIRED） */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/issues": {
         parameters: {
             query?: never;
@@ -12564,12 +12609,61 @@ export interface components {
             counts: number[];
             total: number;
         };
+        /** @description 全部项目维度聚合读面（项目数量 / 负责人 / 启动年份 × 最新阶段） */
+        DashboardProjectAnalyticsResponse: {
+            totalProjects: number;
+            /** @description 固定顺序：T-sort / 3D分拣 / 飞箱 */
+            projectTypes: string[];
+            /** @description 固定顺序：九阶段 + 异常归档 / 验收归档 / 归档-临时任务 */
+            stageBuckets: components["schemas"]["DashboardProjectStageBucket"][];
+            /** @description 年份升序，未记录启动时间置末；多类型项目在每个命中类型各计一次 */
+            typeByYear: components["schemas"]["DashboardProjectTypeYear"][];
+            /** @description 固定顺序：项目经理 / 销售负责人 / 规划负责人 */
+            roles: components["schemas"]["DashboardProjectRoleStats"][];
+            /** @description 年份升序，未记录启动时间置末 */
+            startYearStages: components["schemas"]["DashboardProjectStartYearStage"][];
+        };
         DashboardProjectProgress: {
             projectId: components["schemas"]["Uuid"];
             projectName: string;
             /** @description 项目经理显示名（与 managerIds 同下标；取不到姓名该位为 null） */
             managerNames: (string | null)[];
             summary: components["schemas"]["DashboardTaskSummary"];
+        };
+        /**
+         * @description manager = 项目经理，sales = 销售负责人，planning = 规划负责人
+         * @enum {string}
+         */
+        DashboardProjectRole: "manager" | "sales" | "planning";
+        DashboardProjectRolePerson: {
+            personId: components["schemas"]["Uuid"] & (string | null);
+            /** @description 人员显示名；账号姓名缺失 = null */
+            name: string | null;
+            isUnassigned: boolean;
+            /** @description 与 stageBuckets 同序的项目数量 */
+            stageCounts: number[];
+            total: number;
+        };
+        DashboardProjectRoleStats: {
+            role: components["schemas"]["DashboardProjectRole"];
+            /** @description 按项目总数降序；待分配行（若有）置末 */
+            people: components["schemas"]["DashboardProjectRolePerson"][];
+        };
+        /** @description 项目最新阶段桶：九阶段 key，或 archive_exception / archive_accepted / archive_temporary */
+        DashboardProjectStageBucket: components["schemas"]["StageKey"] | ("archive_exception" | "archive_accepted" | "archive_temporary");
+        DashboardProjectStartYearStage: {
+            /** @description 启动年份；null = 未记录启动时间 */
+            year: number | null;
+            /** @description 与 stageBuckets 同序的项目数量 */
+            stageCounts: number[];
+            total: number;
+        };
+        DashboardProjectTypeYear: {
+            /** @description 启动年份；null = 项目启动任务未完成 / 无启动时间 */
+            year: number | null;
+            /** @description 与 projectTypes 同序的三类项目数量 */
+            counts: number[];
+            total: number;
         };
         /** @description 任务五态分布（只含 count > 0 的状态） */
         DashboardStatus: {

@@ -1,5 +1,5 @@
 import { ISSUE_CATEGORIES, ISSUE_STATES, STAGE_KEYS, STAGE_NAMES } from "@libiaolink/contracts";
-import type { DashboardChangeWords, DashboardDelivery, DashboardIssues, DashboardProgress, DashboardStatus, DashboardTaskSummary } from "@libiaolink/contracts";
+import type { DashboardChangeWords, DashboardDelivery, DashboardIssues, DashboardProgress, DashboardProjectAnalyticsResponse, DashboardProjectRole, DashboardStatus, DashboardTaskSummary } from "@libiaolink/contracts";
 
 /**
  * 仪表盘聚合纯规则（不连库）：
@@ -119,6 +119,251 @@ export function deliveryOf(aggregate: DashboardTaskAggregate): DashboardDelivery
 
 export function taskSummaryOf(aggregate: DashboardTaskAggregate): DashboardTaskSummary {
   return { progress: progressOf(aggregate), status: statusOf(aggregate), delivery: deliveryOf(aggregate) };
+}
+
+/** 全部项目维度统计的固定项目类型顺序（2026-11-21 业务口径）。 */
+export const DASHBOARD_PROJECT_TYPES = ["T-sort", "3D分拣", "飞箱"] as const;
+
+/** 全部项目维度统计的固定最新阶段桶：九阶段 + 三类归档。 */
+export const DASHBOARD_PROJECT_STAGE_BUCKETS = [
+  ...STAGE_KEYS,
+  "archive_exception",
+  "archive_accepted",
+  "archive_temporary",
+] as const;
+
+/** 三类负责人固定顺序：项目经理 / 销售负责人 / 规划负责人。 */
+export const DASHBOARD_PROJECT_ROLES = ["manager", "sales", "planning"] as const;
+
+type ProjectStageBucket = (typeof DASHBOARD_PROJECT_STAGE_BUCKETS)[number];
+type ProjectTypeCode = (typeof DASHBOARD_PROJECT_TYPES)[number];
+type ProjectRole = (typeof DASHBOARD_PROJECT_ROLES)[number];
+
+export interface DashboardAnalyticsProjectInput {
+  id: string;
+  projectType: string;
+  additionalProjectTypes: readonly string[];
+  stageKey: string;
+  status: string;
+  managerIds: readonly string[];
+  managerNames: readonly (string | null)[] | null;
+  archiveKind: "accepted" | "unaccepted" | null;
+  hasOpenPostArchiveTask: boolean;
+}
+
+export interface DashboardProjectRoleTaskInput {
+  projectId: string;
+  title: string;
+  titleEn: string | null;
+  ownerIds: readonly string[];
+  ownerNames: readonly (string | null)[] | null;
+}
+
+export interface DashboardProjectStartupInput {
+  projectId: string;
+  startupCompletedAt: string | null;
+}
+
+interface PersonAccumulator {
+  personId: string;
+  name: string | null;
+  stageCounts: number[];
+  total: number;
+}
+
+const STAGE_KEY_SET: ReadonlySet<string> = new Set(STAGE_KEYS);
+const STAGE_BUCKET_INDEX = new Map<string, number>(DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket, index) => [bucket, index] as const));
+const PROJECT_TYPE_INDEX = new Map<string, number>(DASHBOARD_PROJECT_TYPES.map((type, index) => [type, index] as const));
+
+function zeroStageCounts(): number[] {
+  return DASHBOARD_PROJECT_STAGE_BUCKETS.map(() => 0);
+}
+
+function zeroTypeCounts(): number[] {
+  return DASHBOARD_PROJECT_TYPES.map(() => 0);
+}
+
+/** 空聚合（无可见项目 / 空统计），固定类型与阶段桶仍下发。 */
+export function emptyProjectAnalytics(): DashboardProjectAnalyticsResponse {
+  return {
+    totalProjects: 0,
+    projectTypes: [...DASHBOARD_PROJECT_TYPES],
+    stageBuckets: [...DASHBOARD_PROJECT_STAGE_BUCKETS] as DashboardProjectAnalyticsResponse["stageBuckets"],
+    typeByYear: [],
+    roles: DASHBOARD_PROJECT_ROLES.map((role) => ({ role, people: [] })),
+    startYearStages: [],
+  };
+}
+
+/** 项目最新阶段桶：归档优先拆成临时任务 / 异常 / 验收归档，未归档取项目当前阶段。 */
+export function projectStageBucketOf(project: Pick<DashboardAnalyticsProjectInput, "status" | "stageKey" | "archiveKind" | "hasOpenPostArchiveTask">): ProjectStageBucket {
+  if (project.status === "archived") {
+    if (project.hasOpenPostArchiveTask) return "archive_temporary";
+    if (project.archiveKind === "unaccepted") return "archive_exception";
+    return "archive_accepted";
+  }
+  return STAGE_KEY_SET.has(project.stageKey) ? (project.stageKey as ProjectStageBucket) : "presale";
+}
+
+/** 「项目启动」任务的实际完成日期 → 启动年份；日期缺失 / 非法 = null。 */
+export function projectStartupYear(startupCompletedAt: string | null): number | null {
+  if (startupCompletedAt === null) return null;
+  const matched = /^(\d{4})-/.exec(startupCompletedAt);
+  if (matched === null) return null;
+  const year = Number(matched[1]);
+  return Number.isInteger(year) && year >= 1900 && year <= 9999 ? year : null;
+}
+
+/** 合同签署 → 销售负责人；技术协议定档 → 规划负责人；其它任务 = null。 */
+export function projectRoleOfTask(title: string, titleEn: string | null): "sales" | "planning" | null {
+  const zh = title.trim();
+  const en = (titleEn ?? "").trim().toLowerCase();
+  if (zh === "合同签署" || en === "contract signing") return "sales";
+  if (zh === "技术协议定档" || en === "technical agreement finalization") return "planning";
+  return null;
+}
+
+function yearOrder(left: number | null, right: number | null): number {
+  if (left === null) return right === null ? 0 : 1;
+  if (right === null) return -1;
+  return left - right;
+}
+
+function normalizedName(value: string | null | undefined): string | null {
+  const trimmed = (value ?? "").trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+function addRoleOwner(map: Map<ProjectRole, Map<string, string | null>>, role: ProjectRole, personId: string, name: string | null): void {
+  const people = map.get(role) ?? new Map<string, string | null>();
+  const current = people.get(personId);
+  if (current === null || current === undefined) {
+    people.set(personId, normalizedName(name));
+  }
+  map.set(role, people);
+}
+
+/**
+ * 全部项目维度聚合（纯函数）：
+ * - 项目数量：多类型项目在每个项目类型各计一次；
+ * - 负责人：同一项目同一人只计一次，未配置某角色时落「待分配」；
+ * - 最新阶段：归档项目按项目卡片同一套三类归档口径，未归档项目取 projects.stage_key；
+ * - 年份：项目启动任务实际完成日期所属年份，未记录归 null 并置末。
+ */
+export function buildProjectAnalytics(
+  projects: readonly DashboardAnalyticsProjectInput[],
+  roleTasks: readonly DashboardProjectRoleTaskInput[],
+  startups: readonly DashboardProjectStartupInput[],
+): DashboardProjectAnalyticsResponse {
+  if (projects.length === 0) return emptyProjectAnalytics();
+
+  const startupByProject = new Map<string, string | null>();
+  for (const startup of startups) {
+    if (startup.startupCompletedAt !== null) startupByProject.set(startup.projectId, startup.startupCompletedAt);
+  }
+
+  const ownersByProject = new Map<string, Map<ProjectRole, Map<string, string | null>>>();
+  for (const project of projects) {
+    const roles = new Map<ProjectRole, Map<string, string | null>>();
+    const managers = new Map<string, string | null>();
+    project.managerIds.forEach((personId, index) => {
+      managers.set(personId, normalizedName(project.managerNames?.[index]));
+    });
+    roles.set("manager", managers);
+    ownersByProject.set(project.id, roles);
+  }
+
+  for (const task of roleTasks) {
+    const role = projectRoleOfTask(task.title, task.titleEn);
+    if (role === null) continue;
+    const roles = ownersByProject.get(task.projectId);
+    if (roles === undefined) continue;
+    task.ownerIds.forEach((personId, index) => {
+      addRoleOwner(roles, role, personId, task.ownerNames?.[index] ?? null);
+    });
+  }
+
+  const typeYear = new Map<number | null, number[]>();
+  const yearStage = new Map<number | null, number[]>();
+  const peopleByRole: Record<ProjectRole, Map<string, PersonAccumulator>> = {
+    manager: new Map<string, PersonAccumulator>(),
+    sales: new Map<string, PersonAccumulator>(),
+    planning: new Map<string, PersonAccumulator>(),
+  };
+  const unassignedByRole: Record<ProjectRole, number[]> = {
+    manager: zeroStageCounts(),
+    sales: zeroStageCounts(),
+    planning: zeroStageCounts(),
+  };
+
+  for (const project of projects) {
+    const year = projectStartupYear(startupByProject.get(project.id) ?? null);
+    const stageBucket = projectStageBucketOf(project);
+    const stageIndex = STAGE_BUCKET_INDEX.get(stageBucket) ?? 0;
+
+    const stageCounts = yearStage.get(year) ?? zeroStageCounts();
+    stageCounts[stageIndex] = (stageCounts[stageIndex] ?? 0) + 1;
+    yearStage.set(year, stageCounts);
+
+    const projectTypes = new Set<string>([project.projectType, ...project.additionalProjectTypes]);
+    const typeCounts = typeYear.get(year) ?? zeroTypeCounts();
+    let matchedType = false;
+    for (const type of projectTypes) {
+      const index = PROJECT_TYPE_INDEX.get(type);
+      if (index === undefined) continue;
+      typeCounts[index] = (typeCounts[index] ?? 0) + 1;
+      matchedType = true;
+    }
+    if (matchedType) typeYear.set(year, typeCounts);
+
+    const roles = ownersByProject.get(project.id);
+    for (const role of DASHBOARD_PROJECT_ROLES) {
+      const owners = roles?.get(role);
+      if (owners === undefined || owners.size === 0) {
+        unassignedByRole[role][stageIndex] = (unassignedByRole[role][stageIndex] ?? 0) + 1;
+        continue;
+      }
+      for (const [personId, name] of owners) {
+        const people = peopleByRole[role];
+        const person = people.get(personId) ?? { personId, name: null, stageCounts: zeroStageCounts(), total: 0 };
+        if (person.name === null) person.name = normalizedName(name);
+        person.stageCounts[stageIndex] = (person.stageCounts[stageIndex] ?? 0) + 1;
+        person.total += 1;
+        people.set(personId, person);
+      }
+    }
+  }
+
+  const collator = new Intl.Collator("zh-CN");
+  const roles: DashboardProjectAnalyticsResponse["roles"] = DASHBOARD_PROJECT_ROLES.map((role) => {
+    const people: DashboardProjectAnalyticsResponse["roles"][number]["people"] = [...peopleByRole[role].values()]
+      .sort((left, right) => right.total - left.total || collator.compare(left.name ?? "", right.name ?? "") || left.personId.localeCompare(right.personId))
+      .map((person) => ({
+        personId: person.personId,
+        name: person.name,
+        isUnassigned: false,
+        stageCounts: person.stageCounts,
+        total: person.total,
+      }));
+    const unassignedTotal = unassignedByRole[role].reduce((sum, count) => sum + count, 0);
+    if (unassignedTotal > 0) {
+      people.push({ personId: null, name: null, isUnassigned: true, stageCounts: unassignedByRole[role], total: unassignedTotal });
+    }
+    return { role, people };
+  });
+
+  return {
+    totalProjects: projects.length,
+    projectTypes: [...DASHBOARD_PROJECT_TYPES],
+    stageBuckets: [...DASHBOARD_PROJECT_STAGE_BUCKETS] as DashboardProjectAnalyticsResponse["stageBuckets"],
+    typeByYear: [...typeYear.entries()]
+      .sort(([left], [right]) => yearOrder(left, right))
+      .map(([year, counts]) => ({ year, counts, total: counts.reduce((sum, count) => sum + count, 0) })),
+    roles,
+    startYearStages: [...yearStage.entries()]
+      .sort(([left], [right]) => yearOrder(left, right))
+      .map(([year, stageCounts]) => ({ year, stageCounts, total: stageCounts.reduce((sum, count) => sum + count, 0) })),
+  };
 }
 
 /** 展示态 + 派生 onTime → 交付桶（0 按时 / 1 逾期已交付 / 2 逾期未交付；null = 未到交付节点）。 */

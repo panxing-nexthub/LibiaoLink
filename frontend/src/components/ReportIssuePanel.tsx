@@ -1910,9 +1910,11 @@ function IssueBoard({ issues, onPatch, onOpen }: {
  *  Push 223（业务口径 2026-09-29「日报记录 问题追溯里面 这个编辑也要和干系人同款」+「文字和图片编辑要同款 下拉框的保持原来的」）：
  *  行尾补一枚干系人同款「编辑」按钮 —— 「问题描述 / 解决方案或建议 / 问题附图」改走编辑弹窗（IssueEditModal）
  *  落值（表格里只做展示）；「问题归类」「问题是否处理」是下拉口径、保持原来的行内编辑。 */
-function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
+function IssueTable({ issues, tierTint, highlightIssueId = null, onEdit, onPatch, onDelete }: {
   issues: readonly Issue[];
   tierTint: TintedTier | false;
+  /** 仪表盘问题深链定位行：常驻高亮，直到地址参数变化。 */
+  highlightIssueId?: string | null;
   /** 行尾「编辑」按钮（Push 223）：打开问题编辑弹窗 —— 文字两列 + 问题附图（归类 / 状态是下拉口径，保持行内）。 */
   onEdit?: (issue: Issue) => void;
   onPatch?: (id: string, patch: IssuePatch) => void;
@@ -1939,7 +1941,7 @@ function IssueTable({ issues, tierTint, onEdit, onPatch, onDelete }: {
         </thead>
         <tbody className="divide-y divide-zinc-100">
           {issues.map((issue) => (
-            <tr key={issue.id} data-issue-row={issue.id} className={"group align-top transition-colors " + (tierTint ? "issue-row-tint" + (tierTint === "vivid" ? " tint-vivid" : "") : "hover:bg-zinc-50/80")} style={tierTint ? ({ "--row-tint": (tierTint === "vivid" ? ISSUE_ROW_TINT_VIVID : ISSUE_ROW_TINT)[issue.state].tint, "--row-tint-hover": (tierTint === "vivid" ? ISSUE_ROW_TINT_VIVID : ISSUE_ROW_TINT)[issue.state].hover } as CSSProperties) : undefined}>
+            <tr key={issue.id} data-issue-row={issue.id} data-issue-located={highlightIssueId === issue.id ? "true" : undefined} aria-current={highlightIssueId === issue.id ? "true" : undefined} className={"group align-top transition-colors " + (tierTint ? "issue-row-tint" + (tierTint === "vivid" ? " tint-vivid" : "") : "hover:bg-zinc-50/80")} style={tierTint ? ({ "--row-tint": (tierTint === "vivid" ? ISSUE_ROW_TINT_VIVID : ISSUE_ROW_TINT)[issue.state].tint, "--row-tint-hover": (tierTint === "vivid" ? ISSUE_ROW_TINT_VIVID : ISSUE_ROW_TINT)[issue.state].hover } as CSSProperties) : undefined}>
               <td data-mobile-label={fieldText(locale, "日期")} className="whitespace-nowrap px-4 py-4 text-zinc-700">{isoDateText(locale, issue.raisedAt)}</td>
               <td data-mobile-label={fieldText(locale, "问题描述")} className="min-w-[240px] px-4 py-4">
                 {/* Push 217 续（业务口径「问题归类去左侧一些这个间距不协调」）：min-w 320 → 240 —— 收窄本列与
@@ -3412,7 +3414,7 @@ function IssueDrawer({ projectId, members, issue, report, readOnly, onPatchIssue
   );
 }
 
-export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilter, focusReportId = null, focusIssueId = null, onFocusClosed, onClearDateFilter, onChangeSub, readOnly = false, canFill = !readOnly }: {
+export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilter, focusReportId = null, focusIssueId = null, locateIssueId = null, onFocusClosed, onClearDateFilter, onChangeSub, readOnly = false, canFill = !readOnly }: {
   project: Project;
   me: MeResponse;
   /** 项目成员（Push 243：问题处理人 / 责任人下拉的候选）。 */
@@ -3427,6 +3429,8 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
   /** 站内信深链：日报记录定位行 / 问题追踪自动打开详情抽屉。 */
   focusReportId?: string | null;
   focusIssueId?: string | null;
+  /** 仪表盘问题深链：只滚动并高亮问题表对应行，不自动打开抽屉。 */
+  locateIssueId?: string | null;
   /** 问题抽屉关闭后清掉地址里的精确落点。 */
   onFocusClosed?: () => void;
   /** 清除单日筛选（写回地址）。 */
@@ -3498,6 +3502,24 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
     setIssueKeyword("");
     setOpenIssueId(focusIssueId);
   }, [focusIssueId, issues]);
+  /** 仪表盘深链：定位到问题表对应行并高亮，不打开问题抽屉。 */
+  const locatedIssueRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (locateIssueId === null) {
+      locatedIssueRef.current = null;
+      return;
+    }
+    if (locatedIssueRef.current === locateIssueId || !issues.some((issue) => issue.id === locateIssueId)) {
+      return;
+    }
+    locatedIssueRef.current = locateIssueId;
+    setIssueKeyword("");
+    const frame = window.requestAnimationFrame(() => {
+      const row = document.querySelector<HTMLElement>('[data-issue-row="' + CSS.escape(locateIssueId) + '"]');
+      row?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [locateIssueId, issues]);
   /** 页内搜索（业务口径 2026-09-30「给日报记录 / 问题追踪增加搜索功能，搜索的组件和项目空间右上角的相同」）：
    *  两枚关键词各管一张表（客户端过滤 —— 列表一次取满 limit 200，无需回服务端）；换项目随组件 key 复位。 */
   const [recordKeyword, setRecordKeyword] = useState("");
@@ -4192,7 +4214,7 @@ export function ReportIssuePanel({ project, me, members, tierTint, sub, dateFilt
           ) : visibleIssues.length === 0 ? (
             <EmptyCard text={t("report.issues.emptyMatch", { kw: issueKeyword.trim() })} hint={t("report.emptyHint")} />
           ) : (
-            <IssueTable issues={visibleIssues} tierTint={tierRows} onEdit={readOnly ? undefined : (issue) => { setEditModal({ kind: "issue", id: issue.id }); }} onPatch={readOnly ? undefined : patchIssue} onDelete={readOnly ? undefined : requestDeleteIssue} />
+            <IssueTable issues={visibleIssues} tierTint={tierRows} highlightIssueId={locateIssueId} onEdit={readOnly ? undefined : (issue) => { setEditModal({ kind: "issue", id: issue.id }); }} onPatch={readOnly ? undefined : patchIssue} onDelete={readOnly ? undefined : requestDeleteIssue} />
           )}
         </section>
       ) : (

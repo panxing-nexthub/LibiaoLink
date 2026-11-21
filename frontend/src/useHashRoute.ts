@@ -115,7 +115,8 @@ export const EMPTY_FILES_QUERY: FilesQueryState = { tab: "recycled", keyword: nu
 export type ProjectFocus =
   | { kind: "task"; id: string }
   | { kind: "report"; id: string }
-  | { kind: "issue"; id: string };
+  | { kind: "issue"; id: string }
+  | { kind: "issueLocate"; id: string };
 
 export type Route =
   | { kind: "hub"; view: HubView | null }
@@ -346,9 +347,10 @@ function parseProjectDate(search: string, sub: DailySubView): string | null {
   return sub === "records" || sub === "issues" ? parseDailyDateParam(search) : null;
 }
 
-const PROJECT_FOCUS_KINDS: readonly ProjectFocus["kind"][] = ["task", "report", "issue"];
+const PROJECT_FOCUS_KINDS: readonly ProjectFocus["kind"][] = ["task", "report", "issue", "issueLocate"];
 
-/** 项目深链的精确落点（`?task=` / `?report=` / `?issue=`）：只认三类，id 只做长度兜底；重复键认第一个。 */
+/** 项目深链的精确落点（`?task=` / `?report=` / `?issue=` / `?issueLocate=`）：id 只做长度兜底；重复键认第一个。
+ *  issue = 打开问题抽屉；issueLocate = 只滚动并高亮对应问题行，不打开抽屉。 */
 function parseProjectFocus(search: string): ProjectFocus | null {
   for (const chunk of search.split("&")) {
     if (chunk === "") {
@@ -502,10 +504,11 @@ function projectHrefWithFocus(id: string, view: ProjectView, sub: DailySubView, 
   return base + (base.includes("?") ? "&" : "?") + focus.kind + "=" + encodeURIComponent(focus.id);
 }
 
-/** 站内信深链：任务落到项目总览并自动开抽屉；日报 / 问题落到日报及问题对应子视图。 */
+/** 项目深链：任务落到项目总览并自动开抽屉；日报 / 问题落到日报及问题对应子视图。
+ *  仪表盘问题行使用 issueLocate，只定位并高亮问题表行，不打开抽屉。 */
 export function projectFocusHref(id: string, focus: ProjectFocus): string {
   const view: ProjectView = focus.kind === "task" ? "overview" : "daily";
-  const sub: DailySubView = focus.kind === "issue" ? "issues" : "records";
+  const sub: DailySubView = focus.kind === "issue" || focus.kind === "issueLocate" ? "issues" : "records";
   return projectHrefWithFocus(id, view, sub, null, focus);
 }
 
@@ -699,7 +702,7 @@ export function parseHash(hash: string): Route {
     // 页内子视图只在「日报及问题」标签下有语义；其它标签一律缺省（form），地址里也不落
     const focus = parseProjectFocus(search);
     const view: ProjectView = focus === null ? parseProjectView(search) : focus.kind === "task" ? "overview" : "daily";
-    const sub: DailySubView = view !== "daily" ? "form" : focus?.kind === "issue" ? "issues" : focus?.kind === "report" ? "records" : parseProjectSub(search);
+    const sub: DailySubView = view !== "daily" ? "form" : focus?.kind === "issue" || focus?.kind === "issueLocate" ? "issues" : focus?.kind === "report" ? "records" : parseProjectSub(search);
     const date = view === "daily" ? parseProjectDate(search, sub) : null;
     return { kind: "project", id: safeDecode(match[1] ?? ""), view, sub, focus, date };
   }

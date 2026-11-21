@@ -1,7 +1,8 @@
 import { z } from "../zod.ts";
-import { UuidSchema } from "../common/conventions.ts";
+import { DateOnlySchema, UuidSchema } from "../common/conventions.ts";
 import { StageKeySchema, TaskDisplayStatusSchema } from "../common/dicts.ts";
 import { IssueCategorySchema, IssueStateSchema } from "./issues.ts";
+import { FilePhotoRefSchema } from "./files.ts";
 
 /**
  * 仪表盘聚合读面（B4 · M7-02）：服务端一次算好项目进度 / 任务状态 / 交付时间，
@@ -106,12 +107,126 @@ export const DashboardIssueProjectSchema = z
   })
   .openapi("DashboardIssueProject");
 
+/** 问题图表下钻行：只读展示用，不携带图片签名或写操作。 */
+export const DashboardIssueRecordSchema = z
+  .object({
+    id: UuidSchema,
+    projectId: UuidSchema,
+    projectCode: z.string(),
+    projectName: z.string(),
+    title: z.string(),
+    state: IssueStateSchema,
+    categories: z.array(IssueCategorySchema),
+    reporterName: z.string().nullable(),
+    ownerName: z.string().nullable(),
+    raisedAt: DateOnlySchema,
+    solution: z.string().nullable(),
+    photos: z.array(FilePhotoRefSchema).openapi({ description: "问题附图引用；预览地址按需走文件预览接口" }),
+  })
+  .openapi("DashboardIssueRecord");
+
 export const DashboardIssuesResponseSchema = z
   .object({
     all: DashboardIssuesSchema,
     byProject: z.array(DashboardIssueProjectSchema).openapi({ description: "只含有问题记录的项目；没有问题的项目由前端补空统计" }),
+    details: z.array(DashboardIssueRecordSchema).openapi({ description: "全部可见项目的问题下钻行；一条问题只出现一次" }),
   })
-  .openapi("DashboardIssuesResponse", { description: "仪表盘问题分布聚合读面" });
+  .openapi("DashboardIssuesResponse", { description: "仪表盘问题分布与问题图表下钻读面" });
+
+/**
+ * 全部项目维度统计（2026-11-21 业务口径）：项目数量按启动年份 × 项目类型、三类负责人 × 最新阶段、
+ * 启动年份 × 最新阶段。只下发聚合结果，不下发项目明细。
+ *
+ * 口径：
+ * - 启动年份 = 标题为「项目启动 / Project Startup」的任务实际完成日期所属年份；多条取最晚，未完成 = null。
+ * - 最新阶段 = 未归档项目取 projects.stage_key；归档项目按归档状态拆成异常归档 / 验收归档 / 归档-临时任务。
+ * - 三类负责人 = 项目经理（projects.manager_ids）、销售负责人（合同签署任务负责人）、
+ *   规划负责人（技术协议定档任务负责人）。同一项目同一人多条命中只计一次。
+ */
+export const DashboardProjectStageBucketSchema = z
+  .union([
+    StageKeySchema,
+    z.enum(["archive_exception", "archive_accepted", "archive_temporary"]),
+  ])
+  .openapi("DashboardProjectStageBucket", {
+    description: "项目最新阶段桶：九阶段 key，或 archive_exception / archive_accepted / archive_temporary",
+  });
+
+export const DashboardProjectRoleSchema = z
+  .enum(["manager", "sales", "planning"])
+  .openapi("DashboardProjectRole", { description: "manager = 项目经理，sales = 销售负责人，planning = 规划负责人" });
+
+export const DashboardProjectTypeYearSchema = z
+  .object({
+    year: z.number().int().min(1900).max(9999).nullable().openapi({ description: "启动年份；null = 项目启动任务未完成 / 无启动时间" }),
+    counts: z.array(z.number().int().min(0)).length(3).openapi({ description: "与 projectTypes 同序的三类项目数量" }),
+    total: z.number().int().min(0),
+  })
+  .openapi("DashboardProjectTypeYear");
+
+export const DashboardProjectRolePersonSchema = z
+  .object({
+    personId: UuidSchema.nullable().openapi({ description: "人员账号 id；待分配 = null" }),
+    name: z.string().nullable().openapi({ description: "人员显示名；账号姓名缺失 = null" }),
+    isUnassigned: z.boolean(),
+    stageCounts: z.array(z.number().int().min(0)).length(12).openapi({ description: "与 stageBuckets 同序的项目数量" }),
+    total: z.number().int().min(0),
+  })
+  .openapi("DashboardProjectRolePerson");
+
+export const DashboardProjectRoleStatsSchema = z
+  .object({
+    role: DashboardProjectRoleSchema,
+    people: z.array(DashboardProjectRolePersonSchema).openapi({ description: "按项目总数降序；待分配行（若有）置末" }),
+  })
+  .openapi("DashboardProjectRoleStats");
+
+export const DashboardProjectStartYearStageSchema = z
+  .object({
+    year: z.number().int().min(1900).max(9999).nullable().openapi({ description: "启动年份；null = 未记录启动时间" }),
+    stageCounts: z.array(z.number().int().min(0)).length(12).openapi({ description: "与 stageBuckets 同序的项目数量" }),
+    total: z.number().int().min(0),
+  })
+  .openapi("DashboardProjectStartYearStage");
+
+export const DashboardProjectOwnerSchema = z
+  .object({
+    personId: UuidSchema,
+    name: z.string().nullable(),
+  })
+  .openapi("DashboardProjectOwner");
+
+/** 全部项目图表的项目下钻行。 */
+export const DashboardProjectSummarySchema = z
+  .object({
+    id: UuidSchema,
+    code: z.string(),
+    name: z.string(),
+    projectTypes: z.array(z.string()).openapi({ description: "项目命中的全部类型（去重，保留输入顺序）" }),
+    stageBucket: DashboardProjectStageBucketSchema,
+    startupAt: DateOnlySchema.nullable().openapi({ description: "项目启动任务实际完成日期；null = 未记录" }),
+    startupYear: z.number().int().min(1900).max(9999).nullable(),
+    owners: z
+      .object({
+        manager: z.array(DashboardProjectOwnerSchema),
+        sales: z.array(DashboardProjectOwnerSchema),
+        planning: z.array(DashboardProjectOwnerSchema),
+      })
+      .openapi({ description: "三类负责人的去重人员；空数组 = 待分配" }),
+  })
+  .openapi("DashboardProjectSummary");
+
+export const DashboardProjectAnalyticsResponseSchema = z
+  .object({
+    totalProjects: z.number().int().min(0),
+    projectTypes: z.array(z.string()).length(3).openapi({ description: "固定顺序：T-sort / 3D分拣 / 飞箱" }),
+    stageBuckets: z.array(DashboardProjectStageBucketSchema).length(12).openapi({ description: "固定顺序：九阶段 + 异常归档 / 验收归档 / 归档-临时任务" }),
+    typeByYear: z.array(DashboardProjectTypeYearSchema).openapi({ description: "年份升序，未记录启动时间置末；多类型项目在每个命中类型各计一次" }),
+    roles: z.array(DashboardProjectRoleStatsSchema).length(3).openapi({ description: "固定顺序：项目经理 / 销售负责人 / 规划负责人" }),
+    startYearStages: z.array(DashboardProjectStartYearStageSchema).openapi({ description: "年份升序，未记录启动时间置末" }),
+    projects: z.array(DashboardProjectSummarySchema).openapi({ description: "全部可见项目的下钻行；顺序与项目列表默认排序一致" }),
+  })
+  .openapi("DashboardProjectAnalyticsResponse", { description: "全部项目维度聚合读面（项目数量 / 负责人 / 启动年份 × 最新阶段，附项目下钻行）" });
 
 export const DashboardWordSchema = z
   .object({
@@ -150,6 +265,9 @@ export type DashboardTaskSummary = z.infer<typeof DashboardTaskSummarySchema>;
 export type DashboardProjectProgress = z.infer<typeof DashboardProjectProgressSchema>;
 export type DashboardProgressResponse = z.infer<typeof DashboardProgressResponseSchema>;
 export type DashboardIssues = z.infer<typeof DashboardIssuesSchema>;
+export type DashboardProjectStageBucket = z.infer<typeof DashboardProjectStageBucketSchema>;
+export type DashboardProjectRole = z.infer<typeof DashboardProjectRoleSchema>;
+export type DashboardProjectAnalyticsResponse = z.infer<typeof DashboardProjectAnalyticsResponseSchema>;
 export type DashboardIssueCount = z.infer<typeof DashboardIssueCountSchema>;
 export type DashboardIssuesResponse = z.infer<typeof DashboardIssuesResponseSchema>;
 export type DashboardChangeWords = z.infer<typeof DashboardChangeWordsSchema>;

@@ -1,3 +1,298 @@
+> **2026-11-22 00:18 问题点击直接定位项目问题行（测试机 frontend-only · test-20261122-0018-px-dashboard-issue-row-locate-ff408796）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `ff408796`；release = `test-20261122-0018-px-dashboard-issue-row-locate-ff408796`，previous = `test-20261122-0013-px-dashboard-issue-photo-link-eb93993b`；staging = `/srv/data/deploy-test-20261122-0018-px-dashboard-issue-row-locate-ff408796/staging`。
+
+> **改动 / 验收**：仪表盘问题链接由会打开问题抽屉的 `?issue={id}` 改为 `?issueLocate={id}`；项目问题追踪进入后清空可能遮挡的搜索词、滚动到目标问题行并常驻黄色高亮，不再打开右侧抽屉。通知深链原 `issue={id}` 抽屉语义保留。frontend typecheck / build 通过；Chrome 实测目标行直接居中高亮、抽屉未打开、console error 0。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,615,853 B / SHA-256 `a7c63b8e…`、678 文件；线上前端 1094 → 1097 文件并原子替换 `index.html`，强制重建 web。无 server / shared 产物变化。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `5a6bbf7d…`、主包 `assets/index-Ds3cmUdv.js` 2,555,394 B / `34ca5345…`、CSS `assets/index-B3mPVj0a.css` 261,333 B / `0d181b3d…`、ES `assets/es-1wtahwsY.js` 428,098 B / `9838b735…`；`/`、`/healthz`、`/readyz` 200，web healthy、RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261122-0018-px-dashboard-issue-row-locate-ff408796`，162,449,245 B / 4 文件 / SHA256SUMS `267de6e0…`；新 `RELEASE_MANIFEST.json` 4,731 B / `706d9e03…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / 迁移 / Compose / env / Nginx / 对象存储变更。回滚：恢复前端备份与原 manifest，再重建 web。
+
+> **2026-11-22 00:13 问题下钻补图片与项目定位跳转（测试机 full-stack · test-20261122-0013-px-dashboard-issue-photo-link-eb93993b）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `eb93993b`；release = `test-20261122-0013-px-dashboard-issue-photo-link-eb93993b`，previous = `test-20261122-0000-px-dashboard-project-row-link-414ae0a2`；staging = `/srv/data/deploy-test-20261122-0013-px-dashboard-issue-photo-link-eb93993b/staging`。
+
+> **改动 / 验收**：全部项目问题下拉行新增「问题附图」缩略图，点击可打开大图预览；问题正文改为链接，进入 `#/project/{projectId}?view=daily&sub=issues&issue={issueId}`，自动定位并打开对应项目的问题详情抽屉。`issues.details[]` 增只读 `photos[]`（fileId / name，预览仍走文件接口）。shared check、server typecheck / build / dashboard tests 10 条、frontend typecheck / build 通过；Chrome 实测供应商原因 4 条问题中两条各显示 2 张附图，点图预览正常；点击第一条问题进入 `UK-VANILLA-AIRROB` 问题追踪并自动打开所述问题，console error 0。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,615,759 B / SHA-256 `cab46961…`、678 文件；`server-dist.tar.gz` 1,350,916 B / `85bd23ea…`；`shared-dist.tar.gz` 274,193 B / `01c932f6…`。线上前端 1091 → 1094 文件，server / shared dist 原子换装后强制重建 api / worker / web；server 795 文件、shared 120 文件。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `1edc9316…`、主包 `assets/index-Do9s-SU2.js` 2,554,770 B / `6af6d8fa…`、CSS `assets/index-CsYaFKyq.css` 261,088 B / `0b6eb1a3…`、ES `assets/es-XFCta-vr.js` 428,098 B / `4e6c1be3…`；`/`、`/healthz`、`/readyz` 200，web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261122-0013-px-dashboard-issue-photo-link-eb93993b`，163,157,777 B / 8 文件 / SHA256SUMS `e8b072a5…`；新 `RELEASE_MANIFEST.json` 7,131 B / `75ed9b5f…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；本轮无数据库结构 / 迁移 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份 frontend / server / shared dist 与原 manifest，再重建 api / worker / web。
+
+> **2026-11-22 00:00 项目下钻列表行进入项目详情（测试机 frontend-only + 测试库增量补齐 · test-20261122-0000-px-dashboard-project-row-link-414ae0a2）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `414ae0a2`；release = `test-20261122-0000-px-dashboard-project-row-link-414ae0a2`，previous = `test-20261121-2356-px-dashboard-drilldown-3c28151d`；staging = `/srv/data/deploy-test-20261122-0000-px-dashboard-project-row-link-414ae0a2/staging`。
+
+> **改动 / 验收**：全部项目图表「数据详情」中的项目列表整行改为链接，点击 / 键盘 Enter 进入 `#/project/{id}` 项目总览；行尾增加进入箭头，悬停高亮，aria-label 带项目名称与编号。frontend typecheck / build 通过；Chrome 实测由列表进入 `DEMO-2026-06` 项目详情成功，项目页正常渲染，console error 0。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,613,051 B / SHA-256 `7a708659…`、678 文件；线上前端 1088 → 1091 文件并原子替换 `index.html`，强制重建 web。无 server / shared 产物变化。
+
+> **测试库增量 / 边界**：测试库此前缺当前分支已依赖的 0107 / 0109 / 0110 增量，导致项目详情 500。本轮按迁移文件补 `project_archives.archive_kind`（0107）、3 条历史归档回填 `accepted` 并设默认 / 非空（0109）、`projects.additional_project_types` / `source_blueprint_type`（0110）；三项均为追加列 / 默认值回填，项目详情恢复。`schema_migrations` 仍记录到 0105；0108 因测试库存在 1 条历史 `status=done` 项目、直接收紧 CHECK 会失败，本轮未改该状态数据，留待专项迁移处理。正式机未触碰。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `8a2e5b15…`、主包 `assets/index-B68jwjhE.js` 2,553,784 B / `aa316b03…`、CSS `assets/index-_QfmUYA3.css` 260,238 B / `ea336ef0…`、ES `assets/es-BNGRGYON.js` 428,098 B / `9a606bc9…`；`/`、`/healthz`、`/readyz` 200，web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261122-0000-px-dashboard-project-row-link-414ae0a2`，162,743,247 B / 8 文件 / SHA256SUMS `da1eaee5…`，含前端 160,553,216 B / `eb3ef2f6…`、原 manifest 7,163 B / `eb0b4aec…`、数据库 dump 2,181,223 B / `8648ece0…` 与 0107 / 0109 / 0110 迁移文件；新 `RELEASE_MANIFEST.json` 6,764 B / `75cf8e27…`，`root:root 644` 原子替换。
+
+> **回滚**：恢复前端备份与 manifest 后重建 web；如需回退测试库增量，使用 `libiaolink-before-0110.dump` 恢复。无 Compose / env / Nginx / 对象存储变更。
+
+> **2026-11-21 23:56 全部项目图表点击下钻（测试机 full-stack · test-20261121-2356-px-dashboard-drilldown-3c28151d）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `3c28151d`；release = `test-20261121-2356-px-dashboard-drilldown-3c28151d`，previous = `test-20261121-2355-px-dashboard-issue-heading-b60c2906`；staging = `/srv/data/deploy-test-20261121-2356-px-dashboard-drilldown-3c28151d/staging`。本轮同时带回上一提交的问题归纳标题精简。
+
+> **改动 / 验收**：项目统计柱 / 折线点、项目当前阶段柱、项目经理 / 销售负责人 / 规划负责人阶段分段与人员柱底、问题归纳柱均可打开卡片式「数据详情」。项目列表固定长列表不折叠，展示项目类型 / 编号 / 名称 / 项目经理 / 启动时间，阶段与负责人页补当前阶段；问题详情按项目折叠，展开显示命中「状态 × 归类」的问题正文、状态、责任人、提出时间、归类与解决方案。shared typecheck / generate / check 通过，server typecheck / build 与全量 tests 2021 passed / 75 skipped，frontend typecheck / build 通过；Chrome 实测项目统计 4 项、当前阶段 9 项、项目经理 8 项、销售负责人 2 项，问题折叠组 2 条展开正常，Esc 关闭正常，console error 0。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,612,646 B / SHA-256 `1bdb6c11…`、678 文件；`server-dist.tar.gz` 1,350,403 B / `169ad0c2…`；`shared-dist.tar.gz` 274,073 B / `9ecf43fe…`。线上前端 1085 → 1088 文件并原子替换 `index.html`，server / shared dist 原子换装后强制重建 api / worker / web；server 795 文件、shared 120 文件，与发布件一致。API 响应新增只读 `project-insights.projects[]` 与 `issues.details[]`，无数据库迁移。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `80a61af8…`、主包 `assets/index-BZG4ucZX.js` 2,553,902 B / `f99627f5…`、CSS `assets/index-tBO65ifa.css` 259,765 B / `4c8617d9…`、ES `assets/es-D0qhV5SL.js` 428,098 B / `634b1758…`；`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true，未登录下钻 API 401；web / api / worker healthy，RestartCount 0、OOM false，近 10 分钟 ERROR / FATAL 0。备份 `/srv/data/backups/before-test-20261121-2356-px-dashboard-drilldown-3c28151d`，161,276,759 B / 8 文件 / SHA256SUMS `01982850…`；前端 159,624,929 B / `f449f246…`、server 1,351,872 B / `85697017…`、shared 295,401 B / `9545ad13…`、原 manifest 3,896 B / `9ecaed40…`。新 `RELEASE_MANIFEST.json` 7,163 B / `eb0b4aec…`，`root:root 644` 原子替换。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无数据库结构 / 迁移 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份的 frontend / server / shared dist 与原 manifest，再 `docker compose up -d --force-recreate --no-deps api worker web`。
+
+> **2026-11-21 23:50 仪表盘柱状图动态轴适配（测试机 frontend-only · test-20261121-2350-px-dashboard-axis-fit-b2cb7560）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `b2cb7560`；release = `test-20261121-2350-px-dashboard-axis-fit-b2cb7560`，previous = `test-20261121-2340-px-dashboard-filter-memory-f4086a48`；staging = `/srv/data/deploy-test-20261121-2350-px-dashboard-axis-fit-b2cb7560/staging`。
+
+> **改动 / 验收**：新增统一纵轴算法，最高值预留约 8% 顶部空间，采用 1 / 2 / 5 × 10^n 整数整齐步长；覆盖项目进度、问题原因、项目统计、负责人阶段、项目当前阶段、交付时间。去掉柱顶数字的坐标区 clamp，最高值 9 时纵轴为 0 / 5 / 10，数字 bottom=179.8px 小于柱顶 top=184.0px，不再重合。frontend `npm run typecheck` / `npm run build` 通过。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,608,161 B / SHA-256 `e8f95c9a…`、678 文件；`build-info.json` 378 B / `659d7124…`；`frontend-files.sha256` 92,437 B / `a7d4ba59…`；`release-files.sha256` 254 B / `8ad13106…`。线上 1081 → 1083 文件（CSS 沿用同哈希），新增 2 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `de5bf2cd…`、主包 `assets/index-Ba_ezHwp.js` 2,540,533 B / `c460ac50…`、CSS `assets/index-DCI9uLXa.css` 254,336 B / `ab7cc7bf…`、ES `assets/es-D8bSPlm1.js` 428,098 B / `2bc75199…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2350-px-dashboard-axis-fit-b2cb7560`，前端 157,840,862 B / `f8e55b34…`、原 manifest 4,379 B / `0cbc8785…`，SHA256SUMS 3 / 3 通过；新 manifest 4,071 B / `8fcc1c48…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 23:40 仪表盘全选统一与筛选记忆（测试机 frontend-only · test-20261121-2340-px-dashboard-filter-memory-f4086a48）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `f4086a48`；release = `test-20261121-2340-px-dashboard-filter-memory-f4086a48`，previous = `test-20261121-2320-px-dashboard-project-stats-first-84a26a65`；staging = `/srv/data/deploy-test-20261121-2340-px-dashboard-filter-memory-f4086a48/staging`。
+
+> **改动 / 验收**：问题原因归纳、项目统计、项目当前阶段三处全选统一放到最左并使用同一玻璃按钮；项目当前阶段新增年份全选。全部项目仪表盘筛选按 viewerId 存 localStorage：问题分类、项目年份 / 类型 / 窗口 / 柱线模式、负责人阶段显隐、当前阶段年份 / 窗口，刷新后保持。frontend `npm run typecheck` / `npm run build` 通过；本地夹具刷新后上述筛选和折线聚焦状态全部保持。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,610,180 B / SHA-256 `ed8b5305…`、678 文件；`build-info.json` 372 B / `b6627699…`；`frontend-files.sha256` 92,437 B / `f8ca2a08…`；`release-files.sha256` 254 B / `c9479854…`。线上 1078 → 1081 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `fda93075…`、主包 `assets/index-DhxhHqAJ.js` 2,541,311 B / `51927b04…`、CSS `assets/index-DCI9uLXa.css` 254,336 B / `ab7cc7bf…`、ES `assets/es-Dmayo_7r.js` 428,098 B / `a67f46e7…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2340-px-dashboard-filter-memory-f4086a48`，前端 156,907,761 B / `4ef2d881…`、原 manifest 4,077 B / `6d770a84…`，SHA256SUMS 3 / 3 通过；新 manifest 4,379 B / `0cbc8785…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 23:20 项目统计更名并调整为第一页（测试机 frontend-only · test-20261121-2320-px-dashboard-project-stats-first-84a26a65）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `84a26a65`；release = `test-20261121-2320-px-dashboard-project-stats-first-84a26a65`，previous = `test-20261121-2310-px-dashboard-line-motion-7eff6c71`；staging = `/srv/data/deploy-test-20261121-2320-px-dashboard-project-stats-first-84a26a65/staging`。
+
+> **改动 / 验收**：上方标题及底部入口改为「项目统计」，下方标题改为「项目当前阶段」，相关 aria 文案同步；页面顺序改为项目统计、问题归纳、项目经理、销售负责人、规划负责人，进入全部项目默认落在第一页。frontend `npm run typecheck` / `npm run build` 通过；线上 bundle 命中「项目统计」×4、「项目当前阶段」×4。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,443 B / SHA-256 `6636c40e…`、678 文件；`build-info.json` 393 B / `330f1214…`；`frontend-files.sha256` 92,437 B / `58089fd7…`；`release-files.sha256` 254 B / `5d3270ad…`。线上 1076 → 1078 文件（CSS 沿用同哈希），新增 2 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `4c5975aa…`、主包 `assets/index-dTWaa5Cj.js` 2,539,888 B / `1823fe08…`、CSS `assets/index-DhDIKdxP.css` 254,044 B / `25d059a3…`、ES `assets/es-CmkBpMiE.js` 428,098 B / `ea1e4639…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2320-px-dashboard-project-stats-first-84a26a65`，前端 156,008,107 B / `053a3601…`、原 manifest 4,074 B / `9370c2a8…`，SHA256SUMS 3 / 3 通过；新 manifest 4,077 B / `6d770a84…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 23:10 折线图切换动画（测试机 frontend-only · test-20261121-2310-px-dashboard-line-motion-7eff6c71）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `7eff6c71`；release = `test-20261121-2310-px-dashboard-line-motion-7eff6c71`，previous = `test-20261121-2300-px-dashboard-line-focus-4324c597`；staging = `/srv/data/deploy-test-20261121-2310-px-dashboard-line-motion-7eff6c71/staging`。
+
+> **改动 / 验收**：折线 720ms 从左到右绘制、三条线错峰 90ms；数据点 380ms 依次弹出（首点 240ms、年份间隔 65ms），数字再延迟 120ms；折线聚焦容器 420ms 淡入；切回柱状图恢复柱体入场动画。frontend `npm run typecheck` / `npm run build` 通过，本地浏览器已确认 dashoffset 与延迟生效。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,607,845 B / SHA-256 `ea7e2e2e…`、678 文件；`build-info.json` 355 B / `ec40c8fe…`；`frontend-files.sha256` 92,437 B / `5507ebe8…`；`release-files.sha256` 254 B / `8395cd2f…`。线上 1073 → 1076 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `753f41e9…`、主包 `assets/index-Cgd86dZY.js` 2,539,852 B / `50333a72…`、CSS `assets/index-DhDIKdxP.css` 254,044 B / `25d059a3…`、ES `assets/es-i6sMI3rQ.js` 428,098 B / `014d9b08…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2310-px-dashboard-line-motion-7eff6c71`，前端 155,077,456 B / `100acd4a…`、原 manifest 4,098 B / `c8fa1334…`，SHA256SUMS 3 / 3 通过；新 manifest 4,074 B / `9370c2a8…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 23:00 折线图聚焦模式隐藏下方面板（测试机 frontend-only · test-20261121-2300-px-dashboard-line-focus-4324c597）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `4324c597`；release = `test-20261121-2300-px-dashboard-line-focus-4324c597`，previous = `test-20261121-2250-px-dashboard-stage-font-f1433805`；staging = `/srv/data/deploy-test-20261121-2300-px-dashboard-line-focus-4324c597/staging`。
+
+> **改动 / 验收**：点击「折线图」后下方项目阶段面板下滑收起（高度 0、opacity 0、translateY 28px、aria-hidden），上方项目数量面板扩展至 940px，折线图改用 1200×520 扩展画布居中展示；点击「柱状图」恢复双图，下面板回到 433px。frontend `npm run typecheck` / `npm run build` 通过。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,364 B / SHA-256 `cd5ca2c7…`、678 文件；`build-info.json` 364 B / `24946609…`；`frontend-files.sha256` 92,437 B / `cdc59c37…`；`release-files.sha256` 254 B / `a51def3c…`。线上 1070 → 1073 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `7da2ad5f…`、主包 `assets/index-Xl4XBVhy.js` 2,539,708 B / `e9c501fa…`、CSS `assets/index-Aw-29TuD.css` 253,799 B / `fdd23eb5…`、ES `assets/es-BOOvqkBy.js` 428,098 B / `67270607…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2300-px-dashboard-line-focus-4324c597`，前端 154,135,251 B / `f76602cc…`、原 manifest 4,007 B / `65d9c654…`，SHA256SUMS 3 / 3 通过；新 manifest 4,098 B / `c8fa1334…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 22:50 放大项目阶段图轴文字（测试机 frontend-only · test-20261121-2250-px-dashboard-stage-font-f1433805）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `f1433805`；release = `test-20261121-2250-px-dashboard-stage-font-f1433805`，previous = `test-20261121-2240-px-dashboard-filter-align-97c56d22`；staging = `/srv/data/deploy-test-20261121-2250-px-dashboard-stage-font-f1433805/staging`。
+
+> **改动 / 验收**：项目阶段图横轴中文标签 12.4 → 14.3、纵轴刻度 12 → 13.2、柱顶数字 12.5 → 13.5；12 个阶段标签单行显示，不压缩、不重叠。frontend `npm run typecheck` / `npm run build` 通过。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,128 B / SHA-256 `be0575bd…`、678 文件；`build-info.json` 343 B / `33f364bd…`；`frontend-files.sha256` 92,437 B / `5bbbb33d…`；`release-files.sha256` 254 B / `6d6f6175…`。线上 1068 → 1070 文件（CSS 沿用同哈希），新增 2 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `43d1dd38…`、主包 `assets/index-D_96MrPf.js` 2,539,429 B / `93b14ddc…`、CSS `assets/index-C22Z19ED.css` 253,324 B / `febb157b…`、ES `assets/es-Dlfe-1B2.js` 428,098 B / `81b9ce5f…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2250-px-dashboard-stage-font-f1433805`，前端 153,258,898 B / `e7f43964…`、原 manifest 4,065 B / `88d34321…`，SHA256SUMS 3 / 3 通过；新 manifest 4,007 B / `65d9c654…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 22:40 年份与全选对齐、类型图例回到年份下方（测试机 frontend-only · test-20261121-2240-px-dashboard-filter-align-97c56d22）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `97c56d22`；release = `test-20261121-2240-px-dashboard-filter-align-97c56d22`，previous = `test-20261121-2230-px-dashboard-legend-row-cff6a383`；staging = `/srv/data/deploy-test-20261121-2240-px-dashboard-filter-align-97c56d22/staging`。
+
+> **改动 / 验收**：项目数量图筛选区改为两列布局，左列全选 / 折线图上下排列，右列年份导航在上、类型图例在下；全选与年份 y 坐标均为 68.7px，类型图例 y=102.2px，绘图区约 389px。frontend `npm run typecheck` / `npm run build` 通过。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,149 B / SHA-256 `7cfbed70…`、678 文件；`build-info.json` 367 B / `c5136256…`；`frontend-files.sha256` 92,437 B / `451bda52…`；`release-files.sha256` 254 B / `16072ffb…`。线上 1065 → 1068 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `ebfa4487…`、主包 `assets/index-Cq_dRUmm.js` 2,539,425 B / `92069eb7…`、CSS `assets/index-C22Z19ED.css` 253,324 B / `febb157b…`、ES `assets/es-CUyTcv3V.js` 428,098 B / `33eb05fa…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2240-px-dashboard-filter-align-97c56d22`，前端 152,332,617 B / `425041d0…`、原 manifest 4,049 B / `b517f041…`，SHA256SUMS 3 / 3 通过；新 manifest 4,065 B / `88d34321…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 22:30 类型图例上移释放纵轴空间（测试机 frontend-only · test-20261121-2230-px-dashboard-legend-row-cff6a383）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `cff6a383`；release = `test-20261121-2230-px-dashboard-legend-row-cff6a383`，previous = `test-20261121-2220-px-dashboard-fill-charts-56128a83`；staging = `/srv/data/deploy-test-20261121-2230-px-dashboard-legend-row-cff6a383/staging`。
+
+> **改动 / 验收**：项目数量图类型图例移到年份导航同一行右侧，年份导航保持居中；窄于 1100px 时图例回落年份导航下方。项目数量图绘图区高度由 353.1px 增至 383.7px，纵轴多出约 30.6px。frontend `npm run typecheck` / `npm run build` 通过。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,171 B / SHA-256 `fbe0ab0b…`、678 文件；`build-info.json` 361 B / `e803dc29…`；`frontend-files.sha256` 92,437 B / `f3935622…`；`release-files.sha256` 254 B / `23139b51…`。线上 1062 → 1065 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `0bf6c1f4…`、主包 `assets/index-CxmhPkYQ.js` 2,539,346 B / `32c4be41…`、CSS `assets/index-9__paoL7.css` 253,561 B / `6af5f1ec…`、ES `assets/es-wsDeVG7N.js` 428,098 B / `076b8cb1…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2230-px-dashboard-legend-row-cff6a383`，前端 151,400,424 B / `a8e51462…`、原 manifest 4,045 B / `1b1fe435…`，SHA256SUMS 3 / 3 通过；新 manifest 4,049 B / `b517f041…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 22:20 合并页图表撑满可用画布（测试机 frontend-only · test-20261121-2220-px-dashboard-fill-charts-56128a83）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `56128a83`；release = `test-20261121-2220-px-dashboard-fill-charts-56128a83`，previous = `test-20261121-2210-px-dashboard-balanced-panels-744ad7e0`；staging = `/srv/data/deploy-test-20261121-2220-px-dashboard-fill-charts-56128a83/staging`。
+
+> **改动 / 验收**：项目数量图 viewBox 高度 360 → 280，项目阶段图 400 → 320，使两图在现有面板内横向撑满；1600×1000 两图绘图区约 353 / 364px，1366×768 约 229 / 256px，均完整显示。frontend `npm run typecheck` / `npm run build` 通过。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,607,320 B / SHA-256 `0c765c44…`、678 文件；`build-info.json` 364 B / `bd3627fa…`；`frontend-files.sha256` 92,437 B / `77f5097f…`；`release-files.sha256` 254 B / `33d5633a…`。线上 1060 → 1062 文件（CSS 沿用同哈希），新增 2 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `aec11024…`、主包 `assets/index-Cj-jV0Ew.js` 2,539,346 B / `5007a7b4…`、CSS `assets/index-DKc1ZDRE.css` 253,296 B / `ba66cfd8…`、ES `assets/es-B4OYkcWI.js` 428,098 B / `a4fd3b17…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2220-px-dashboard-fill-charts-56128a83`，前端 150,508,564 B / `b1e84de8…`、原 manifest 4,114 B / `1be0f104…`，SHA256SUMS 3 / 3 通过；新 manifest 4,045 B / `1b1fe435…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 22:10 合并页上下图表接近等高（测试机 frontend-only · test-20261121-2210-px-dashboard-balanced-panels-744ad7e0）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `744ad7e0`；release = `test-20261121-2210-px-dashboard-balanced-panels-744ad7e0`，previous = `test-20261121-2200-px-dashboard-enlarge-top-panel-00998b22`；staging = `/srv/data/deploy-test-20261121-2210-px-dashboard-balanced-panels-744ad7e0/staging`。
+
+> **改动 / 验收**：上方面板 flex-grow 由 1.45 回调为 1.15，上下接近等高；1600×1000 下上/下约 497 / 434px，绘图区约 353 / 364px；1366×768 下约 373 / 327px，绘图区约 229 / 256px。frontend `npm run typecheck` / `npm run build` 通过，两图均完整显示。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,607,315 B / SHA-256 `a65fc235…`、678 文件；`build-info.json` 357 B / `8298856a…`；`frontend-files.sha256` 92,437 B / `13a6d64b…`；`release-files.sha256` 254 B / `2ab6d1f8…`。线上 1057 → 1060 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `f95fa6d6…`、主包 `assets/index-B47Ip1OT.js` 2,539,346 B / `386a063b…`、CSS `assets/index-DKc1ZDRE.css` 253,296 B / `ba66cfd8…`、ES `assets/es-Dexu7xMS.js` 428,098 B / `c6ce392d…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2210-px-dashboard-balanced-panels-744ad7e0`，前端 149,576,106 B / `fafe0cc7…`、原 manifest 4,134 B / `a6e97658…`，SHA256SUMS 3 / 3 通过；新 manifest 4,114 B / `1be0f104…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 22:00 合并页放大上方项目数量面板（测试机 frontend-only · test-20261121-2200-px-dashboard-enlarge-top-panel-00998b22）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `00998b22`；release = `test-20261121-2200-px-dashboard-enlarge-top-panel-00998b22`，previous = `test-20261121-2150-px-dashboard-combined-project-stats-2bd167c1`；staging = `/srv/data/deploy-test-20261121-2200-px-dashboard-enlarge-top-panel-00998b22/staging`。
+
+> **改动 / 验收**：项目数量 / 项目阶段上下合并页改为非等高布局，上方面板高度占比约 59%，下方约 41%；上方面板由 455.8px 放大到 548.4px，绘图区从 311.8px 放大到 404.3px。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 1366×768 上方面板 411px、下方 289px，仍无裁切。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,142 B / SHA-256 `55868546…`、678 文件；`build-info.json` 357 B / `d13cab77…`；`frontend-files.sha256` 92,437 B / `17cf108a…`；`release-files.sha256` 254 B / `58308196…`。线上 1054 → 1057 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `b8497fc6…`、主包 `assets/index-CyCs1PeB.js` 2,539,346 B / `36e59380…`、CSS `assets/index-B_mgxIE3.css` 253,296 B / `8c2df757…`、ES `assets/es-DmwL5KCs.js` 428,098 B / `fcf7a9e0…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2200-px-dashboard-enlarge-top-panel-00998b22`，前端 148,643,612 B / `0b729fa8…`、原 manifest 4,131 B / `a2d852b9…`，SHA256SUMS 3 / 3 通过；新 manifest 4,134 B / `a6e97658…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 21:50 项目数量与项目阶段合并同屏（测试机 frontend-only · test-20261121-2150-px-dashboard-combined-project-stats-2bd167c1）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `2bd167c1`；release = `test-20261121-2150-px-dashboard-combined-project-stats-2bd167c1`，previous = `test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a`；staging = `/srv/data/deploy-test-20261121-2150-px-dashboard-combined-project-stats-2bd167c1/staging`。
+
+> **改动 / 验收**：全部项目仪表盘由 6 屏精简为 5 屏，「项目数量统计」与「项目阶段」合并为一屏上下双面板；顶部保留年份 / 类型筛选、全选、柱线切换，底部保留年份筛选、阶段柱图和全选。独立「最新阶段」入口移除，合并页沿用「项目数量」入口。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 1600×1000、1366×768、768×1000 三种尺寸两面板均无裁切；线上 bundle 命中 `hub-dash-combined__panel` ×2。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,609,028 B / SHA-256 `6d9408c3…`、678 文件；`build-info.json` 375 B / `90518f6d…`；`frontend-files.sha256` 92,437 B / `54478cdf…`；`release-files.sha256` 254 B / `d373a5cb…`。线上 1051 → 1054 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `464b2c51…`、主包 `assets/index-DzePAv0X.js` 2,539,346 B / `05641ce0…`、CSS `assets/index-D1C_GO49.css` 253,229 B / `108968f9…`、ES `assets/es-Db-Bt6Vx.js` 428,098 B / `6d1cde98…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2150-px-dashboard-combined-project-stats-2bd167c1`，前端 147,701,619 B / `45c8a46b…`、原 manifest 4,089 B / `e6ac17c3…`，SHA256SUMS 3 / 3 通过；新 manifest 4,131 B / `a2d852b9…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 21:42 柱状图 / 折线图切换按钮移至全选下方（测试机 frontend-only · test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `77a94d6a`；release = `test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a`，previous = `test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5`；staging = `/srv/data/deploy-test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a/staging`。
+
+> **改动 / 验收**：项目数量统计左侧控制区改为上下排列，「全选」在上、「折线图 / 柱状图」按钮在下并左对齐；年份导航保持居中，窄屏继续堆叠。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 1600 宽度按钮 y=84 / 117 且左对齐、导航居中，600 宽度堆叠不重叠；线上 bundle 命中 `hub-dash-project-types__leftControls`。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,608,942 B / SHA-256 `88f7cedd…`、678 文件；`build-info.json` 349 B / `5966663f…`；`frontend-files.sha256` 92,437 B / `93db5be1…`；`release-files.sha256` 254 B / `574903c4…`。线上 1048 → 1051 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `ecd7ee18…`、主包 `assets/index-FflKx_wt.js` 2,539,321 B / `ea3560a5…`、CSS `assets/index-BJ_fyEjW.css` 252,183 B / `60b27f52…`、ES `assets/es-Dv8bXwLz.js` 428,098 B / `87dc1248…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a`，前端 146,774,459 B / `c8877414…`、原 manifest 4,139 B / `befad90e…`，SHA256SUMS 3 / 3 通过；新 manifest 4,089 B / `e6ac17c3…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 21:35 项目数量统计柱状图 / 折线图切换（测试机 frontend-only · test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `71ed6dd5`；release = `test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5`，previous = `test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87`；staging = `/srv/data/deploy-test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5/staging`。
+
+> **改动 / 验收**：项目数量统计右上角新增图表类型按钮，默认柱状图，点击切为折线图；折线模式按 T-sort / 3D分拣 / 飞箱绘制三条趋势线，按钮变为「柱状图」可切回。年份筛选、全选、类型显隐、悬停卡和刻度共用。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核默认 15 柱、折线 3 线 / 15 点、隐藏 T-sort 后 2 线 / 10 点、切回柱状图恢复；线上 bundle 命中 `hub-dash-project-types__line` / `hub-dash-project-types__chartToggle`。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,608,897 B / SHA-256 `4a2e6305…`、678 文件；`build-info.json` 353 B / `c5b02d17…`；`frontend-files.sha256` 92,437 B / `cbde5ad6…`；`release-files.sha256` 254 B / `6416402a…`。线上 1045 → 1048 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `6dc7840c…`、主包 `assets/index-_wiaoyw8.js` 2,539,241 B / `10ded47b…`、CSS `assets/index-CoP7tP7U.css` 251,944 B / `22ee02cc…`、ES `assets/es-CULKcChS.js` 428,098 B / `424d59be…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5`，前端 145,834,898 B / `5c2ac424…`、原 manifest 4,153 B / `96b9bd8c…`，SHA256SUMS 3 / 3 通过；新 manifest 4,139 B / `befad90e…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 21:20 项目阶段标题精简与问题原因归类可筛选（测试机 frontend-only · test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `ff029b87`；release = `test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87`，previous = `test-20261121-2105-px-dashboard-role-stage-filter-b332be0a`；staging = `/srv/data/deploy-test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87/staging`。
+
+> **改动 / 验收**：全部项目第 6 屏标题改为「项目阶段」并移除说明文字，底部标签同步；问题原因归纳 7 类图例改为可点击显隐，隐藏项灰显，左侧新增「全选」双向按钮，柱、刻度和状态组悬停明细按可见归类重算。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核问题图 7 个按钮、隐藏供应商原因后柱 11→9、全选清空与恢复；线上 bundle 断言命中 `hub-dash-issues__legendItem` / `hub-dash-issues__selectAll`，标题「项目阶段」已打入主包。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,608,374 B / SHA-256 `771ce4e2…`、678 文件；`build-info.json` 390 B / `068a1900…`；`frontend-files.sha256` 92,437 B / `e1365ccd…`；`release-files.sha256` 254 B / `66cf99b6…`。线上 1042 → 1045 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `87787004…`、主包 `assets/index-BtHXLi_v.js` 2,536,829 B / `f9a49710…`、CSS `assets/index-BEg0Payn.css` 251,516 B / `df975c84…`、ES `assets/es-DfGpNgk3.js` 428,098 B / `d82aab06…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87`，前端 144,909,838 B / `7dd3bb30…`、原 manifest 4,104 B / `6f576008…`，SHA256SUMS 3 / 3 通过；新 manifest 4,153 B / `96b9bd8c…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 21:05 负责人图阶段图例可筛选与全选（测试机 frontend-only · test-20261121-2105-px-dashboard-role-stage-filter-b332be0a）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `b332be0a`；release = `test-20261121-2105-px-dashboard-role-stage-filter-b332be0a`，previous = `test-20261121-2040-px-dashboard-stage-axis-8d0aa965`；staging = `/srv/data/deploy-test-20261121-2105-px-dashboard-role-stage-filter-b332be0a/staging`。
+
+> **改动 / 验收**：项目经理、销售负责人、规划负责人三页的阶段图例改为可点击显隐，隐藏项色块 / 文案变灰；图例左侧新增「全选」，可在全部显示与全部隐藏间切换。隐藏阶段不绘制，纵轴、人员阴影悬停明细与合计同步重算；全部隐藏时保留图例和空状态。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 12 个阶段按钮、单项关闭后分段 29→26、合计 21→20、全选清空与恢复、768 宽度换行；线上主包断言命中 `hub-dash-role__legendBar` / `hub-dash-role__selectAll` / `hub-dash-role__legendItem`。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,606,113 B / SHA-256 `015d5c9a…`、678 文件；`build-info.json` 365 B / `9238685b…`；`frontend-files.sha256` 92,437 B / `b7d670ed…`；`release-files.sha256` 254 B / `b61a3f60…`。线上 1037 → 1040 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `4c761e57…`、主包 `assets/index-BVmMcJH_.js` 2,535,869 B / `bf4460b8…`、CSS `assets/index-DVjb2hWS.css` 250,722 B / `cf5c4b74…`、ES `assets/es-BtIvGOZy.js` 428,098 B / `7a6581ad…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2105-px-dashboard-role-stage-filter-b332be0a`，前端 143,101,087 B / `7b96d5de…`、原 manifest 4,076 B / `d61b284e…`，SHA256SUMS 3 / 3 通过；新 manifest 4,104 B / `6f576008…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 20:40 最新阶段图横轴改为阶段并移除饼图（测试机 frontend-only · test-20261121-2040-px-dashboard-stage-axis-8d0aa965）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `8d0aa965`；release = `test-20261121-2040-px-dashboard-stage-axis-8d0aa965`，previous = `test-20261121-1805-px-dashboard-five-years-f3db362e`；staging = `/srv/data/deploy-test-20261121-2040-px-dashboard-stage-axis-8d0aa965/staging`。
+
+> **改动 / 验收**：全部项目第 6 屏改名为「最新阶段项目数量」，横轴固定九大阶段 + 异常归档 / 验收归档 / 归档-临时任务，纵轴项目数；年份改为与项目数量图一致的方块多选 + 5 年分页，默认近 5 年、未记录独立可筛；移除柱状图顶部阶段图例和右侧环形饼图，保留柱 / 年份阴影悬停白卡；底部标签同步为「最新阶段」。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 12 类横轴、年份开关、悬停明细及 1600 / 1366 / 768 宽度；线上主包字符串断言命中新标题 / 年份说明 / 12 类阶段，旧饼图 DOM class 为 0。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,605,712 B / SHA-256 `30bd7eed…`、678 文件；`build-info.json` 380 B / `868ecfbd…`；`frontend-files.sha256` 92,437 B / `9054a543…`；`release-files.sha256` 254 B / `b3283239…`。线上 1034 → 1037 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `3c7b3498…`、主包 `assets/index-D2C06Id4.js` 2,534,941 B / `819ada8c…`、CSS `assets/index-wIm2keju.css` 250,075 B / `19355059…`、ES `assets/es-Bldm9wcN.js` 428,098 B / `c3623782…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2040-px-dashboard-stage-axis-8d0aa965`，前端 142,161,036 B / `9e8bed4c…`、原 manifest 3,733 B / `f6dc0e33…`，SHA256SUMS 3 / 3 通过；新 manifest 4,076 B / `d61b284e…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 18:05 项目数量图年份窗口扩展至 5 年（测试机 frontend-only · test-20261121-1805-px-dashboard-five-years-f3db362e）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `f3db362e`；release = `test-20261121-1805-px-dashboard-five-years-f3db362e`，previous = `test-20261121-1800-px-dashboard-role-copy-b36459ae`；staging = `/srv/data/deploy-test-20261121-1805-px-dashboard-five-years-f3db362e/staging`。
+
+> **改动 / 验收**：年份导航由 3 年改为 5 年，默认最近 5 年；年份不超过 5 个时左右箭头禁用，超过 5 个才分页。类型显隐、全选、悬停总数保持不变。线上 `index.html` 已引用新主包，主包 / CSS / ES 与发布件 SHA-256 一致；`/healthz`、`/readyz` 200，web / api / worker healthy。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,606,285 B / SHA-256 `3b157686…`、678 文件；`build-info.json` 334 B / `f48cc127…`；`frontend-files.sha256` 91,081 B / `d3b8a034…`；`release-files.sha256` 254 B / `d256c8d6…`。线上 1032 → 1034 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `e0c2968c…`、主包 `assets/index--prl6PKO.js` 2,538,156 B / `b32b5378…`、CSS `assets/index-Dj0xX3PD.css` 249,766 B / `ccb6e390…`、ES `assets/es-CEVg2hx3.js` 428,098 B / `ca7bca60…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1805-px-dashboard-five-years-f3db362e`，前端 141,269,270 B / `15358523…`、原 manifest 4,074 B / `74f3392a…`，SHA256SUMS 3 / 3 通过；新 manifest 3733 B / `f6dc0e33…`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 18:00 负责人图移除阴影总数并放大阶段名称（测试机 frontend-only · test-20261121-1800-px-dashboard-role-copy-b36459ae）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `b36459ae`；release = `test-20261121-1800-px-dashboard-role-copy-b36459ae`，previous = `test-20261121-1755-px-dashboard-role-total-5a8c553b`；staging = `/srv/data/deploy-test-20261121-1800-px-dashboard-role-copy-b36459ae/staging`。
+
+> **改动 / 验收**：负责人人阴影区顶部总数字移除，仅保留悬停白卡；白卡内阶段名称改为 0.86rem、650 字重、深灰色。浏览器实测负责人页悬停白卡阶段名称清晰，柱内分段数字正常保留。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,606,212 B / SHA-256 `477fa747…`、678 文件；`build-info.json` 349 B / `b75deb0b…`；`frontend-files.sha256` 91,081 B / `38acdd6a…`；`release-files.sha256` 254 B / `637f6c02…`。线上 1029 → 1032 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `4aaeef18…`、主包 `assets/index-Bn48qXZ3.js` 2,538,156 B / `a1bbecbf…`、CSS `assets/index-Dj0xX3PD.css` 249,766 B / `ccb6e390…`、ES `assets/es-DsvEVM1V.js` `9d904e5f…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1800-px-dashboard-role-copy-b36459ae`，前端 140,350,097 B / `87b28ec3…`、原 manifest 4,102 B / `c70e49a9…`，SHA256SUMS 3 / 3 通过；新 manifest 4,074 B / `74f3392a…`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 17:55 负责人图阴影总数与说明文案（测试机 frontend-only · test-20261121-1755-px-dashboard-role-total-5a8c553b）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `5a8c553b`；release = `test-20261121-1755-px-dashboard-role-total-5a8c553b`，previous = `test-20261121-1745-px-dashboard-filters-ac3a22d3`；staging = `/srv/data/deploy-test-20261121-1755-px-dashboard-role-total-5a8c553b/staging`。
+
+> **改动 / 验收**：负责人三页删除说明文案；人员阴影区悬停时在顶部显示粗体总数，并隐藏该人员柱上的分段数字避免重叠；白卡明细保留。浏览器实测负责人页标题、图例、阴影总数与分段显隐正常。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,608,247 B / SHA-256 `ae47a439…`、678 文件；`build-info.json` 348 B / `c141dd06…`；`frontend-files.sha256` 91,081 B / `98e2a7ea…`；`release-files.sha256` 254 B / `376e1d48…`。线上 1026 → 1029 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `e85789c4…`、主包 `assets/index-DSASuMRi.js` 2,538,492 B / `64b5859a…`、CSS `assets/index-BsSDSXTd.css` 249,836 B / `019a64d4…`、ES `assets/es-C8thSFmW.js` `7664b28e…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1755-px-dashboard-role-total-5a8c553b`，前端 139,421,995 B / `2771ab6b…`、原 manifest 4,191 B / `696d61af…`，SHA256SUMS 3 / 3 通过；新 manifest 4,102 B / `c70e49a9…`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 17:45 项目数量图年份居中与总数样式微调（测试机 frontend-only · test-20261121-1745-px-dashboard-filters-ac3a22d3）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `ac3a22d3`；release = `test-20261121-1745-px-dashboard-filters-ac3a22d3`，previous = `test-20261121-1735-px-dashboard-filters-2f09ec45`；staging = `/srv/data/deploy-test-20261121-1745-px-dashboard-filters-ac3a22d3/staging`。
+
+> **改动 / 验收**：年份导航居中，双箭头紧贴年份，全选固定最左；年份项无边框、仅方块纯色变化（`#2f7ef2`）且无荧光；悬停总数改为阴影区顶部纯粗体数字，不再使用胶囊。浏览器实测：全选、年份方块纯色、双箭头无边框且邻近年份、顶部总数与筛选功能保持。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,606,334 B / SHA-256 `783b2bf6…`、678 文件；`build-info.json` 397 B / `a3e78ba6…`；`frontend-files.sha256` 91,081 B / `7d6ae537…`；`release-files.sha256` 254 B / `fe5c9f93…`。线上 1023 → 1026 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `74263637…`、主包 `assets/index-CdiuGhOD.js` 2,538,350 B / `3e6578bc…`、CSS `assets/index-CZ-dOGvA.css` 249,733 B / `d21d75ea…`、ES `assets/es-7lwBnVeI.js` `234bb844…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1745-px-dashboard-filters-ac3a22d3`，前端 138,472,268 B / `8ad3af40…`、原 manifest 4,602 B / `687fcc5a…`，SHA256SUMS 3 / 3 通过；新 manifest 4,191 B / `696d61af…`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 17:35 项目数量图年份/类型筛选与悬停总数（测试机 frontend-only · test-20261121-1735-px-dashboard-filters-2f09ec45）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `2f09ec45`；测试机 release = `test-20261121-1735-px-dashboard-filters-2f09ec45`，previous = `test-20261121-1710-px-dashboard-hover-744c5034`；staging = `/srv/data/deploy-test-20261121-1735-px-dashboard-filters-2f09ec45/staging`。
+
+> **改动 / 验收**：项目数量图新增可点击类型图例与年份筛选；年份默认最近 3 年，`《`/`》` 分页，最左侧液态玻璃「全选」，年份按钮仅方块变色（`#2f7ef2`）；关闭类型 / 年份即隐藏对应柱；移除图内说明文字。阴影区悬停总数改为自适应白色徽标，放在最高柱上方，避免与柱体和数字重叠。浏览器实测：默认 2024 / 2025 / 2026；左翻显示 2022 / 2023 / 2024；3D分拣关闭后变灰且黄柱消失；2024 关闭后该年组消失；全选恢复全部年份 + 未记录；2026 阴影悬停显示粗体 15 且无重叠。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,605,683 B / SHA-256 `ac156761…`、678 文件；`build-info.json` 399 B / `d0ff47c2…`；`frontend-files.sha256` 91,081 B / `2bfe7e47…`；`release-files.sha256` 254 B / `6e07cc6e…`。线上 1017 → 1020 文件，新增 3 个 hashed 资源并原子替换 `index.html`，旧资源保留；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `a9f7807f…`、主包 `assets/index-Bz0lAkyp.js` 2,537,298 B / `f8181f7c…`、CSS `assets/index-NUhKLNp1.css` 249,103 B / `792a27d5…`、ES `assets/es-D7BRpHXy.js` `618977e7…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1735-px-dashboard-filters-2f09ec45`，前端 136,619,155 B / `c4702d17…`、原 manifest 4,490 B / `e5914fbc…`，SHA256SUMS 3 / 3 通过；新 manifest 4,602 B / `687fcc5a…`。
+
+> **测试数据**：同日已向测试库加入 `DEMO-2022-01` ～ `DEMO-2026-10` 共 50 个项目、600 条任务；覆盖 2022–2026、三种项目类型和九个阶段，数据库写入前备份 `/srv/data/backups/before-demo50-20261121/libiaolink-before-demo50.dump`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 17:10 仪表盘新图表鼠标悬停交互（测试机 frontend-only · test-20261121-1710-px-dashboard-hover-744c5034）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `744c5034`；测试机 release = `test-20261121-1710-px-dashboard-hover-744c5034`，previous = `test-20261121-1700-px-dashboard-slide-0bbbd2ad`；staging = `/srv/data/deploy-test-20261121-1710-px-dashboard-hover-744c5034/staging`。
+
+> **改动 / 验收**：项目数量柱、负责人阶段分段、启动年份柱、启动年份饼图及饼图图例统一增加白卡悬停卡与悬停高亮；年份组 / 人员列可显示全部阶段及合计，饼图显示项目数与占比。浮层通过 Portal 固定视口，避免被滑轨裁切；隐藏屏使用 `overflow: clip` 修复程序化滚动串屏。浏览器实测：项目类型柱（2026 / T-sort / 4）、负责人分段（刘安楠 / 售前规划 / 6）、启动年份柱（2026 / 售前规划 / 4）、饼图图例（2026 / 售前规划 / 4 / 80%）。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,606,276 B / SHA-256 `d03eaf83…`、678 文件；`build-info.json` 398 B / `ebbbdfda…`；`frontend-files.sha256` 91,081 B / `6811f464…`；`release-files.sha256` 254 B / `011c5937…`。线上 1009 → 1012 文件，新增 3 个 hashed 资源并原子替换 `index.html`，旧资源保留；强制重建 web。
+
+> **验证 / 备份 / 清单**：`index.html` `725fb4d4…`、主包 `assets/index-C9IZSKBC.js` 2,533,866 B / `750a509c…`、CSS `assets/index-BgTBmYNj.css` 245,995 B / `a7d8c0fc…`、ES `assets/es-Di36gr0P.js` `77b24df4…`；678 / 678 校验通过。`/healthz`、`/readyz` 200，web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1710-px-dashboard-hover-744c5034`，前端 133,883,003 B / `be1ff0f8…`、原 manifest 4,606 B / `236b580a…`，SHA256SUMS 3 / 3 通过；新 manifest 4,490 B / `e5914fbc…`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 17:00 仪表盘全部项目与单项目统一滑动切换（测试机 frontend-only · test-20261121-1700-px-dashboard-slide-0bbbd2ad）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `0bbbd2ad`；测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1700-px-dashboard-slide-0bbbd2ad`，previous = `test-20261121-1630-px-dashboard-all-projects-490d5825`；staging = `/srv/data/deploy-test-20261121-1655-px-dashboard-slide-0bbbd2ad/staging`。
+
+> **改动 / 验收**：全部项目改为 6 屏刚体滑轨（问题归纳 / 项目数量 / 项目经理 / 销售负责人 / 规划负责人 / 启动年份），单项目原 6 视图改同一滑轨；滚轮、方向键 / PageUp / PageDown、底部单选按钮均可翻屏，首屏向上仍返回地图、末屏向下停住。浏览器实测全部项目 6 屏与底部切换、单项目「数据总览 → 项目进度」滑动；验后恢复账号偏好（移除 `hubDashProject`、`hubDashView=overview`）。仅前端变更，api / worker / database / shared 未改。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,603,079 B / SHA-256 `f3965180…`、678 文件；`build-info.json` 407 B / `894122dd…`；`frontend-files.sha256` 91,081 B / `418285e6…`；`release-files.sha256` 254 B / `fd58d68d…`。按内容哈希新增 3 个 hashed 资源并原子替换 `index.html`；线上 1003 → 1006 文件，旧资源保留；强制重建 web 容器恢复 bind 挂载。
+
+> **验证 / 备份 / 清单**：`index.html` `d2b1acba…`、主包 `assets/index-DMy6qozp.js` 2,529,495 B / `3b1c24de…`、CSS `assets/index-DoUAiUbT.css` 244,539 B / `66df7f02…`、ES 分包 `assets/es-DxkE_KIZ.js` `7923805a…` 与公网一致；678 / 678 构建文件校验通过。`/healthz`、`/readyz` 200；web / api / worker healthy。备份 `/srv/data/backups/before-test-20261121-1655-px-dashboard-slide-0bbbd2ad`，前端 132,021,089 B / `892e6ba6…`、原 manifest 6,246 B / `15e86abe…`，SHA256SUMS 3 / 3 通过；新 `RELEASE_MANIFEST.json` 4,606 B / `236b580a…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API、字段、DDL、迁移、权限、Compose、env、Nginx、shared 或对象存储变更。回滚：恢复备份 `frontend-dist-before.tar.gz` 到 `/opt/libiaolink/frontend/dist`，重建 web 容器，再恢复 `RELEASE_MANIFEST.json.before`。
+
+> **2026-11-21 16:30 仪表盘全部项目总览改版（测试机 · test-20261121-1630-px-dashboard-all-projects-490d5825）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `490d5825`（基于测试机现役基线 `62880b75`，未合入 main）；测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1630-px-dashboard-all-projects-490d5825`，previous = `test-20261121-1408-px-project-legacy-done-62880b75`；staging = `/srv/data/deploy-test-20261121-1630-px-dashboard-all-projects-490d5825/staging`。
+
+> **改动 / 验收**：全部项目页改为纵向长页：保留问题状态 × 归类图，新增启动年份 × 项目类型柱状图、项目经理 / 销售负责人 / 规划负责人三张阶段堆叠柱图、启动年份 × 最新阶段柱图与可切换年份的环形饼图；单项目仍保留原六视图。新增只读 `GET /api/v1/dashboard/project-insights`；104 项迁移未改，可选 `additional_project_types` / `archive_kind` 通过 `to_jsonb` 兼容旧测试库。浏览器实测全部项目页 4 个区块、7 张 SVG、滚动高度 4393 / 视口 757；2026 ↔ 全部年份饼图切换正常；单项目 UK-VANILLA-AIRROB 原六视图与底部切换完整；验后已恢复「全部项目」偏好。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,603,767 B / SHA-256 `d3337983…`、692 归档条目、678 文件；`dashboard-module.tar.gz` 19,029 B / `70767907…`；`build-info.json` 551 B / `b3570c74…`；`frontend-files.sha256` 91,081 B / `76787534…`；`release-files.sha256` 260 B / `76e5c2ce…`。前端按内容哈希新增 4 个文件并原子替换 `index.html`，线上 1000 → 1003 文件、旧 hashed 资源保留；server 仅覆盖 `server/dist/modules/dashboard`（12 文件）；shared/database 保持测试基线不变。bind 目录替换后强制重建 web 容器以恢复新挂载，api / worker 重启。
+
+> **验证 / 备份 / 清单**：`index.html` `04f18e92…`、主包 `assets/index-J7pk8KqS.js` 2,524,898 B / `7e6c10a4…`、CSS `assets/index-BhxgnxsG.css` 242,446 B / `39e2843a…`、ES 分包 `assets/es-CUdiRbrk.js` `af057700…` 与公网逐字节一致；构建文件 678 / 678 校验通过。已登录接口返回 200：11 个项目、3 类型、12 阶段桶、3 角色、启动年份 2026 / 未记录；未登录为 401。`/healthz`、`/readyz` 200 且四探针全 true；web / api / worker / postgres healthy，近期 api / worker 0 error。备份 `/srv/data/backups/before-test-20261121-1625-px-dashboard-all-projects-1b0746c1`，前端 131,097,630 B / `8891e5ce…`、server 1,345,602 B / `4b26ffa6…`、shared 295,401 B / `9545ad13…`，SHA256SUMS 5 / 5 通过；新 `RELEASE_MANIFEST.json` 6,246 B / `15e86abe…`，`root:root 644`。
+
+> **发布过程事故与纠正**：首次于 16:16 整包替换 server/shared/frontend 后，发现测试机现役 server 构建早于多类型迁移，旧库无 `additional_project_types`，项目 / 字典接口出现 500。已立即从 SHA 校验通过的备份恢复 server/shared/frontend，并把服务端发布改为仅覆盖仪表盘模块；新增查询通过 `to_jsonb` 兼容旧库可选列后重新发布。最终健康检查全绿、近期 0 error，备份与发布清单已同步。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机 `10.1.103.44` 未触碰；无 DDL、迁移、权限、Compose、env、Nginx 或对象存储变更；server 仅 dashboard 模块更新。回滚：恢复备份的 `frontend-dist-before.tar.gz` 到 `/opt/libiaolink/frontend/dist` 并重建 web，恢复 `server-dist-before.tar.gz` / `shared-dist-before.tar.gz` 后重启 api / worker，再恢复 `RELEASE_MANIFEST.json.before`。
 > **2026-11-21 14:55–15:00 项目空间-兼容旧 API 已完成状态（正式机 frontend-only · prod-20261121-1455-px-project-legacy-done-e3e26632）**：代码来源 main `e3e26632`（功能 PR [#976](https://github.com/panxing-nexthub/LibiaoLink/pull/976) squash `9df209a0`；#938 仅补齐发布记录文档）。正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261121-1455-px-project-legacy-done-e3e26632`，previous = `prod-20261121-1121-px-pm-gantt-filter-copy-eb766751`；staging = `/srv/data/deploy-prod-20261121-1455-px-project-legacy-done-e3e26632/staging`，备份 = `/srv/data/backups/before-prod-20261121-1455-px-project-legacy-done-e3e26632`。
 >
 > **改动 / 构建**：从 `origin/main e3e26632` 的干净工作区构建。前端读模型兼容旧 API 的 `done`：卡片、地图、项目详情和编辑弹窗显示「已完成」；编辑旧 done 项目且不修改状态时 PATCH 省略 `status`；补充状态样式与中 / 英 / 日 / 韩文案。不新增状态值、不改筛选 / 写入契约 / 数据库约束。`npm run typecheck`、`npm run build` 通过，前端 678 文件。

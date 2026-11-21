@@ -1,3 +1,13 @@
+> **2026-11-21 21:20 项目阶段标题精简与问题原因归类可筛选（测试机 frontend-only · test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `ff029b87`；release = `test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87`，previous = `test-20261121-2105-px-dashboard-role-stage-filter-b332be0a`；staging = `/srv/data/deploy-test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87/staging`。
+
+> **改动 / 验收**：全部项目第 6 屏标题改为「项目阶段」并移除说明文字，底部标签同步；问题原因归纳 7 类图例改为可点击显隐，隐藏项灰显，左侧新增「全选」双向按钮，柱、刻度和状态组悬停明细按可见归类重算。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核问题图 7 个按钮、隐藏供应商原因后柱 11→9、全选清空与恢复；线上 bundle 断言命中 `hub-dash-issues__legendItem` / `hub-dash-issues__selectAll`，标题「项目阶段」已打入主包。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,608,374 B / SHA-256 `771ce4e2…`、678 文件；`build-info.json` 390 B / `068a1900…`；`frontend-files.sha256` 92,437 B / `e1365ccd…`；`release-files.sha256` 254 B / `66cf99b6…`。线上 1042 → 1045 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `87787004…`、主包 `assets/index-BtHXLi_v.js` 2,536,829 B / `f9a49710…`、CSS `assets/index-BEg0Payn.css` 251,516 B / `df975c84…`、ES `assets/es-DfGpNgk3.js` 428,098 B / `d82aab06…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87`，前端 144,909,838 B / `7dd3bb30…`、原 manifest 4,104 B / `6f576008…`，SHA256SUMS 3 / 3 通过；新 manifest 4,153 B / `96b9bd8c…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 21:05 负责人图阶段图例可筛选与全选（测试机 frontend-only · test-20261121-2105-px-dashboard-role-stage-filter-b332be0a）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `b332be0a`；release = `test-20261121-2105-px-dashboard-role-stage-filter-b332be0a`，previous = `test-20261121-2040-px-dashboard-stage-axis-8d0aa965`；staging = `/srv/data/deploy-test-20261121-2105-px-dashboard-role-stage-filter-b332be0a/staging`。
 
 > **改动 / 验收**：项目经理、销售负责人、规划负责人三页的阶段图例改为可点击显隐，隐藏项色块 / 文案变灰；图例左侧新增「全选」，可在全部显示与全部隐藏间切换。隐藏阶段不绘制，纵轴、人员阴影悬停明细与合计同步重算；全部隐藏时保留图例和空状态。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 12 个阶段按钮、单项关闭后分段 29→26、合计 21→20、全选清空与恢复、768 宽度换行；线上主包断言命中 `hub-dash-role__legendBar` / `hub-dash-role__selectAll` / `hub-dash-role__legendItem`。

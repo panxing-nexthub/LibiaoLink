@@ -64,7 +64,6 @@ export function HubDashAllProjects({ viewerId, activeSlide, issues, issuesState,
         <div className="hub-dash-all__slideCard">
           <div className="hub-dash-all__heading">
             <h3>{t("hub.dash.projects.issues.title")}</h3>
-            <p>{t("hub.dash.projects.issues.subtitle")}</p>
           </div>
           <div className="hub-dash-all__chart hub-dash-all__chart--issues">
             {issuesState === "ready" && issues !== null ? (

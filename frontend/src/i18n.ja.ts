@@ -1854,7 +1854,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "hub.capped": "マップには {total} 件のプロジェクトのうち先頭の {n} 件のみ描画されます",
   "hub.loadFailed": "プロジェクトデータの読み込みに失敗しました — マップは操作できます。再試行するには更新してください。",
   "hub.dash.projects.title": "全プロジェクト概要",
-  "hub.dash.projects.issues.title": "課題原因の内訳",
+  "hub.dash.projects.issues.title": "課題集計",
   "hub.dash.projects.issues.subtitle": "課題ステータスと原因別に集計",
   "hub.dash.projects.typeYear.title": "プロジェクト数",
   "hub.dash.projects.typeYear.subtitle": "開始年とプロジェクト種別で集計。3色は T-sort / 3D仕分け / フライングボックス",

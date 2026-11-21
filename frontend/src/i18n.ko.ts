@@ -1854,7 +1854,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "hub.capped": "지도에는 {total}개 프로젝트 중 처음 {n}개만 표시됩니다",
   "hub.loadFailed": "프로젝트 데이터를 불러오지 못했습니다 — 지도는 계속 사용할 수 있으며, 새로고침 후 다시 시도하세요.",
   "hub.dash.projects.title": "전체 프로젝트 개요",
-  "hub.dash.projects.issues.title": "이슈 원인 분석",
+  "hub.dash.projects.issues.title": "이슈 집계",
   "hub.dash.projects.issues.subtitle": "이슈 상태와 원인별 집계",
   "hub.dash.projects.typeYear.title": "프로젝트 수",
   "hub.dash.projects.typeYear.subtitle": "시작 연도와 프로젝트 유형별 집계. 세 가지 색상은 T-sort / 3D 분류 / 플라잉 박스",

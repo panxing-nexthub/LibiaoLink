@@ -273,7 +273,7 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, i
   const [pickedId, setPickedId] = useState<string | null>(rememberedDashProject);
   /** 仪表盘页内视图（Push 339 底栏按钮驱动；Push 345 按账号常驻；Push 358 起六枚）：overview = 数据总览（最左）/ progress = 项目进度 / status = 任务状态 / issues = 问题 / delivery = 交付时间 / wordcloud = 词频图。 */
   const [view, setView] = useState<HubDashView>(rememberedDashView);
-  /** 「全部项目」当前滑屏（2026-11-21 第二轮：6 屏刚体滑轨；单项目继续用 view 的 6 视图）。 */
+  /** 「全部项目」当前滑屏（2026-11-21：项目数量与阶段合并后为 5 屏刚体滑轨；单项目继续用 view 的 6 视图）。 */
   const [allSlide, setAllSlide] = useState(0);
   /** 页内滑轨动画锁：600ms 内的连续滚轮事件不再叠加翻页。 */
   const slideLockUntilRef = useRef(0);
@@ -509,9 +509,9 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, i
     setDetail(null);
     void onDashViewChange(next);
   };
-  /** 当前屏：全部项目 = 6 屏业务页；单项目 = 原 6 个视图。 */
+  /** 当前屏：全部项目 = 5 屏业务页；单项目 = 原 6 个视图。 */
   const activePageIndex = pickedId === null ? allSlide : Math.max(0, HUB_DASH_VIEW_IDS.indexOf(view));
-  const pageCount = HUB_DASH_VIEW_IDS.length;
+  const pageCount = pickedId === null ? 5 : HUB_DASH_VIEW_IDS.length;
 
   /** 内部翻页：单项目写回账号常驻视图；全部项目只移动本页滑轨。 */
   const goToPage = (next: number): boolean => {
@@ -787,7 +787,6 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, i
             <DashViewSwitch view="projects-manager" checked={allSlide === 2} label={t("hub.dash.projects.role.manager")} onSelect={() => goToPage(2)} />
             <DashViewSwitch view="projects-sales" checked={allSlide === 3} label={t("hub.dash.projects.role.sales")} onSelect={() => goToPage(3)} />
             <DashViewSwitch view="projects-planning" checked={allSlide === 4} label={t("hub.dash.projects.role.planning")} onSelect={() => goToPage(4)} />
-            <DashViewSwitch view="projects-start-year" checked={allSlide === 5} label={t("hub.dash.projects.nav.startYear")} onSelect={() => goToPage(5)} />
           </>
         ) : (
           <>

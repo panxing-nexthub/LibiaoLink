@@ -12,10 +12,9 @@ import { Loader } from "./Loader";
 type LoadingState = "idle" | "loading" | "ready" | "failed";
 
 /**
- * 仪表盘「全部项目」六屏滑轨（2026-11-21 第二轮业务口径：
- * 「现在全做成滑动的好吗 就像地图和仪表盘这样切换一样」）：
- * ① 问题原因归纳；② 项目数量；③ 项目经理阶段；④ 销售负责人阶段；⑤ 规划负责人阶段；
- * ⑥ 项目阶段（阶段横轴 + 年份筛选）。每屏占满内容区，滚轮 / 键盘 / 底部切换共同驱动同一刚体滑轨。
+ * 仪表盘「全部项目」五屏滑轨（2026-11-21：项目数量与项目阶段合并为同一屏上下排布）：
+ * ① 问题原因归纳；② 项目数量 + 项目阶段；③ 项目经理阶段；④ 销售负责人阶段；⑤ 规划负责人阶段。
+ * 每屏占满内容区，滚轮 / 键盘 / 底部切换共同驱动同一刚体滑轨。
  */
 export function HubDashAllProjects({ activeSlide, issues, issuesState, insights, insightsState, onIssueTip, onIssueRowTip, onLeave }: {
   readonly activeSlide: number;
@@ -36,86 +35,87 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
     <HubDashSlideDeck activeIndex={activeSlide} allProjects>
       <section className="hub-dash-all__slide" data-section="issues">
         <div className="hub-dash-all__slideCard">
-        <div className="hub-dash-all__heading">
-          <h3>{t("hub.dash.projects.issues.title")}</h3>
-          <p>{t("hub.dash.projects.issues.subtitle")}</p>
-        </div>
-        <div className="hub-dash-all__chart hub-dash-all__chart--issues">
-          {issuesState === "ready" && issues !== null ? (
-            issues.totalIssues === 0 ? (
-              <div className="hub-dash-state">{t("hub.dash.issues.empty")}</div>
+          <div className="hub-dash-all__heading">
+            <h3>{t("hub.dash.projects.issues.title")}</h3>
+            <p>{t("hub.dash.projects.issues.subtitle")}</p>
+          </div>
+          <div className="hub-dash-all__chart hub-dash-all__chart--issues">
+            {issuesState === "ready" && issues !== null ? (
+              issues.totalIssues === 0 ? (
+                <div className="hub-dash-state">{t("hub.dash.issues.empty")}</div>
+              ) : (
+                <HubDashIssues
+                  issues={issues}
+                  canDrill={false}
+                  onTip={onIssueTip}
+                  onRowTip={onIssueRowTip}
+                  onLeave={onLeave}
+                  onPick={() => undefined}
+                />
+              )
+            ) : issuesState === "failed" ? (
+              <div className="hub-dash-state">{t("hub.dash.failed")}</div>
             ) : (
-              <HubDashIssues
-                issues={issues}
-                canDrill={false}
-                onTip={onIssueTip}
-                onRowTip={onIssueRowTip}
-                onLeave={onLeave}
-                onPick={() => undefined}
-              />
-            )
-          ) : issuesState === "failed" ? (
-            <div className="hub-dash-state">{t("hub.dash.failed")}</div>
-          ) : (
-            <div className="hub-dash-state"><Loader /></div>
-          )}
+              <div className="hub-dash-state"><Loader /></div>
+            )}
+          </div>
         </div>
-      </div>
       </section>
 
-      <section className="hub-dash-all__slide" data-section="project-types">
-        <div className="hub-dash-all__slideCard">
-        <div className="hub-dash-all__heading">
-          <h3>{t("hub.dash.projects.typeYear.title")}</h3>
+      <section className="hub-dash-all__slide" data-section="project-stats">
+        <div className="hub-dash-all__slideCard hub-dash-all__slideCard--stacked">
+          <div className="hub-dash-combined">
+            <section className="hub-dash-combined__panel" data-panel="project-count">
+              <div className="hub-dash-all__heading">
+                <h3>{t("hub.dash.projects.typeYear.title")}</h3>
+              </div>
+              <div className="hub-dash-combined__chart">
+                {analyticsReady ? <HubDashProjectTypeYears insights={insights} /> : analyticsFallback}
+              </div>
+            </section>
+            <section className="hub-dash-combined__panel" data-panel="project-stage">
+              <div className="hub-dash-all__heading">
+                <h3>{t("hub.dash.projects.startYear.title")}</h3>
+              </div>
+              <div className="hub-dash-combined__chart">
+                {analyticsReady ? <HubDashStartYearStages insights={insights} /> : analyticsFallback}
+              </div>
+            </section>
+          </div>
         </div>
-        <div className="hub-dash-all__chart">
-          {analyticsReady ? <HubDashProjectTypeYears insights={insights} /> : analyticsFallback}
-        </div>
-      </div>
       </section>
 
       <section className="hub-dash-all__slide" data-section="manager">
         <div className="hub-dash-all__slideCard">
-        <div className="hub-dash-all__heading">
-          <h3>{t("hub.dash.projects.role.manager")}</h3>
+          <div className="hub-dash-all__heading">
+            <h3>{t("hub.dash.projects.role.manager")}</h3>
+          </div>
+          <div className="hub-dash-all__roleBody">
+            {analyticsReady ? <HubDashRoleStage role="manager" insights={insights} /> : analyticsFallback}
+          </div>
         </div>
-        <div className="hub-dash-all__roleBody">
-          {analyticsReady ? <HubDashRoleStage role="manager" insights={insights} /> : analyticsFallback}
-        </div>
-      </div>
       </section>
 
       <section className="hub-dash-all__slide" data-section="sales">
         <div className="hub-dash-all__slideCard">
-        <div className="hub-dash-all__heading">
-          <h3>{t("hub.dash.projects.role.sales")}</h3>
+          <div className="hub-dash-all__heading">
+            <h3>{t("hub.dash.projects.role.sales")}</h3>
+          </div>
+          <div className="hub-dash-all__roleBody">
+            {analyticsReady ? <HubDashRoleStage role="sales" insights={insights} /> : analyticsFallback}
+          </div>
         </div>
-        <div className="hub-dash-all__roleBody">
-          {analyticsReady ? <HubDashRoleStage role="sales" insights={insights} /> : analyticsFallback}
-        </div>
-      </div>
       </section>
 
       <section className="hub-dash-all__slide" data-section="planning">
         <div className="hub-dash-all__slideCard">
-        <div className="hub-dash-all__heading">
-          <h3>{t("hub.dash.projects.role.planning")}</h3>
+          <div className="hub-dash-all__heading">
+            <h3>{t("hub.dash.projects.role.planning")}</h3>
+          </div>
+          <div className="hub-dash-all__roleBody">
+            {analyticsReady ? <HubDashRoleStage role="planning" insights={insights} /> : analyticsFallback}
+          </div>
         </div>
-        <div className="hub-dash-all__roleBody">
-          {analyticsReady ? <HubDashRoleStage role="planning" insights={insights} /> : analyticsFallback}
-        </div>
-      </div>
-      </section>
-
-      <section className="hub-dash-all__slide" data-section="start-year-stages">
-        <div className="hub-dash-all__slideCard">
-        <div className="hub-dash-all__heading">
-          <h3>{t("hub.dash.projects.startYear.title")}</h3>
-        </div>
-        <div className="hub-dash-all__startBody">
-          {analyticsReady ? <HubDashStartYearStages insights={insights} /> : analyticsFallback}
-        </div>
-      </div>
       </section>
     </HubDashSlideDeck>
   );

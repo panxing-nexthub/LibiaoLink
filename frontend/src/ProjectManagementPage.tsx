@@ -3278,7 +3278,7 @@ function PmImplementationGantt({
       ? ganttAnchorIso
       : timeline.days[ganttViewportReferenceIndex].iso;
   const selectGanttScale = (nextScale: PmGanttScale): void => {
-    const referenceIso = ganttViewportReferenceIso;
+    const referenceIso = ganttTimeFilter?.anchorIso ?? ganttViewportReferenceIso;
     setGanttScale(nextScale);
     setGanttAnchorIso(referenceIso);
     setSelectedGanttColumnKey(null);

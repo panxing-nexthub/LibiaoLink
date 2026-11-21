@@ -278,9 +278,9 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
     }
   }, []);
 
-  /** 换项目 / 项目归档时收起询问，避免旧项目的提示串到下一页。 */
+  /** 换项目或读到已完成、已归档状态时关闭验收提示。 */
   useEffect(() => {
-    if (projectId === null || project?.status === "archived") {
+    if (projectId === null || project?.status === "done" || project?.status === "archived") {
       acceptanceDonePromptOpenRef.current = false;
       if (acceptanceDoneCloseTimer.current !== null) {
         window.clearTimeout(acceptanceDoneCloseTimer.current);
@@ -456,6 +456,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
       onArchiveProject === undefined ||
       project === null ||
       project.status === "archived" ||
+      project.status === "done" ||
       acceptanceDonePromptOpenRef.current
     ) {
       return;

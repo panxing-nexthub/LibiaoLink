@@ -16,6 +16,7 @@
  *
  * 前置（都在本机跑着）：前端 dev :3000 / api :3001 / 本地沙箱 PG :5433 / 本机 Chrome（无头）。
  * 用法：node scripts/ui-project-status-e2e.mjs
+ * 仅回放旧 API 已完成项目：node scripts/ui-project-status-e2e.mjs --legacy-done
  *   可覆盖的环境变量：FRONTEND_BASE / API_BASE / DATABASE_URL / CHROME_PATH / CDP_PORT / REPLAY_USER / PG_MODULE / SHOT_DIR
  */
 
@@ -314,7 +315,57 @@ async function openEditFor(code) {
   return await waitFor("document.querySelector(" + j(editDialogSel) + ") !== null", 12000);
 }
 
-try {
+async function runLegacyDoneReplay() {
+  const url = FRONTEND + "/#/projects";
+  const cardVisible = "Array.from(document.querySelectorAll('.project-card h1')).some((node) => node.textContent.trim() === " + j(throwCode) + ")";
+  await page.send("Emulation.setDeviceMetricsOverride", { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await page.send("Page.navigate", { url });
+  if (!await waitFor(cardVisible, 20000)) throw new Error("当前 API 的对照卡片未显示");
+  check("当前 API 的项目仍显示进行中", (await cardStatusOf(throwCode))?.text === "进行中");
+
+  function useLegacyProjectResponse(code) {
+    const fetchProjectList = window.fetch;
+    window.fetch = async (input, options) => {
+      const response = await fetchProjectList(input, options);
+      const requestUrl = new URL(typeof input === "string" || input instanceof URL ? input : input.url, window.location.href);
+      if (requestUrl.origin !== window.location.origin || requestUrl.pathname !== "/api/v1/projects" || !response.ok) return response;
+      const payload = await response.clone().json();
+      const project = payload.items?.find((item) => item.code === code);
+      if (project === undefined) return response;
+      project.status = "done";
+      delete project.projectTypes;
+      delete project.archiveKind;
+      delete project.hasOpenPostArchiveTask;
+      return new Response(JSON.stringify(payload), { status: response.status, headers: { "content-type": "application/json" } });
+    };
+  }
+
+  let patch;
+  const trackPatch = (event) => {
+    const message = JSON.parse(event.data);
+    const request = message.params?.request;
+    if (message.method === "Network.requestWillBeSent" && request?.method === "PATCH" && new URL(request.url).pathname === "/api/v1/projects/" + throwId) {
+      patch = JSON.parse(request.postData);
+    }
+  };
+  const injection = await page.send("Page.addScriptToEvaluateOnNewDocument", { source: "(" + useLegacyProjectResponse.toString() + ")(" + j(throwCode) + ")" });
+  page.ws.addEventListener("message", trackPatch);
+  try {
+    await page.send("Page.reload");
+    const ready = await waitFor("document.querySelector('[data-card-status=done]')?.textContent.trim() === '已完成'", 15000);
+    check("旧 API 返回 done 时，项目空间显示已完成卡片", ready && (await cardStatusOf(throwCode))?.text === "已完成");
+    if (!ready || !await openEditFor(throwCode)) throw new Error("旧版项目的编辑入口不可用");
+    check("编辑旧版项目时保留已完成状态", await ev("document.querySelector('[data-project-status-option=done]')?.getAttribute('aria-checked') === 'true'"));
+    await clickSelector(submitSel);
+    const saved = await waitFor("document.querySelector(" + j(editDialogSel) + ") === null", 10000);
+    check("保留旧状态保存时不发送 status", saved && patch !== undefined && !Object.hasOwn(patch, "status"));
+  } finally {
+    page.ws.removeEventListener("message", trackPatch);
+    await page.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: injection.identifier });
+  }
+}
+
+async function runProjectStatusReplay() {
   // ---------- ① 卡片状态字 ----------
   await page.send("Emulation.setDeviceMetricsOverride", { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false });
   await page.send("Page.navigate", { url: "about:blank" });
@@ -611,6 +662,14 @@ try {
   const archiveGateNoise = consoleErrors.filter((item) => item.text.indexOf("Failed to load resource") === 0 && item.text.indexOf("409") !== -1 && item.url.indexOf("/archive") !== -1);
   const realErrors = consoleErrors.filter((item) => archiveGateNoise.indexOf(item) === -1);
   check("⑰ 控制台零报错 / 零异常（归档门禁故意触发的 409 网络日志 " + String(archiveGateNoise.length) + " 条已豁免）", realErrors.length === 0, realErrors.slice(0, 3).map((item) => item.text).join(" ;; "));
+}
+
+try {
+  if (process.argv.includes("--legacy-done")) {
+    await runLegacyDoneReplay();
+  } else {
+    await runProjectStatusReplay();
+  }
 } catch (error) {
   check("⑰-异常 流程异常中止：" + String(error !== null && error !== undefined && error.message !== undefined ? error.message : error), false);
 } finally {

@@ -864,6 +864,7 @@ body {
 .hub-map__pillar-seg[data-status="active"] { fill: #1a73e8; }
 .hub-map__pillar-seg[data-status="paused"] { fill: #f29900; }
 .hub-map__pillar-seg[data-status="archived"] { fill: #9aa0a6; }
+.hub-map__pillar-seg[data-status="done"] { fill: #1e8e3e; }
 
 .hub-map__pillar-top {
   fill: #b6c0d0;
@@ -877,6 +878,7 @@ body {
 .hub-map__pillar[data-top-status="active"] .hub-map__pillar-top { fill: #1a73e8; }
 .hub-map__pillar[data-top-status="paused"] .hub-map__pillar-top { fill: #f29900; }
 .hub-map__pillar[data-top-status="archived"] .hub-map__pillar-top { fill: #9aa0a6; }
+.hub-map__pillar[data-top-status="done"] .hub-map__pillar-top { fill: #1e8e3e; }
 
 .hub-map__pillar-count {
   fill: #55627a;
@@ -1186,6 +1188,7 @@ body {
 .hub-map-legend__swatch[data-status="active"] { background: #1a73e8; }
 .hub-map-legend__swatch[data-status="paused"] { background: #f29900; }
 .hub-map-legend__swatch[data-status="archived"] { background: #9aa0a6; }
+.hub-map-legend__swatch[data-status="done"] { background: #1e8e3e; }
 
 .hub-map-legend__swatch[data-tier="1"] { background: #c8dcfc; }
 .hub-map-legend__swatch[data-tier="2"] { background: #a3c6fa; }

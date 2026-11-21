@@ -1,3 +1,15 @@
+> **2026-11-22 00:00 项目下钻列表行进入项目详情（测试机 frontend-only + 测试库增量补齐 · test-20261122-0000-px-dashboard-project-row-link-414ae0a2）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `414ae0a2`；release = `test-20261122-0000-px-dashboard-project-row-link-414ae0a2`，previous = `test-20261121-2356-px-dashboard-drilldown-3c28151d`；staging = `/srv/data/deploy-test-20261122-0000-px-dashboard-project-row-link-414ae0a2/staging`。
+
+> **改动 / 验收**：全部项目图表「数据详情」中的项目列表整行改为链接，点击 / 键盘 Enter 进入 `#/project/{id}` 项目总览；行尾增加进入箭头，悬停高亮，aria-label 带项目名称与编号。frontend typecheck / build 通过；Chrome 实测由列表进入 `DEMO-2026-06` 项目详情成功，项目页正常渲染，console error 0。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,613,051 B / SHA-256 `7a708659…`、678 文件；线上前端 1088 → 1091 文件并原子替换 `index.html`，强制重建 web。无 server / shared 产物变化。
+
+> **测试库增量 / 边界**：测试库此前缺当前分支已依赖的 0107 / 0109 / 0110 增量，导致项目详情 500。本轮按迁移文件补 `project_archives.archive_kind`（0107）、3 条历史归档回填 `accepted` 并设默认 / 非空（0109）、`projects.additional_project_types` / `source_blueprint_type`（0110）；三项均为追加列 / 默认值回填，项目详情恢复。`schema_migrations` 仍记录到 0105；0108 因测试库存在 1 条历史 `status=done` 项目、直接收紧 CHECK 会失败，本轮未改该状态数据，留待专项迁移处理。正式机未触碰。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `8a2e5b15…`、主包 `assets/index-B68jwjhE.js` 2,553,784 B / `aa316b03…`、CSS `assets/index-_QfmUYA3.css` 260,238 B / `ea336ef0…`、ES `assets/es-BNGRGYON.js` 428,098 B / `9a606bc9…`；`/`、`/healthz`、`/readyz` 200，web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261122-0000-px-dashboard-project-row-link-414ae0a2`，162,743,247 B / 8 文件 / SHA256SUMS `da1eaee5…`，含前端 160,553,216 B / `eb3ef2f6…`、原 manifest 7,163 B / `eb0b4aec…`、数据库 dump 2,181,223 B / `8648ece0…` 与 0107 / 0109 / 0110 迁移文件；新 `RELEASE_MANIFEST.json` 6,764 B / `75cf8e27…`，`root:root 644` 原子替换。
+
+> **回滚**：恢复前端备份与 manifest 后重建 web；如需回退测试库增量，使用 `libiaolink-before-0110.dump` 恢复。无 Compose / env / Nginx / 对象存储变更。
+
 > **2026-11-21 23:56 全部项目图表点击下钻（测试机 full-stack · test-20261121-2356-px-dashboard-drilldown-3c28151d）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `3c28151d`；release = `test-20261121-2356-px-dashboard-drilldown-3c28151d`，previous = `test-20261121-2355-px-dashboard-issue-heading-b60c2906`；staging = `/srv/data/deploy-test-20261121-2356-px-dashboard-drilldown-3c28151d/staging`。本轮同时带回上一提交的问题归纳标题精简。
 
 > **改动 / 验收**：项目统计柱 / 折线点、项目当前阶段柱、项目经理 / 销售负责人 / 规划负责人阶段分段与人员柱底、问题归纳柱均可打开卡片式「数据详情」。项目列表固定长列表不折叠，展示项目类型 / 编号 / 名称 / 项目经理 / 启动时间，阶段与负责人页补当前阶段；问题详情按项目折叠，展开显示命中「状态 × 归类」的问题正文、状态、责任人、提出时间、归类与解决方案。shared typecheck / generate / check 通过，server typecheck / build 与全量 tests 2021 passed / 75 skipped，frontend typecheck / build 通过；Chrome 实测项目统计 4 项、当前阶段 9 项、项目经理 8 项、销售负责人 2 项，问题折叠组 2 条展开正常，Esc 关闭正常，console error 0。

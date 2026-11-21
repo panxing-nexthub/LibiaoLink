@@ -1,5 +1,15 @@
 ***
 
+> **2026-11-21 11:12 项目管理甘特-实施时间筛选弹层说明文案精简（测试机 frontend-only · test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4）**：代码来源 PR [#983](https://github.com/panxing-nexthub/LibiaoLink/pull/983)（CI 6 / 6，run `44859626902`，squash 合入 main `8ace67c4`）。测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4`，previous live = `test-20261121-1054-px-pm-gantt-period-anchor-a770ef7b`；staging = `/srv/data/deploy-test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4/staging`，备份 = `/srv/data/backups/before-test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4`。
+>
+> **改动 / 验收**：移除弹层内「默认显示全部项目；选择周期范围后，以今天为中心向前后展开」与「范围跟随右侧时间刻度，当前为「周 / 月 / 季 / 年」」两段说明，并移除触发按钮旧悬停提示；保留「全部显示 / 周期范围」、当前范围和右侧时间刻度。仅前端展示调整，无 API、字段、权限、DDL 或迁移变化。
+>
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,596,765 B / SHA-256 `fde8b81e…` / 692 归档条目 / 678 文件；`build-info.json` 1,391 B / `42dd2f26…`；`frontend-files.sha256` 91,081 B / `f6ad4d20…`；`release-files.sha256` 257 B / `2668c740…`，发布件 3 / 3 校验通过。按内容哈希增量替换 `index.html`、`assets/index-BGCcE2Xl.js`、`assets/es-Do5WEFYI.js`；CSS 与当时线上同哈希未重复替换，旧 hashed 资源全部保留；线上 995 → 997 文件，staging / live 均 678 / 678 哈希通过。
+>
+> **验证 / 备份 / 清单**：测试机 `/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；web / api / worker / postgres / minio / CAD / SVG preview 等八个核心容器 healthy，RestartCount 0、OOM false，未重启后端。真实账号 Chrome 复验弹层正文只剩「时间筛选」「全部显示」「周期范围」「当前范围：10-21 – 12-21」，旧说明文字与按钮 `title` 均为空；切周后范围仍为 `2026-11-14 – 2026-11-28`。备份 129,286,012 B / SHA-256SUMS `579e6f03…`，3 / 3 校验通过；新 `RELEASE_MANIFEST.json` 6,551 B / `e82db70d…`，`root:root 644` 原子替换。
+>
+> **边界 / 回滚**：仅测试机前端 dist、release manifest、staging 与备份；正式机 `10.1.103.44` 未触碰。无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。回滚恢复本次 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 10:46 项目管理甘特-实施周期范围与右侧时间刻度去重（测试机 frontend-only · test-20261121-1046-px-pm-gantt-period-scale-dedupe-1e9b4c37）**：代码来源 PR [#980](https://github.com/panxing-nexthub/LibiaoLink/pull/980)（CI 6 / 6，run `44857250082`，squash 合入 main `1e9b4c37`）。测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1046-px-pm-gantt-period-scale-dedupe-1e9b4c37`，previous live = `test-20261121-1028-px-pm-gantt-period-filter-8f44112e`；staging = `/srv/data/deploy-test-20261121-1046-px-pm-gantt-period-scale-dedupe-1e9b4c37/staging`，备份 = `/srv/data/backups/before-test-20261121-1046-px-pm-gantt-period-scale-dedupe-1e9b4c37`。
 >
 > **改动 / 验收**：时间筛选弹层只保留「全部显示 / 周期范围」两个入口；周期范围直接沿用右侧当前时间刻度，弹层不再重复展示周 / 月 / 季 / 年档位；触发按钮同步显示具体起止日期，上一周期 / 下一周期与今天保留，全部显示时两侧箭头禁用。验证时切换周 / 月 / 季 / 年范围与提示同步、按钮显示具体日期，但切档锚点仍取当前视口中心；该问题已由随后的 1054 修复。

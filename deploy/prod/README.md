@@ -1,3 +1,13 @@
+> **2026-11-21 20:40 最新阶段图横轴改为阶段并移除饼图（测试机 frontend-only · test-20261121-2040-px-dashboard-stage-axis-8d0aa965）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `8d0aa965`；release = `test-20261121-2040-px-dashboard-stage-axis-8d0aa965`，previous = `test-20261121-1805-px-dashboard-five-years-f3db362e`；staging = `/srv/data/deploy-test-20261121-2040-px-dashboard-stage-axis-8d0aa965/staging`。
+
+> **改动 / 验收**：全部项目第 6 屏改名为「最新阶段项目数量」，横轴固定九大阶段 + 异常归档 / 验收归档 / 归档-临时任务，纵轴项目数；年份改为与项目数量图一致的方块多选 + 5 年分页，默认近 5 年、未记录独立可筛；移除柱状图顶部阶段图例和右侧环形饼图，保留柱 / 年份阴影悬停白卡；底部标签同步为「最新阶段」。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 12 类横轴、年份开关、悬停明细及 1600 / 1366 / 768 宽度；线上主包字符串断言命中新标题 / 年份说明 / 12 类阶段，旧饼图 DOM class 为 0。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,605,712 B / SHA-256 `30bd7eed…`、678 文件；`build-info.json` 380 B / `868ecfbd…`；`frontend-files.sha256` 92,437 B / `9054a543…`；`release-files.sha256` 254 B / `b3283239…`。线上 1034 → 1037 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `3c7b3498…`、主包 `assets/index-D2C06Id4.js` 2,534,941 B / `819ada8c…`、CSS `assets/index-wIm2keju.css` 250,075 B / `19355059…`、ES `assets/es-Bldm9wcN.js` 428,098 B / `c3623782…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2040-px-dashboard-stage-axis-8d0aa965`，前端 142,161,036 B / `9e8bed4c…`、原 manifest 3,733 B / `f6dc0e33…`，SHA256SUMS 3 / 3 通过；新 manifest 4,076 B / `d61b284e…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 18:05 项目数量图年份窗口扩展至 5 年（测试机 frontend-only · test-20261121-1805-px-dashboard-five-years-f3db362e）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `f3db362e`；release = `test-20261121-1805-px-dashboard-five-years-f3db362e`，previous = `test-20261121-1800-px-dashboard-role-copy-b36459ae`；staging = `/srv/data/deploy-test-20261121-1805-px-dashboard-five-years-f3db362e/staging`。
 
 > **改动 / 验收**：年份导航由 3 年改为 5 年，默认最近 5 年；年份不超过 5 个时左右箭头禁用，超过 5 个才分页。类型显隐、全选、悬停总数保持不变。线上 `index.html` 已引用新主包，主包 / CSS / ES 与发布件 SHA-256 一致；`/healthz`、`/readyz` 200，web / api / worker healthy。

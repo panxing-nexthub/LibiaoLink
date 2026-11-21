@@ -26,6 +26,17 @@ function axisOf(maxValue: number): { max: number; step: number } {
 function yearKey(year: YearKey): string { return year === null ? "unknown" : String(year); }
 function includesYear(years: readonly YearKey[], year: YearKey): boolean { return years.some((item) => item === year); }
 
+function YearArrowIcon({ direction }: { readonly direction: "left" | "right" }) {
+  return (
+    <svg viewBox="0 0 1662 1024" aria-hidden="true" focusable="false" className="hub-dash-project-types__arrowIcon">
+      <g transform={direction === "left" ? "translate(1662 0) scale(-1 1)" : undefined}>
+        <path d="M1110.10503692 502.370245c0 15.073971-5.024657 25.123286-15.068947 35.167575l-452.128698 452.128698c-20.098629 20.098629-50.236522 20.098629-70.33515 0-20.088579-20.093604-20.088579-50.23652199 0-70.330126l416.966147-416.966147-416.966147-416.971172c-20.088579-20.088579-20.088579-50.23652199 0-70.325102 20.098629-20.098629 50.236522-20.098629 70.33515 0L1095.03608992 467.202669c10.04429 10.04429 15.06894699 20.088579 15.068947 35.167576z" fill="currentColor" />
+        <path d="M1063.16653992 516.16359421c0 6.51192663-2.1713659 10.85465844-6.51192663 15.19521916l-195.38385183 195.38385183c-8.68546405 8.68546405-21.70931687 8.68546405-30.39478049 0-8.68112102-8.68329253-8.68112102-21.70931687 0-30.3926094L1011.06461365 516.16359421l-180.18863268-180.1929757c-8.68112102-8.68112102-8.68112102-21.70931687 1e-8-30.39043789 8.68546405-8.68546405 21.70931687-8.68546405 30.39478048 0L1056.65461329 500.96403245c4.34056072 4.34273181 6.51192663 8.68329253 6.51192663 15.19956176z" fill="currentColor" />
+      </g>
+    </svg>
+  );
+}
+
 /**
  * 「全部项目」项目数量统计：x = 启动年份，每组三根柱 = T-sort / 3D分拣 / 飞箱。
  * 年份与类型均可点击筛选；年份默认最近 3 年，左右按钮切换年份窗口；最左侧「全选」为液态玻璃按钮。
@@ -67,7 +78,7 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
       <div className="hub-dash-project-types__controls">
         <div className="hub-dash-project-types__yearLine">
           <button type="button" className="hub-dash-project-types__selectAll" data-active={allSelected ? "true" : "false"} aria-pressed={allSelected} onClick={() => setSelectedYears(allSelected ? [] : [...allYears])}>{t("hub.dash.projects.selectAll")}</button>
-          <button type="button" className="hub-dash-project-types__arrow" disabled={yearWindowStart <= 0} aria-label={t("hub.dash.projects.yearPrev")} onClick={() => setYearWindowStart((start) => Math.max(0, start - YEAR_WINDOW))}>《</button>
+          <button type="button" className="hub-dash-project-types__arrow" disabled={yearWindowStart <= 0} aria-label={t("hub.dash.projects.yearPrev")} onClick={() => setYearWindowStart((start) => Math.max(0, start - YEAR_WINDOW))}><YearArrowIcon direction="left" /></button>
           <div className="hub-dash-project-types__yearChips">
             {visibleYearChars.map((year) => (
               <button key={year} type="button" className="hub-dash-project-types__yearChip" data-active={includesYear(selectedYears, year) ? "true" : "false"} aria-pressed={includesYear(selectedYears, year)} onClick={() => toggleYear(year)}>
@@ -80,7 +91,7 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
               </button>
             ) : null}
           </div>
-          <button type="button" className="hub-dash-project-types__arrow" disabled={yearWindowStart + YEAR_WINDOW >= numericYears.length} aria-label={t("hub.dash.projects.yearNext")} onClick={() => setYearWindowStart((start) => Math.min(Math.max(0, numericYears.length - YEAR_WINDOW), start + YEAR_WINDOW))}>》</button>
+          <button type="button" className="hub-dash-project-types__arrow" disabled={yearWindowStart + YEAR_WINDOW >= numericYears.length} aria-label={t("hub.dash.projects.yearNext")} onClick={() => setYearWindowStart((start) => Math.min(Math.max(0, numericYears.length - YEAR_WINDOW), start + YEAR_WINDOW))}><YearArrowIcon direction="right" /></button>
         </div>
         <div className="hub-dash-project-types__typeLine">
           {DASHBOARD_PROJECT_TYPES.map((type) => {
@@ -123,23 +134,18 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
                     </g>
                   );
                 })}
-                {hoverYear === key ? (() => {
-                  const visibleMaxCount = activeTypeIndexes.reduce((max, item) => Math.max(max, row.counts[item.index] ?? 0), 0);
-                  const tallestTop = AXIS_Y - visibleMaxCount * unit;
-                  const available = Math.max(14, tallestTop - PLOT_TOP - 10);
-                  const totalText = String(visibleTotal);
-                  const totalFont = Math.max(14, Math.min(26, groupW * 0.13, available - 8));
-                  const badgeW = Math.max(34, totalText.length * totalFont * 0.7 + 18);
-                  const badgeH = totalFont + 12;
-                  const maxCenterY = Math.max(PLOT_TOP + badgeH / 2 + 2, tallestTop - badgeH / 2 - 8);
-                  const centerY = Math.min((PLOT_TOP + AXIS_Y) / 2, maxCenterY);
-                  return (
-                    <g className="hub-dash-project-types__hoverTotal" pointerEvents="none">
-                      <rect x={groupX + groupW / 2 - badgeW / 2} y={centerY - badgeH / 2} width={badgeW} height={badgeH} rx={badgeH / 2} fill="rgba(255,255,255,0.92)" stroke="rgba(203,213,225,0.92)" />
-                      <text x={groupX + groupW / 2} y={centerY + totalFont * 0.34} textAnchor="middle" fontSize={totalFont} fontWeight={700} fill="#334155">{totalText}</text>
-                    </g>
-                  );
-                })() : null}
+                {hoverYear === key ? (
+                  <text
+                    className="hub-dash-project-types__hoverTotal"
+                    x={groupX + groupW / 2}
+                    y={PLOT_TOP + 24}
+                    textAnchor="middle"
+                    fontSize={Math.max(18, Math.min(24, groupW * 0.12))}
+                    fontWeight={700}
+                    fill="#334155"
+                    pointerEvents="none"
+                  >{visibleTotal}</text>
+                ) : null}
                 <text x={groupX + groupW / 2} y={TICK_LABEL_Y + 15} textAnchor="middle" fontSize={row.year === null ? 11.5 : 13} fill="#4b5563">{baselineLabel}</text>
               </g>
             );

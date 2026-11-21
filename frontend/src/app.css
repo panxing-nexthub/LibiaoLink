@@ -4955,16 +4955,15 @@ body {
 
 .hub-dash-project-types__yearChips {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.4rem;
   min-width: 0;
 }
 
-.hub-dash-project-types__selectAll,
-.hub-dash-project-types__arrow {
+.hub-dash-project-types__selectAll {
   flex: 0 0 auto;
   border: 1px solid rgb(255 255 255 / 0.72);
   border-radius: 10px;
@@ -4990,21 +4989,44 @@ body {
 }
 
 .hub-dash-project-types__arrow {
-  width: 1.85rem;
-  height: 1.7rem;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.42rem;
+  height: 1.5rem;
   padding: 0;
-  font-size: 0.8rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: #2f4f8f;
+  cursor: pointer;
+  transition: color 150ms ease, transform 150ms ease, opacity 150ms ease;
 }
 
-.hub-dash-project-types__selectAll:hover,
-.hub-dash-project-types__arrow:hover:not(:disabled) {
+.hub-dash-project-types__arrowIcon {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+}
+
+.hub-dash-project-types__selectAll:hover {
   border-color: rgb(191 219 254 / 0.95);
   background: linear-gradient(135deg, rgb(255 255 255 / 0.86), rgb(219 234 254 / 0.62));
   color: #1d4ed8;
 }
 
+.hub-dash-project-types__arrow:hover:not(:disabled) {
+  background: transparent;
+  color: #1d4ed8;
+  transform: scale(1.06);
+}
+
 .hub-dash-project-types__arrow:disabled {
-  opacity: 0.32;
+  opacity: 0.28;
   cursor: default;
 }
 
@@ -5024,10 +5046,10 @@ body {
 }
 
 .hub-dash-project-types__yearChip {
-  padding: 0.26rem 0.5rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 0.2rem 0.28rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .hub-dash-project-types__yearChip i,
@@ -5041,8 +5063,8 @@ body {
 }
 
 .hub-dash-project-types__yearChip[data-active="true"] {
-  border-color: #e5e7eb;
-  background: #ffffff;
+  border: 0;
+  background: transparent;
   color: #374151;
 }
 

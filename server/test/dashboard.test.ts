@@ -264,7 +264,11 @@ describe("全部项目维度聚合", () => {
       { projectId: "33333333-3333-4333-8333-333333333333", startupCompletedAt: "2026-01-20" },
       { projectId: "44444444-4444-4444-8444-444444444444", startupCompletedAt: null },
     ];
-    const result = buildProjectAnalytics(projects, roleTasks, startups);
+    const taskBuckets: DashboardTaskBucketRow[] = [
+      { projectId: PROJECT_A, stageKey: "presale", progressBin: 2, displayStatus: "active", deliveryBucket: null, count: 1 },
+      { projectId: PROJECT_A, stageKey: "production", progressBin: 4, displayStatus: "done", deliveryBucket: 0, count: 1 },
+    ];
+    const result = buildProjectAnalytics(projects, roleTasks, startups, taskBuckets);
     expect(() => DashboardProjectAnalyticsResponseSchema.parse(result)).not.toThrow();
     expect(result.totalProjects).toBe(4);
     expect(result.projectTypes).toEqual(["T-sort", "3D分拣", "飞箱"]);
@@ -278,7 +282,7 @@ describe("全部项目维度聚合", () => {
       code: "DEMO-A",
       name: "项目 A",
       projectTypes: ["T-sort", "飞箱"],
-      stageBucket: "install",
+      stageBucket: "production",
       startupAt: "2025-03-12",
       startupYear: 2025,
     });
@@ -297,18 +301,18 @@ describe("全部项目维度聚合", () => {
       { year: null, counts: [1, 0, 0], total: 1 },
     ]);
     expect(result.startYearStages.find((row) => row.year === 2025)?.stageCounts).toMatchObject([
-      0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0,
+      0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0,
     ]);
     expect(result.startYearStages.find((row) => row.year === 2026)?.stageCounts[11]).toBe(1);
     expect(result.startYearStages.find((row) => row.year === null)?.stageCounts[9]).toBe(1);
     const manager = result.roles.find((role) => role.role === "manager");
     const sales = result.roles.find((role) => role.role === "sales");
     const planning = result.roles.find((role) => role.role === "planning");
-    expect(manager?.people.find((person) => person.name === "张三")?.stageCounts[4]).toBe(1);
+    expect(manager?.people.find((person) => person.name === "张三")?.stageCounts[7]).toBe(1);
     expect(manager?.people.find((person) => person.name === "张三")?.stageCounts[10]).toBe(1);
     expect(sales?.people.find((person) => person.name === "张三")?.total).toBe(1);
     expect(sales?.people.find((person) => person.isUnassigned)?.stageCounts[9]).toBe(1);
-    expect(planning?.people.find((person) => person.name === "李四")?.stageCounts[4]).toBe(1);
+    expect(planning?.people.find((person) => person.name === "李四")?.stageCounts[7]).toBe(1);
     expect(planning?.people.find((person) => person.name === "李四")?.stageCounts[11]).toBe(1);
     expect(planning?.people.find((person) => person.name === "赵六")?.total).toBe(1);
     expect(planning?.people.find((person) => person.isUnassigned)?.stageCounts[10]).toBe(1);
@@ -357,6 +361,32 @@ describe("仪表盘聚合服务", () => {
       { status: "done", count: 1 },
       { status: "pending", count: 1 },
     ]);
+  });
+
+  it("projectInsights 使用项目空间同口径的任务派生最新阶段", async () => {
+    const repo = new FakeDashboardRepository();
+    repo.analyticsProjectRows = [{
+      id: PROJECT_A,
+      code: "DEMO-A",
+      name: "项目 A",
+      projectType: "T-sort",
+      additionalProjectTypes: [],
+      stageKey: "presale",
+      status: "active",
+      managerIds: [P1],
+      managerNames: ["张三"],
+      archiveKind: null,
+      hasOpenPostArchiveTask: false,
+    }];
+    repo.taskRows = [
+      { projectId: PROJECT_A, stageKey: "presale", progressBin: 1, displayStatus: "active", deliveryBucket: null, count: 1 },
+      { projectId: PROJECT_A, stageKey: "acceptance", progressBin: 4, displayStatus: "done", deliveryBucket: 0, count: 1 },
+    ];
+    repo.startupRows = [{ projectId: PROJECT_A, startupCompletedAt: "2026-01-10" }];
+    const response = await makeService(repo, new FakePermissionService()).projectInsights("actor-1");
+    expect(() => DashboardProjectAnalyticsResponseSchema.parse(response)).not.toThrow();
+    expect(response.projects[0]?.stageBucket).toBe("acceptance");
+    expect(response.startYearStages[0]?.stageCounts[8]).toBe(1);
   });
 
   it("可见项目为空时直接返回空聚合（九阶段仍固定、无逐项目项）", async () => {

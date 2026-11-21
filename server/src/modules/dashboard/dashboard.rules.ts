@@ -198,13 +198,36 @@ export function emptyProjectAnalytics(): DashboardProjectAnalyticsResponse {
   };
 }
 
-/** 项目最新阶段桶：归档优先拆成临时任务 / 异常 / 验收归档，未归档取项目当前阶段。 */
-export function projectStageBucketOf(project: Pick<DashboardAnalyticsProjectInput, "status" | "stageKey" | "archiveKind" | "hasOpenPostArchiveTask">): ProjectStageBucket {
+/**
+ * 项目空间「最新阶段」：已动工任务（进度 ≥ 1 格）中阶段序最靠后的阶段。
+ * 与 TaskService.summary().latestStage 同一口径；没有已动工任务 = null。
+ */
+export function latestStageByProject(taskBuckets: readonly DashboardTaskBucketRow[]): Map<string, string | null> {
+  const started = new Map<string, Set<string>>();
+  for (const bucket of taskBuckets) {
+    if (bucket.stageKey === null || !STAGE_KEY_SET.has(bucket.stageKey) || bucket.progressBin <= 0) continue;
+    const stages = started.get(bucket.projectId) ?? new Set<string>();
+    stages.add(bucket.stageKey);
+    started.set(bucket.projectId, stages);
+  }
+  const result = new Map<string, string | null>();
+  for (const [projectId, stages] of started) {
+    result.set(projectId, [...STAGE_KEYS].reverse().find((key) => stages.has(key)) ?? null);
+  }
+  return result;
+}
+
+/** 项目最新阶段桶：归档优先拆成临时任务 / 异常 / 验收归档；未归档取任务派生最新阶段，无动工任务回落 projects.stage_key。 */
+export function projectStageBucketOf(
+  project: Pick<DashboardAnalyticsProjectInput, "status" | "stageKey" | "archiveKind" | "hasOpenPostArchiveTask">,
+  latestStageKey: string | null = null,
+): ProjectStageBucket {
   if (project.status === "archived") {
     if (project.hasOpenPostArchiveTask) return "archive_temporary";
     if (project.archiveKind === "unaccepted") return "archive_exception";
     return "archive_accepted";
   }
+  if (latestStageKey !== null && STAGE_KEY_SET.has(latestStageKey)) return latestStageKey as ProjectStageBucket;
   return STAGE_KEY_SET.has(project.stageKey) ? (project.stageKey as ProjectStageBucket) : "presale";
 }
 
@@ -250,16 +273,18 @@ function addRoleOwner(map: Map<ProjectRole, Map<string, string | null>>, role: P
  * 全部项目维度聚合（纯函数）：
  * - 项目数量：多类型项目在每个项目类型各计一次；
  * - 负责人：同一项目同一人只计一次，未配置某角色时落「待分配」；
- * - 最新阶段：归档项目按项目卡片同一套三类归档口径，未归档项目取 projects.stage_key；
+ * - 最新阶段：归档项目按项目卡片同一套三类归档口径；未归档项目取项目空间「最新阶段」（已动工任务中阶段序最靠后者），无动工任务回落 projects.stage_key；
  * - 年份：项目启动任务实际完成日期所属年份，未记录归 null 并置末。
  */
 export function buildProjectAnalytics(
   projects: readonly DashboardAnalyticsProjectInput[],
   roleTasks: readonly DashboardProjectRoleTaskInput[],
   startups: readonly DashboardProjectStartupInput[],
+  taskBuckets: readonly DashboardTaskBucketRow[] = [],
 ): DashboardProjectAnalyticsResponse {
   if (projects.length === 0) return emptyProjectAnalytics();
 
+  const latestStageByProjectId = latestStageByProject(taskBuckets);
   const startupByProject = new Map<string, string | null>();
   for (const startup of startups) {
     if (startup.startupCompletedAt !== null) startupByProject.set(startup.projectId, startup.startupCompletedAt);
@@ -301,7 +326,7 @@ export function buildProjectAnalytics(
 
   for (const project of projects) {
     const year = projectStartupYear(startupByProject.get(project.id) ?? null);
-    const stageBucket = projectStageBucketOf(project);
+    const stageBucket = projectStageBucketOf(project, latestStageByProjectId.get(project.id) ?? null);
     const stageIndex = STAGE_BUCKET_INDEX.get(stageBucket) ?? 0;
 
     const stageCounts = yearStage.get(year) ?? zeroStageCounts();
@@ -382,7 +407,7 @@ export function buildProjectAnalytics(
         code: project.code,
         name: project.name,
         projectTypes,
-        stageBucket: projectStageBucketOf(project),
+        stageBucket: projectStageBucketOf(project, latestStageByProjectId.get(project.id) ?? null),
         startupAt,
         startupYear: projectStartupYear(startupAt),
         owners: {

@@ -144,7 +144,7 @@ export function HubDashIssueGroupDetail({ rows, context, onClose }: {
                         <article key={issue.id} className="hub-dash-issue-group-detail__issue">
                           <a
                             className="hub-dash-issue-group-detail__issueLink"
-                            href={projectFocusHref(issue.projectId, { kind: "issue", id: issue.id })}
+                            href={projectFocusHref(issue.projectId, { kind: "issueLocate", id: issue.id })}
                             aria-label={t("hub.dash.projects.issueDetail.open", { title: issue.title })}
                             title={t("hub.dash.projects.issueDetail.open", { title: issue.title })}
                           >

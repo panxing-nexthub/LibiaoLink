@@ -1,3 +1,13 @@
+> **2026-11-21 21:42 柱状图 / 折线图切换按钮移至全选下方（测试机 frontend-only · test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `77a94d6a`；release = `test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a`，previous = `test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5`；staging = `/srv/data/deploy-test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a/staging`。
+
+> **改动 / 验收**：项目数量统计左侧控制区改为上下排列，「全选」在上、「折线图 / 柱状图」按钮在下并左对齐；年份导航保持居中，窄屏继续堆叠。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核 1600 宽度按钮 y=84 / 117 且左对齐、导航居中，600 宽度堆叠不重叠；线上 bundle 命中 `hub-dash-project-types__leftControls`。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,608,942 B / SHA-256 `88f7cedd…`、678 文件；`build-info.json` 349 B / `5966663f…`；`frontend-files.sha256` 92,437 B / `93db5be1…`；`release-files.sha256` 254 B / `574903c4…`。线上 1048 → 1051 文件，新增 3 个 hashed 资源并原子替换 `index.html`；强制重建 web。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `ecd7ee18…`、主包 `assets/index-FflKx_wt.js` 2,539,321 B / `ea3560a5…`、CSS `assets/index-BJ_fyEjW.css` 252,183 B / `60b27f52…`、ES `assets/es-Dv8bXwLz.js` 428,098 B / `87dc1248…`；678 / 678 校验通过。`/`、`/healthz`、`/readyz` 均 200，readyz 四项全 true；web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261121-2140-px-dashboard-line-toggle-stack-77a94d6a`，前端 146,774,459 B / `c8877414…`、原 manifest 4,139 B / `befad90e…`，SHA256SUMS 3 / 3 通过；新 manifest 4,089 B / `e6ac17c3…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；无 API / server / shared / 数据库结构 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份前端 dist 并重建 web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 21:35 项目数量统计柱状图 / 折线图切换（测试机 frontend-only · test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `71ed6dd5`；release = `test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5`，previous = `test-20261121-2120-px-dashboard-stage-title-issue-filter-ff029b87`；staging = `/srv/data/deploy-test-20261121-2135-px-dashboard-project-line-toggle-71ed6dd5/staging`。
 
 > **改动 / 验收**：项目数量统计右上角新增图表类型按钮，默认柱状图，点击切为折线图；折线模式按 T-sort / 3D分拣 / 飞箱绘制三条趋势线，按钮变为「柱状图」可切回。年份筛选、全选、类型显隐、悬停卡和刻度共用。frontend `npm run typecheck` / `npm run build` 通过；本地夹具复核默认 15 柱、折线 3 线 / 15 点、隐藏 T-sort 后 2 线 / 10 点、切回柱状图恢复；线上 bundle 命中 `hub-dash-project-types__line` / `hub-dash-project-types__chartToggle`。

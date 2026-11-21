@@ -3468,7 +3468,6 @@ function PmImplementationGantt({
                 aria-expanded={ganttTimeFilterOpen}
                 aria-haspopup="dialog"
                 aria-label={ganttTimeFilterAriaLabel}
-                title={t("pm.gantt.timeFilter.hint")}
                 onClick={openGanttTimeFilter}
                 className={
                   "flex min-w-[132px] items-center justify-center gap-1 whitespace-nowrap rounded-md px-2 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " +
@@ -3497,7 +3496,6 @@ function PmImplementationGantt({
                 >
                   <div>
                     <p className="text-xs font-semibold text-zinc-800">{t("pm.gantt.timeFilter")}</p>
-                    <p className="mt-0.5 text-[11px] text-zinc-500">{t("pm.gantt.timeFilter.hint")}</p>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <button
@@ -3529,22 +3527,13 @@ function PmImplementationGantt({
                       {t("pm.gantt.timeFilter.period")}
                     </button>
                   </div>
-                  {ganttTimeFilter !== null ? (
-                    <div className="space-y-2">
-                      <p className="text-[11px] text-zinc-500">
-                        {t("pm.gantt.timeFilter.periodHint", {
-                          scale: ganttTimeFilterPeriodLabel ?? "",
-                        })}
-                      </p>
-                      {ganttTimeFilterRangeText !== null ? (
-                        <p
-                          data-project-management-gantt-time-filter-current-range="true"
-                          className="rounded-md bg-zinc-50 px-2 py-1.5 text-[11px] tabular-nums text-zinc-600"
-                        >
-                          {t("pm.gantt.timeFilter.currentRange", { range: ganttTimeFilterRangeText })}
-                        </p>
-                      ) : null}
-                    </div>
+                  {ganttTimeFilter !== null && ganttTimeFilterRangeText !== null ? (
+                    <p
+                      data-project-management-gantt-time-filter-current-range="true"
+                      className="rounded-md bg-zinc-50 px-2 py-1.5 text-[11px] tabular-nums text-zinc-600"
+                    >
+                      {t("pm.gantt.timeFilter.currentRange", { range: ganttTimeFilterRangeText })}
+                    </p>
                   ) : null}
                 </div>
               ) : null}

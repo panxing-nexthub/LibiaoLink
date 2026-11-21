@@ -17,6 +17,7 @@
  * 前置（都在本机跑着）：前端 dev :3000 / api :3001 / 本地沙箱 PG :5433 / 本机 Chrome（无头）。
  * 用法：node scripts/ui-project-status-e2e.mjs
  * 仅回放旧 API 已完成项目：node scripts/ui-project-status-e2e.mjs --legacy-done
+ * 仅回放编辑并归档：node scripts/ui-project-status-e2e.mjs --archive-update
  *   可覆盖的环境变量：FRONTEND_BASE / API_BASE / DATABASE_URL / CHROME_PATH / CDP_PORT / REPLAY_USER / PG_MODULE / SHOT_DIR
  */
 
@@ -365,6 +366,42 @@ async function runLegacyDoneReplay() {
   }
 }
 
+async function runArchiveUpdateReplay() {
+  await page.send("Emulation.setDeviceMetricsOverride", { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await page.send("Page.navigate", { url: FRONTEND + "/#/projects" });
+  const cardVisible = "Array.from(document.querySelectorAll('.project-card h1')).some((node) => node.textContent.trim() === " + j(throwCode) + ")";
+  if (!await waitFor(cardVisible, 20000) || !await openEditFor(throwCode)) throw new Error("归档回放项目的编辑入口不可用");
+
+  const initial = await projectRowOf(throwId);
+  const changedName = "回放-编辑并归档-" + stamp;
+  const nameInput = editDialogSel + " input[placeholder='如 中国包裹分拣']";
+  await clickSelector(nameInput);
+  await ev("document.querySelector(" + j(nameInput) + ").select()");
+  await page.send("Input.insertText", { text: changedName });
+  await clickSelector("[data-project-status-option='archived']");
+  await clickSelector(submitSel);
+
+  const rejected = await waitFor("document.querySelector(" + j(editDialogSel) + ")?.textContent.includes('还有 1 项任务未完成，无法归档。') === true", 12000);
+  const unchanged = await projectRowOf(throwId);
+  const failedAudit = await auditRows(throwId, 10);
+  const archives = (await db.query("select count(*)::int as count from project_archives where project_id = $1", [throwId])).rows[0].count;
+  check("归档失败时保留原名称、版本和状态，且没有归档清单或编辑审计",
+    rejected && unchanged.name === initial.name && unchanged.version === initial.version && unchanged.status === "active" &&
+    archives === 0 && failedAudit.every((row) => row.action !== "update" && row.action !== "archive"),
+    JSON.stringify({ rejected, status: unchanged.status, name: unchanged.name, version: unchanged.version, archives }));
+
+  await db.query("update tasks set status = 'done' where project_id = $1 and stage_key = 'acceptance'", [throwId]);
+  await clickSelector(submitSel);
+  const closed = await waitFor("document.querySelector(" + j(editDialogSel) + ") === null", 12000);
+  const archived = await projectRowOf(throwId);
+  const record = (await db.query("select archive_kind from project_archives where project_id = $1", [throwId])).rows[0];
+  const actions = (await auditRows(throwId, 10)).map((row) => row.action);
+  check("任务完成后重试，项目修改和已验收归档一起保存",
+    closed && archived.name === changedName && archived.status === "archived" && record?.archive_kind === "accepted" &&
+    actions.includes("update") && actions.includes("archive"),
+    JSON.stringify({ closed, status: archived.status, name: archived.name, archiveKind: record?.archive_kind, actions }));
+}
+
 async function runProjectStatusReplay() {
   // ---------- ① 卡片状态字 ----------
   await page.send("Emulation.setDeviceMetricsOverride", { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false });
@@ -667,6 +704,8 @@ async function runProjectStatusReplay() {
 try {
   if (process.argv.includes("--legacy-done")) {
     await runLegacyDoneReplay();
+  } else if (process.argv.includes("--archive-update")) {
+    await runArchiveUpdateReplay();
   } else {
     await runProjectStatusReplay();
   }

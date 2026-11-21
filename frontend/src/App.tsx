@@ -41,7 +41,7 @@ import {
 import { directoryMemberOptions, loadDirectory, type DirectoryUser } from "./directory";
 import { memberOptionsWithExisting } from "./data/members";
 import { loadProjectManagerCandidates, type ProjectManagerCandidate } from "./projectManagerCandidates";
-import { archiveProject, createProject, deleteProject, downloadProjectWorkbook, fetchProject, recordProjectVisit, restoreArchivedProject, toUiProject, updateProject, type ProjectExportFormat } from "./projectApi";
+import { archiveProject, archiveProjectWithUpdate, createProject, deleteProject, downloadProjectWorkbook, fetchProject, recordProjectVisit, restoreArchivedProject, toUiProject, updateProject, type ProjectExportFormat } from "./projectApi";
 import { loadMyPreferences, loadMyPreferencesWithLegacyMigration, saveHomeSavedFilters, saveTaskTableHiddenColumns, saveHubDashProject, saveHubDashView, saveHubView, saveWorkspaceOpenProjects, type WorkspaceOpenProjects } from "./preferencesApi";
 import type { SavedFilter } from "./savedFilters";
 import { asHubDashView, type HubDashView } from "./data/dashboardProgress";
@@ -200,7 +200,7 @@ function errorMessageOf(error: unknown, fallback: string): string {
 }
 
 /**
- * 编辑弹窗字段与项目现值是否有差异（Push 262；Push 280 起含备注）：「已归档」保存要先落其余字段时，用来判断要不要先 PATCH。
+ * 编辑弹窗含字段修改时使用「编辑并归档」接口。
  */
 function projectFieldsChanged(
   project: Project,
@@ -232,7 +232,6 @@ export default function App() {
   const [managerCandidates, setManagerCandidates] = useState<ProjectManagerCandidate[]>([]);
   // 常用筛选（A24 · Push 169 落库）：按账号存服务端，换设备同账号可见（契约 users.ts homeSavedFilters）
   const filterRevision = useRef(0);
-  const archiveAttempt = useRef<{ id: string; baseVersion: number; version: number; fields: string } | null>(null);
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   // 任务表列显隐（A4 · Push 170）：同样按账号存服务端；null = 偏好尚未取到（先用页面默认列）
   const [taskTableHiddenColumns, setTaskTableHiddenColumns] = useState<string[] | null>(null);
@@ -704,16 +703,13 @@ export default function App() {
       managerIds: draft.managerIds,
       remark: draft.note.trim(),
     };
-    const baseVersion = options?.version ?? project.version;
-    const attempt = archiveAttempt.current;
-    const previous = attempt?.id === project.id && attempt.baseVersion === baseVersion ? attempt : null;
-    let version = previous?.version ?? baseVersion;
+    const version = options?.version ?? project.version;
     try {
       if (project.status === "archived") {
         if (draft.status !== "active") {
           return { kind: "error", message: t("modal.err.archived") };
         }
-        await restoreArchivedProject(project.id, options?.version ?? project.version);
+        await restoreArchivedProject(project.id, version);
         setDataVersion((value) => value + 1);
         return { kind: "ok" };
       }
@@ -722,17 +718,12 @@ export default function App() {
         setDataVersion((value) => value + 1);
         return { kind: "ok" };
       }
-      const signature = JSON.stringify(fields);
-      const fieldsChanged = previous === null
-        ? options?.version !== undefined || projectFieldsChanged(project, fields)
-        : previous.fields !== signature;
-      if (fieldsChanged) {
-        const saved = await updateProject(project.id, fields, version);
-        version = saved.version;
+      const archiveKind = options?.archiveKind ?? "accepted";
+      if (options?.version !== undefined || projectFieldsChanged(project, fields)) {
+        await archiveProjectWithUpdate(project.id, fields, version, archiveKind);
+      } else {
+        await archiveProject(project.id, version, archiveKind, options?.archiveConfirm === true);
       }
-      archiveAttempt.current = { id: project.id, baseVersion, version, fields: signature };
-      await archiveProject(project.id, version, options?.archiveKind ?? "accepted", options?.archiveConfirm === true);
-      archiveAttempt.current = null;
       setDataVersion((value) => value + 1);
       return { kind: "ok" };
     } catch (error: unknown) {
@@ -1138,10 +1129,7 @@ export default function App() {
         savedFilters={savedFilters}
         onSavedFiltersChange={handleSaveSavedFilters}
         onCreate={handleCreateProject}
-        onEdit={(project) => {
-          archiveAttempt.current = null;
-          setEditingProject(project);
-        }}
+        onEdit={setEditingProject}
         refreshToken={dataVersion}
       />
       {editModal}

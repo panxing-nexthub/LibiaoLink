@@ -176,32 +176,14 @@ export function createProject(input: ProjectWriteInput): Promise<ApiProject> {
 /** PATCH 可写状态（契约 ProjectUpdateBody：archived 不接受 PATCH —— 归档只能走归档端点；Push 262 编辑弹窗口径）。 */
 export type ProjectStatusPatch = "active" | "paused";
 
-export function updateProject(id: string, input: ProjectWriteInput, version: number, status?: ProjectStatusPatch): Promise<ApiProject> {
-  const body: {
-    code: string;
-    name: string;
-    region: string;
-    projectTypes: string[];
-    managerIds: string[];
-    version: number;
-    status?: ProjectStatusPatch;
-    description?: string | null;
-  } = {
-    code: input.code,
-    name: input.name,
-    region: input.region,
-    projectTypes: input.projectTypes,
-    managerIds: input.managerIds,
-    version,
-  };
-  if (status !== undefined) {
-    body.status = status;
-  }
+function projectUpdateFields(input: ProjectWriteInput) {
+  const { remark, ...fields } = input;
   // 备注（Push 280）：undefined = 不发送（不改）；空串 = 发 null 清空（契约 description 可空）。
-  if (input.remark !== undefined) {
-    body.description = input.remark === "" ? null : input.remark;
-  }
-  return apiSend<ApiProject>("/api/v1/projects/" + encodeURIComponent(id), "PATCH", body);
+  return { ...fields, description: remark === "" ? null : remark };
+}
+
+export function updateProject(id: string, input: ProjectWriteInput, version: number, status?: ProjectStatusPatch): Promise<ApiProject> {
+  return apiSend<ApiProject>("/api/v1/projects/" + encodeURIComponent(id), "PATCH", { ...projectUpdateFields(input), version, status });
 }
 
 /**
@@ -220,6 +202,14 @@ export type ProjectArchiveResult = {
 
 export function archiveProject(id: string, version: number, archiveKind: ProjectArchiveKind, confirm = false): Promise<ProjectArchiveResult> {
   return apiSend<ProjectArchiveResult>("/api/v1/projects/" + encodeURIComponent(id) + "/archive", "POST", { version, archiveKind, confirm });
+}
+
+export function archiveProjectWithUpdate(id: string, input: ProjectWriteInput, version: number, archiveKind: ProjectArchiveKind): Promise<ProjectArchiveResult> {
+  return apiSend<ProjectArchiveResult>("/api/v1/projects/" + encodeURIComponent(id) + "/archive-with-update", "POST", {
+    version,
+    archiveKind,
+    changes: projectUpdateFields(input),
+  });
 }
 
 /** 归档项目恢复到进行中：只清归档状态并递增 version，保留最近一次归档清单。 */

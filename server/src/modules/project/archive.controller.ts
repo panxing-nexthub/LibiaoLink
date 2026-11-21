@@ -1,10 +1,11 @@
 import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from "@nestjs/common";
-import { ProjectArchiveBodySchema, ProjectUnarchiveBodySchema, UuidSchema } from "@libiaolink/contracts";
+import { ProjectArchiveBodySchema, ProjectArchiveWithUpdateBodySchema, ProjectUnarchiveBodySchema, UuidSchema } from "@libiaolink/contracts";
 import { ZodValidationPipe } from "../../common/http/zod-validation.pipe.js";
 import { CsrfGuard, CurrentActorId, SessionGuard } from "../identity/index.js";
-import { ProjectAccessGuard, RequirePermission } from "../permission/index.js";
+import { CurrentProjectAccess, PermissionService, ProjectAccessGuard, RequirePermission, type ProjectAccessContext } from "../permission/index.js";
+import { TranslateService } from "../translate/index.js";
 import { ArchiveService } from "./archive.service.js";
-import type { ArchiveRequestBody, UnarchiveRequestBody, ProjectArchiveView } from "./archive.service.js";
+import type { ArchiveRequestBody, ArchiveWithUpdateRequestBody, UnarchiveRequestBody, ProjectArchiveView } from "./archive.service.js";
 import type { ProjectView } from "./project.service.js";
 
 const uuidParam = new ZodValidationPipe(UuidSchema);
@@ -17,7 +18,11 @@ const uuidParam = new ZodValidationPipe(UuidSchema);
 @Controller("api/v1/projects")
 @UseGuards(SessionGuard, CsrfGuard, ProjectAccessGuard)
 export class ArchiveController {
-  constructor(private readonly archive: ArchiveService) {}
+  constructor(
+    private readonly archive: ArchiveService,
+    private readonly permission: PermissionService,
+    private readonly translate: TranslateService,
+  ) {}
 
   /** 归档：按验收结果校验，生成带归档类型的清单。 */
   @Post(":id/archive")
@@ -29,6 +34,22 @@ export class ArchiveController {
     @CurrentActorId() actorId: string,
   ): Promise<ProjectArchiveView> {
     return this.archive.archiveProject(id, body, actorId);
+  }
+
+  @Post(":id/archive-with-update")
+  @HttpCode(200)
+  @RequirePermission("project.archive")
+  async archiveWithUpdate(
+    @Param("id", uuidParam) id: string,
+    @Body(new ZodValidationPipe(ProjectArchiveWithUpdateBodySchema)) body: ArchiveWithUpdateRequestBody,
+    @CurrentProjectAccess() access: ProjectAccessContext,
+    @CurrentActorId() actorId: string,
+  ): Promise<ProjectArchiveView> {
+    await this.permission.assertCan(actorId, "project.update", access);
+    const archived = await this.archive.archiveProject(id, body, actorId);
+    const texts = [body.changes.name, body.changes.description].filter((text): text is string => typeof text === "string" && text !== "");
+    this.translate.warmup(texts);
+    return archived;
   }
 
   /** 恢复为进行中：仅归档项目可恢复；保留最近一次归档清单，写审计并递增 version。 */

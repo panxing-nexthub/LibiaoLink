@@ -8,6 +8,7 @@ import { StageKeySchema } from "./common/dicts.ts";
 import { ApiErrorSchema } from "./common/errors.ts";
 import {
   ProjectArchiveBodySchema,
+  ProjectArchiveWithUpdateBodySchema,
   ProjectUnarchiveBodySchema,
   ProjectArchiveViewSchema,
   ProjectCreateBodySchema,
@@ -584,6 +585,21 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
       404: commonErrors[404],
       409: commonErrors[409],
       422: commonErrors[422],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/archive-with-update",
+    tags: ["projects"],
+    summary: "修改项目并归档：字段修改和归档在同一事务内提交，需 project.update 与 project.archive",
+    request: { params: idParams, body: json(ProjectArchiveWithUpdateBodySchema) },
+    responses: {
+      200: { description: "项目字段和归档均已保存，返回归档记录与清单", ...json(ProjectArchiveViewSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+      409: commonErrors[409],
     },
   });
 

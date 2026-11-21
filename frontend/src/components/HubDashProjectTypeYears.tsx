@@ -78,20 +78,22 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
       <div className="hub-dash-project-types__controls">
         <div className="hub-dash-project-types__yearLine">
           <button type="button" className="hub-dash-project-types__selectAll" data-active={allSelected ? "true" : "false"} aria-pressed={allSelected} onClick={() => setSelectedYears(allSelected ? [] : [...allYears])}>{t("hub.dash.projects.selectAll")}</button>
-          <button type="button" className="hub-dash-project-types__arrow" disabled={yearWindowStart <= 0} aria-label={t("hub.dash.projects.yearPrev")} onClick={() => setYearWindowStart((start) => Math.max(0, start - YEAR_WINDOW))}><YearArrowIcon direction="left" /></button>
-          <div className="hub-dash-project-types__yearChips">
-            {visibleYearChars.map((year) => (
-              <button key={year} type="button" className="hub-dash-project-types__yearChip" data-active={includesYear(selectedYears, year) ? "true" : "false"} aria-pressed={includesYear(selectedYears, year)} onClick={() => toggleYear(year)}>
-                <i /><span>{year}</span>
-              </button>
-            ))}
-            {hasUnknownYear ? (
-              <button type="button" className="hub-dash-project-types__yearChip" data-active={includesYear(selectedYears, null) ? "true" : "false"} aria-pressed={includesYear(selectedYears, null)} onClick={() => toggleYear(null)}>
-                <i /><span>{t("hub.dash.projects.unknownYear")}</span>
-              </button>
-            ) : null}
+          <div className="hub-dash-project-types__yearNavigator">
+            <button type="button" className="hub-dash-project-types__arrow" disabled={yearWindowStart <= 0} aria-label={t("hub.dash.projects.yearPrev")} onClick={() => setYearWindowStart((start) => Math.max(0, start - YEAR_WINDOW))}><YearArrowIcon direction="left" /></button>
+            <div className="hub-dash-project-types__yearChips">
+              {visibleYearChars.map((year) => (
+                <button key={year} type="button" className="hub-dash-project-types__yearChip" data-active={includesYear(selectedYears, year) ? "true" : "false"} aria-pressed={includesYear(selectedYears, year)} onClick={() => toggleYear(year)}>
+                  <i /><span>{year}</span>
+                </button>
+              ))}
+              {hasUnknownYear ? (
+                <button type="button" className="hub-dash-project-types__yearChip" data-active={includesYear(selectedYears, null) ? "true" : "false"} aria-pressed={includesYear(selectedYears, null)} onClick={() => toggleYear(null)}>
+                  <i /><span>{t("hub.dash.projects.unknownYear")}</span>
+                </button>
+              ) : null}
+            </div>
+            <button type="button" className="hub-dash-project-types__arrow" disabled={yearWindowStart + YEAR_WINDOW >= numericYears.length} aria-label={t("hub.dash.projects.yearNext")} onClick={() => setYearWindowStart((start) => Math.min(Math.max(0, numericYears.length - YEAR_WINDOW), start + YEAR_WINDOW))}><YearArrowIcon direction="right" /></button>
           </div>
-          <button type="button" className="hub-dash-project-types__arrow" disabled={yearWindowStart + YEAR_WINDOW >= numericYears.length} aria-label={t("hub.dash.projects.yearNext")} onClick={() => setYearWindowStart((start) => Math.min(Math.max(0, numericYears.length - YEAR_WINDOW), start + YEAR_WINDOW))}><YearArrowIcon direction="right" /></button>
         </div>
         <div className="hub-dash-project-types__typeLine">
           {DASHBOARD_PROJECT_TYPES.map((type) => {

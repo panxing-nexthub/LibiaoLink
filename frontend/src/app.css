@@ -4947,9 +4947,20 @@ body {
 }
 
 .hub-dash-project-types__yearLine {
+  position: relative;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.42rem;
+  min-width: 0;
+}
+
+.hub-dash-project-types__yearNavigator {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
   min-width: 0;
 }
 
@@ -4958,7 +4969,7 @@ body {
   flex: 0 1 auto;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 0.4rem;
   min-width: 0;
 }
@@ -4978,8 +4989,13 @@ body {
 }
 
 .hub-dash-project-types__selectAll {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 1;
   padding: 0.28rem 0.72rem;
   font-size: 0.75rem;
+  transform: translateY(-50%);
 }
 
 .hub-dash-project-types__selectAll[data-active="true"] {
@@ -5070,7 +5086,7 @@ body {
 
 .hub-dash-project-types__yearChip[data-active="true"] i {
   background: #2f7ef2;
-  box-shadow: 0 0 0 3px rgb(47 126 242 / 0.12);
+  box-shadow: none;
 }
 
 .hub-dash-project-types__yearChip[data-active="false"],
@@ -5113,7 +5129,17 @@ body {
 
 @media (max-width: 639.98px) {
   .hub-dash-project-types__yearLine {
+    flex-wrap: wrap;
     gap: 0.28rem;
+  }
+
+  .hub-dash-project-types__selectAll {
+    position: static;
+    transform: none;
+  }
+
+  .hub-dash-project-types__yearNavigator {
+    flex: 1 0 100%;
   }
 
   .hub-dash-project-types__yearChip,

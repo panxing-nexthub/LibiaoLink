@@ -1,6 +1,6 @@
 # LibiaoLink 案例数据面（测试机）
 
-更新时间：2026-11-20
+更新时间：2026-11-21
 
 范围：仅测试机 `10.1.104.44`（`libiao-vm` / `test-pm.libiaorobot.com`）；正式机 `10.1.103.44` 未触碰。
 
@@ -28,7 +28,7 @@
 | 服务身份元数据 | `/opt/libiaolink-case/config/service-identities.json` |
 | 发布清单 | `/opt/libiaolink-case/CASE_DATA_RELEASE_MANIFEST.json`（以服务器当前文件 `sha256sum` 为准） |
 | 配置包 | `/srv/case/staging/case-data-20261119-1526/case-data-config-20261119-1526.tar.gz`（SHA-256 `55db9e320e2671e7b354d32806c7afd0839672f1669fd96cb894836db759a017`，不含密钥） |
-| 应用包 | `/srv/case/staging/case-data-20261120-1957/libiaolink-case-20261120-1957.tgz`（SHA-256 `d2197ab93678e71df463f1d802a746c56e5aeb305c2720a9e0b46edf9a6ac925`，648,970 B） |
+| 应用包 | `/srv/case/staging/case-data-20261121-1338/libiaolink-case-runtime-20261121-1338.tgz`（SHA-256 `44ff6edd8d02eab8c7a50f84db34ad6d3286ab7f31041995227c00fc16497cb2`，408,525 B） |
 
 /srv/case 为 30G 独立分区；/srv/data 为 295G 数据盘。结构化数据与媒体对象分离。
 
@@ -48,7 +48,7 @@
 
 - 数据库：`libiaolink_case`。
 - 迁移账号：`case_migrator`；运行账号：`case_project_projection_rw`、`case_gateway_authoring_rw`、`case_operation_cleanup`、`case_gateway_public_ro`。
-- 测试机已应用迁移：`0001` 至 `0014`；`0014` 补齐本地项目软删除、案例版本与语言分组、项目级素材、素材版本、跨案例挂接和 `projects/*` 对象授权。迁移账本 14 项校验通过，`migrate.mjs --check` 通过。
+- 测试机已应用迁移：`0001` 至 `0015`；`0015` 增加案例素材持久排序、发布历史枚举、客户 Logo 版本冻结和 operation 墓碑。迁移账本 15 项校验通过，`migrate.mjs --check` 无漂移。
 - 连接上限：投影 4、作者 6、清理 2、公开读 3。
 - 核心投影账号：`case_project_ro`，连接上限 2，默认只读，语句超时 5s、锁超时 500ms、事务空闲超时 10s。
 
@@ -107,16 +107,20 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://test-pm.libiaorobot.com/case-d
 - 2026-11-20 完整远端验收通过：本地项目 `01a1f8d4-4f30-72c2-8a12-bdbd0234a20e`（`REMOTE-P0-5176025525`）创建 `201`、按 ID 立即读取 `200`、profile 首次 `201`、重读 `200`、过期 profile `409`。
 - 项目更新后 `sourceVersion` 2 → 归档 3 → 解档 4 → 软删除 5（GET 404）→ 恢复 6（GET 200）。重复编号 `409 PROJECT_CODE_EXISTS`、跨来源项目 ID `409 PROJECT_ID_EXISTS`、核心项目 PATCH `409 PROJECT_SOURCE_READ_ONLY`。
 - 该本地项目在 `project_directory` 可读，`project_summary` 对应行数为 0；`project_code_claim` 有唯一编号占用。
+- 2026-11-21 增量验收：本地项目 `01a1fca3-72ed-75f6-b4e0-78e3b0a29d07`（`REMOTE-GAP-5239932343`）完成创建、operation 原地重放、更新/归档/解档；同一项目目录 23 项，核心 PATCH 仍为 409。
+- 案例 `01a1fca3-789a-767b-bd92-79a63d980e21` 完成 6 个 release：发布历史按 `limit=2` 分 3 页，覆盖 `active/staged/superseded/withdrawn` 四态；素材重排后历史 release 顺序不变；Logo A/B 在案例版本和 release 中分别冻结，Logo 变化使 `projectSnapshotHash` 变化；归档 Logo A 后公开读取仍为 200 且字节一致。
+- operation 过期实测：将已提交回执置为过期后，查询和原键重放均返回 `410 OPERATION_EXPIRED`，项目仍为 `sourceVersion=4`，新 operation 重号写入返回 409，未发生第二次写入。
+- 核心项目投影为常驻 `watch`，连续两次水位延迟 204 ms / 652 ms，均小于 1 秒，不是 5 分钟周期。四项健康检查均为 200。
 
 ## 备份与回滚
 
 - 核心 Nginx 原配置：`/srv/data/backups/nginx-libiaolink.conf.before-case-data-20261119-1525`，SHA-256 `b5ffbf7c8917acf006cd85232c556a020f9d75426fe374a7edce6873f4253e22`。
 - 部署后 Nginx：SHA-256 `34e6bb6905961103c862a147684ed1da5be238eaafdf6640ba6f612708d2e8d8`；`nginx -t` 通过。
 - 分区前 fstab 备份：`/srv/data/backups/fstab-before-case-20261119-150459`、`/srv/data/backups/fstab-before-case-mount-20261119-150523`。
-- 本次 `0014` 前应用备份：`/srv/case/staging/case-data-20261120-1957/app-before-0014.tgz`（SHA-256 `afb815bd91f7e0dbc6a11e4844cc5709a22ea6a6da96cdadfa9f74dfbe4d5c3f`）。
-- 本次 `0014` 前数据库备份：`/srv/case/staging/case-data-20261120-1957/libiaolink_case-before-0014.dump`（SHA-256 `af87f96a1804c05c39185d6e4130e0b5e50a273819faf32180529c32d158c59f`）。
+- 本次 `0015` 前应用备份：`/srv/case/staging/case-data-20261121-1338/app-before-0015.tgz`（673,776 B，SHA-256 `afc1759ed08e6a56d21d316c1dafa146968ad02b666453b9d652da8e10f8405e`）。
+- 本次 `0015` 前数据库备份：`/srv/case/staging/case-data-20261121-1338/libiaolink_case-before-0015.dump`（139,633 B，SHA-256 `870c4e6778705d8dca9b60c322d8067531a66f3a34fd3469ef022ffcc49e4170`）。
 - 历史 `0012` 前备份：`/srv/case/staging/case-data-20261120-153010/app-before.tgz`、`/srv/case/staging/case-data-20261120-153010/libiaolink_case-before-0012.dump`。
-- `0014` 回滚入口：停 `projection`、`gateway`，恢复 `app-before-0014.tgz` 到 `/opt/libiaolink-case/app`，再由数据库管理员恢复 `libiaolink_case-before-0014.dump`；`0014` 是 forward-only，不执行逆向 SQL。随后启动旧网关与投影，并复核健康检查。对象桶保留新 `projects/*` 对象与版本；如需撤销新策略，将 `libiaolink-case-gateway` 重新挂回父用户，再解绑 `libiaolink-case-gateway-v2`。
+- `0015` 回滚入口：停 `projection`、`gateway`，恢复 `app-before-0015.tgz` 到 `/opt/libiaolink-case/app`，再由数据库管理员恢复 `libiaolink_case-before-0015.dump`；`0015` 是 forward-only，不执行逆向 SQL。随后启动旧网关与投影，并复核健康检查。若只回退应用而不恢复数据库，旧应用会忽略新增列并继续运行，但不得删除 0015 新增列或墓碑记录。
 - 不得直接修改正式机；正式发布只走 `10.1.103.44` 与仓库发布流程。
 
 ## 已知事项

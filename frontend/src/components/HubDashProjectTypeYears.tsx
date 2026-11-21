@@ -123,7 +123,23 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
                     </g>
                   );
                 })}
-                {hoverYear === key ? <text className="hub-dash-project-types__hoverTotal" x={groupX + groupW / 2} y={(PLOT_TOP + AXIS_Y) / 2 + 8} textAnchor="middle" fontSize={28} fontWeight={700} fill="#475569" stroke="#ffffff" strokeWidth={6} paintOrder="stroke" pointerEvents="none">{visibleTotal}</text> : null}
+                {hoverYear === key ? (() => {
+                  const visibleMaxCount = activeTypeIndexes.reduce((max, item) => Math.max(max, row.counts[item.index] ?? 0), 0);
+                  const tallestTop = AXIS_Y - visibleMaxCount * unit;
+                  const available = Math.max(14, tallestTop - PLOT_TOP - 10);
+                  const totalText = String(visibleTotal);
+                  const totalFont = Math.max(14, Math.min(26, groupW * 0.13, available - 8));
+                  const badgeW = Math.max(34, totalText.length * totalFont * 0.7 + 18);
+                  const badgeH = totalFont + 12;
+                  const maxCenterY = Math.max(PLOT_TOP + badgeH / 2 + 2, tallestTop - badgeH / 2 - 8);
+                  const centerY = Math.min((PLOT_TOP + AXIS_Y) / 2, maxCenterY);
+                  return (
+                    <g className="hub-dash-project-types__hoverTotal" pointerEvents="none">
+                      <rect x={groupX + groupW / 2 - badgeW / 2} y={centerY - badgeH / 2} width={badgeW} height={badgeH} rx={badgeH / 2} fill="rgba(255,255,255,0.92)" stroke="rgba(203,213,225,0.92)" />
+                      <text x={groupX + groupW / 2} y={centerY + totalFont * 0.34} textAnchor="middle" fontSize={totalFont} fontWeight={700} fill="#334155">{totalText}</text>
+                    </g>
+                  );
+                })() : null}
                 <text x={groupX + groupW / 2} y={TICK_LABEL_Y + 15} textAnchor="middle" fontSize={row.year === null ? 11.5 : 13} fill="#4b5563">{baselineLabel}</text>
               </g>
             );

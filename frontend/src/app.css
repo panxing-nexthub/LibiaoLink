@@ -5027,7 +5027,7 @@ body {
   padding: 0.26rem 0.5rem;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  background: #f8fafc;
+  background: #ffffff;
 }
 
 .hub-dash-project-types__yearChip i,
@@ -5041,14 +5041,14 @@ body {
 }
 
 .hub-dash-project-types__yearChip[data-active="true"] {
-  border-color: #dbeafe;
-  background: #f0f7ff;
-  color: #1e3a8a;
+  border-color: #e5e7eb;
+  background: #ffffff;
+  color: #374151;
 }
 
 .hub-dash-project-types__yearChip[data-active="true"] i {
-  background: #5aa9f7;
-  box-shadow: 0 0 0 3px rgb(90 169 247 / 0.14);
+  background: #2f7ef2;
+  box-shadow: 0 0 0 3px rgb(47 126 242 / 0.12);
 }
 
 .hub-dash-project-types__yearChip[data-active="false"],

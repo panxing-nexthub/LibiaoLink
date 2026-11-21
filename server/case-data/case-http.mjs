@@ -125,15 +125,17 @@ function createAssetHttp(pool, storage, cursorKey) {
     if (!storage) throw new CaseAssetError(503, "ASSET_STORAGE_UNAVAILABLE", "案例对象存储暂不可用");
     const action = route.assetAction;
     const method = request.method;
-    const query = () => parseAssetListQuery(new URL(request.url, "http://case-gateway.local").searchParams, cursorKey);
+    const query = (scope, id) => parseAssetListQuery(
+      new URL(request.url, "http://case-gateway.local").searchParams, cursorKey, scope, id,
+    );
 
     if (action === "caseAssets") {
       const caseId = parse(CaseUuidSchema, route.caseId, "path.caseId");
-      return { status: 200, body: await assets.listByCase(caseId, clientId, query()), resourceId: caseId };
+      return { status: 200, body: await assets.listByCase(caseId, clientId, query("case", caseId)), resourceId: caseId };
     }
     if (action === "projectAssets") {
       const projectId = parse(CaseUuidSchema, route.projectId, "path.projectId");
-      return { status: 200, body: await assets.listByProject(projectId, clientId, query()), resourceId: projectId };
+      return { status: 200, body: await assets.listByProject(projectId, clientId, query("project", projectId)), resourceId: projectId };
     }
     if (action === "assetVersions") {
       const assetId = parse(CaseUuidSchema, route.assetId, "path.assetId");
@@ -159,14 +161,17 @@ function createAssetHttp(pool, storage, cursorKey) {
     if (action === "link") {
       const assetId = parse(CaseUuidSchema, route.assetId, "path.assetId");
       const caseId = parse(CaseUuidSchema, route.caseId, "path.caseId");
-      const { operationId, traceId, operatorUserKey } = parse(CaseAssetLinkBodySchema, await readBody(request), "body");
+      const { operationId, traceId, operatorUserKey, sortOrder } = parse(
+        CaseAssetLinkBodySchema, await readBody(request), "body",
+      );
       Object.assign(writeMetadata, { operationId, clientTraceId: traceId, operatorUserKey });
       const linked = method === "PUT";
       return writeCaseOnce(pool, {
         clientId, operationId, method, path: `/api/v1/assets/${assetId}/cases/${caseId}`,
-        payload: { operatorUserKey },
+        payload: { operatorUserKey, ...(sortOrder === undefined ? {} : { sortOrder }) },
       }, async (client) => ({ status: 200,
-        body: await assets.linkInTransaction(client, assetId, caseId, clientId, operatorUserKey, linked), resourceId: assetId }));
+        body: await assets.linkInTransaction(client, assetId, caseId, clientId, operatorUserKey, linked, sortOrder),
+        resourceId: assetId }));
     }
     if (route.assetId) {
       const assetId = parse(CaseUuidSchema, route.assetId, "path.assetId");
@@ -217,7 +222,7 @@ function createAssetHttp(pool, storage, cursorKey) {
 export function createCaseHttp(pool, storage, releaseReads, publicEnabled, cursorKey) {
   const aggregate = createCaseAggregate(pool, cursorKey);
   const assets = createAssetHttp(pool, storage, cursorKey);
-  const releases = createReleaseHttp(pool, storage, releaseReads, publicEnabled, { parse, readBody });
+  const releases = createReleaseHttp(pool, storage, releaseReads, publicEnabled, { parse, readBody, cursorKey });
   const projectData = createProjectDataHttp(pool, { parse, readBody });
   return async (request, route, clientId, writeMetadata) => {
     const method = request.method;
@@ -278,8 +283,15 @@ export function createCaseHttp(pool, storage, releaseReads, publicEnabled, curso
       const operationId = parse(CaseOperationIdSchema, route.operationId, "path.operationId");
       writeMetadata.operationId = operationId;
       const operation = await readCaseOperation(pool, clientId, operationId);
-      return operation ? { status: 200, body: operation } :
-        { status: 404, body: { code: "NOT_FOUND", message: "操作结果不存在", details: [] } };
+      if (operation?.expired) {
+        return { status: 410, body: { code: "OPERATION_EXPIRED",
+          message: "操作结果已超过 30 天保留期，禁止使用同一标识再次执行", details: [] } };
+      }
+      if (operation) {
+        delete operation.expired;
+        return { status: 200, body: operation, resourceId: operation.resourceId };
+      }
+      return { status: 404, body: { code: "NOT_FOUND", message: "操作结果不存在", details: [] } };
     }
     if (method === "GET") {
       const caseId = parse(CaseUuidSchema, route.caseId, "path.caseId");

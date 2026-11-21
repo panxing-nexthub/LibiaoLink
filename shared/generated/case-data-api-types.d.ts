@@ -582,11 +582,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 分页枚举发布历史
+         * @description 本地 Scope 为 case-data:releases:history:read。按 stagedAt 降序、releaseId 降序稳定枚举 staged、active、superseded 和 withdrawn；游标只能用于同一案例。
+         */
+        get: operations["listCaseReleases"];
         put?: never;
         /**
          * 固化待发布版本
-         * @description 本地 Scope 为 case-data:releases:write。提交已准备好的对外快照与精确素材版本。
+         * @description 本地 Scope 为 case-data:releases:write。提交已准备好的对外快照与精确素材版本；素材展示顺序取自案例挂接的持久 sortOrder，并在本版本冻结。
          */
         post: operations["stageRelease"];
         delete?: never;
@@ -1233,7 +1237,14 @@ export interface components {
             confidentiality: {
                 [key: string]: unknown;
             };
+            customerLogo: components["schemas"]["CaseCustomerLogoReference"];
         };
+        CaseCustomerLogoReference: {
+            /** Format: uuid */
+            assetId: string;
+            /** Format: uuid */
+            assetVersionId: string;
+        } | null;
         CaseRestoreVersionBody: {
             /** Format: uuid */
             operationId: string;
@@ -1335,6 +1346,8 @@ export interface components {
             /** Format: uuid */
             projectId: string;
             caseIds: string[];
+            sortOrder: number | null;
+            caseLinks: components["schemas"]["CaseAssetCaseLink"][];
             /** @enum {string} */
             assetType: "logo" | "cover" | "image" | "video" | "document" | "other";
             title: string | null;
@@ -1356,6 +1369,11 @@ export interface components {
             /** Format: date-time */
             deletedAt: string | null;
             currentVersion: components["schemas"]["CaseAssetVersionView"];
+        };
+        CaseAssetCaseLink: {
+            /** Format: uuid */
+            caseId: string;
+            sortOrder: number;
         };
         CaseAssetVersionView: {
             /** Format: uuid */
@@ -1437,12 +1455,14 @@ export interface components {
             /** Format: uuid */
             caseId: string;
             linked: boolean;
+            sortOrder: number | null;
         };
         CaseAssetLinkBody: {
             /** Format: uuid */
             operationId: string;
             traceId?: string;
             operatorUserKey: string;
+            sortOrder?: number;
         };
         CaseUploadTarget: {
             /** Format: uri */
@@ -1534,6 +1554,58 @@ export interface components {
                 durationMs?: number;
             };
         };
+        CaseReleaseList: {
+            items: components["schemas"]["CaseReleaseHistory"][];
+            nextCursor: string | null;
+        };
+        CaseReleaseHistory: {
+            /** Format: uuid */
+            releaseId: string;
+            /** Format: uuid */
+            caseId: string;
+            versionNo: number;
+            /** @enum {string} */
+            status: "staged" | "active" | "superseded" | "withdrawn";
+            customerLogo: components["schemas"]["CaseCustomerLogoReference"];
+            sourceVersion: number;
+            caseContentHash: string;
+            projectSnapshotHash: string;
+            releaseHash: string;
+            /** Format: date-time */
+            stagedAt: string;
+            /** Format: date-time */
+            activatedAt: string | null;
+            /** Format: date-time */
+            supersededAt: string | null;
+            /** Format: date-time */
+            withdrawnAt: string | null;
+            approvalRef: string | null;
+            caseSnapshot: components["schemas"]["PublishedCaseSnapshot"];
+            projectSnapshot: {
+                [key: string]: unknown;
+            };
+            assets: {
+                /** Format: uuid */
+                assetId: string;
+                /** Format: uuid */
+                assetVersionId: string;
+                objectVersionId: string;
+                sortOrder: number;
+            }[];
+        };
+        PublishedCaseSnapshot: {
+            /** @enum {number} */
+            schemaVersion: 1;
+            locale: string;
+            title: string;
+            /** @default null */
+            summary: string | null;
+            /** @default [] */
+            sections: {
+                heading: string;
+                text: string;
+            }[];
+        };
         CaseReleaseReceipt: {
             /** Format: uuid */
             releaseId: string;
@@ -1542,6 +1614,7 @@ export interface components {
             versionNo: number;
             /** @enum {string} */
             status: "staged" | "active" | "superseded" | "withdrawn";
+            customerLogo: components["schemas"]["CaseCustomerLogoReference"];
             sourceVersion: number;
             caseContentHash: string;
             projectSnapshotHash: string;
@@ -1572,19 +1645,6 @@ export interface components {
                 objectVersionId: string;
             }[];
         };
-        PublishedCaseSnapshot: {
-            /** @enum {number} */
-            schemaVersion: 1;
-            locale: string;
-            title: string;
-            /** @default null */
-            summary: string | null;
-            /** @default [] */
-            sections: {
-                heading: string;
-                text: string;
-            }[];
-        };
         ActivateCaseReleaseBody: {
             /** Format: uuid */
             operationId: string;
@@ -1602,45 +1662,13 @@ export interface components {
             /** Format: uuid */
             expectedActiveReleaseId: string | null;
         };
-        CaseReleaseHistory: {
-            /** Format: uuid */
-            releaseId: string;
-            /** Format: uuid */
-            caseId: string;
-            versionNo: number;
-            /** @enum {string} */
-            status: "staged" | "active" | "superseded" | "withdrawn";
-            sourceVersion: number;
-            caseContentHash: string;
-            projectSnapshotHash: string;
-            releaseHash: string;
-            /** Format: date-time */
-            stagedAt: string;
-            /** Format: date-time */
-            activatedAt: string | null;
-            /** Format: date-time */
-            supersededAt: string | null;
-            /** Format: date-time */
-            withdrawnAt: string | null;
-            approvalRef: string | null;
-            caseSnapshot: components["schemas"]["PublishedCaseSnapshot"];
-            projectSnapshot: {
-                [key: string]: unknown;
-            };
-            assets: {
-                /** Format: uuid */
-                assetId: string;
-                /** Format: uuid */
-                assetVersionId: string;
-                objectVersionId: string;
-            }[];
-        };
         PublishedCaseRelease: {
             /** Format: uuid */
             releaseId: string;
             /** Format: uuid */
             caseId: string;
             versionNo: number;
+            customerLogo: components["schemas"]["CaseCustomerLogoReference"];
             caseSnapshot: components["schemas"]["PublishedCaseSnapshot"];
             /** Format: date-time */
             activatedAt: string;
@@ -1649,6 +1677,7 @@ export interface components {
                 assetId: string;
                 /** Format: uuid */
                 assetVersionId: string;
+                sortOrder: number;
                 mimeType: string;
                 sizeBytes: number;
             }[];
@@ -3182,6 +3211,15 @@ export interface operations {
             };
             /** @description 当前调用方没有已提交的操作结果 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 操作结果已超过 30 天保留期，禁止再次执行 */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5136,6 +5174,94 @@ export interface operations {
             };
         };
     };
+    listCaseReleases: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 发布历史分页；nextCursor=null 表示末页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseReleaseList"];
+                };
+            };
+            /** @description 服务令牌无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 缺少所需 Scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例或发布版本不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 请求参数或案例字段非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 超过本地请求频率或并发限额 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 案例请求处理失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+            /** @description 网关、公开读面或对象存储暂不可用，或案例写入受容量限制 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDataGatewayError"];
+                };
+            };
+        };
+    };
     stageRelease: {
         parameters: {
             query?: never;
@@ -5557,7 +5683,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description active 快照和已锁定素材版本 */
+            /** @description active 快照、冻结客户 Logo 和已锁定素材版本；customerLogo.assetVersionId 可直接用于同路径素材内容接口 */
             200: {
                 headers: {
                     [name: string]: unknown;

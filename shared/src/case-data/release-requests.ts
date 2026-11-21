@@ -1,6 +1,6 @@
 import { z } from "../zod.ts";
 import { CaseObjectVersionIdSchema, caseAssetMaxBytes } from "./asset-requests.ts";
-import { CaseLocaleSchema, CaseUuidSchema, caseWriteContext } from "./case-requests.ts";
+import { CaseCustomerLogoReferenceSchema, CaseLocaleSchema, CaseUuidSchema, caseWriteContext } from "./case-requests.ts";
 
 const text = (length: number) => z.string().trim().min(1).max(length).refine(
   (value) => !/[\u0000\ud800-\udfff]/u.test(value), "含不支持的字符",
@@ -13,8 +13,12 @@ const snapshot = z.strictObject({
   summary: text(5000).nullable().default(null),
   sections: z.array(z.strictObject({ heading: text(200), text: text(20_000) })).max(20).default([]),
 }).openapi("PublishedCaseSnapshot");
-const assetReference = z.strictObject({
+const assetReferenceFields = {
   assetId: CaseUuidSchema, assetVersionId: CaseUuidSchema, objectVersionId: CaseObjectVersionIdSchema,
+};
+const assetReference = z.strictObject(assetReferenceFields);
+const frozenAssetReference = z.strictObject({
+  ...assetReferenceFields, sortOrder: z.number().int().min(0).max(100_000),
 });
 const writeAssets = z.array(assetReference).max(12).superRefine((assets, context) => {
   const versions = new Set<string>();
@@ -39,17 +43,27 @@ export const DeactivateCaseReleaseBodySchema = z.strictObject({
 const releaseMetadata = {
   releaseId: CaseUuidSchema, caseId: CaseUuidSchema, versionNo: z.number().int().min(1),
   status: z.enum(["staged", "active", "superseded", "withdrawn"]),
+  customerLogo: CaseCustomerLogoReferenceSchema.nullable(),
   sourceVersion, caseContentHash: hash, projectSnapshotHash: hash, releaseHash: hash,
   stagedAt: timestamp, activatedAt: timestamp.nullable(), supersededAt: timestamp.nullable(), withdrawnAt: timestamp.nullable(),
 };
 export const CaseReleaseReceiptSchema = z.strictObject(releaseMetadata).openapi("CaseReleaseReceipt");
 export const CaseReleaseHistorySchema = z.strictObject({
   ...releaseMetadata, approvalRef: approvalRef.nullable(), caseSnapshot: snapshot,
-  projectSnapshot: z.record(z.string(), z.unknown()), assets: z.array(assetReference),
+  projectSnapshot: z.record(z.string(), z.unknown()), assets: z.array(frozenAssetReference),
 }).openapi("CaseReleaseHistory");
+export const CaseReleaseListQuerySchema = z.strictObject({
+  limit: z.coerce.number({ error: "limit 必须是 1–100 的整数" }).int().min(1).max(100).default(50),
+  cursor: z.string().optional(),
+}).openapi("CaseReleaseListQuery");
+export const CaseReleaseListSchema = z.strictObject({
+  items: z.array(CaseReleaseHistorySchema).max(100), nextCursor: z.string().nullable(),
+}).openapi("CaseReleaseList");
 export const PublishedCaseReleaseSchema = z.strictObject({
-  releaseId: CaseUuidSchema, caseId: CaseUuidSchema, versionNo: z.number().int().min(1), caseSnapshot: snapshot,
-  activatedAt: timestamp, assets: z.array(z.strictObject({
-    assetId: CaseUuidSchema, assetVersionId: CaseUuidSchema, mimeType: z.string(), sizeBytes: z.number().int().min(1).max(caseAssetMaxBytes),
+  releaseId: CaseUuidSchema, caseId: CaseUuidSchema, versionNo: z.number().int().min(1),
+  customerLogo: CaseCustomerLogoReferenceSchema.nullable(), caseSnapshot: snapshot, activatedAt: timestamp,
+  assets: z.array(z.strictObject({
+    assetId: CaseUuidSchema, assetVersionId: CaseUuidSchema, sortOrder: z.number().int().min(0).max(100_000),
+    mimeType: z.string(), sizeBytes: z.number().int().min(1).max(caseAssetMaxBytes),
   })),
 }).openapi("PublishedCaseRelease");

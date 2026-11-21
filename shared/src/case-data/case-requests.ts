@@ -83,6 +83,9 @@ export const caseWriteContext = {
   operatorUserKey: z.string().min(1).max(128).refine((value) => value.trim().length > 0),
 };
 export const CaseUuidSchema = z.uuid().transform((value) => value.toLowerCase());
+export const CaseCustomerLogoReferenceSchema = z.strictObject({
+  assetId: CaseUuidSchema, assetVersionId: CaseUuidSchema,
+}).openapi("CaseCustomerLogoReference");
 const title = z.string().trim().min(1).max(300);
 const summary = z.string().max(5000).nullable().transform((value) => value?.trim() ? value : null);
 const changeSummary = z.string().min(1).max(1000).refine((value) => value.trim().length > 0).nullable();
@@ -160,7 +163,7 @@ export const CaseListPageSchema = z.strictObject({
 export const CaseVersionSnapshotSchema = z.strictObject({
   locale: CaseLocaleSchema, translationGroupId: z.uuid(), title, summary: z.string().nullable(),
   changeSummary: z.string().nullable(), content: storedObject, solutionParameters: storedObject, outcomes: storedObject,
-  confidentiality: storedObject,
+  confidentiality: storedObject, customerLogo: CaseCustomerLogoReferenceSchema.nullable(),
 }).openapi("CaseVersionSnapshot");
 export const CaseVersionSchema = z.strictObject({
   caseId: z.uuid(), caseVersionId: z.uuid(), versionNo: z.number().int().min(1),

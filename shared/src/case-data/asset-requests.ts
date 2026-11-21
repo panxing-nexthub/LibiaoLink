@@ -107,8 +107,13 @@ export const CaseAssetVersionViewSchema = z.strictObject({
   rowVersion: positiveInteger, archivedAt: timestamp.nullable(), deletedAt: timestamp.nullable(),
 }).openapi("CaseAssetVersionView");
 export const CaseAssetVersionSchema = CaseAssetVersionViewSchema;
+export const CaseAssetCaseLinkSchema = z.strictObject({
+  caseId: CaseUuidSchema, sortOrder: z.number().int().min(0).max(100_000),
+}).openapi("CaseAssetCaseLink");
 export const CaseAssetSummarySchema = z.strictObject({
   assetId: CaseUuidSchema, projectId: CaseUuidSchema, caseIds: z.array(CaseUuidSchema).max(500),
+  sortOrder: z.number().int().min(0).max(100_000).nullable(),
+  caseLinks: z.array(CaseAssetCaseLinkSchema).max(500),
   ...assetMetadata, rowVersion: positiveInteger, createdAt: timestamp, updatedAt: timestamp,
   archivedAt: timestamp.nullable(), deletedAt: timestamp.nullable(), currentVersion: CaseAssetVersionViewSchema,
 }).openapi("CaseAssetSummary");
@@ -135,7 +140,10 @@ export const CaseAssetPatchBodySchema = z.strictObject({
 }).refine((value) => ["assetType", "title", "description", "locale", "tags", "classification", "customerVisible",
   "customerPresentationAllowed", "shareAllowed", "archived", "deleted"].some((key) => (value as Record<string, unknown>)[key] !== undefined),
 "至少提供一个可更新字段").openapi("CaseAssetPatchBody");
-export const CaseAssetLinkBodySchema = z.strictObject({ ...caseWriteContext }).openapi("CaseAssetLinkBody");
+export const CaseAssetLinkBodySchema = z.strictObject({
+  ...caseWriteContext, sortOrder: z.number().int().min(0).max(100_000).optional(),
+}).openapi("CaseAssetLinkBody");
 export const CaseAssetLinkViewSchema = z.strictObject({
   assetId: CaseUuidSchema, caseId: CaseUuidSchema, linked: z.boolean(),
+  sortOrder: z.number().int().min(0).max(100_000).nullable(),
 }).openapi("CaseAssetLinkView");

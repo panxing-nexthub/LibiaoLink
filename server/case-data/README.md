@@ -1,6 +1,6 @@
 # 案例数据面迁移
 
-迁移只在独立 PostgreSQL 实例的 `libiaolink_case` 数据库执行。首条迁移创建 `project_read.project_summary`，供项目投影任务写入；`0012` 新增本地项目、跨来源编号占用和合并目录视图，`0013` 修正本地项目写入触发器的字段读取，`0014` 补齐远端主存项目软删除、案例版本与语言分组、项目级素材、素材版本和跨案例挂接。迁移记录保存在案例库的 `"case".case_schema_migrations`。
+迁移只在独立 PostgreSQL 实例的 `libiaolink_case` 数据库执行。首条迁移创建 `project_read.project_summary`，供项目投影任务写入；`0012` 新增本地项目、跨来源编号占用和合并目录视图，`0013` 修正本地项目写入触发器的字段读取，`0014` 补齐远端主存项目软删除、案例版本与语言分组、项目级素材、素材版本和跨案例挂接；`0015` 增加案例素材持久排序、发布历史枚举、客户 Logo 版本冻结和 operation 墓碑。迁移记录保存在案例库的 `"case".case_schema_migrations`。
 
 ## 角色与权限
 
@@ -140,8 +140,8 @@ node server/case-data/gateway.mjs
 - 项目目录没有独立 `rowVersion`；PATCH 的 `expectedVersion` 使用目录项 `sourceVersion`。项目 profile 有独立 `rowVersion`，首次保存传 `expectedVersion: 0`，成功返回 201，读取或冲突均不再返回 201。
 - `externalProjectId` 在所有核心历史摘要与本地项目间永久唯一；`projectCode` 在目录可用项间跨来源唯一。`project_directory` 是唯一合并读取口径，`project_summary` 只保存核心只读投影。
 - 案例调用方可预生成 `caseId`；`translationGroupId` 关联独立编辑、审核和发布的语言版本，一语言一案例。每次真实变更保存 `case_versions`，无实际变化的 PATCH 不递增 `rowVersion`、不新增历史版本。
-- 素材是项目级稳定资产；同一 `assetId` 重新上传生成新 `assetVersionId`，可挂接同项目多个案例。历史 release 固定精确 `assetVersionId` 与 `objectVersionId`，后续编辑、归档、删除或解挂不改写历史快照。
-- 图片、PDF 和 AVIF 可取得短时预览票据；票据不暴露桶名、`object_key` 或永久凭据。被 release 引用的素材删除返回 409 `ASSET_REFERENCED`，归档仍允许。
+- 素材是项目级稳定资产；同一 `assetId` 重新上传生成新 `assetVersionId`，可挂接同项目多个案例。案例素材以 `case_asset_links.sort_order` 持久排序，范围 `0..100000`，相同值按 `assetId` 稳定排序；固化 release 时按案例当前顺序冻结为连续 `0..N-1`，后续重排不改写历史 release。历史 release 固定精确 `assetVersionId` 与 `objectVersionId`。
+- 图片、PDF 和 AVIF 可取得短时预览票据；票据不暴露桶名、`object_key` 或永久凭据。被 release 或客户 Logo 快照引用的素材删除返回 409 `ASSET_REFERENCED`，归档仍允许；已归档的客户 Logo 仍可按精确对象版本公开读取。
 
 ## 案例侧项目补充资料
 
@@ -168,17 +168,17 @@ node server/case-data/gateway.mjs
 
 新建校验项目 ID、可选性和 `sourceVersion`，支持调用方提供 `caseId`，省略时由案例库生成 UUIDv7。省略正文、方案参数或成果指标时写入对应空结构，`confidentiality` 必填。`private` 需要非空的 `internalScope`。非空方案组校验案例侧 `case.project_profiles.attributes.solutionTypes`，联调种子由案例库迁移角色准备。PATCH 按顶层字段替换 JSON 对象，校验案例的 `expectedVersion`，真实变化才递增 `rowVersion` 并更新 `updatedAt`。项目关联、语言和创建人由创建时确定。
 
-写入的 `operationId` 通过 JSON 请求体传递，使用 UUIDv7。同一调用方原键重试返回首次结果，载荷变更返回 `409 IDEMPOTENCY_CONFLICT`，执行中的操作返回 `409 IDEMPOTENCY_IN_PROGRESS` 和 `Retry-After`。案例写入和结果记录在同一事务提交，结果至少留存 30 天。
+写入的 `operationId` 通过 JSON 请求体传递，使用 UUIDv7。同一调用方原键重试返回首次结果，载荷变更返回 `409 IDEMPOTENCY_CONFLICT`，执行中的操作返回 `409 IDEMPOTENCY_IN_PROGRESS` 和 `Retry-After`。案例写入和结果记录在同一事务提交，结果至少留存 30 天；超过保留期或已清理的记录返回 `410 OPERATION_EXPIRED`，不得静默重放。
 
 在 `shared/` 运行 `npm run build` 构建网关使用的 Zod 契约，`npm run generate:case-data` 生成独立的 [OpenAPI](../../shared/generated/case-data-openapi.json) 和 [客户端类型](../../shared/generated/case-data-api-types.d.ts)，`npm run check:case-data` 校验产物。用 `server/test/case-data-gateway.integration.test.ts` 和 `server/test/case-data-case-aggregate.integration.test.ts` 对独立临时案例库执行 HTTP、权限、幂等和聚合回归。
 
 ## 操作结果恢复与清理
 
-`GET /api/v1/operations/{operationId}` 使用 `case-data:operations:read`。结果按令牌中的 `client_id` 和原 UUIDv7 操作标识查询。已提交的结果返回 HTTP 200，原写入状态和响应体分别在 `statusCode` 和 `response`。响应也包含 `resourceId`、`createdAt` 和 `expiresAt`。操作结果尚未提交、已清理或属于其他调用方时均返回 404。收到响应前断连时，先查询原操作标识，查不到时用原标识和同一请求重试。
+`GET /api/v1/operations/{operationId}` 使用 `case-data:operations:read`。结果按令牌中的 `client_id` 和原 UUIDv7 操作标识查询。已提交的结果返回 HTTP 200，原写入状态和响应体分别在 `statusCode` 和 `response`。响应也包含 `resourceId`、`createdAt` 和 `expiresAt`。操作结果尚未提交或属于其他调用方时返回 404；已过期或已墓碑化（`purged_at` 非空）时返回 `410 OPERATION_EXPIRED`。收到响应前断连时，先查询原操作标识，查不到时用原标识和同一请求重试；410 禁止复用该标识产生第二次业务写入。
 
-清理由独立任务调用 `0007_case_operation_cleanup.sql` 安装的函数。`case_operation_cleanup` 只具备调用清理函数所需的权限。由维护方接收案例小组 outbox 确认已全部结清的操作清单，每个文件对应一个服务 `clientId`，`operationIds` 最多包含 500 个 UUIDv7。过期且已留存至少 30 天的清单内记录才会删除。同键写入进行中时本次跳过，原清单可安全重跑。清单为空时删除数为零。
+清理由独立任务调用 `0007_case_operation_cleanup.sql` 安装的函数。`case_operation_cleanup` 只具备调用清理函数所需的权限。由维护方接收案例小组 outbox 确认已全部结清的操作清单，每个文件对应一个服务 `clientId`，`operationIds` 最多包含 500 个 UUIDv7。过期且已留存至少 30 天的清单内记录转为墓碑：清除响应体、写入 `purged_at`，保留键和请求哈希以防重复执行。同键写入进行中时本次跳过，原清单可安全重跑。清单为空时墓碑化数为零。
 
-在受控目录挂载仅所有者可读的 `case_operation_cleanup_database_url`，凭据使用 `case_operation_cleanup` 登录。清理命令输出确认条数和实际删除条数。
+在受控目录挂载仅所有者可读的 `case_operation_cleanup_database_url`，凭据使用 `case_operation_cleanup` 登录。清理命令输出 `confirmed` 与 `tombstoned` 条数。
 
 ```sh
 CASE_OPERATION_CLEANUP_SECRET_DIR=/path/to/mounted/secrets \
@@ -212,22 +212,23 @@ node server/case-data/operation-cleanup.mjs /path/to/settled-outbox.json
 
 ## 发布版本与公开只读
 
-先创建 `case_gateway_public_ro` 并应用 `0009_case_releases.sql`。启用公开读面时，将只读角色连接串挂载为 `CASE_GATEWAY_PUBLIC_SECRET_DIR` 目录下的 `case_gateway_public_ro_database_url`，权限仅所有者可读。角色只查询 `published_release_v` 与 `published_release_assets_v` 两个 active 视图。网关使用独立连接池和只读事务，`/readyz` 检查视图授权。部署侧将公开 Scope 只签发给案例小组公开后端。
+先创建 `case_gateway_public_ro` 并应用 `0009_case_releases.sql` 与 `0015`。启用公开读面时，将只读角色连接串挂载为 `CASE_GATEWAY_PUBLIC_SECRET_DIR` 目录下的 `case_gateway_public_ro_database_url`，权限仅所有者可读。角色只查询 `published_release_v`、`published_release_assets_v` 与 `published_release_logo_v` 三个 active 视图。网关使用独立连接池和只读事务，`/readyz` 检查视图授权。部署侧将公开 Scope 只签发给案例小组公开后端。
 
 | 动作 | 本地接口 | Scope |
 |---|---|---|
 | 固化 | `POST /api/v1/cases/{caseId}/releases` | `case-data:releases:write` |
 | 激活 | `POST /api/v1/cases/{caseId}/releases/{releaseId}/activate` | `case-data:releases:write` |
 | 撤回 | `POST /api/v1/cases/{caseId}/releases/{releaseId}/deactivate` | `case-data:releases:write` |
-| 作者历史 | `GET /api/v1/cases/{caseId}/releases/{releaseId}` | `case-data:releases:history:read` |
+| 作者历史列表 | `GET /api/v1/cases/{caseId}/releases` | `case-data:releases:history:read` |
+| 作者单条历史 | `GET /api/v1/cases/{caseId}/releases/{releaseId}` | `case-data:releases:history:read` |
 | 读取已发布快照 | `GET /api/v1/public/cases/{caseId}/releases/{releaseId}` | `case-data:releases:read` |
 | 读取已发布素材 | `GET /api/v1/public/cases/{caseId}/releases/{releaseId}/assets/{assetVersionId}/content` | `case-data:releases:read` |
 
-固化使用指定的 `externalProjectId`、`sourceVersion`、已准备好的对外 `caseSnapshot` 和有序素材版本清单。当前本地快照包含语言、标题、摘要和文本段落，素材上限 12 个。事务保存当时的项目摘要、快照哈希以及素材 ID、素材版本 ID、对象版本 ID 的复合引用。正式快照字段随案例小组联调冻结。
+固化使用指定的 `externalProjectId`、`sourceVersion`、已准备好的对外 `caseSnapshot` 和已挂接素材版本清单。网关按 `case_asset_links.sort_order` 排序并冻结为连续序号，素材上限 12 个；同时从项目 profile 的 `attributes.customerLogoAssetId` 冻结 `{assetId, assetVersionId}`。事务保存当时的项目摘要、快照哈希、客户 Logo 引用以及素材 ID、素材版本 ID、对象版本 ID 的复合引用。`projectSnapshotHash` 覆盖客户 Logo，Logo 版本变化会使审批引用对应不同的项目快照。正式快照字段随案例小组联调冻结。
 
 激活与撤回显式携带 `expectedActiveReleaseId`，无 active 时使用 JSON `null`。激活另带案例小组提供的 `approvalRef`。同一案例在事务内串行切换，部分唯一索引限制单 active，锁忙返回可用原键重试的 409。激活要求已通过扫描、转码状态为 `not_required` 或 `ready`，并流式重验各锁定对象版本的大小、MIME 和 SHA-256。版本校验或媒体门禁冲突后，业务方继续推进时使用新的逻辑操作键。写入均接入 C07 回执。
 
-公开读取精确匹配案例和发布 ID。草稿、历史快照、审批引用和内部项目字段留在作者面。公开素材由网关用短时签名按原对象版本取流，外部当前请求收到文件流。替换或撤回提交后，后续公开快照和素材请求均返回 404。作者历史保留原素材引用，可按 C08 票据读回历史字节。复合外键保护四态发布所引用的素材版本，网关桶凭据仍只支持写入及指定版本读取。
+发布历史列表默认 `limit=50`、最大 `100`，按 `stagedAt DESC, releaseId DESC` 稳定排序，覆盖 `staged/active/superseded/withdrawn`；游标封装数据库原始时间文本，避免微秒截断漏项，`nextCursor=null` 表示末页。公开读取精确匹配案例和发布 ID，并返回冻结的 `customerLogo` 与素材 `sortOrder`。草稿、历史快照、审批引用和内部项目字段留在作者面。公开素材与客户 Logo 由网关用短时签名按原对象版本取流，外部当前请求收到文件流。替换或撤回提交后，后续公开快照和素材请求均返回 404；历史 Logo 归档后仍可按冻结版本读取。复合外键保护四态发布所引用的素材版本，网关桶凭据仍只支持写入及指定版本读取。
 
 公开服务的分享授权、缓存键和失效由案例小组后端负责。实际媒体作业、外部缓存失效和生产读链路待联调验证。
 
@@ -243,7 +244,7 @@ LocalStack 社区版 4.8.1 未执行部分 IAM 拒绝断言，因此本地素材
 
 ## C10 本地端到端联调
 
-`server/test/case-data-gateway.integration.test.ts` 的 C10 用例从项目目录读取来源版本，经案例创建及更新、真实素材上传、staging、本地审批、outbox 激活、公开读取和撤回。案例库应用 `0001–0014`。另起仅监听回环地址的 PostgreSQL 实例，在 `case_partner_fixture` 库初始化案例小组 v0.2 的 `03-local-schema/001_local_schema_up.sql`。使用独立的作者、公开与媒体服务令牌，通过测试桶 `libiaolink-case-proof` 验证实际对象版本。媒体夹具通过 HTTP 回传合成结果，故障代理独立注入丢请求或丢响应。
+`server/test/case-data-gateway.integration.test.ts` 的 C10 用例从项目目录读取来源版本，经案例创建及更新、真实素材上传、staging、本地审批、outbox 激活、公开读取和撤回。案例库应用 `0001–0015`。另起仅监听回环地址的 PostgreSQL 实例，在 `case_partner_fixture` 库初始化案例小组 v0.2 的 `03-local-schema/001_local_schema_up.sql`。使用独立的作者、公开与媒体服务令牌，通过测试桶 `libiaolink-case-proof` 验证实际对象版本。媒体夹具通过 HTTP 回传合成结果，故障代理独立注入丢请求或丢响应。
 
 测试沿用网关的 `CASE_DATA_GATEWAY_TEST_ADMIN_URL`、`CASE_DATA_GATEWAY_TEST_DATABASE_URL`、`CASE_DATA_PUBLIC_TEST_DATABASE_URL` 及 `CASE_DATA_ASSETS_TEST_ENDPOINT`、`CASE_DATA_ASSETS_TEST_BUCKET`、`CASE_DATA_ASSETS_TEST_ACCESS_KEY`、`CASE_DATA_ASSETS_TEST_SECRET_KEY`。新增 `CASE_DATA_PARTNER_TEST_DATABASE_URL` 用于夹具写业务决定，`CASE_DATA_PARTNER_OUTBOX_TEST_DATABASE_URL` 用于独立 worker 进程。worker 只接收后者、网关 HTTP 地址和作者服务令牌。worker 角色读审批记录，对本地 outbox、案例状态和分享链接拥有查询与更新权限。
 

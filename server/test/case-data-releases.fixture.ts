@@ -4,7 +4,15 @@ import type { Client } from "pg";
 import { expect } from "vitest";
 
 type Asset = { assetId: string; assetVersionId: string; objectVersionId: string };
-type Release = { releaseId: string; status: string };
+type Release = {
+  releaseId: string; status: string; versionNo: number; sourceVersion: number;
+  customerLogo: { assetId: string; assetVersionId: string } | null;
+  caseContentHash: string; projectSnapshotHash: string; releaseHash: string;
+  stagedAt: string; activatedAt: string | null; supersededAt: string | null; withdrawnAt: string | null;
+  approvalRef: string | null; caseSnapshot: Record<string, unknown>; projectSnapshot: Record<string, unknown>;
+  assets: Array<{ assetId: string; assetVersionId: string; objectVersionId: string; sortOrder: number }>;
+};
+type ReleasePage = { items: Release[]; nextCursor: string | null };
 type Fixture = {
   base: string; caseId: string; anotherCaseId: string; projectId: string; authorToken: string; publicToken: string;
   db: Client; publicDb: Client; endpoint: string; bucket: string;
@@ -81,6 +89,25 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
 
   expect((await fetch(base + "/readyz")).status).toBe(200);
   const before = await upload(original);
+  const logoA = await upload(original);
+  await db.query(`
+    insert into "case".project_profiles (project_id, source_version, attributes)
+    values ($1, 4, jsonb_build_object('customerLogoAssetId', $2::text))
+  `, [projectId, logoA.assetId]);
+  const firstCaseEdit = await sendMethod("PATCH", casePath, {
+    ...write(), expectedVersion: 1, changeSummary: "记录首次客户 Logo",
+  });
+  expect(firstCaseEdit.status).toBe(200);
+  expect(await firstCaseEdit.json()).toMatchObject({ rowVersion: 2 });
+  const versionsA = await (await send(`${casePath}/versions?limit=10`)).json() as {
+    items: Array<{ caseVersionId: string; versionNo: number; snapshot: {
+      customerLogo: { assetId: string; assetVersionId: string } | null;
+    } }>;
+  };
+  expect(versionsA.items).toHaveLength(1);
+  const versionA = versionsA.items[0]!;
+  expect(versionA.snapshot.customerLogo).toEqual({ assetId: logoA.assetId, assetVersionId: logoA.assetVersionId });
+
   await expectCode(await send(collection, stageInput("项目版本不符", 3, [])), 409, "PROJECT_VERSION_CONFLICT");
   await expectCode(await send(`/api/v1/cases/${anotherCaseId}/releases`, stageInput("跨案例素材", 4, [before])),
     409, "RELEASE_ASSET_MISMATCH");
@@ -91,7 +118,44 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
     422, "VALIDATION_FAILED");
   const firstInput = stageInput("首次公开标题", 4, [before]);
   const first = await stage(firstInput, 1);
+  expect(first.customerLogo).toEqual({ assetId: logoA.assetId, assetVersionId: logoA.assetVersionId });
   expect(await (await send(collection, firstInput)).json()).toEqual(first);
+
+  const logoB = await upload(replacement, logoA.assetId);
+  expect(logoB.assetId).toBe(logoA.assetId);
+  expect(logoB.assetVersionId).not.toBe(logoA.assetVersionId);
+  const secondCaseEdit = await sendMethod("PATCH", casePath, {
+    ...write(), expectedVersion: 2, changeSummary: "记录替换后的客户 Logo",
+  });
+  expect(secondCaseEdit.status).toBe(200);
+  expect(await secondCaseEdit.json()).toMatchObject({ rowVersion: 3 });
+  const versionsB = await (await send(`${casePath}/versions?limit=10`)).json() as {
+    items: Array<{ caseVersionId: string; versionNo: number; snapshot: {
+      customerLogo: { assetId: string; assetVersionId: string } | null;
+    } }>;
+  };
+  const versionB = versionsB.items[0]!;
+  expect(versionB).toMatchObject({ versionNo: 3 });
+  expect(versionB.snapshot.customerLogo).toEqual({ assetId: logoB.assetId, assetVersionId: logoB.assetVersionId });
+
+  const logoSwitch = await stage(stageInput("仅客户 Logo 变化的候选", 4, [before]), 2);
+  expect(logoSwitch.customerLogo).toEqual({ assetId: logoB.assetId, assetVersionId: logoB.assetVersionId });
+  expect(logoSwitch.projectSnapshotHash).not.toBe(first.projectSnapshotHash);
+
+  const restoreLogo = await sendMethod("POST", `${casePath}/versions/${versionA.caseVersionId}/restore`, {
+    ...write(), expectedVersion: 3, changeSummary: "恢复首次版本及当时 Logo",
+  });
+  expect(restoreLogo.status).toBe(200);
+  expect(await restoreLogo.json()).toMatchObject({ rowVersion: 4 });
+  const restoredVersions = await (await send(`${casePath}/versions?limit=10`)).json() as {
+    items: Array<{ caseVersionId: string; versionNo: number; restoredFromVersionId: string | null; snapshot: {
+      customerLogo: { assetId: string; assetVersionId: string } | null;
+    } }>;
+  };
+  expect(restoredVersions.items[0]).toMatchObject({
+    versionNo: 4, restoredFromVersionId: versionA.caseVersionId,
+    snapshot: { customerLogo: { assetId: logoA.assetId, assetVersionId: logoA.assetVersionId } },
+  });
   await protect(before);
   const protectedDelete = await sendMethod("PATCH", `/api/v1/assets/${before.assetId}`, {
     operationId: write().operationId, operatorUserKey: "release-fixture", expectedVersion: 1, deleted: true,
@@ -115,8 +179,10 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
   expect(visible.status).toBe(200);
   expect(visible.headers.get("cache-control")).toBe("no-store");
   const view = await visible.json();
-  expect(view).toMatchObject({ caseId, releaseId: first.releaseId, caseSnapshot: { title: "首次公开标题" },
-    assets: [{ assetId: before.assetId, assetVersionId: before.assetVersionId, mimeType: "image/png" }] });
+  expect(view).toMatchObject({ caseId, releaseId: first.releaseId,
+    customerLogo: { assetId: logoA.assetId, assetVersionId: logoA.assetVersionId },
+    caseSnapshot: { title: "首次公开标题" },
+    assets: [{ assetId: before.assetId, assetVersionId: before.assetVersionId, mimeType: "image/png", sortOrder: 0 }] });
   expect(view).not.toHaveProperty("projectSnapshot");
   expect(view).not.toHaveProperty("approvalRef");
   expect(JSON.stringify(view)).not.toMatch(/新草稿|仅内部|objectVersionId|objectKey/);
@@ -128,8 +194,27 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
   expect(publicBytes.headers.get("location")).toBeNull();
   expect(publicBytes.headers.get("cache-control")).toBe("no-store");
   expect(Buffer.from(await publicBytes.arrayBuffer())).toEqual(original);
+  const publicLogoA = await publicGet(mediaPath(first, logoA));
+  expect(publicLogoA.status).toBe(200);
+  expect(Buffer.from(await publicLogoA.arrayBuffer())).toEqual(original);
+  const archivedLogo = await sendMethod("PATCH", `/api/v1/assets/${logoA.assetId}`, {
+    operationId: write().operationId, operatorUserKey: "release-fixture", expectedVersion: 2, archived: true,
+  });
+  expect(archivedLogo.status).toBe(200);
+  expect(await archivedLogo.json()).toMatchObject({ rowVersion: 3, archivedAt: expect.any(String) });
+  const archivedLogoBytes = await publicGet(mediaPath(first, logoA));
+  expect(archivedLogoBytes.status).toBe(200);
+  expect(Buffer.from(await archivedLogoBytes.arrayBuffer())).toEqual(original);
+  const deleteLogo = await sendMethod("PATCH", `/api/v1/assets/${logoA.assetId}`, {
+    operationId: write().operationId, operatorUserKey: "release-fixture", expectedVersion: 3, deleted: true,
+  });
+  expect(deleteLogo.status).toBe(409);
+  expect(await deleteLogo.json()).toMatchObject({ code: "ASSET_REFERENCED" });
   expect(await (await send(authorPath(first))).json()).toMatchObject({
-    approvalRef: firstActivation.approvalRef, projectSnapshot: { projectName: "项目原名", sourceVersion: 4 }, assets: [before],
+    approvalRef: firstActivation.approvalRef, customerLogo: { assetId: logoA.assetId, assetVersionId: logoA.assetVersionId },
+    projectSnapshot: { projectName: "项目原名", sourceVersion: 4,
+      customerLogo: { assetId: logoA.assetId, assetVersionId: logoA.assetVersionId } },
+    assets: [{ ...before, sortOrder: 0 }],
   });
 
   const archivedAsset = await sendMethod("PATCH", `/api/v1/assets/${before.assetId}`, {
@@ -167,7 +252,7 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
     )
     select id as "assetId", asset_version_id as "assetVersionId", object_version_id as "objectVersionId" from asset
   `, [caseId, projectId]);
-  const missing = await stage(stageInput("缺少锁定对象", 5, [missingAsset]), 2);
+  const missing = await stage(stageInput("缺少锁定对象", 5, [missingAsset]), 3);
   await expectCode(await activate(missing, activation(first.releaseId)), 409, "RELEASE_ASSET_NOT_READY");
   expect((await publicGet(publicPath(first))).status).toBe(200);
 
@@ -175,8 +260,8 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
   expect(after.assetVersionId).not.toBe(before.assetVersionId);
   expect((await publicGet(mediaPath(first, after))).status).toBe(404);
   await db.query('update "case".case_assets set scan_status = \'passed\' where asset_version_id = $1', [after.assetVersionId]);
-  const second = await stage(stageInput("并发候选 A", 5, [after]), 3);
-  const third = await stage(stageInput("并发候选 B", 5, [after]), 4);
+  const second = await stage(stageInput("并发候选 A", 5, [after]), 4);
+  const third = await stage(stageInput("并发候选 B", 5, [after]), 5);
   const inputs = [activation(first.releaseId), activation(first.releaseId)];
   const responses = await Promise.all([activate(second, inputs[0]!), activate(third, inputs[1]!)]);
   expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
@@ -194,7 +279,14 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
   expect((await publicGet(mediaPath(first, before))).status).toBe(404);
   expect((await publicGet(publicPath(loser))).status).toBe(404);
   expect((await publicGet(publicPath(winner))).status).toBe(200);
-  expect(await (await send(authorPath(first))).json()).toMatchObject({ status: "superseded", assets: [before] });
+  const winnerView = await (await publicGet(publicPath(winner))).json() as {
+    customerLogo: { assetId: string; assetVersionId: string } | null;
+  };
+  expect(winnerView.customerLogo).toEqual({ assetId: logoB.assetId, assetVersionId: logoB.assetVersionId });
+  const publicLogoB = await publicGet(mediaPath(winner, logoB));
+  expect(publicLogoB.status).toBe(200);
+  expect(Buffer.from(await publicLogoB.arrayBuffer())).toEqual(replacement);
+  expect(await (await send(authorPath(first))).json()).toMatchObject({ status: "superseded", assets: [{ ...before, sortOrder: 0 }] });
   await db.query('revoke select on "case".published_release_v from case_gateway_public_ro');
   try {
     await expectCode(await publicGet(publicPath(winner)), 503, "PUBLIC_RELEASE_UNAVAILABLE");
@@ -225,12 +317,88 @@ export async function verifyCaseReleaseRequests(fixture: Fixture) {
   expect((await deactivate()).status).toBe(200);
   expect((await publicGet(publicPath(winner))).status).toBe(404);
   expect((await publicGet(mediaPath(winner, after))).status).toBe(404);
-  expect(await (await send(authorPath(winner))).json()).toMatchObject({ status: "withdrawn", assets: [after] });
+  expect(await (await send(authorPath(winner))).json()).toMatchObject({ status: "withdrawn", assets: [{ ...after, sortOrder: 0 }] });
   await expectCode(await activate(winner, activation(null)), 409, "RELEASE_STATE_CONFLICT");
   await protect(after);
   await expect(db.query(`
     update "case".case_releases set status = 'active', withdrawn_at = null where id = $1
   `, [winner.releaseId])).rejects.toMatchObject({ code: "23514" });
+
+  const ordered = await upload(original);
+  const orderedRelease = await stage(stageInput("素材排序冻结", 5, [ordered, before]), 6);
+  const orderedHistory = await (await send(authorPath(orderedRelease))).json() as Release;
+  expect(orderedHistory.assets).toEqual([
+    { ...before, sortOrder: 0 },
+    { ...ordered, sortOrder: 1 },
+  ]);
+  const setSortOrder = async (asset: Asset, sortOrder: number) => {
+    const response = await sendMethod("PUT", `/api/v1/assets/${asset.assetId}/cases/${caseId}`, {
+      ...write(), sortOrder,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ assetId: asset.assetId, caseId, linked: true, sortOrder });
+  };
+  await setSortOrder(before, 1000);
+  await setSortOrder(ordered, 5);
+  const orderedAfterReorder = await (await send(authorPath(orderedRelease))).json() as Release;
+  expect(orderedAfterReorder.assets).toEqual(orderedHistory.assets);
+  const caseOrderAfterReorder = await (await send(`${casePath}/assets?limit=200`)).json() as {
+    items: Array<{ assetId: string; sortOrder: number }>;
+  };
+  expect(caseOrderAfterReorder.items.find(({ assetId }) => assetId === ordered.assetId)?.sortOrder).toBe(5);
+  expect(caseOrderAfterReorder.items.find(({ assetId }) => assetId === before.assetId)?.sortOrder).toBe(1000);
+
+  const allReleasesResponse = await send(`${collection}?limit=100`);
+  expect(allReleasesResponse.status).toBe(200);
+  const allReleases = await allReleasesResponse.json() as ReleasePage;
+  expect(allReleases.nextCursor).toBeNull();
+  expect(allReleases.items).toHaveLength(6);
+  expect(allReleases.items.map(({ releaseId }) => releaseId)).toEqual([
+    orderedRelease.releaseId, third.releaseId, second.releaseId, missing.releaseId, logoSwitch.releaseId, first.releaseId,
+  ]);
+  expect(allReleases.items.find(({ releaseId }) => releaseId === first.releaseId)).toMatchObject({ status: "superseded" });
+  expect(allReleases.items.find(({ releaseId }) => releaseId === winner.releaseId)).toMatchObject({ status: "withdrawn" });
+  for (const releaseId of [missing.releaseId, logoSwitch.releaseId, orderedRelease.releaseId]) {
+    expect(allReleases.items.find((item) => item.releaseId === releaseId)).toMatchObject({ status: "staged" });
+  }
+  for (const item of allReleases.items) {
+    const single = await send(authorPath(item));
+    expect(single.status).toBe(200);
+    expect(await single.json()).toEqual(item);
+  }
+  const allIds = allReleases.items.map(({ releaseId }) => releaseId);
+  async function pagedIds(limit: number) {
+    const ids: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const query = `?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+      const response = await send(collection + query);
+      expect(response.status).toBe(200);
+      const page = await response.json() as ReleasePage;
+      if (page.nextCursor) expect(page.items).toHaveLength(limit);
+      ids.push(...page.items.map(({ releaseId }) => releaseId));
+      cursor = page.nextCursor;
+    } while (cursor);
+    return ids;
+  }
+  expect(await pagedIds(1)).toEqual(allIds);
+  expect(await pagedIds(2)).toEqual(allIds);
+  expect(await pagedIds(3)).toEqual(allIds);
+  expect(new Set(allIds).size).toBe(allIds.length);
+  try {
+    await fixture.db.query('alter table "case".case_releases disable trigger guard_release_transition');
+    await fixture.db.query(`update "case".case_releases
+      set staged_at = timestamptz '2026-11-21 00:00:00.123456+00' where case_id = $1`, [fixture.caseId]);
+  } finally {
+    await fixture.db.query('alter table "case".case_releases enable trigger guard_release_transition');
+  }
+  const tiedIds = [...allIds].sort((left, right) => right.localeCompare(left));
+  expect(await pagedIds(1)).toEqual(tiedIds);
+  expect(await pagedIds(2)).toEqual(tiedIds);
+  expect(await pagedIds(3)).toEqual(tiedIds);
+  expect((await send(`${collection}?limit=0`)).status).toBe(422);
+  expect((await send(`${collection}?cursor=invalid`)).status).toBe(422);
+  expect((await send(`/api/v1/cases/${projectId}/releases`)).status).toBe(404);
 
   const admin = new S3Client({ endpoint: fixture.endpoint, region: "us-east-1", forcePathStyle: true,
     credentials: fixture.adminCredentials });

@@ -3,7 +3,7 @@ import { ActivateCaseReleaseBodySchema, DeactivateCaseReleaseBodySchema,
   StageCaseReleaseBodySchema } from "@libiaolink/contracts/case-data/releases";
 import { CaseAssetError } from "./case-asset-storage.mjs";
 import { activateCaseRelease, CasePublicReleaseReadError, CaseReleaseBusyError,
-  deactivateCaseRelease, stageCaseRelease } from "./case-releases.mjs";
+  deactivateCaseRelease, parseReleaseListQuery, stageCaseRelease } from "./case-releases.mjs";
 import { caseErrorResponse, writeCaseOnce } from "./case-write.mjs";
 import { errorCode } from "./database-credentials.mjs";
 
@@ -12,8 +12,9 @@ const releasePublic = "case-data:releases:read";
 
 export function matchReleaseRoute(pathname) {
   const collection = /^\/api\/v1\/cases\/([^/]+)\/releases$/.exec(pathname);
-  if (collection) return { path: "/api/v1/cases/{caseId}/releases", scopes: { POST: releaseWrite },
-    releaseAction: "stage", caseId: collection[1] };
+  if (collection) return { path: "/api/v1/cases/{caseId}/releases",
+    scopes: { GET: "case-data:releases:history:read", POST: releaseWrite },
+    releaseAction: "collection", allowQuery: true, caseId: collection[1] };
   const author = /^\/api\/v1\/cases\/([^/]+)\/releases\/([^/]+)(?:\/(activate|deactivate))?$/.exec(pathname);
   if (author) {
     const action = author[3];
@@ -60,12 +61,14 @@ async function readPublishedAsset(storage, asset) {
     "Content-Disposition": "attachment", "Content-Length": String(asset.sizeBytes), "X-Content-Type-Options": "nosniff" } };
 }
 
-export function createReleaseHttp(pool, storage, reads, publicEnabled, { parse, readBody }) {
+export function createReleaseHttp(pool, storage, reads, publicEnabled, { parse, readBody, cursorKey }) {
   return async (request, route, clientId, writeMetadata) => {
     try {
       const caseId = parse(CaseUuidSchema, route.caseId, "path.caseId");
-      const action = route.releaseAction;
-      const releaseId = action === "stage" ? null : parse(CaseUuidSchema, route.releaseId, "path.releaseId");
+      const action = route.releaseAction === "collection" ?
+        (request.method === "GET" ? "list" : "stage") : route.releaseAction;
+      const releaseId = action === "stage" || action === "list" ? null :
+        parse(CaseUuidSchema, route.releaseId, "path.releaseId");
       if (route.publicRelease) {
         if (!publicEnabled) return releaseFailure(503, "PUBLIC_RELEASE_UNAVAILABLE", "发布读面暂不可用");
         if (action === "published") return { status: 200, body: await reads.published(caseId, releaseId) };
@@ -73,7 +76,14 @@ export function createReleaseHttp(pool, storage, reads, publicEnabled, { parse, 
         const result = await readPublishedAsset(storage, await reads.publishedAsset(caseId, releaseId, assetVersionId));
         return { ...result, resourceId: assetVersionId };
       }
+      if (action === "list") {
+        const query = parseReleaseListQuery(new URL(request.url, "http://case-gateway.local").searchParams, cursorKey);
+        return { status: 200, body: await reads.list(caseId, query), resourceId: caseId };
+      }
       if (action === "history") return { status: 200, body: await reads.history(caseId, releaseId) };
+      if (action === "stage" && new URL(request.url, "http://case-gateway.local").searchParams.size !== 0) {
+        return releaseFailure(422, "VALIDATION_FAILED", "发布 staging 不接受查询参数");
+      }
 
       const { operationId, traceId, ...input } = parse(requestSchemas[action], await readBody(request), "body");
       Object.assign(writeMetadata, { operationId, clientTraceId: traceId, operatorUserKey: input.operatorUserKey });

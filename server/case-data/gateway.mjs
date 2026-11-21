@@ -282,7 +282,7 @@ async function main() {
     lock_timeout: 500, idle_in_transaction_session_timeout: 10_000,
   }) : null;
   publicPool?.on("error", (error) => console.error(JSON.stringify({ event: "published_release_connection_failed", code: errorCode(error) })));
-  const releaseReads = createCaseReleaseReads(pool, publicPool);
+  const releaseReads = createCaseReleaseReads(pool, publicPool, cursorKey);
   const cases = createCaseHttp(pool, assetStorage, releaseReads, Boolean(publicPool), cursorKey);
   const server = createServer({ maxHeaderSize: 16_384, requestTimeout: 10_000, headersTimeout: 5_000,
     connectionsCheckingInterval: 1_000 },

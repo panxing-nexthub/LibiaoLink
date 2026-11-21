@@ -9,8 +9,9 @@ import { CaseAuthoringViewSchema, CaseCreateBodySchema, CaseListPageSchema, Case
   CaseOperationIdSchema, CaseOperationResultSchema, CasePatchBodySchema, CaseRestoreVersionBodySchema,
   CaseTranslationsSchema, CaseUuidSchema, CaseVersionListQuerySchema, CaseVersionPageSchema,
   CaseVersionSchema } from "./case-requests.ts";
-import { ActivateCaseReleaseBodySchema, CaseReleaseHistorySchema, CaseReleaseReceiptSchema, DeactivateCaseReleaseBodySchema,
-  PublishedCaseReleaseSchema, StageCaseReleaseBodySchema } from "./release-requests.ts";
+import { ActivateCaseReleaseBodySchema, CaseReleaseHistorySchema, CaseReleaseListQuerySchema, CaseReleaseListSchema,
+  CaseReleaseReceiptSchema, DeactivateCaseReleaseBodySchema, PublishedCaseReleaseSchema,
+  StageCaseReleaseBodySchema } from "./release-requests.ts";
 import { CaseProjectCatalogPageSchema, CaseProjectCatalogQuerySchema, CaseProjectCatalogItemSchema,
   PatchLocalCaseProjectBodySchema, RegisterLocalCaseProjectBodySchema } from "./project-catalog.ts";
 import { CaseProjectProfileViewSchema, CaseSubjectViewSchema, SaveCaseProjectProfileBodySchema,
@@ -171,7 +172,8 @@ export function buildCaseDataOpenApiDocument() {
     description: "本地 Scope 为 case-data:operations:read。只返回当前服务身份的记录。原写入 HTTP 状态放在 statusCode。",
     request: { params: z.object({ operationId: CaseOperationIdSchema }) },
     responses: { ...errors, 200: { description: "已提交的原写入结果", content: json(CaseOperationResultSchema) },
-      404: error("当前调用方没有已提交的操作结果"), 422: error("操作 ID 或查询参数无效") },
+      404: error("当前调用方没有已提交的操作结果"), 410: error("操作结果已超过 30 天保留期，禁止再次执行"),
+      422: error("操作 ID 或查询参数无效") },
   });
   const assetErrors = { ...errors, 404: error("当前调用方没有此资源或对象版本不存在"),
     409: error("操作冲突、上传尚未就绪或会话已完成"), 410: error("上传会话已过期"),
@@ -321,8 +323,14 @@ export function buildCaseDataOpenApiDocument() {
     413: writeErrors[413] };
   const releaseReceipt = { description: "发布版本的技术状态和快照哈希", content: json(CaseReleaseReceiptSchema) };
   registry.registerPath({
+    method: "get", path: releasePath, operationId: "listCaseReleases", security,
+    summary: "分页枚举发布历史", description: "本地 Scope 为 case-data:releases:history:read。按 stagedAt 降序、releaseId 降序稳定枚举 staged、active、superseded 和 withdrawn；游标只能用于同一案例。",
+    request: { params: caseParams, query: CaseReleaseListQuerySchema },
+    responses: { 200: { description: "发布历史分页；nextCursor=null 表示末页", content: json(CaseReleaseListSchema) }, ...releaseErrors },
+  });
+  registry.registerPath({
     method: "post", path: releasePath, operationId: "stageRelease", security,
-    summary: "固化待发布版本", description: "本地 Scope 为 case-data:releases:write。提交已准备好的对外快照与精确素材版本。",
+    summary: "固化待发布版本", description: "本地 Scope 为 case-data:releases:write。提交已准备好的对外快照与精确素材版本；素材展示顺序取自案例挂接的持久 sortOrder，并在本版本冻结。",
     request: { params: caseParams, body: { required: true, content: json(StageCaseReleaseBodySchema) } },
     responses: { 201: releaseReceipt, ...releaseWriteErrors },
   });
@@ -350,7 +358,7 @@ export function buildCaseDataOpenApiDocument() {
     method: "get", path: publishedPath, operationId: "getPublishedCaseRelease", security,
     summary: "读取 active 发布快照", description: "本地 Scope 为 case-data:releases:read。按案例和发布 ID 精确查找。",
     request: { params: releaseParams },
-    responses: { 200: { description: "active 快照和已锁定素材版本", content: json(PublishedCaseReleaseSchema) },
+    responses: { 200: { description: "active 快照、冻结客户 Logo 和已锁定素材版本；customerLogo.assetVersionId 可直接用于同路径素材内容接口", content: json(PublishedCaseReleaseSchema) },
       ...publishedErrors },
   });
   registry.registerPath({
@@ -362,7 +370,7 @@ export function buildCaseDataOpenApiDocument() {
   });
   const document = new OpenApiGeneratorV31(registry.definitions).generateDocument({
     openapi: "3.1.0",
-    info: { title: "LibiaoLink 案例数据网关", version: "1.8.0",
+    info: { title: "LibiaoLink 案例数据网关", version: "1.9.0",
       description: "项目、案例和素材以 libiaolink_case 与独立素材桶为唯一主存。写成功即在同一事务提交，项目目录投影常驻 watch 约 1 秒刷新，客户端可在提交响应后立即读回。" },
   });
   return {
@@ -386,7 +394,8 @@ export function buildCaseDataOpenApiDocument() {
       getCaseAssetDownloadTicket: "case-data:assets:read", getCaseMediaInput: "case-data:assets:process",
       getCaseMediaState: "case-data:assets:process", saveCaseMediaResult: "case-data:assets:process",
       stageRelease: "case-data:releases:write", activateRelease: "case-data:releases:write",
-      deactivateRelease: "case-data:releases:write", getCaseReleaseHistory: "case-data:releases:history:read",
+      deactivateRelease: "case-data:releases:write", listCaseReleases: "case-data:releases:history:read",
+      getCaseReleaseHistory: "case-data:releases:history:read",
       getPublishedCaseRelease: "case-data:releases:read", getPublishedCaseAsset: "case-data:releases:read",
       getOperationResult: "case-data:operations:read",
     },
@@ -430,7 +439,9 @@ export function buildCaseDataOpenApiDocument() {
       },
       asset: {
         assetId: "uuid; stable project-level asset identity", projectId: "uuid; asset library owner",
-        caseIds: "uuid[]; zero or more links within the same project", assetType: "logo|cover|image|video|document|other",
+        caseIds: "uuid[]; zero or more links within the same project",
+        sortOrder: "integer 0..100000|null; case-list order for the requested case; null outside a case-scoped list",
+        caseLinks: "{caseId,sortOrder}[]; all case links ordered by sortOrder then caseId", assetType: "logo|cover|image|video|document|other",
         title: "string 1..300|null", description: "string <=2000|null", locale: "locale|null", tags: "unique string[] <=30",
         classification: "L1|L2|L3", customerVisible: "boolean", customerPresentationAllowed: "boolean", shareAllowed: "boolean",
         assetVersionId: "uuid; immutable version identity", versionNo: "integer >=1",
@@ -442,9 +453,14 @@ export function buildCaseDataOpenApiDocument() {
         thumbnailAvailable: "boolean; image or PDF preview capability", rowVersion: "asset metadata concurrency version",
         archivedAt: "timestamp|null", deletedAt: "timestamp|null",
       },
+      release: {
+        customerLogo: "{assetId,assetVersionId}|null; frozen at stage time and included in projectSnapshotHash",
+        sortOrder: "integer 0..100000; frozen sequential display position in release.assets",
+        pagination: "limit 1..100 default 50; stable keyset cursor on stagedAt DESC, releaseId DESC",
+      },
     },
     "x-write-semantics": {
-      idempotency: "Every write uses body operationId UUIDv7. The first committed result is retained 30 days; same hash returns the original status/body, different hash returns 409 IDEMPOTENCY_CONFLICT.",
+      idempotency: "Every write uses body operationId UUIDv7. The first committed result is retained at least 30 days; same hash returns the original status/body, different hash returns 409 IDEMPOTENCY_CONFLICT. At/after expiry the gateway returns 410 OPERATION_EXPIRED and never executes the identifier again; cleanup retains a tombstone.",
       immediateRead: "Writes and reads use the same case database; after 2xx the committed row is immediately readable. Project core projection uses a resident watch at CASE_PROJECTION_WATCH_MS=1000 by default (250..60000), not a five-minute cycle.",
       optimisticConcurrency: "Cases and assets use expectedVersion/rowVersion; local projects use expectedVersion/sourceVersion; conflicts return 409 and never overwrite the newer row.",
       noChange: "A PATCH with no actual field change succeeds without incrementing rowVersion or creating a case version.",
@@ -460,12 +476,12 @@ export function buildCaseDataOpenApiDocument() {
         "UPLOAD_ALREADY_COMPLETED", "UPLOAD_OBJECT_MISSING", "UPLOAD_VERSION_AMBIGUOUS",
         "RELEASE_STATE_CONFLICT", "RELEASE_ASSET_MISMATCH", "RELEASE_ASSET_NOT_READY", "ACTIVE_RELEASE_MISMATCH",
         "MEDIA_STATE_CONFLICT", "PREVIEW_NOT_AVAILABLE", "ASSET_REFERENCED", "ASSET_NOT_AVAILABLE",
-        "RELEASE_SWITCH_IN_PROGRESS"],
-      "410": ["UPLOAD_SESSION_EXPIRED"], "413": ["PAYLOAD_TOO_LARGE"], "422": ["VALIDATION_FAILED", "ASSET_OBJECT_MISMATCH"],
+        "RELEASE_SWITCH_IN_PROGRESS", "CUSTOMER_LOGO_NOT_FOUND"],
+      "410": ["UPLOAD_SESSION_EXPIRED", "OPERATION_EXPIRED"], "413": ["PAYLOAD_TOO_LARGE"], "422": ["VALIDATION_FAILED", "ASSET_OBJECT_MISMATCH"],
       "429": ["RATE_LIMITED", "CLIENT_CONCURRENCY_LIMIT"],
       "503": ["CASE_DATABASE_BUSY", "GATEWAY_BUSY", "PROJECT_CATALOG_UNAVAILABLE", "ASSET_STORAGE_UNAVAILABLE",
         "PUBLIC_RELEASE_UNAVAILABLE", "CAPACITY_UNAVAILABLE", "CAPACITY_READ_ONLY", "CAPACITY_UPLOAD_PAUSED"],
     },
-    "x-migration": { current: "0014_remote_primary_projects_cases_assets.sql", previous: ["0012_local_projects.sql", "0013_fix_local_project_claim_trigger.sql"], notes: "Historical migrations are immutable. See the frozen contract report for SHA-256 values and schema diff." },
+    "x-migration": { current: "0015_release_history_asset_order_logo_and_operation_tombstone.sql", previous: ["0013_fix_local_project_claim_trigger.sql", "0014_remote_primary_projects_cases_assets.sql"], notes: "0015 is incremental: case asset link sortOrder, frozen customerLogo columns, release enumeration support and operation tombstone. Historical migrations are immutable; see the 2026-11-21 delivery report for SHA-256 values and compatibility." },
   };
 }

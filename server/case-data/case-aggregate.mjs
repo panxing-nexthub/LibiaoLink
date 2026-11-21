@@ -146,20 +146,37 @@ export function parseCaseListQuery(params, cursorKey) {
   return { limit, filters, afterUpdatedAt: after?.[0] ?? null, afterId: after?.[1] ?? null };
 }
 
-function versionOf(row) {
+function versionOf(row, customerLogo) {
   return {
     locale: row.locale, translationGroupId: row.translationGroupId, title: row.title, summary: row.summary,
     changeSummary: row.changeSummary, content: row.content, solutionParameters: row.solutionParameters,
-    outcomes: row.outcomes, confidentiality: row.confidentiality,
+    outcomes: row.outcomes, confidentiality: row.confidentiality, customerLogo: customerLogo ?? null,
   };
 }
 
-async function insertCaseVersion(client, row, { restoredFromVersionId = null, changeSummary, createdBy } = {}) {
+function versionView(row) {
+  return { ...row, snapshot: { ...row.snapshot, customerLogo: row.snapshot.customerLogo ?? null } };
+}
+
+async function resolveProjectLogo(client, projectId) {
+  const { rows: [logo] } = await client.query(`
+    select a.id as "assetId", a.asset_version_id as "assetVersionId"
+    from "case".project_profiles p
+    join "case".case_assets a
+      on a.id::text = lower(p.attributes->>'customerLogoAssetId') and a.project_id = p.project_id
+    where p.project_id = $1
+    order by a.asset_version_no desc limit 1
+  `, [projectId]);
+  return logo ?? null;
+}
+
+async function insertCaseVersion(client, row,
+  { restoredFromVersionId = null, changeSummary, createdBy, customerLogo = null } = {}) {
   await client.query(`
     insert into "case".case_versions
       (case_id, version_no, snapshot, change_summary, restored_from_version_id, created_by)
     values ($1, $2, $3::jsonb, $4, $5, $6)
-  `, [row.caseId, row.rowVersion, JSON.stringify(versionOf(row)), changeSummary ?? row.changeSummary,
+  `, [row.caseId, row.rowVersion, JSON.stringify(versionOf(row, customerLogo)), changeSummary ?? row.changeSummary,
     restoredFromVersionId, createdBy ?? row.createdBy]);
 }
 
@@ -205,7 +222,10 @@ export async function insertCase(client, input) {
   requireSolutionMembership(solutionsAllowed);
   if (!caseId) throw new CaseAggregateError("CASE_ID_CONFLICT", "案例 ID 已存在");
   const created = requireCase(await readCaseView(client, caseId));
-  await insertCaseVersion(client, created, { changeSummary: created.changeSummary, createdBy: input.operatorUserKey });
+  const customerLogo = await resolveProjectLogo(client, created.sourceProjectId);
+  await insertCaseVersion(client, created, {
+    changeSummary: created.changeSummary, createdBy: input.operatorUserKey, customerLogo,
+  });
   return created;
 }
 
@@ -255,7 +275,9 @@ export async function patchCase(client, caseId, expectedVersion, patch, versionM
     update "case".cases set ${assignments.join(", ")} where id = $1
   `, [caseId, ...values]);
   const updated = requireCase(await readCaseView(client, caseId));
-  await insertCaseVersion(client, updated, versionMetadata);
+  const customerLogo = Object.hasOwn(versionMetadata, "customerLogo") ? versionMetadata.customerLogo :
+    await resolveProjectLogo(client, updated.sourceProjectId);
+  await insertCaseVersion(client, updated, { ...versionMetadata, customerLogo });
   return updated;
 }
 
@@ -270,10 +292,12 @@ export async function restoreCaseVersion(client, caseId, caseVersionId, input) {
   delete restored.locale;
   delete restored.translationGroupId;
   if (input.changeSummary !== undefined) restored.changeSummary = input.changeSummary;
+  const customerLogo = version.snapshot.customerLogo ?? null;
+  delete restored.customerLogo;
   return patchCase(client, caseId, input.expectedVersion, restored, {
     restoredFromVersionId: caseVersionId,
     changeSummary: input.changeSummary ?? `恢复自版本 ${version.versionNo}`,
-    createdBy: input.operatorUserKey,
+    createdBy: input.operatorUserKey, customerLogo,
   });
 }
 
@@ -318,7 +342,7 @@ export async function listCaseVersions(client, caseId, { limit, afterVersionNo }
     where v.case_id = $1 and ($2::integer is null or v.version_no < $2)
     order by v.version_no desc limit $3
   `, [caseId, afterVersionNo, limit + 1]);
-  const items = rows.slice(0, limit);
+  const items = rows.slice(0, limit).map(versionView);
   const nextCursor = rows.length > limit ? encodeCursor([items.at(-1).versionNo], [], cursorKey) : null;
   return { items, nextCursor };
 }
@@ -328,7 +352,7 @@ export async function getCaseVersion(client, caseId, caseVersionId) {
     select ${versionColumns} from "case".case_versions v where v.case_id = $1 and v.id = $2
   `, [caseId, caseVersionId]);
   if (!version) throw new CaseAggregateError("NOT_FOUND", "案例版本不存在");
-  return version;
+  return versionView(version);
 }
 
 export async function listCaseTranslations(client, caseId) {

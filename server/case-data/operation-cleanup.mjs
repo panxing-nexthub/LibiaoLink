@@ -26,10 +26,10 @@ async function main() {
   try {
     await db.connect();
     await assertCaseDatabaseRole(db, "case_operation_cleanup");
-    const { rows: [{ deleted }] } = await db.query(
-      'select "case".purge_case_operation_results($1, $2::uuid[]) as deleted', [clientId, operationIds],
+    const { rows: [{ tombstoned }] } = await db.query(
+      'select "case".purge_case_operation_results($1, $2::uuid[]) as tombstoned', [clientId, operationIds],
     );
-    console.log(JSON.stringify({ confirmed: operationIds.length, deleted }));
+    console.log(JSON.stringify({ confirmed: operationIds.length, tombstoned }));
   } finally {
     await db.end();
   }

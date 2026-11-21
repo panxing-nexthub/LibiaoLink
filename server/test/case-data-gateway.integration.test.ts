@@ -42,6 +42,18 @@ function checkRecovery(dir: string) {
   });
 }
 
+function uuidv7() {
+  const bytes = randomBytes(16);
+  const milliseconds = BigInt(Date.now());
+  for (let index = 5; index >= 0; index -= 1) {
+    bytes[index] = Number((milliseconds >> BigInt((5 - index) * 8)) & 0xffn);
+  }
+  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function serviceToken(key: KeyObject, claims: Record<string, unknown> = {}, header: Record<string, unknown> = {}) {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const now = Math.floor(Date.now() / 1000);
@@ -328,6 +340,39 @@ async function verifyCaseRequests(db: Client, base: string, token: (claims?: Rec
     caseId: englishCaseId, locale: "en-US", title: "Retail warehouse picking upgrade", status: "draft",
   }] });
   expect((await db.query(`select count(*)::int as count from "case".cases`)).rows[0].count).toBe(2);
+
+  const expiryOperationId = uuidv7();
+  const expiryCaseId = randomUUID();
+  const expiryClient = "case-expiry-author";
+  const expiryBody = {
+    ...create, operationId: expiryOperationId, caseId: expiryCaseId, operatorUserKey: "usr_case_expiry",
+    title: "过期操作不得再次执行", changeSummary: "过期语义验证",
+  };
+  const expiryAuthorization = token({ sub: expiryClient, client_id: expiryClient,
+    scope: "case-data:cases:write case-data:operations:read" });
+  const writeExpiry = (body: object) => fetch(base + collection, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${expiryAuthorization}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body), signal: AbortSignal.timeout(4000),
+  });
+  const readExpiry = () => fetch(`${base}/api/v1/operations/${expiryOperationId}`, {
+    headers: { Authorization: `Bearer ${expiryAuthorization}` }, signal: AbortSignal.timeout(4000),
+  });
+  const initialExpiryWrite = await writeExpiry(expiryBody);
+  expect(initialExpiryWrite.status).toBe(201);
+  const initialExpiryBody = await initialExpiryWrite.json();
+  expect((await readExpiry()).status).toBe(200);
+  const expiryReplay = await writeExpiry(expiryBody);
+  expect(expiryReplay.status).toBe(201);
+  expect(await expiryReplay.json()).toEqual(initialExpiryBody);
+  await expectError(await writeExpiry({ ...expiryBody, title: "同一操作的不同载荷" }), 409, "IDEMPOTENCY_CONFLICT");
+  await db.query(`update "case".case_idempotency_keys set expires_at = now() - interval '1 second'
+    where client_id = $1 and operation_id = $2`, [expiryClient, expiryOperationId]);
+  await expectError(await writeExpiry(expiryBody), 410, "OPERATION_EXPIRED");
+  const expiredReceipt = await readExpiry();
+  expect(expiredReceipt.status).toBe(410);
+  expect(await expiredReceipt.json()).toMatchObject({ code: "OPERATION_EXPIRED" });
+  expect((await db.query('select count(*)::int as count from "case".cases where id = $1', [expiryCaseId])).rows[0].count).toBe(1);
 }
 
 it.skipIf(!adminUrl || !gatewayUrl)("authenticates and scopes project catalog and case requests in the isolated gateway", async () => {
@@ -907,13 +952,13 @@ it.skipIf(!adminUrl || !cleanupUrl)("cleans only expired operations confirmed se
   const settled = "0190d2e4-a004-7000-8000-000000000001";
   const unresolved = "0190d2e4-a004-7000-8000-000000000002";
   const unexpired = "0190d2e4-a004-7000-8000-000000000003";
-  async function clean(operationIds: string[], deleted: number) {
+  async function clean(operationIds: string[], tombstoned: number) {
     await writeFile(manifest, JSON.stringify({ clientId: owner, operationIds }), { mode: 0o600 });
     const result = spawnSync(process.execPath, [cleanupScript, manifest], {
       env: { ...process.env, CASE_OPERATION_CLEANUP_SECRET_DIR: dir }, encoding: "utf8", timeout: 10_000,
     });
     expect(result.status, result.stderr).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({ confirmed: operationIds.length, deleted });
+    expect(JSON.parse(result.stdout)).toEqual({ confirmed: operationIds.length, tombstoned });
   }
   try {
     await db.connect();
@@ -947,12 +992,15 @@ it.skipIf(!adminUrl || !cleanupUrl)("cleans only expired operations confirmed se
     await clean([settled, unexpired], 1);
     await clean([settled, unexpired], 0);
     const survivors = await db.query(`
-      select client_id, operation_id from "case".case_idempotency_keys where client_id in ($1,$2)
+      select client_id, operation_id, purged_at is not null as tombstoned, response is null as response_purged
+      from "case".case_idempotency_keys where client_id in ($1,$2)
       order by client_id, operation_id
     `, [owner, other]);
     expect(survivors.rows).toEqual([
-      { client_id: other, operation_id: settled }, { client_id: owner, operation_id: unresolved },
-      { client_id: owner, operation_id: unexpired },
+      { client_id: other, operation_id: settled, tombstoned: false, response_purged: false },
+      { client_id: owner, operation_id: settled, tombstoned: true, response_purged: true },
+      { client_id: owner, operation_id: unresolved, tombstoned: false, response_purged: false },
+      { client_id: owner, operation_id: unexpired, tombstoned: false, response_purged: false },
     ]);
   } finally {
     await Promise.all([worker.end(), db.end()]);
@@ -1108,7 +1156,7 @@ it.skipIf(!adminUrl || !gatewayUrl || !publicUrl || !s3Endpoint || !s3Bucket || 
       const gateway = await startGateway(dir, { CASE_GATEWAY_PUBLIC_SECRET_DIR: dir, CASE_GATEWAY_ASSET_BUCKET: s3Bucket,
         CASE_GATEWAY_S3_ENDPOINT: s3Endpoint, CASE_GATEWAY_PROJECTS_PER_MINUTE: "80" });
       try {
-        const scope = "case-data:releases:write case-data:releases:history:read case-data:assets:read case-data:assets:write case-data:operations:read";
+        const scope = "case-data:releases:write case-data:releases:history:read case-data:cases:read case-data:cases:write case-data:assets:read case-data:assets:write case-data:operations:read";
         await verifyCaseReleaseRequests({
           base: gateway.base, caseId: id, anotherCaseId, projectId, db, publicDb, endpoint: s3Endpoint!, bucket: s3Bucket!,
           authorToken: serviceToken(privateKey, { scope }),

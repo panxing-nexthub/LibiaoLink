@@ -168,15 +168,22 @@ export async function verifyCaseAssetRequests(fixture: Fixture) {
   expect(logoCompleted).toMatchObject({ projectId, caseId: null, assetType: "logo", title: "项目 Logo",
     tags: ["品牌", "共享"], classification: "L2", rowVersion: 1 });
   const linkPath = (targetCaseId: string) => `/api/v1/assets/${projectAsset.session.assetId}/cases/${targetCaseId}`;
-  const link = (targetCaseId: string, operationId: string) => sendJson("PUT", linkPath(targetCaseId), {
-    operationId, operatorUserKey: "asset-fixture",
+  const link = (targetCaseId: string, operationId: string, sortOrder?: number) => sendJson("PUT", linkPath(targetCaseId), {
+    operationId, operatorUserKey: "asset-fixture", ...(sortOrder === undefined ? {} : { sortOrder }),
   });
-  expect((await link(caseId, operation(22))).status).toBe(200);
-  expect((await link(secondCaseId, operation(23))).status).toBe(200);
+  const firstLink = await link(caseId, operation(22), 30);
+  expect(firstLink.status).toBe(200);
+  expect(await firstLink.json()).toMatchObject({ assetId: projectAsset.session.assetId, caseId, linked: true, sortOrder: 30 });
+  expect((await link(secondCaseId, operation(23), 10)).status).toBe(200);
   const sharedDetail = await (await send(`/api/v1/assets/${projectAsset.session.assetId}`)).json() as {
-    caseIds: string[]; rowVersion: number;
+    caseIds: string[]; rowVersion: number; sortOrder: number | null;
+    caseLinks: Array<{ caseId: string; sortOrder: number }>;
   };
-  expect(sharedDetail).toMatchObject({ projectId, rowVersion: 1, caseIds: expect.arrayContaining([caseId, secondCaseId]) });
+  expect(sharedDetail).toMatchObject({ projectId, rowVersion: 1, sortOrder: null,
+    caseIds: expect.arrayContaining([caseId, secondCaseId]) });
+  expect(sharedDetail.caseLinks).toEqual(expect.arrayContaining([
+    { caseId, sortOrder: 30 }, { caseId: secondCaseId, sortOrder: 10 },
+  ]));
   for (const targetCaseId of [caseId, secondCaseId]) {
     const listed = await (await send(`/api/v1/cases/${targetCaseId}/assets?limit=200`)).json() as {
       items: Array<Record<string, unknown>>;
@@ -333,6 +340,60 @@ export async function verifyCaseAssetRequests(fixture: Fixture) {
   expect(recovered.status).toBe(200);
   expect(await recovered.json()).toMatchObject({ assetVersionId: single.session.assetVersionId, objectVersionId: originalVersion });
   expect((await send(completePath(single.session), recovery)).status).toBe(200);
+  const autoOrdered = await (await send(`/api/v1/cases/${caseId}/assets?limit=200`)).json() as {
+    items: Array<{ assetId: string; sortOrder: number }>;
+  };
+  const autoOrder = new Map(autoOrdered.items.map(({ assetId, sortOrder }) => [assetId, sortOrder]));
+  expect(autoOrder.get(projectAsset.session.assetId)).toBe(30);
+  expect(autoOrder.get(single.session.assetId)).toBeGreaterThan(30);
+  const reorder = async (assetId: string, operationId: string, sortOrder: number) => {
+    const response = await sendJson("PUT", `/api/v1/assets/${assetId}/cases/${caseId}`, {
+      operationId, operatorUserKey: "asset-fixture", sortOrder,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ assetId, caseId, linked: true, sortOrder });
+  };
+  await reorder(session.assetId, operation(34), 10);
+  await reorder(single.session.assetId, operation(35), 20);
+  await reorder(projectAsset.session.assetId, operation(36), 30);
+  const expectedOrder = [
+    { assetId: session.assetId, sortOrder: 10 },
+    { assetId: single.session.assetId, sortOrder: 20 },
+    { assetId: projectAsset.session.assetId, sortOrder: 30 },
+  ];
+  for (let readNo = 0; readNo < 3; readNo++) {
+    const ordered = await (await send(`/api/v1/cases/${caseId}/assets?limit=200`)).json() as {
+      items: Array<{ assetId: string; sortOrder: number }>;
+    };
+    expect(ordered.items.map(({ assetId, sortOrder }) => ({ assetId, sortOrder }))).toEqual(expectedOrder);
+  }
+  await reorder(session.assetId, operation(37), 30);
+  await reorder(projectAsset.session.assetId, operation(38), 10);
+  await reorder(single.session.assetId, operation(39), 20);
+  const reordered = await (await send(`/api/v1/cases/${caseId}/assets?limit=200`)).json() as {
+    items: Array<{ assetId: string; sortOrder: number; caseLinks: Array<{ caseId: string; sortOrder: number }> }>;
+  };
+  expect(reordered.items.map(({ assetId, sortOrder }) => ({ assetId, sortOrder }))).toEqual([
+    { assetId: projectAsset.session.assetId, sortOrder: 10 },
+    { assetId: single.session.assetId, sortOrder: 20 },
+    { assetId: session.assetId, sortOrder: 30 },
+  ]);
+  expect(reordered.items.every(({ sortOrder, caseLinks }) => {
+    const [link] = caseLinks;
+    return caseLinks.length === 1 && link !== undefined && link.caseId === caseId && link.sortOrder === sortOrder;
+  })).toBe(true);
+  await reorder(session.assetId, operation(40), 20);
+  await reorder(single.session.assetId, operation(41), 20);
+  const duplicateOrderRead = await (await send(`/api/v1/cases/${caseId}/assets?limit=200`)).json() as {
+    items: Array<{ assetId: string; sortOrder: number }>;
+  };
+  const tied = [
+    { assetId: session.assetId, sortOrder: 20 },
+    { assetId: single.session.assetId, sortOrder: 20 },
+  ].sort((left, right) => left.assetId.localeCompare(right.assetId));
+  expect(duplicateOrderRead.items.map(({ assetId, sortOrder }) => ({ assetId, sortOrder }))).toEqual([
+    { assetId: projectAsset.session.assetId, sortOrder: 10 }, ...tied,
+  ]);
   const stored = await db.query('select count(*)::int as count from "case".case_assets where case_id = $1', [caseId]);
   expect(stored.rows).toEqual([{ count: 3 }]);
   await setTimeout(Math.max(0, Date.parse(newerTicket.expiresAt) - Date.now() + 1250));

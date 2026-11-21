@@ -52,7 +52,8 @@ function versionView(row) {
 
 function summaryView(row) {
   return {
-    assetId: row.assetId, projectId: row.projectId, caseIds: row.caseIds, assetType: row.assetType,
+    assetId: row.assetId, projectId: row.projectId, caseIds: row.caseIds,
+    sortOrder: row.sortOrder ?? null, caseLinks: row.caseLinks, assetType: row.assetType,
     title: row.title, description: row.description, locale: row.locale, tags: row.tags,
     classification: row.classification, customerVisible: row.customerVisible,
     customerPresentationAllowed: row.customerPresentationAllowed, shareAllowed: row.shareAllowed,
@@ -75,9 +76,14 @@ const currentVersionJson = `jsonb_build_object(
   'createdBy', a.created_by, 'createdAt', a.created_at, 'rowVersion', m.row_version,
   'archivedAt', m.archived_at, 'deletedAt', m.deleted_at
 )`;
-const summarySelect = `select m.asset_id as "assetId", m.project_id as "projectId",
-  coalesce((select jsonb_agg(l.case_id order by l.created_at, l.case_id) from "case".case_asset_links l
+function summarySelect(sortOrderExpression = 'null::integer') {
+  return `select m.asset_id as "assetId", m.project_id as "projectId",
+  coalesce((select jsonb_agg(l.case_id order by l.sort_order, l.case_id) from "case".case_asset_links l
     where l.asset_id = m.asset_id), '[]'::jsonb) as "caseIds",
+  coalesce((select jsonb_agg(jsonb_build_object('caseId', l.case_id, 'sortOrder', l.sort_order)
+    order by l.sort_order, l.case_id) from "case".case_asset_links l
+    where l.asset_id = m.asset_id), '[]'::jsonb) as "caseLinks",
+  ${sortOrderExpression} as "sortOrder",
   m.asset_type as "assetType", m.title, m.description, m.locale, m.tags, m.classification,
   m.customer_visible as "customerVisible", m.customer_presentation_allowed as "customerPresentationAllowed",
   m.share_allowed as "shareAllowed", m.row_version as "rowVersion", m.created_at as "createdAt",
@@ -88,6 +94,7 @@ const summarySelect = `select m.asset_id as "assetId", m.project_id as "projectI
     select a.* from "case".case_assets a
     where a.id = m.asset_id order by a.asset_version_no desc limit 1
   ) a on true`;
+}
 
 function cursorSignature(payload, key) {
   return createHmac("sha256", key).update(payload).digest();
@@ -119,7 +126,7 @@ function decodeCursor(cursor, filters, key) {
   return value;
 }
 
-export function parseAssetListQuery(params, cursorKey) {
+export function parseAssetListQuery(params, cursorKey, scope, id) {
   const seen = new Set();
   for (const name of params.keys()) {
     if (!Object.hasOwn(CaseAssetListQuerySchema.shape, name)) throw new CaseQueryError("query", "存在未知查询参数");
@@ -132,9 +139,9 @@ export function parseAssetListQuery(params, cursorKey) {
     throw new CaseQueryError(`query.${issue.path[0]}`, issue.message);
   }
   const { limit, cursor, assetType = null, includeArchived } = parsed.data;
-  const filters = [assetType, includeArchived];
+  const filters = [scope, id, assetType, includeArchived];
   const after = cursor === undefined ? null : decodeCursor(cursor, filters, cursorKey);
-  return { limit, filters, afterUpdatedAt: after?.[0] ?? null, afterId: after?.[1] ?? null };
+  return { limit, filters, afterValue: after?.[0] ?? null, afterId: after?.[1] ?? null };
 }
 
 async function readTarget(client, { caseId, projectId }) {
@@ -286,16 +293,19 @@ export async function completeCaseUpload(client, storage, uploadId, clientId, { 
     where asset_id = $1 and client_id = $2
   `, [upload.assetId, clientId]);
   await client.query(`
-    insert into "case".case_asset_links (asset_id, case_id, project_id, created_by)
-    select asset_id, case_id, project_id, $2 from "case".case_asset_uploads
-    where id = $1 and case_id is not null
+    insert into "case".case_asset_links (asset_id, case_id, project_id, created_by, sort_order)
+    select u.asset_id, u.case_id, u.project_id, $2,
+      least(coalesce((select max(l.sort_order) from "case".case_asset_links l
+        where l.case_id = u.case_id), -10) + 10, 100000)
+    from "case".case_asset_uploads u
+    where u.id = $1 and u.case_id is not null
     on conflict (asset_id, case_id) do nothing
   `, [uploadId, operatorUserKey]);
   return versionView(await findAsset(client, upload.assetId, assetVersionId, clientId));
 }
 
 async function listAssets(client, scope, id, clientId, input, cursorKey) {
-  const [assetType, includeArchived] = input.filters;
+  const [, , assetType, includeArchived] = input.filters;
   if (scope === "case") {
     const { rowCount } = await client.query('select 1 from "case".cases where id = $1', [id]);
     if (!rowCount) throw new CaseAggregateError("NOT_FOUND", "案例不存在");
@@ -309,24 +319,33 @@ async function listAssets(client, scope, id, clientId, input, cursorKey) {
     ? `join "case".case_asset_links link on link.asset_id = m.asset_id and link.case_id = $2`
     : "where m.project_id = $2";
   const where = scope === "case" ? "where m.client_id = $1" : "and m.client_id = $1";
+  const sortOrderExpression = scope === "case" ? 'link.sort_order' : 'null::integer';
+  const cursorClause = scope === "case"
+    ? 'and ($5::integer is null or (link.sort_order, m.asset_id) > ($5::integer, $6::uuid))'
+    : 'and ($5::timestamptz is null or (m.updated_at, m.asset_id) < ($5, $6::uuid))';
+  const orderBy = scope === "case"
+    ? 'order by link.sort_order asc, m.asset_id asc limit $7'
+    : 'order by m.updated_at desc, m.asset_id desc limit $7';
   const { rows } = await client.query(`
-    ${summarySelect}
+    ${summarySelect(sortOrderExpression)}
     ${association}
     ${where}
       and m.deleted_at is null
       and ($3::text is null or m.asset_type = $3)
       and ($4::boolean or m.archived_at is null)
-      and ($5::timestamptz is null or (m.updated_at, m.asset_id) < ($5, $6::uuid))
-    order by m.updated_at desc, m.asset_id desc limit $7
-  `, [clientId, id, assetType, includeArchived, input.afterUpdatedAt, input.afterId, input.limit + 1]);
+      ${cursorClause}
+    ${orderBy}
+  `, [clientId, id, assetType, includeArchived, input.afterValue, input.afterId, input.limit + 1]);
   const items = rows.slice(0, input.limit).map(summaryView);
+  const cursorValue = scope === "case" ? items.at(-1)?.sortOrder :
+    new Date(items.at(-1)?.updatedAt).toISOString();
   const nextCursor = rows.length > input.limit
-    ? encodeCursor([new Date(items.at(-1).updatedAt).toISOString(), items.at(-1).assetId], input.filters, cursorKey) : null;
+    ? encodeCursor([cursorValue, items.at(-1).assetId], input.filters, cursorKey) : null;
   return { items, nextCursor };
 }
 
 async function assetDetail(client, assetId, clientId) {
-  const { rows: [row] } = await client.query(`${summarySelect} where m.asset_id = $1 and m.client_id = $2`,
+  const { rows: [row] } = await client.query(`${summarySelect()} where m.asset_id = $1 and m.client_id = $2`,
     [assetId, clientId]);
   if (!row) throw new CaseAggregateError("NOT_FOUND", "素材不存在");
   return summaryView(row);
@@ -346,8 +365,13 @@ async function patchAsset(client, assetId, clientId, expectedVersion, patch) {
     return JSON.stringify(current[field]) === JSON.stringify(patch[field]);
   })) return assetDetail(client, assetId, clientId);
   if (patch.deleted === true) {
-    const { rowCount } = await client.query('select 1 from "case".case_release_assets where asset_id = $1 limit 1', [assetId]);
-    if (rowCount) throw new CaseAggregateError("ASSET_REFERENCED", "素材已被发布版本引用，只能归档，不能删除");
+    const { rowCount } = await client.query(`
+      select 1 from "case".case_release_assets where asset_id = $1
+      union all
+      select 1 from "case".case_releases where customer_logo_asset_id = $1
+      limit 1
+    `, [assetId]);
+    if (rowCount) throw new CaseAggregateError("ASSET_REFERENCED", "素材已被发布版本或客户 Logo 快照引用，只能归档，不能删除");
   }
   const assignments = [];
   const values = [];
@@ -375,7 +399,7 @@ async function patchAsset(client, assetId, clientId, expectedVersion, patch) {
   return assetDetail(client, assetId, clientId);
 }
 
-async function linkAsset(client, assetId, caseId, clientId, operatorUserKey, linked) {
+async function linkAsset(client, assetId, caseId, clientId, operatorUserKey, linked, sortOrder) {
   const { rows: [asset] } = await client.query(`
     select project_id as "projectId", archived_at as "archivedAt", deleted_at as "deletedAt"
     from "case".case_asset_metadata where asset_id = $1 and client_id = $2
@@ -389,18 +413,35 @@ async function linkAsset(client, assetId, caseId, clientId, operatorUserKey, lin
   if (asset.projectId !== projectCase.projectId) {
     throw new CaseAggregateError("VALIDATION_FAILED", "素材与案例不属于同一项目");
   }
-  if (linked) {
-    if (asset.deletedAt || projectCase.deletedAt || asset.archivedAt || projectCase.archivedAt) {
-      throw new CaseAggregateError("ASSET_NOT_AVAILABLE", "素材或案例已归档、删除");
-    }
-    await client.query(`
-      insert into "case".case_asset_links (asset_id, case_id, project_id, created_by)
-      values ($1, $2, $3, $4) on conflict (asset_id, case_id) do nothing
-    `, [assetId, caseId, asset.projectId, operatorUserKey]);
-  } else {
+  if (!linked) {
     await client.query('delete from "case".case_asset_links where asset_id = $1 and case_id = $2', [assetId, caseId]);
+    return { assetId, caseId, linked, sortOrder: null };
   }
-  return { assetId, caseId, linked };
+  if (asset.deletedAt || projectCase.deletedAt || asset.archivedAt || projectCase.archivedAt) {
+    throw new CaseAggregateError("ASSET_NOT_AVAILABLE", "素材或案例已归档、删除");
+  }
+  const { rows: [existing] } = await client.query(`
+    select sort_order as "sortOrder" from "case".case_asset_links
+    where asset_id = $1 and case_id = $2 for update
+  `, [assetId, caseId]);
+  if (existing) {
+    if (sortOrder !== undefined && sortOrder !== existing.sortOrder) {
+      await client.query(`
+        update "case".case_asset_links set sort_order = $3 where asset_id = $1 and case_id = $2
+      `, [assetId, caseId, sortOrder]);
+    }
+    return { assetId, caseId, linked, sortOrder: sortOrder ?? existing.sortOrder };
+  }
+  const { rows: [{ nextSortOrder }] } = await client.query(`
+    select least(coalesce(max(sort_order), -10) + 10, 100000) as "nextSortOrder"
+    from "case".case_asset_links where case_id = $1
+  `, [caseId]);
+  const assigned = sortOrder ?? nextSortOrder;
+  await client.query(`
+    insert into "case".case_asset_links (asset_id, case_id, project_id, created_by, sort_order)
+    values ($1, $2, $3, $4, $5)
+  `, [assetId, caseId, asset.projectId, operatorUserKey, assigned]);
+  return { assetId, caseId, linked, sortOrder: assigned };
 }
 
 export function createCaseAssets(pool, storage, cursorKey) {
@@ -463,8 +504,8 @@ export function createCaseAssets(pool, storage, cursorKey) {
     patch: (assetId, clientId, expectedVersion, patch) => withCaseAuthoringTransaction(pool, false,
       (client) => patchAsset(client, assetId, clientId, expectedVersion, patch)),
     patchInTransaction: patchAsset,
-    link: (assetId, caseId, clientId, operatorUserKey, linked) => withCaseAuthoringTransaction(pool, false,
-      (client) => linkAsset(client, assetId, caseId, clientId, operatorUserKey, linked)),
+    link: (assetId, caseId, clientId, operatorUserKey, linked, sortOrder) => withCaseAuthoringTransaction(pool, false,
+      (client) => linkAsset(client, assetId, caseId, clientId, operatorUserKey, linked, sortOrder)),
     linkInTransaction: linkAsset,
   };
 }

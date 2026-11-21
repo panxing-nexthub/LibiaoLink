@@ -181,11 +181,13 @@ export function HubDashProjectTypeYears({ insights, expanded = false, onChartTyp
             );
           }) : (
             <>
-              {lineSeries.map((series) => (
+              {lineSeries.map((series, seriesIndex) => (
                 <polyline
                   key={"line-" + series.type}
                   className="hub-dash-project-types__line"
                   points={series.points.map((point) => point.x + "," + point.y).join(" ")}
+                  pathLength={1}
+                  style={{ animationDelay: seriesIndex * 90 + "ms" }}
                   fill="none"
                   stroke={series.color}
                   strokeWidth={3.2}
@@ -194,9 +196,10 @@ export function HubDashProjectTypeYears({ insights, expanded = false, onChartTyp
                   pointerEvents="none"
                 />
               ))}
-              {lineSeries.map((series) => series.points.map((point) => {
+              {lineSeries.map((series, seriesIndex) => series.points.map((point) => {
                 const baselineLabel = yearText(point.row.year);
                 const key = yearKey(point.row.year);
+                const pointDelay = seriesIndex * 80 + point.yearIndex * 65 + 240;
                 return (
                   <g key={"point-" + series.type + "-" + key}>
                     <circle
@@ -208,8 +211,8 @@ export function HubDashProjectTypeYears({ insights, expanded = false, onChartTyp
                       onMouseEnter={(event) => { setHoverYear(null); setTip(hoverTipAt(event, baselineLabel, [{ label: t("hub.dash.projects.projectCount"), value: point.count, color: series.color }], series.type)); }}
                       onMouseMove={(event) => { setHoverYear(null); setTip(hoverTipAt(event, baselineLabel, [{ label: t("hub.dash.projects.projectCount"), value: point.count, color: series.color }], series.type)); }}
                     />
-                    <circle className="hub-dash-project-types__point" cx={point.x} cy={point.y} r={4.8} fill={series.color} stroke="#ffffff" strokeWidth={2} pointerEvents="none" />
-                    {point.count > 0 && hoverYear !== key ? <text className="hub-dash-project-types__num" x={point.x} y={Math.max(point.y - 10, PLOT_TOP + 10)} textAnchor="middle" fontSize={13} fontWeight={600} fill="#374151" pointerEvents="none">{point.count}</text> : null}
+                    <circle className="hub-dash-project-types__point" style={{ animationDelay: pointDelay + "ms" }} cx={point.x} cy={point.y} r={4.8} fill={series.color} stroke="#ffffff" strokeWidth={2} pointerEvents="none" />
+                    {point.count > 0 && hoverYear !== key ? <text className="hub-dash-project-types__num" style={{ animationDelay: pointDelay + 120 + "ms" }} x={point.x} y={Math.max(point.y - 10, PLOT_TOP + 10)} textAnchor="middle" fontSize={13} fontWeight={600} fill="#374151" pointerEvents="none">{point.count}</text> : null}
                   </g>
                 );
               }))}

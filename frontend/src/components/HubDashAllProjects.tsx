@@ -1,9 +1,9 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
+import { useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { DashboardIssues } from "../data/dashboardProgress";
 import type { DashboardProjectInsights } from "../data/dashboardProjectInsights";
 import { useT } from "../i18n";
 import { HubDashIssues, type DashboardIssueRow } from "./HubDashIssues";
-import { HubDashProjectTypeYears } from "./HubDashProjectTypeYears";
+import { HubDashProjectTypeYears, type DashboardProjectChartKind } from "./HubDashProjectTypeYears";
 import { HubDashRoleStage } from "./HubDashRoleStages";
 import { HubDashSlideDeck } from "./HubDashSlideDeck";
 import { HubDashStartYearStages } from "./HubDashStartYearStages";
@@ -27,6 +27,8 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
   readonly onLeave: () => void;
 }) {
   const t = useT();
+  const [projectChartType, setProjectChartType] = useState<DashboardProjectChartKind>("bar");
+  const lineExpanded = projectChartType === "line";
   const analyticsReady = insightsState === "ready" && insights !== null;
   const analyticsFallback = insightsState === "failed"
     ? <div className="hub-dash-state">{t("hub.dash.failed")}</div>
@@ -64,16 +66,16 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
 
       <section className="hub-dash-all__slide" data-section="project-stats">
         <div className="hub-dash-all__slideCard hub-dash-all__slideCard--stacked">
-          <div className="hub-dash-combined">
+          <div className="hub-dash-combined" data-line-expanded={lineExpanded ? "true" : "false"}>
             <section className="hub-dash-combined__panel" data-panel="project-count">
               <div className="hub-dash-all__heading">
                 <h3>{t("hub.dash.projects.typeYear.title")}</h3>
               </div>
               <div className="hub-dash-combined__chart">
-                {analyticsReady ? <HubDashProjectTypeYears insights={insights} /> : analyticsFallback}
+                {analyticsReady ? <HubDashProjectTypeYears insights={insights} expanded={lineExpanded} onChartTypeChange={setProjectChartType} /> : analyticsFallback}
               </div>
             </section>
-            <section className="hub-dash-combined__panel" data-panel="project-stage">
+            <section className="hub-dash-combined__panel" data-panel="project-stage" aria-hidden={lineExpanded}>
               <div className="hub-dash-all__heading">
                 <h3>{t("hub.dash.projects.startYear.title")}</h3>
               </div>

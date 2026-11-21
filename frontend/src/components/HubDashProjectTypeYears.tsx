@@ -15,7 +15,8 @@ const BAR_MAX_W = 46;
 const GROUP_INSET_RATIO = 0.16;
 
 type YearKey = DashboardYearKey;
-type ChartKind = "bar" | "line";
+export type DashboardProjectChartKind = "bar" | "line";
+type ChartKind = DashboardProjectChartKind;
 
 function axisOf(maxValue: number): { max: number; step: number } {
   if (maxValue <= 5) return { max: Math.max(1, maxValue), step: 1 };
@@ -32,7 +33,11 @@ function includesYear(years: readonly YearKey[], year: YearKey): boolean { retur
  * 年份与类型均可点击筛选；年份默认最近 5 年，左右按钮切换年份窗口；最左侧「全选」为液态玻璃按钮。
  * 右侧按钮切换柱状图 / 折线图；两种图形共用年份、类型筛选和悬停统计。
  */
-export function HubDashProjectTypeYears({ insights }: { readonly insights: DashboardProjectInsights }) {
+export function HubDashProjectTypeYears({ insights, expanded = false, onChartTypeChange }: {
+  readonly insights: DashboardProjectInsights;
+  readonly expanded?: boolean;
+  readonly onChartTypeChange?: (chartType: DashboardProjectChartKind) => void;
+}) {
   const t = useT();
   const rows = insights.typeByYear;
   const numericYears = [...new Set(rows.map((row) => row.year).filter((year): year is number => year !== null))].sort((left, right) => left - right);
@@ -44,6 +49,15 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
   const [chartType, setChartType] = useState<ChartKind>("bar");
   const [tip, setTip] = useState<DashboardHoverTip | null>(null);
   const [hoverYear, setHoverYear] = useState<string | null>(null);
+  const expandedLine = expanded && chartType === "line";
+  const viewH = expandedLine ? 520 : VIEW_H;
+  const axisY = expandedLine ? 430 : AXIS_Y;
+  const tickLabelY = expandedLine ? 458 : TICK_LABEL_Y;
+  const chartToggle = (): void => {
+    const next = chartType === "bar" ? "line" : "bar";
+    setChartType(next);
+    onChartTypeChange?.(next);
+  };
 
   if (rows.length === 0) return <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>;
 
@@ -51,7 +65,7 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
   const activeTypeIndexes = DASHBOARD_PROJECT_TYPES.map((type, index) => ({ type, index })).filter((item) => visibleTypes.includes(item.type));
   const maxValue = visibleYears.reduce((max, row) => activeTypeIndexes.reduce((inner, item) => Math.max(inner, row.counts[item.index] ?? 0), max), 0);
   const { max: tickMax, step } = axisOf(Math.max(maxValue, 1));
-  const unit = (AXIS_Y - PLOT_TOP) / tickMax;
+  const unit = (axisY - PLOT_TOP) / tickMax;
   const groupW = visibleYears.length === 0 ? PLOT_X1 - PLOT_X0 : (PLOT_X1 - PLOT_X0) / visibleYears.length;
   const itemW = groupW * (1 - GROUP_INSET_RATIO * 2) / Math.max(activeTypeIndexes.length, 1);
   const barW = Math.min(BAR_MAX_W, itemW * 0.64);
@@ -72,7 +86,7 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
         yearIndex,
         count,
         x: PLOT_X0 + groupW * yearIndex + groupW / 2,
-        y: AXIS_Y - count * unit,
+        y: axisY - count * unit,
       };
     }),
   }));
@@ -89,7 +103,7 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
               data-active={chartType === "line" ? "true" : "false"}
               aria-pressed={chartType === "line"}
               aria-label={t("hub.dash.projects.typeYear.viewToggle")}
-              onClick={() => setChartType((current) => current === "bar" ? "line" : "bar")}
+              onClick={chartToggle}
             >{chartType === "bar" ? t("hub.dash.projects.typeYear.viewLine") : t("hub.dash.projects.typeYear.viewBar")}</button>
           </div>
           <div className="hub-dash-project-types__rightFilters">
@@ -118,10 +132,10 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
       {visibleYears.length === 0 || activeTypeIndexes.length === 0 ? (
         <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>
       ) : (
-        <svg className="hub-dash-project-types" viewBox={"0 0 " + VIEW_W + " " + VIEW_H} preserveAspectRatio="xMidYMid meet" role="img" aria-label={chartType === "bar" ? t("hub.dash.projects.typeYear.aria") : t("hub.dash.projects.typeYear.ariaLine")} onMouseLeave={() => { setTip(null); setHoverYear(null); }}>
-          {ticks.map((value) => value > 0 ? <line key={"grid-" + value} x1={PLOT_X0} y1={AXIS_Y - value * unit} x2={PLOT_X1} y2={AXIS_Y - value * unit} stroke="#e8eaee" strokeDasharray="3 4" /> : null)}
-          <line x1={PLOT_X0 - 8} y1={AXIS_Y} x2={PLOT_X1 + 8} y2={AXIS_Y} stroke="#b8bec6" />
-          {ticks.map((value) => <text key={"tick-" + value} x={PLOT_X0 - 14} y={AXIS_Y - value * unit + 4} textAnchor="end" fontSize={12} fill="#8a9099">{value}</text>)}
+        <svg className="hub-dash-project-types" viewBox={"0 0 " + VIEW_W + " " + viewH} data-expanded={expandedLine ? "true" : "false"} preserveAspectRatio="xMidYMid meet" role="img" aria-label={chartType === "bar" ? t("hub.dash.projects.typeYear.aria") : t("hub.dash.projects.typeYear.ariaLine")} onMouseLeave={() => { setTip(null); setHoverYear(null); }}>
+          {ticks.map((value) => value > 0 ? <line key={"grid-" + value} x1={PLOT_X0} y1={axisY - value * unit} x2={PLOT_X1} y2={axisY - value * unit} stroke="#e8eaee" strokeDasharray="3 4" /> : null)}
+          <line x1={PLOT_X0 - 8} y1={axisY} x2={PLOT_X1 + 8} y2={axisY} stroke="#b8bec6" />
+          {ticks.map((value) => <text key={"tick-" + value} x={PLOT_X0 - 14} y={axisY - value * unit + 4} textAnchor="end" fontSize={12} fill="#8a9099">{value}</text>)}
 
           {visibleYears.map((row, yearIndex) => {
             const groupX = PLOT_X0 + groupW * yearIndex;
@@ -135,7 +149,7 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
                 x={groupX + 4}
                 y={PLOT_TOP - 6}
                 width={Math.max(groupW - 8, 1)}
-                height={AXIS_Y - PLOT_TOP + 6}
+                height={axisY - PLOT_TOP + 6}
                 rx={8}
                 fill="transparent"
                 onMouseEnter={(event) => { setHoverYear(key); setTip(hoverTipAt(event, baselineLabel, yearRows, t("hub.dash.projects.typeYear.title"))); }}
@@ -154,7 +168,7 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
                   const count = row.counts[item.index] ?? 0;
                   const height = count * unit;
                   const x = startX + typeIndex * itemW + groupGap / 2;
-                  const y = AXIS_Y - height;
+                  const y = axisY - height;
                   const color = DASHBOARD_PROJECT_TYPE_COLORS[item.type];
                   return (
                     <g key={item.type}>
@@ -220,7 +234,7 @@ export function HubDashProjectTypeYears({ insights }: { readonly insights: Dashb
                     pointerEvents="none"
                   >{visibleTotal}</text>
                 ) : null}
-                <text x={groupX + groupW / 2} y={TICK_LABEL_Y + 15} textAnchor="middle" fontSize={row.year === null ? 11.5 : 13} fill="#4b5563">{yearText(row.year)}</text>
+                <text x={groupX + groupW / 2} y={tickLabelY + 15} textAnchor="middle" fontSize={row.year === null ? 11.5 : 13} fill="#4b5563">{yearText(row.year)}</text>
               </g>
             );
           })}

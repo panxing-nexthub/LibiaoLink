@@ -4684,6 +4684,7 @@ body {
   width: 100%;
   min-height: 0;
   overflow: hidden;
+  overflow: clip;
 }
 
 .hub-dash-slide-track {
@@ -4704,6 +4705,7 @@ body {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  overflow: clip;
 }
 
 .hub-dash-all__slide {
@@ -4714,6 +4716,7 @@ body {
   min-height: 0;
   padding: 0.25rem 3.33% 0.35rem;
   overflow: hidden;
+  overflow: clip;
 }
 
 .hub-dash-all__slideCard {
@@ -4724,6 +4727,8 @@ body {
   min-width: 0;
   min-height: 0;
   padding: 0.9rem 1.05rem 0.8rem;
+  overflow: hidden;
+  overflow: clip;
   border: 1px solid #e5e7eb;
   border-radius: 14px;
   background: #ffffff;

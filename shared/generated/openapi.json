@@ -9460,6 +9460,57 @@
           "version"
         ]
       },
+      "ProjectArchiveChanges": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50,
+            "example": "CNBJ-20260708-0001",
+            "description": "项目编号：建后可修改；同样校验唯一性，重复返回 409 PROJECT_CODE_EXISTS"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "region": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "projectTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。"
+          },
+          "managerIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "项目经理（A22 · Push 136）：至少一位、可多位（≤ 200 位）；不传 = 不改、传空数组或超过上限 = 400；数组顺序 = 展示顺序"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000
+          }
+        },
+        "additionalProperties": false,
+        "description": "编辑表单提交的项目字段，与归档在同一事务内保存"
+      },
       "ProjectArchiveMissing": {
         "type": "object",
         "properties": {
@@ -9827,6 +9878,43 @@
           "acknowledgedMissing"
         ],
         "description": "归档记录与清单（POST 归档返回；GET /projects/{id}/archive 读面同形）"
+      },
+      "ProjectArchiveWithUpdateBody": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Version"
+              },
+              {
+                "description": "项目当前 version（乐观锁；不匹配 409 VERSION_CONFLICT）"
+              }
+            ]
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false,
+            "description": "旧契约兼容字段：当前忽略，不改变归档类型或门禁"
+          },
+          "archiveKind": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "unaccepted"
+            ],
+            "default": "accepted",
+            "description": "accepted 已验收归档，unaccepted 异常归档；旧请求默认已验收"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/ProjectArchiveChanges"
+          }
+        },
+        "required": [
+          "version",
+          "changes"
+        ],
+        "additionalProperties": false
       },
       "ProjectCreateBody": {
         "type": "object",
@@ -18071,6 +18159,86 @@
           },
           "404": {
             "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{id}/archive-with-update": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "修改项目并归档：字段修改和归档在同一事务内提交，需 project.update 与 project.archive",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectArchiveWithUpdateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "项目字段和归档均已保存，返回归档记录与清单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectArchiveView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "冲突（VERSION_CONFLICT / 状态不允许当前操作）",
             "content": {
               "application/json": {
                 "schema": {

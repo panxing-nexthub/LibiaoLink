@@ -213,15 +213,16 @@ export function ProjectModal({ mode, initial, initialArchiveKind, hasOpenPostArc
     };
   }, []);
 
-  const canSubmit =
+  const fieldsComplete =
     code.trim() !== "" &&
     description.trim() !== "" &&
     managerIds.length > 0 &&
     projectTypes.length > 0 &&
-    region !== "" &&
+    region !== "";
+  const canSubmit =
     !pending &&
     archiveMissing === null &&
-    (!archivedLock || (canArchive && status === "active"));
+    (archivedLock ? canArchive && status === "active" : fieldsComplete);
   const title = isEdit ? t("card.edit") : t("home.create");
   /** 触发器上的展示名：字典条目给字典名（阿联酋 → 阿拉伯联合酋长国）；否则值本身（标准中文国名）。 */
   const regionLabel = dictLabel(dicts, "region", region);
@@ -287,98 +288,103 @@ export function ProjectModal({ mode, initial, initialArchiveKind, hasOpenPostArc
 
         <ScrollArea viewportClassName="mt-5 min-h-0 flex-1" className="overscroll-contain space-y-4 px-0.5 pb-1" ariaLabel={t("modal.form.aria")} thumbAlwaysVisible>
         <form id="project-modal-form" className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-700">{t("modal.code.field")}</span>
-            <input
-              className={fieldClass}
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              placeholder={t("modal.code.placeholder")}
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-700">{t("modal.name.field")}</span>
-            <input
-              className={fieldClass}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder={t("modal.name.placeholder")}
-            />
-          </label>
-          <div className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-700">
-              {fieldText(locale, "项目经理")}<span className="ml-1 text-xs font-normal text-zinc-400">{t("modal.managers.any")}</span>
-            </span>
-            <MemberMultiSelect
-              values={managerIds}
-              onChange={setManagerIds}
-              options={managerOptions}
-              placeholder={t("drawer.manager.placeholder")}
-              ariaLabel={t("drawer.manager.aria")}
-            />
-          </div>
-          <div className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-700">{t("modal.province")}</span>
-            {/* Push 195：小窗 = 搜索框 + 最上方「已有项目地区」+ 分洲全部国家（不支持手填 / 添加 / 删除，不写字典） */}
-            <RegionSelect
-              value={region}
-              valueLabel={regionLabel}
-              items={dicts.region}
-              usedRegions={usedRegions}
-              onChange={setRegion}
-              onOpenChange={setRegionPopoverOpen}
-            />
-          </div>
-          <div className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-700">{t("modal.type.field")}</span>
-            <DictSelect
-              values={projectTypes}
-              items={dicts.projectType}
-              ariaLabel={t("modal.type.aria")}
-              placeholder={t("modal.type.placeholder")}
-              renderContent={(name, item) => projectTypeContent(projectTypeText(locale, name), item)}
-              onAdd={
-                canManageDicts
-                  ? (input) => dictTools.onAdd("projectType", input)
-                  : undefined
-              }
-              addText={{
-                label: t("modal.type.add"),
-                placeholder: t("modal.type.namePlaceholder"),
-              }}
-              palette={{
-                label: fieldText(locale, "颜色模板"),
-                options: DICT_ACCENT_PALETTE,
-              }}
-              onDelete={
-                canManageDicts
-                  ? (code) => dictTools.onDelete("projectType", code)
-                  : undefined
-              }
-              deleteLabelOf={(_code, name) => t("modal.type.deleteAria", { name })}
-              onChange={setProjectTypes}
-            />
-          </div>
+          <fieldset
+            disabled={archivedLock}
+            className="min-w-0 space-y-4 [&_:disabled]:cursor-not-allowed [&_:disabled]:bg-zinc-50 [&_textarea:disabled]:resize-none"
+          >
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-zinc-700">{t("modal.code.field")}</span>
+              <input
+                className={fieldClass}
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                placeholder={t("modal.code.placeholder")}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-zinc-700">{t("modal.name.field")}</span>
+              <input
+                className={fieldClass}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder={t("modal.name.placeholder")}
+              />
+            </label>
+            <div className="block">
+              <span className="mb-1.5 block text-sm font-medium text-zinc-700">
+                {fieldText(locale, "项目经理")}<span className="ml-1 text-xs font-normal text-zinc-400">{t("modal.managers.any")}</span>
+              </span>
+              <MemberMultiSelect
+                values={managerIds}
+                onChange={setManagerIds}
+                options={managerOptions}
+                placeholder={t("drawer.manager.placeholder")}
+                ariaLabel={t("drawer.manager.aria")}
+              />
+            </div>
+            <div className="block">
+              <span className="mb-1.5 block text-sm font-medium text-zinc-700">{t("modal.province")}</span>
+              {/* Push 195：小窗 = 搜索框 + 最上方「已有项目地区」+ 分洲全部国家（不支持手填 / 添加 / 删除，不写字典） */}
+              <RegionSelect
+                value={region}
+                valueLabel={regionLabel}
+                items={dicts.region}
+                usedRegions={usedRegions}
+                onChange={setRegion}
+                onOpenChange={setRegionPopoverOpen}
+              />
+            </div>
+            <div className="block">
+              <span className="mb-1.5 block text-sm font-medium text-zinc-700">{t("modal.type.field")}</span>
+              <DictSelect
+                values={projectTypes}
+                items={dicts.projectType}
+                ariaLabel={t("modal.type.aria")}
+                placeholder={t("modal.type.placeholder")}
+                renderContent={(name, item) => projectTypeContent(projectTypeText(locale, name), item)}
+                onAdd={
+                  canManageDicts
+                    ? (input) => dictTools.onAdd("projectType", input)
+                    : undefined
+                }
+                addText={{
+                  label: t("modal.type.add"),
+                  placeholder: t("modal.type.namePlaceholder"),
+                }}
+                palette={{
+                  label: fieldText(locale, "颜色模板"),
+                  options: DICT_ACCENT_PALETTE,
+                }}
+                onDelete={
+                  canManageDicts
+                    ? (code) => dictTools.onDelete("projectType", code)
+                    : undefined
+                }
+                deleteLabelOf={(_code, name) => t("modal.type.deleteAria", { name })}
+                onChange={setProjectTypes}
+              />
+            </div>
 
-          {/* Push 280：备注（契约 description）恢复采集 —— 新建 / 编辑都可填；多行、选填、上限 2000（契约 max(2000)）。 */}
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-700">
-              {t("modal.note.field")}<span className="ml-1 text-xs font-normal text-zinc-400">{t("modal.note.optional")}</span>
-            </span>
-            <textarea
-              className={fieldClass + " min-h-20 resize-y"}
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              maxLength={2000}
-              placeholder={t("modal.note.placeholder")}
-            />
-            {note === (initial?.note ?? "") && noteTranslation !== null && noteTranslation !== note ? (
-              <p className="mt-1.5 max-h-28 overflow-y-auto whitespace-pre-wrap rounded-md bg-zinc-50 px-2.5 py-1.5 text-xs leading-5 text-zinc-600">
-                <span className="mr-1.5 text-[11px] text-zinc-400">{t("ie.mtPreview")}</span>
-                {noteTranslation}
-              </p>
-            ) : null}
-          </label>
+            {/* Push 280：备注（契约 description）恢复采集 —— 新建 / 编辑都可填；多行、选填、上限 2000（契约 max(2000)）。 */}
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-zinc-700">
+                {t("modal.note.field")}<span className="ml-1 text-xs font-normal text-zinc-400">{t("modal.note.optional")}</span>
+              </span>
+              <textarea
+                className={fieldClass + " min-h-20 resize-y"}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                maxLength={2000}
+                placeholder={t("modal.note.placeholder")}
+              />
+              {note === (initial?.note ?? "") && noteTranslation !== null && noteTranslation !== note ? (
+                <p className="mt-1.5 max-h-28 overflow-y-auto whitespace-pre-wrap rounded-md bg-zinc-50 px-2.5 py-1.5 text-xs leading-5 text-zinc-600">
+                  <span className="mr-1.5 text-[11px] text-zinc-400">{t("ie.mtPreview")}</span>
+                  {noteTranslation}
+                </p>
+              ) : null}
+            </label>
+          </fieldset>
 
           {isEdit ? (
             <div className="block">

@@ -266,6 +266,19 @@ export const ProjectArchiveBodySchema = archiveVersionBody.extend({
   archiveKind: ProjectArchiveKindSchema.default("accepted").describe("accepted 已验收归档，unaccepted 异常归档；旧请求默认已验收"),
 }).openapi("ProjectArchiveBody");
 
+export const ProjectArchiveChangesSchema = ProjectUpdateBodySchema.pick({
+  code: true,
+  name: true,
+  region: true,
+  projectTypes: true,
+  managerIds: true,
+  description: true,
+}).strict().openapi("ProjectArchiveChanges");
+
+export const ProjectArchiveWithUpdateBodySchema = ProjectArchiveBodySchema.extend({
+  changes: ProjectArchiveChangesSchema.describe("编辑表单提交的项目字段，与归档在同一事务内保存"),
+}).strict().openapi("ProjectArchiveWithUpdateBody");
+
 /** 归档缺项条目（历史兼容）：旧版本 422 明细与清单 acknowledgedMissing 同形；新归档的拒绝明细通过错误响应返回。 */
 export const ProjectArchiveMissingSchema = z
   .object({

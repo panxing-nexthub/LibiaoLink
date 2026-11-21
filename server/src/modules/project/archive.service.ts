@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { ProjectArchiveBodySchema, ProjectArchiveViewSchema, ProjectUnarchiveBodySchema, z } from "@libiaolink/contracts";
+import { ProjectArchiveBodySchema, ProjectArchiveViewSchema, ProjectArchiveWithUpdateBodySchema, ProjectUnarchiveBodySchema, z } from "@libiaolink/contracts";
 import type { StageKey } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import { DatabaseService } from "../../db/database.service.js";
@@ -9,12 +9,13 @@ import { AuditService } from "../admin/index.js";
 import { ArchiveRepository, type ArchiveViewRow } from "./archive.repository.js";
 import { FlowService } from "./flow.service.js";
 import { ProjectRepository } from "./project.repository.js";
-import { toProjectView, type ProjectView } from "./project.service.js";
+import { ProjectService, toProjectView, type ProjectView } from "./project.service.js";
 import type { ProjectStageRow } from "./flow.repository.js";
 
 export type ProjectArchiveView = z.infer<typeof ProjectArchiveViewSchema>;
 
 export type ArchiveRequestBody = z.infer<typeof ProjectArchiveBodySchema>;
+export type ArchiveWithUpdateRequestBody = z.infer<typeof ProjectArchiveWithUpdateBodySchema>;
 export type UnarchiveRequestBody = z.infer<typeof ProjectUnarchiveBodySchema>;
 
 /** 行 → 契约视图（归档清单读面 / 归档成功返回同形）。 */
@@ -48,18 +49,21 @@ export class ArchiveService {
     private readonly projects: ProjectRepository,
     private readonly flow: FlowService,
     private readonly audit: AuditService,
+    private readonly projectUpdates: ProjectService,
   ) {}
 
   /**
-   * POST /projects/{id}/archive：分类归档并生成清单。
+   * 单独归档与编辑并归档共用门禁、清单和写事务。
    * confirm 保留为旧契约兼容字段；当前口径不存在可确认越过的缺项，值会被忽略。
    */
-  async archiveProject(projectId: string, body: ArchiveRequestBody, actorId: string): Promise<ProjectArchiveView> {
+  async archiveProject(projectId: string, body: ArchiveRequestBody | ArchiveWithUpdateRequestBody, actorId: string): Promise<ProjectArchiveView> {
     const view = await this.projects.findViewById(projectId);
     if (view === null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
     if (view.project.status === "archived") throw new AppError("PROJECT_ARCHIVED", "项目已归档");
     await this.flow.assertProjectEditor(projectId, actorId, "项目归档");
-    await this.database.db.transaction(async (tx) => {
+    if (view.project.version !== body.version) throw new AppError("VERSION_CONFLICT", "项目已被他人更新，请刷新后重试");
+    const patch = "changes" in body ? await this.projectUpdates.prepareProjectUpdate(view.project, body.changes) : undefined;
+    return this.database.db.transaction(async (tx) => {
       const locked = await this.archive.lockProjectRow(tx, projectId);
       if (locked === null || locked.deletedAt !== null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
       if (locked.status === "archived") throw new AppError("PROJECT_ARCHIVED", "项目已归档");
@@ -86,7 +90,8 @@ export class ArchiveService {
       }
       const stage = await this.archive.findStage(tx, projectId, locked.stageKey);
       if (stage === null) throw new AppError("INTERNAL", "项目阶段快照缺失，无法归档");
-      const updated = await this.archive.updateProjectArchived(tx, projectId, actorId, body.version);
+      const edited = patch === undefined ? locked : await this.projectUpdates.applyProjectUpdate(tx, locked, patch, body.version, actorId);
+      const updated = await this.archive.updateProjectArchived(tx, projectId, actorId, edited.version);
       if (updated === null) throw new AppError("VERSION_CONFLICT", "项目已被他人更新，请刷新后重试");
       const at = updated.updatedAt;
       const snapshot = await this.buildSnapshot(tx, projectId, stage);
@@ -104,7 +109,7 @@ export class ArchiveService {
         objectType: "project",
         objectId: projectId,
         projectId,
-        summary: "归档项目：" + locked.code + "（" + locked.name + "）",
+        summary: "归档项目：" + updated.code + "（" + updated.name + "）",
         changes: [{ field: "status", from: locked.status, to: "archived" }],
         metadata: { archiveId: record.id, archiveKind: body.archiveKind },
       });
@@ -115,10 +120,10 @@ export class ArchiveService {
           payload: { projectId, status: updated.status, previousStatus: locked.status, version: updated.version, actorId, at: at.toISOString() },
         });
       }
+      const archiveView = await this.archive.findArchive(tx, projectId);
+      if (archiveView === null) throw new AppError("INTERNAL", "归档记录写入后读取失败");
+      return toArchiveView(archiveView);
     });
-    const record = await this.archive.findArchive(this.database.db, projectId);
-    if (record === null) throw new AppError("INTERNAL", "归档记录写入后读取失败");
-    return toArchiveView(record);
   }
 
   /** GET /projects/{id}/archive：归档清单读面（未归档 404）。 */

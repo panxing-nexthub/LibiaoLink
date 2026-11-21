@@ -184,8 +184,8 @@ export class ProjectRepository {
     return facets;
   }
 
-  async findViewById(id: string): Promise<ProjectViewRow | null> {
-    const rows = await this.database.db
+  async findViewById(id: string, client: DbClient = this.database.db): Promise<ProjectViewRow | null> {
+    const rows = await client
       .select({ project: projects, managerNames: MANAGER_NAMES_SQL, archiveKind: projectArchives.archiveKind, hasOpenPostArchiveTask })
       .from(projects)
       .leftJoin(projectArchives, and(eq(projects.status, "archived"), eq(projectArchives.projectId, projects.id)))

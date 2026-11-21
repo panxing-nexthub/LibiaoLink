@@ -1616,6 +1616,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/archive-with-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 修改项目并归档：字段修改和归档在同一事务内提交，需 project.update 与 project.archive */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProjectArchiveWithUpdateBody"];
+                };
+            };
+            responses: {
+                /** @description 项目字段和归档均已保存，返回归档记录与清单 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectArchiveView"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 冲突（VERSION_CONFLICT / 状态不允许当前操作） */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{id}/unarchive": {
         parameters: {
             query?: never;
@@ -14161,6 +14240,21 @@ export interface components {
              */
             archiveKind: "accepted" | "unaccepted";
         };
+        /** @description 编辑表单提交的项目字段，与归档在同一事务内保存 */
+        ProjectArchiveChanges: {
+            /**
+             * @description 项目编号：建后可修改；同样校验唯一性，重复返回 409 PROJECT_CODE_EXISTS
+             * @example CNBJ-20260708-0001
+             */
+            code?: string;
+            name?: string;
+            region?: string;
+            /** @description 按选择顺序排列的项目类型。首项用于兼容单值读取，组合项目创建时使用通用流程。 */
+            projectTypes?: string[];
+            /** @description 项目经理（A22 · Push 136）：至少一位、可多位（≤ 200 位）；不传 = 不改、传空数组或超过上限 = 400；数组顺序 = 展示顺序 */
+            managerIds?: components["schemas"]["Uuid"][];
+            description?: string | null;
+        };
         /** @description 归档缺项条目（历史兼容；2026-11-12 起新归档 acknowledgedMissing 恒为空） */
         ProjectArchiveMissing: {
             /**
@@ -14250,6 +14344,21 @@ export interface components {
             snapshot: components["schemas"]["ProjectArchiveSnapshot"];
             /** @description 旧流程缺项留痕（历史兼容；2026-11-12 起新归档恒为空数组） */
             acknowledgedMissing: components["schemas"]["ProjectArchiveMissing"][];
+        };
+        ProjectArchiveWithUpdateBody: {
+            version: components["schemas"]["Version"] & unknown;
+            /**
+             * @description 旧契约兼容字段：当前忽略，不改变归档类型或门禁
+             * @default false
+             */
+            confirm: boolean;
+            /**
+             * @description accepted 已验收归档，unaccepted 异常归档；旧请求默认已验收
+             * @default accepted
+             * @enum {string}
+             */
+            archiveKind: "accepted" | "unaccepted";
+            changes: components["schemas"]["ProjectArchiveChanges"];
         };
         /** @description 创建项目：项目序号 seqNo 不接受传入，由服务端分配并随响应返回 */
         ProjectCreateBody: {

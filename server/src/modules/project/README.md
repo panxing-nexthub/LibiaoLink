@@ -56,6 +56,7 @@
 ## 已实现（M7-04 归档 · ADR-027 · C4-02 / C4-03 · Push 167）
 
 - 端点（契约 `shared/src/modules/projects.ts`，OpenAPI tags = projects；`project.archive` 功能权限 + 记录级可见性）：`POST /api/v1/projects/{id}/archive`（200 返回清单视图）与 `GET /api/v1/projects/{id}/archive`（未归档 / 无清单 404）。
+- 编辑并归档走 `POST /api/v1/projects/{id}/archive-with-update`，同时要求 `project.update` 和 `project.archive`。通过归档校验后，字段修改、项目经理快照、审计、状态与清单在同一事务提交。客户端要使用组合入口，须先部署包含该端点的 API。
 - 已验收归档（默认 `archiveKind=accepted`）要求所有未删除任务完成且含验收阶段任务；缺项返回 409 `ARCHIVE_NOT_READY`。异常归档（`unaccepted`）保留任务进度，不写 `project.completed`。两类归档均保留清单与操作审计，既有归档清单的 `archiveKind` 统一补为 `accepted`。
 - 归档事务（单事务）：锁项目行（`FOR UPDATE`）→ 乐观锁 `version` 判定 → 置 `status = archived` + `archived_at` / `archived_by` → 生成 `project_archives` 引用式清单（阶段 / 任务分布 / 文件含版本 / 变更 / 日报 / 问题统计）→ 撤销进行中的上传会话 → 审计 `action=archive`；不删数据、不改阶段、不做解冻（冻结口径）。
 - 检索与投影：列表 `filter[archivedYear]`（四位年份 1900-2100、多值逗号分隔；按 `archived_at` 的 Asia/Shanghai 年）—— 归档检索（C4-07）的服务端读面；`search_docs` 搜索投影随 M7-01（lan）。

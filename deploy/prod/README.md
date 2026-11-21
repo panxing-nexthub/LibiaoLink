@@ -1,3 +1,13 @@
+> **2026-11-22 00:13 问题下钻补图片与项目定位跳转（测试机 full-stack · test-20261122-0013-px-dashboard-issue-photo-link-eb93993b）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `eb93993b`；release = `test-20261122-0013-px-dashboard-issue-photo-link-eb93993b`，previous = `test-20261122-0000-px-dashboard-project-row-link-414ae0a2`；staging = `/srv/data/deploy-test-20261122-0013-px-dashboard-issue-photo-link-eb93993b/staging`。
+
+> **改动 / 验收**：全部项目问题下拉行新增「问题附图」缩略图，点击可打开大图预览；问题正文改为链接，进入 `#/project/{projectId}?view=daily&sub=issues&issue={issueId}`，自动定位并打开对应项目的问题详情抽屉。`issues.details[]` 增只读 `photos[]`（fileId / name，预览仍走文件接口）。shared check、server typecheck / build / dashboard tests 10 条、frontend typecheck / build 通过；Chrome 实测供应商原因 4 条问题中两条各显示 2 张附图，点图预览正常；点击第一条问题进入 `UK-VANILLA-AIRROB` 问题追踪并自动打开所述问题，console error 0。
+
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,615,759 B / SHA-256 `cab46961…`、678 文件；`server-dist.tar.gz` 1,350,916 B / `85bd23ea…`；`shared-dist.tar.gz` 274,193 B / `01c932f6…`。线上前端 1091 → 1094 文件，server / shared dist 原子换装后强制重建 api / worker / web；server 795 文件、shared 120 文件。
+
+> **验证 / 备份 / 清单**：线上 `index.html` `1edc9316…`、主包 `assets/index-Do9s-SU2.js` 2,554,770 B / `6af6d8fa…`、CSS `assets/index-CsYaFKyq.css` 261,088 B / `0b6eb1a3…`、ES `assets/es-XFCta-vr.js` 428,098 B / `4e6c1be3…`；`/`、`/healthz`、`/readyz` 200，web / api / worker healthy，RestartCount 0、OOM false。备份 `/srv/data/backups/before-test-20261122-0013-px-dashboard-issue-photo-link-eb93993b`，163,157,777 B / 8 文件 / SHA256SUMS `e8b072a5…`；新 `RELEASE_MANIFEST.json` 7,131 B / `75ed9b5f…`，`root:root 644`。
+
+> **边界 / 回滚**：仅测试机 `10.1.104.44`；正式机未触碰；本轮无数据库结构 / 迁移 / Compose / env / Nginx / 对象存储变更。回滚：恢复备份 frontend / server / shared dist 与原 manifest，再重建 api / worker / web。
+
 > **2026-11-22 00:00 项目下钻列表行进入项目详情（测试机 frontend-only + 测试库增量补齐 · test-20261122-0000-px-dashboard-project-row-link-414ae0a2）**：代码来源分支 `codex/dashboard-all-projects-test-20261121` @ `414ae0a2`；release = `test-20261122-0000-px-dashboard-project-row-link-414ae0a2`，previous = `test-20261121-2356-px-dashboard-drilldown-3c28151d`；staging = `/srv/data/deploy-test-20261122-0000-px-dashboard-project-row-link-414ae0a2/staging`。
 
 > **改动 / 验收**：全部项目图表「数据详情」中的项目列表整行改为链接，点击 / 键盘 Enter 进入 `#/project/{id}` 项目总览；行尾增加进入箭头，悬停高亮，aria-label 带项目名称与编号。frontend typecheck / build 通过；Chrome 实测由列表进入 `DEMO-2026-06` 项目详情成功，项目页正常渲染，console error 0。

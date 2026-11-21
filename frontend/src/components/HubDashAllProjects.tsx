@@ -15,7 +15,7 @@ type LoadingState = "idle" | "loading" | "ready" | "failed";
  * 仪表盘「全部项目」六屏滑轨（2026-11-21 第二轮业务口径：
  * 「现在全做成滑动的好吗 就像地图和仪表盘这样切换一样」）：
  * ① 问题原因归纳；② 项目数量；③ 项目经理阶段；④ 销售负责人阶段；⑤ 规划负责人阶段；
- * ⑥ 最新阶段项目数量（阶段横轴 + 年份筛选）。每屏占满内容区，滚轮 / 键盘 / 底部切换共同驱动同一刚体滑轨。
+ * ⑥ 项目阶段（阶段横轴 + 年份筛选）。每屏占满内容区，滚轮 / 键盘 / 底部切换共同驱动同一刚体滑轨。
  */
 export function HubDashAllProjects({ activeSlide, issues, issuesState, insights, insightsState, onIssueTip, onIssueRowTip, onLeave }: {
   readonly activeSlide: number;
@@ -111,7 +111,6 @@ export function HubDashAllProjects({ activeSlide, issues, issuesState, insights,
         <div className="hub-dash-all__slideCard">
         <div className="hub-dash-all__heading">
           <h3>{t("hub.dash.projects.startYear.title")}</h3>
-          <p>{t("hub.dash.projects.startYear.subtitle")}</p>
         </div>
         <div className="hub-dash-all__startBody">
           {analyticsReady ? <HubDashStartYearStages insights={insights} /> : analyticsFallback}

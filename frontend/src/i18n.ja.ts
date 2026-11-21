@@ -60,7 +60,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "pm.gantt.timeFilter": "期間フィルター",
   "pm.gantt.timeFilter.hint": "既定ではすべて表示します。期間範囲は今日を中心に前後へ広げます",
   "pm.gantt.timeFilter.period": "期間範囲",
-  "pm.gantt.timeFilter.periodHint": "今日を中心に、前後それぞれ1週間 / 1か月 / 1四半期 / 1年",
+  "pm.gantt.timeFilter.periodHint": "範囲は右側の時間軸に連動します（現在：{scale}）",
   "pm.gantt.timeFilter.currentRange": "現在の範囲：{range}",
   "pm.gantt.timeFilter.start": "開始日",
   "pm.gantt.timeFilter.end": "終了日",

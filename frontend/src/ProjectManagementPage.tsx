@@ -2442,8 +2442,6 @@ function PmImplementationGantt({
   const [ganttTimeFilter, setGanttTimeFilter] = useState<PmGanttTimeFilter | null>(null);
   const [ganttOnlyInProgress, setGanttOnlyInProgress] = useState(false);
   const [ganttTimeFilterOpen, setGanttTimeFilterOpen] = useState(false);
-  const [ganttTimeFilterPeriod, setGanttTimeFilterPeriod] = useState<PmGanttScale>("month");
-  const [ganttTimeFilterPeriodMenuOpen, setGanttTimeFilterPeriodMenuOpen] = useState(false);
   const ganttTimeFilterPopoverRef = useRef<HTMLDivElement | null>(null);
   const ganttFilteredRows = useMemo(
     () =>
@@ -2644,7 +2642,6 @@ function PmImplementationGantt({
   ): void => {
     const range = pmGanttPeriodRangeOf(scale, pmGanttTodayIso());
     setGanttTimeFilter(range);
-    setGanttTimeFilterPeriod(scale);
     setGanttAnchorIso(range.startIso);
     if (closePopover) {
       setGanttTimeFilterOpen(false);
@@ -2657,7 +2654,6 @@ function PmImplementationGantt({
     }
     const range = pmGanttShiftedPeriodRangeOf(ganttTimeFilter, direction);
     setGanttTimeFilter(range);
-    setGanttTimeFilterPeriod(range.period);
     setGanttAnchorIso(range.startIso);
     requestGanttScroll(range.startIso);
   };
@@ -2673,14 +2669,12 @@ function PmImplementationGantt({
     const today = pmGanttTodayIso();
     setGanttTimeFilter(null);
     setGanttAnchorIso(today);
-    setGanttTimeFilterPeriodMenuOpen(false);
     setGanttTimeFilterOpen(false);
     requestGanttScroll(today);
   };
   const selectGanttPeriodMode = (): void => {
-    setGanttTimeFilterPeriodMenuOpen(true);
     if (ganttTimeFilter === null) {
-      applyGanttPeriodTimeFilter(ganttTimeFilterPeriod, false);
+      applyGanttPeriodTimeFilter(ganttScale, false);
     }
   };
   const openGanttTimeFilter = (): void => {
@@ -2688,7 +2682,6 @@ function PmImplementationGantt({
       setGanttTimeFilterOpen(false);
       return;
     }
-    setGanttTimeFilterPeriodMenuOpen(ganttTimeFilter !== null);
     setGanttTimeFilterOpen(true);
   };
 
@@ -3246,18 +3239,24 @@ function PmImplementationGantt({
     ganttTimeFilter === null
       ? null
       : pmGanttVisibleRangeLabel(ganttTimeFilter.startIso, ganttTimeFilter.endIso);
-  const ganttTimeFilterText =
+  const ganttTimeFilterPeriodLabel =
     ganttTimeFilter === null
-      ? t("pm.gantt.timeFilter.all")
-      : t("pm.gantt.timeFilter.period") +
-        " · " +
-        t(PM_GANTT_SCALES[ganttTimeFilter.period].labelKey);
-  const ganttTimeFilterAriaLabel =
+      ? null
+      : t(PM_GANTT_SCALES[ganttTimeFilter.period].labelKey);
+  const ganttTimeFilterText =
     ganttTimeFilter === null || ganttTimeFilterRangeText === null
+      ? t("pm.gantt.timeFilter.all")
+      : t("pm.gantt.timeFilter.period") + " · " + ganttTimeFilterRangeText;
+  const ganttTimeFilterAriaLabel =
+    ganttTimeFilter === null ||
+    ganttTimeFilterRangeText === null ||
+    ganttTimeFilterPeriodLabel === null
       ? t("pm.gantt.timeFilter") + ": " + ganttTimeFilterText
       : t("pm.gantt.timeFilter") +
         ": " +
-        ganttTimeFilterText +
+        t("pm.gantt.timeFilter.period") +
+        " · " +
+        ganttTimeFilterPeriodLabel +
         ", " +
         ganttTimeFilterRangeText;
 
@@ -3283,6 +3282,12 @@ function PmImplementationGantt({
     setGanttScale(nextScale);
     setGanttAnchorIso(referenceIso);
     setSelectedGanttColumnKey(null);
+    if (ganttTimeFilter !== null) {
+      const range = pmGanttPeriodRangeOf(nextScale, referenceIso);
+      setGanttTimeFilter(range);
+      requestGanttScroll(range.startIso);
+      return;
+    }
     requestGanttScroll(referenceIso);
   };
 
@@ -3524,31 +3529,13 @@ function PmImplementationGantt({
                       {t("pm.gantt.timeFilter.period")}
                     </button>
                   </div>
-                  {ganttTimeFilterPeriodMenuOpen || ganttTimeFilter !== null ? (
+                  {ganttTimeFilter !== null ? (
                     <div className="space-y-2">
-                      <p className="text-[11px] text-zinc-500">{t("pm.gantt.timeFilter.periodHint")}</p>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {PM_GANTT_SCALE_KEYS.map((periodScale) => {
-                          const active = ganttTimeFilter?.period === periodScale;
-                          return (
-                            <button
-                              key={periodScale}
-                              type="button"
-                              data-project-management-gantt-time-filter-period-option={periodScale}
-                              aria-pressed={active}
-                              onClick={() => applyGanttPeriodTimeFilter(periodScale)}
-                              className={
-                                "h-8 rounded-md border text-[11px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " +
-                                (active
-                                  ? "border-blue-200 bg-blue-50 text-blue-700"
-                                  : "border-zinc-200 bg-white text-zinc-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700")
-                              }
-                            >
-                              {t(PM_GANTT_SCALES[periodScale].labelKey)}
-                            </button>
-                          );
+                      <p className="text-[11px] text-zinc-500">
+                        {t("pm.gantt.timeFilter.periodHint", {
+                          scale: ganttTimeFilterPeriodLabel ?? "",
                         })}
-                      </div>
+                      </p>
                       {ganttTimeFilterRangeText !== null ? (
                         <p
                           data-project-management-gantt-time-filter-current-range="true"

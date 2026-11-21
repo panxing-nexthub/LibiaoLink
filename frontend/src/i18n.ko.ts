@@ -60,7 +60,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "pm.gantt.timeFilter": "기간 필터",
   "pm.gantt.timeFilter.hint": "기본값은 전체 표시이며, 기간 범위는 오늘을 중심으로 앞뒤로 확장됩니다",
   "pm.gantt.timeFilter.period": "기간 범위",
-  "pm.gantt.timeFilter.periodHint": "오늘을 중심으로 앞뒤 각각 1주 / 1개월 / 1분기 / 1년",
+  "pm.gantt.timeFilter.periodHint": "범위는 오른쪽 시간 눈금을 따릅니다(현재: {scale})",
   "pm.gantt.timeFilter.currentRange": "현재 범위: {range}",
   "pm.gantt.timeFilter.start": "시작일",
   "pm.gantt.timeFilter.end": "종료일",

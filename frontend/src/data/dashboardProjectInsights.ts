@@ -92,6 +92,25 @@ export type DashboardProjectStartYearStage = {
   readonly total: number;
 };
 
+export type DashboardProjectPerson = {
+  readonly personId: string;
+  readonly name: string | null;
+};
+
+export type DashboardProjectRoleOwners = Readonly<Record<DashboardProjectRole, readonly DashboardProjectPerson[]>>;
+
+/** 全部项目图表下钻的一行项目。 */
+export type DashboardProjectSummary = {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly projectTypes: readonly string[];
+  readonly stageBucket: DashboardProjectStageBucket;
+  readonly startupAt: string | null;
+  readonly startupYear: number | null;
+  readonly owners: DashboardProjectRoleOwners;
+};
+
 export type DashboardProjectInsights = {
   readonly totalProjects: number;
   readonly projectTypes: readonly string[];
@@ -99,4 +118,5 @@ export type DashboardProjectInsights = {
   readonly typeByYear: readonly DashboardProjectTypeYear[];
   readonly roles: readonly DashboardProjectRoleStats[];
   readonly startYearStages: readonly DashboardProjectStartYearStage[];
+  readonly projects: readonly DashboardProjectSummary[];
 };

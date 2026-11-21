@@ -20,6 +20,7 @@
 import { displayStatusLabel, stageNameOf } from "../taskApi";
 import { ISSUE_STATE_NAMES } from "../reportApi";
 import { isCompleteStatus, type TaskStatus } from "./tasks";
+import type { IssueState } from "./reports";
 
 /** 进度五档（契约 TaskProgressSchema）：堆叠顺序 = 从左到右 0 → 1。 */
 export const DASHBOARD_BINS = [0, 0.25, 0.5, 0.75, 1] as const;
@@ -163,7 +164,7 @@ export function buildDashboardStatus(tasks: readonly DashboardStatusTaskLike[]):
 /**
  * 问题分布口径（Push 344 · 业务口径 2026-10-16「现在做这个问题 效果和上面做的一样」）：
  * 仪表盘第三个视图 ——「问题」分组柱状图（x = 问题状态、图例 = 问题归类）用；统计取数在 src/dashboardApi.ts
- * 的 fetchDashboardIssues（服务端 /dashboard/issues 聚合；首次切到「问题」视图才拉，点柱明细再按项目懒取）。
+ * 的 fetchDashboardIssues（服务端 /dashboard/issues 聚合与问题下钻行；首次切到「问题」视图才拉，单项目点柱仍按项目懒取）。
  *
  * 口径（改规则只改这里）：
  * - x 轴 = 问题三态展示名（已完成 / 处理中 / 未解决，DASHBOARD_ISSUE_STATE_ORDER），**0 条的状态整组不出现**
@@ -208,6 +209,21 @@ export type DashboardIssues = {
   readonly counts: ReadonlyMap<string, number>;
   /** 问题总数（明细行数口径，与柱高口径分开：多归类问题在每个归类各计一条）。 */
   readonly totalIssues: number;
+};
+
+/** 问题图表下钻行（全部可见项目；一条问题只出现一次）。 */
+export type DashboardIssueRecord = {
+  readonly id: string;
+  readonly projectId: string;
+  readonly projectCode: string;
+  readonly projectName: string;
+  readonly title: string;
+  readonly state: IssueState;
+  readonly categories: readonly string[];
+  readonly reporterName: string | null;
+  readonly ownerName: string | null;
+  readonly raisedAt: string;
+  readonly solution: string | null;
 };
 
 /** （状态 × 归类）计数键。 */
@@ -262,6 +278,11 @@ export function buildDashboardIssues(issues: readonly DashboardIssueLike[]): Das
 /** 问题是否落在该（状态 × 归类）格子里 —— 点柱打开的「数据详情」行按它筛（保证「柱上数字 = 表行数」）。 */
 export function isIssueInCell(issue: DashboardIssueLike, state: string, category: string): boolean {
   return issueStateNameOf(issue.state) === state && issue.categories.includes(category);
+}
+
+/** 问题下钻行是否命中图表柱（state 为界面展示态：已完成 / 处理中 / 未解决）。 */
+export function isDashboardIssueRecordInCell(issue: DashboardIssueRecord, state: string, category: string): boolean {
+  return isIssueInCell(issue, state, category);
 }
 
 /**

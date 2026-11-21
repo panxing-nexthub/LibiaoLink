@@ -141,6 +141,8 @@ type ProjectRole = (typeof DASHBOARD_PROJECT_ROLES)[number];
 
 export interface DashboardAnalyticsProjectInput {
   id: string;
+  code: string;
+  name: string;
   projectType: string;
   additionalProjectTypes: readonly string[];
   stageKey: string;
@@ -192,6 +194,7 @@ export function emptyProjectAnalytics(): DashboardProjectAnalyticsResponse {
     typeByYear: [],
     roles: DASHBOARD_PROJECT_ROLES.map((role) => ({ role, people: [] })),
     startYearStages: [],
+    projects: [],
   };
 }
 
@@ -363,6 +366,32 @@ export function buildProjectAnalytics(
     startYearStages: [...yearStage.entries()]
       .sort(([left], [right]) => yearOrder(left, right))
       .map(([year, stageCounts]) => ({ year, stageCounts, total: stageCounts.reduce((sum, count) => sum + count, 0) })),
+    projects: projects.map((project) => {
+      const startupAt = startupByProject.get(project.id) ?? null;
+      const projectTypes = [...new Set(
+        [project.projectType, ...project.additionalProjectTypes]
+          .map((type) => type.trim())
+          .filter((type) => type !== ""),
+      )];
+      const owners = ownersByProject.get(project.id);
+      const peopleOf = (role: ProjectRole): Array<{ personId: string; name: string | null }> =>
+        [...(owners?.get(role) ?? new Map<string, string | null>()).entries()]
+          .map(([personId, name]) => ({ personId, name: normalizedName(name) }));
+      return {
+        id: project.id,
+        code: project.code,
+        name: project.name,
+        projectTypes,
+        stageBucket: projectStageBucketOf(project),
+        startupAt,
+        startupYear: projectStartupYear(startupAt),
+        owners: {
+          manager: peopleOf("manager"),
+          sales: peopleOf("sales"),
+          planning: peopleOf("planning"),
+        },
+      };
+    }),
   };
 }
 

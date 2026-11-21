@@ -9,6 +9,7 @@ import type { PermissionService, ProjectScopeFilter } from "../src/modules/permi
 import { deriveDisplayStatus, deriveOnTime, type TaskDerivationInput } from "../src/modules/task/task.rules.js";
 import type {
   DashboardChangeRow,
+  DashboardIssueDetailRow,
   DashboardIssueRow,
   DashboardAnalyticsProjectRow,
   DashboardProjectRoleTaskRow,
@@ -42,6 +43,7 @@ class FakeDashboardRepository {
   projectRows: DashboardProjectRow[] = [];
   taskRows: DashboardTaskBucketRow[] = [];
   issueRows: DashboardIssueRow[] = [];
+  issueDetailRows: DashboardIssueDetailRow[] = [];
   changeRows: DashboardChangeRow[] = [];
   analyticsProjectRows: DashboardAnalyticsProjectRow[] = [];
   roleTaskRows: DashboardProjectRoleTaskRow[] = [];
@@ -61,6 +63,10 @@ class FakeDashboardRepository {
 
   async listIssueRows(): Promise<DashboardIssueRow[]> {
     return this.issueRows;
+  }
+
+  async listIssueDetails(): Promise<DashboardIssueDetailRow[]> {
+    return this.issueDetailRows;
   }
 
   async listChangeReasons(): Promise<DashboardChangeRow[]> {
@@ -181,6 +187,8 @@ describe("全部项目维度聚合", () => {
     const projects: DashboardAnalyticsProjectRow[] = [
       {
         id: PROJECT_A,
+        code: "DEMO-A",
+        name: "项目 A",
         projectType: "T-sort",
         additionalProjectTypes: ["飞箱"],
         stageKey: "install",
@@ -192,6 +200,8 @@ describe("全部项目维度聚合", () => {
       },
       {
         id: PROJECT_B,
+        code: "DEMO-B",
+        name: "项目 B",
         projectType: "飞箱",
         additionalProjectTypes: [],
         stageKey: "deploy",
@@ -203,6 +213,8 @@ describe("全部项目维度聚合", () => {
       },
       {
         id: "33333333-3333-4333-8333-333333333333",
+        code: "DEMO-C",
+        name: "项目 C",
         projectType: "3D分拣",
         additionalProjectTypes: [],
         stageKey: "presale",
@@ -214,6 +226,8 @@ describe("全部项目维度聚合", () => {
       },
       {
         id: "44444444-4444-4444-8444-444444444444",
+        code: "DEMO-D",
+        name: "项目 D",
         projectType: "T-sort",
         additionalProjectTypes: [],
         stageKey: "design",
@@ -258,6 +272,25 @@ describe("全部项目维度聚合", () => {
       "presale", "design", "purchase", "assembly", "install", "deploy", "trial", "production", "acceptance",
       "archive_exception", "archive_accepted", "archive_temporary",
     ]);
+    expect(result.projects).toHaveLength(4);
+    expect(result.projects[0]).toMatchObject({
+      id: PROJECT_A,
+      code: "DEMO-A",
+      name: "项目 A",
+      projectTypes: ["T-sort", "飞箱"],
+      stageBucket: "install",
+      startupAt: "2025-03-12",
+      startupYear: 2025,
+    });
+    expect(result.projects[0]?.owners.manager).toEqual([
+      { personId: P1, name: "张三" },
+      { personId: P2, name: "李四" },
+    ]);
+    expect(result.projects[0]?.owners.sales).toEqual([{ personId: P1, name: "张三" }]);
+    expect(result.projects[0]?.owners.planning).toEqual([
+      { personId: P2, name: "李四" },
+      { personId: P5, name: "赵六" },
+    ]);
     expect(result.typeByYear).toEqual([
       { year: 2025, counts: [1, 0, 2], total: 3 },
       { year: 2026, counts: [0, 1, 0], total: 1 },
@@ -291,6 +324,7 @@ describe("全部项目维度聚合", () => {
     expect(response.stageBuckets).toHaveLength(12);
     expect(response.roles.map((role) => role.role)).toEqual(["manager", "sales", "planning"]);
     expect(response.roles.every((role) => role.people.length === 0)).toBe(true);
+    expect(response.projects).toEqual([]);
   });
 });
 
@@ -345,7 +379,7 @@ describe("仪表盘聚合服务", () => {
     expect(response.all.progress.totalTasks).toBe(0);
   });
 
-  it("问题 / 词频只下发统计，且只保留有数据的项目", async () => {
+  it("问题图表携带下钻行，问题 / 词频聚合只保留有数据的项目", async () => {
     const repo = new FakeDashboardRepository();
     repo.projectRows = [
       { id: PROJECT_A, name: "项目 A", managerNames: [] },
@@ -354,6 +388,21 @@ describe("仪表盘聚合服务", () => {
     repo.issueRows = [
       { projectId: PROJECT_A, state: "open", categories: ["采购部", "客户原因"] },
       { projectId: PROJECT_A, state: "done", categories: ["机械部"] },
+    ];
+    repo.issueDetailRows = [
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        projectId: PROJECT_A,
+        projectCode: "DEMO-A",
+        projectName: "项目 A",
+        title: "采购件尺寸不符",
+        state: "open",
+        categories: ["采购部", "客户原因"],
+        reporterName: "张三",
+        ownerName: null,
+        raisedAt: "2026-10-20",
+        solution: null,
+      },
     ];
     repo.changeRows = [
       { projectId: PROJECT_A, reason: "客户需求 1200mm" },
@@ -378,6 +427,7 @@ describe("仪表盘聚合服务", () => {
         },
       },
     ]);
+    expect(issues.details).toEqual(repo.issueDetailRows);
     const words = await service.changeWords("actor-1");
     expect(() => DashboardChangeWordsResponseSchema.parse(words)).not.toThrow();
     expect(words.all.totalChanges).toBe(2);

@@ -20,6 +20,13 @@ const ROLE_TITLE_KEYS: Readonly<Record<DashboardProjectRole, TextKey>> = {
   planning: "hub.dash.projects.role.planning",
 };
 
+export type DashboardRoleProjectPick = {
+  readonly personId: string | null;
+  readonly name: string | null;
+  readonly isUnassigned: boolean;
+  readonly stageBuckets: readonly DashboardProjectStageBucket[];
+};
+
 const VIEW_H = 378;
 const PLOT_TOP = 24;
 const AXIS_Y = 306;
@@ -34,10 +41,11 @@ function truncated(text: string, maxChars = 9): string {
   return text.length <= maxChars ? text : text.slice(0, maxChars - 1) + "…";
 }
 
-function RoleStageChart({ role, stats, visibleStages }: {
+function RoleStageChart({ role, stats, visibleStages, onPick }: {
   readonly role: DashboardProjectRole;
   readonly stats: DashboardProjectRoleStats | undefined;
   readonly visibleStages: readonly DashboardProjectStageBucket[];
+  readonly onPick?: (pick: DashboardRoleProjectPick) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -98,12 +106,14 @@ function RoleStageChart({ role, stats, visibleStages }: {
             <g key={personKey}>
               <rect
                 className="hub-dash-role__band"
+                data-drill={onPick === undefined ? undefined : "true"}
                 x={center - slotW / 2 + 5}
                 y={PLOT_TOP - 6}
                 width={Math.max(slotW - 10, 1)}
                 height={AXIS_Y - PLOT_TOP + 6}
                 rx={8}
                 fill="transparent"
+                onClick={onPick === undefined ? undefined : () => { onPick({ personId: person.personId, name: rawLabel, isUnassigned: person.isUnassigned, stageBuckets: visibleStageEntries.map((entry) => entry.bucket) }); }}
                 onMouseEnter={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
                 onMouseMove={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
               />
@@ -118,12 +128,14 @@ function RoleStageChart({ role, stats, visibleStages }: {
                   <g key={bucket}>
                     <rect
                       className="hub-dash-role__segment"
+                      data-drill={onPick === undefined ? undefined : "true"}
                       style={{ animationDelay: personIndex * 45 + stageIndex * 18 + "ms" }}
                       x={x}
                       y={y}
                       width={barW}
                       height={Math.max(height, 1.5)}
                       fill={DASHBOARD_PROJECT_STAGE_COLORS[bucket]}
+                      onClick={onPick === undefined ? undefined : () => { onPick({ personId: person.personId, name: rawLabel, isUnassigned: person.isUnassigned, stageBuckets: [bucket] }); }}
                       onMouseEnter={(event) => setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
                       onMouseMove={(event) => setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
                     />
@@ -189,11 +201,14 @@ export function HubDashProjectStageLegend({ visibleStages, onToggleStage, onSele
 /**
  * 单一角色的「人员 × 最新阶段」堆叠柱图，供全部项目滑轨的一屏使用。
  * 同一项目同一角色同一人去重；未配置对应负责人落「待分配」。
- * 阶段图例可逐项显隐，隐藏阶段不再绘制，合计与纵轴按可见阶段重算。
+ * 阶段图例可逐项显隐，隐藏阶段不再绘制，合计与纵轴按可见阶段重算；
+ * 点人员柱底或阶段分段按「负责人 × 阶段」下钻项目列表。
  */
-export function HubDashRoleStage({ role, insights, storageKeyPrefix }: {
+export function HubDashRoleStage({ role, insights, onPick, storageKeyPrefix }: {
   readonly role: DashboardProjectRole;
   readonly insights: DashboardProjectInsights;
+  /** 点人员柱底或阶段分段：按该负责人 × 阶段打开项目列表。 */
+  readonly onPick?: (pick: DashboardRoleProjectPick) => void;
   /** 全部项目仪表盘传入时，按账号记住该角色页的阶段显隐。 */
   readonly storageKeyPrefix?: string;
 }) {
@@ -214,7 +229,7 @@ export function HubDashRoleStage({ role, insights, storageKeyPrefix }: {
         onToggleStage={toggleStage}
         onSelectAll={() => setVisibleStages(allSelected ? [] : [...DASHBOARD_PROJECT_STAGE_BUCKETS])}
       />
-      <RoleStageChart role={role} stats={stats} visibleStages={visibleStages} />
+      <RoleStageChart role={role} stats={stats} visibleStages={visibleStages} onPick={onPick} />
     </div>
   );
 }

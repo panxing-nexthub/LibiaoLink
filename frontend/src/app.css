@@ -5434,3 +5434,315 @@ body {
   }
 }
 
+
+
+/* 2026-11-21 全部项目图表下钻：矩形可点光标与只读列表 / 折叠问题弹窗。 */
+.hub-dash-project-types__bar[data-drill="true"],
+.hub-dash-project-types__pointHit[data-drill="true"],
+.hub-dash-start-stage__bar[data-drill="true"],
+.hub-dash-role__band[data-drill="true"],
+.hub-dash-role__segment[data-drill="true"] {
+  cursor: pointer;
+}
+
+.hub-dash-project-list-detail {
+  width: min(84rem, 100%);
+}
+
+.hub-dash-project-list-detail__context {
+  color: #9aa0a6;
+}
+
+.hub-dash-project-list-detail__count {
+  flex: 0 0 auto;
+  color: #6b7280;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-dash-project-list-detail__scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(64vh, 36rem);
+  overflow: auto;
+  padding: 0.65rem;
+}
+
+.hub-dash-project-list-detail__grid {
+  --hub-project-list-columns: minmax(9rem, 0.85fr) minmax(7rem, 0.55fr) minmax(14rem, 1.5fr) minmax(9rem, 0.8fr) minmax(8.5rem, 0.65fr);
+  min-width: 54rem;
+}
+
+.hub-dash-project-list-detail__grid[data-show-stage="true"] {
+  --hub-project-list-columns: minmax(9rem, 0.85fr) minmax(7rem, 0.55fr) minmax(13rem, 1.35fr) minmax(8.5rem, 0.75fr) minmax(8.5rem, 0.7fr) minmax(8.5rem, 0.65fr);
+  min-width: 64rem;
+}
+
+.hub-dash-project-list-detail__headRow,
+.hub-dash-project-list-detail__row {
+  display: grid;
+  grid-template-columns: var(--hub-project-list-columns);
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.hub-dash-project-list-detail__headRow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.55rem;
+  background: #f5f6f8;
+  color: #7c848d;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.hub-dash-project-list-detail__row {
+  min-height: 3.4rem;
+  margin-top: 0.45rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #e7eaee;
+  border-radius: 0.65rem;
+  background: #ffffff;
+  color: #30363d;
+  font-size: 0.82rem;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.hub-dash-project-list-detail__row:hover {
+  border-color: #cfd9e6;
+  background: #fbfdff;
+  box-shadow: 0 8px 22px -20px rgb(15 23 42 / 0.45);
+}
+
+.hub-dash-project-list-detail__cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-dash-project-list-detail__name {
+  color: #111827;
+  font-weight: 650;
+}
+
+.hub-dash-project-list-detail__types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  overflow: visible;
+  white-space: normal;
+}
+
+.hub-dash-project-list-detail__types i {
+  padding: 0.16rem 0.45rem;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #475569;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.hub-dash-project-list-detail__types i[data-type="T-sort"] {
+  background: #eaf4ff;
+  color: #2563a8;
+}
+
+.hub-dash-project-list-detail__types i[data-type="3D分拣"] {
+  background: #fff7dd;
+  color: #9a6a00;
+}
+
+.hub-dash-project-list-detail__types i[data-type="飞箱"] {
+  background: #eaf8ea;
+  color: #2e7d32;
+}
+
+.hub-dash-project-list-detail__empty {
+  padding: 2.5rem 1rem;
+  color: #9aa0a6;
+  font-size: 0.84rem;
+  text-align: center;
+}
+
+.hub-dash-issue-group-detail {
+  width: min(72rem, 100%);
+}
+
+.hub-dash-issue-group-detail__scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(64vh, 36rem);
+  overflow: auto;
+  padding: 0.65rem;
+}
+
+.hub-dash-issue-group-detail__group {
+  overflow: hidden;
+  border: 1px solid #e5e8ec;
+  border-radius: 0.7rem;
+  background: #ffffff;
+}
+
+.hub-dash-issue-group-detail__group + .hub-dash-issue-group-detail__group {
+  margin-top: 0.55rem;
+}
+
+.hub-dash-issue-group-detail__groupHead {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.8rem 0.9rem;
+  border: 0;
+  background: #ffffff;
+  color: #1f2937;
+  cursor: pointer;
+  text-align: left;
+}
+
+.hub-dash-issue-group-detail__groupHead:hover {
+  background: #f8fafc;
+}
+
+.hub-dash-issue-group-detail__groupHead:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: -2px;
+}
+
+.hub-dash-issue-group-detail__chevron {
+  flex: 0 0 auto;
+  color: #7b8491;
+  transition: transform 160ms ease;
+}
+
+.hub-dash-issue-group-detail__group[data-expanded="true"] .hub-dash-issue-group-detail__chevron {
+  transform: rotate(90deg);
+}
+
+.hub-dash-issue-group-detail__projectName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.hub-dash-issue-group-detail__groupCount {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-dash-issue-group-detail__issues {
+  border-top: 1px solid #edf0f3;
+  background: #fbfcfd;
+}
+
+.hub-dash-issue-group-detail__issue {
+  padding: 0.8rem 1rem 0.85rem 2.2rem;
+  border-top: 1px solid #edf0f3;
+}
+
+.hub-dash-issue-group-detail__issue:first-child {
+  border-top: 0;
+}
+
+.hub-dash-issue-group-detail__issueTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.hub-dash-issue-group-detail__issueTop h4 {
+  min-width: 0;
+  margin: 0;
+  color: #1f2937;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.hub-dash-issue-group-detail__state {
+  flex: 0 0 auto;
+  padding: 0.16rem 0.48rem;
+  border-radius: 999px;
+  font-size: 0.69rem;
+  font-weight: 650;
+}
+
+.hub-dash-issue-group-detail__state[data-state="open"] {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.hub-dash-issue-group-detail__state[data-state="in_progress"] {
+  background: #fff7dd;
+  color: #a16207;
+}
+
+.hub-dash-issue-group-detail__state[data-state="done"] {
+  background: #e9f9ef;
+  color: #15803d;
+}
+
+.hub-dash-issue-group-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.45rem;
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+.hub-dash-issue-group-detail__categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+.hub-dash-issue-group-detail__categories span {
+  padding: 0.14rem 0.42rem;
+  border-radius: 0.25rem;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.hub-dash-issue-group-detail__solution {
+  margin: 0.55rem 0 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.4rem;
+  background: #f5f7fa;
+  color: #4b5563;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.hub-dash-issue-group-detail__solution b {
+  color: #374151;
+  font-weight: 600;
+}
+
+@media (max-width: 767.98px) {
+  .hub-dash-project-list-detail__scroll,
+  .hub-dash-issue-group-detail__scroll {
+    max-height: 68vh;
+    padding: 0.45rem;
+  }
+
+  .hub-dash-issue-group-detail__issue {
+    padding-left: 0.9rem;
+  }
+}

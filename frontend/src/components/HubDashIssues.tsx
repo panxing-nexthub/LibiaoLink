@@ -10,8 +10,8 @@ import { dashboardAxisOf } from "../dashboardChartScale";
  * 每个状态一组柱子（组内按归类契约原序）、柱顶写同色数字、y 轴虚线网格（0 轴实线）；
  * 悬停柱 = 整组铺浅灰底 + 浮层卡（状态名 + 归类色点 + 归类 + 条数，参考图二的形态）；
  * 悬停组内空白 = 浮层卡列出该状态全部可见归类（与「项目进度」的行阴影卡同一口径）；
- * 点柱 = 打开只读「数据详情」—— 仅选中具体项目时可点（与柱段 / 扇区同一套，父组件按 canDrill 关掉点击）；
- * 「全部项目」下不可点。父组件负责悬停卡 / 数据详情两个浮层的状态。
+ * 点柱 = 打开只读「数据详情」：单项目按项目下钻，全部项目按「状态 × 归类」打开折叠问题列表；
+ * 父组件按 canDrill 控制是否可点，并负责悬停卡 / 数据详情两个浮层的状态。
  *
  * 口径（buildDashboardIssues，data/dashboardProgress.ts）：0 条的状态整组不出现、0 条的归类整条不出现
  * （业务口径「没有相关的问题才没显示在图中」，与「任务状态」饼图同一口径）；一条问题多归类时每个归类各计一条。
@@ -60,7 +60,7 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
   readonly issues: DashboardIssues;
   /** 全部项目仪表盘传入时按账号记住分类显隐；单项目不传。 */
   readonly filterStorageKey?: string;
-  /** 选中具体项目才可点柱（开「数据详情」）；「全部项目」下光标保持箭头、不给来源。 */
+  /** 是否允许点柱打开详情：单项目与全部项目问题图均为 true。 */
   readonly canDrill: boolean;
   /** 悬停柱：父组件把鼠标位置换算成白卡坐标并出浮层卡（状态名 + 归类 + 条数）。 */
   readonly onTip: (event: ReactMouseEvent<SVGRectElement>, state: string, category: string, count: number) => void;
@@ -68,7 +68,7 @@ export function HubDashIssues({ issues, canDrill, onTip, onRowTip, onLeave, onPi
   readonly onRowTip: (event: ReactMouseEvent<SVGRectElement>, state: string, rows: readonly DashboardIssueRow[]) => void;
   /** 移出：收起浮层卡并撤掉组高亮。 */
   readonly onLeave: () => void;
-  /** 点柱：打开只读「数据详情」（仅选中具体项目时可点）。 */
+  /** 点柱：打开只读「数据详情」（单项目问题明细或全部项目折叠问题列表）。 */
   readonly onPick: (state: string, category: string) => void;
   /** 总览字号倍率（Push 360 · 业务口径 2026-10-16「文字不够清晰 那些小字还是要大一点」）：只有「数据总览」传 >1，单视图不传、逐值不变。 */
   readonly fontScale?: number;

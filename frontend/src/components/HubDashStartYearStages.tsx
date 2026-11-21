@@ -9,6 +9,7 @@ import {
   DASHBOARD_PROJECT_STAGE_COLORS,
   dashboardProjectStageLabel,
   type DashboardProjectInsights,
+  type DashboardProjectStageBucket,
 } from "../data/dashboardProjectInsights";
 
 const BAR_W = 1400;
@@ -60,9 +61,10 @@ function stageLabelLines(label: string): readonly string[] {
   return [text.slice(0, middle), text.slice(middle)];
 }
 
-function StageBars({ insights, selectedYears }: {
+function StageBars({ insights, selectedYears, onPick }: {
   readonly insights: DashboardProjectInsights;
   readonly selectedYears: readonly DashboardYearKey[];
+  readonly onPick?: (bucket: DashboardProjectStageBucket, years: readonly DashboardYearKey[]) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -127,6 +129,7 @@ function StageBars({ insights, selectedYears }: {
               {count > 0 ? (
                 <rect
                   className="hub-dash-start-stage__bar"
+                  data-drill={onPick === undefined ? undefined : "true"}
                   style={{ animationDelay: stageIndex * 35 + "ms" }}
                   x={x}
                   y={y}
@@ -134,6 +137,7 @@ function StageBars({ insights, selectedYears }: {
                   height={Math.max(height, 2)}
                   rx={5}
                   fill={DASHBOARD_PROJECT_STAGE_COLORS[bucket]}
+                  onClick={onPick === undefined ? undefined : () => { onPick(bucket, selectedYears); }}
                   onMouseEnter={(event) => setTip(hoverTipAt(event, label, tipRows, t("hub.dash.projects.startYear.title")))}
                   onMouseMove={(event) => setTip(hoverTipAt(event, label, tipRows, t("hub.dash.projects.startYear.title")))}
                 />
@@ -168,10 +172,12 @@ function StageBars({ insights, selectedYears }: {
 /**
  * 最新阶段 × 启动年份：
  * x = 九大阶段 + 异常归档 / 验收归档 / 归档-临时任务，y = 项目数；
- * 年份使用与项目统计图一致的多选方块筛选，悬停柱体显示所选年份的明细。
+ * 年份使用与项目统计图一致的多选方块筛选，悬停柱体显示所选年份的明细；点柱按「当前阶段 × 选中年份」下钻项目列表。
  */
-export function HubDashStartYearStages({ insights, storageKeyPrefix }: {
+export function HubDashStartYearStages({ insights, onPick, storageKeyPrefix }: {
   readonly insights: DashboardProjectInsights;
+  /** 点阶段柱：按当前阶段 × 当前选中年份打开项目列表。 */
+  readonly onPick?: (bucket: DashboardProjectStageBucket, years: readonly DashboardYearKey[]) => void;
   /** 全部项目仪表盘传入时，按账号记住当前阶段图的年份筛选。 */
   readonly storageKeyPrefix?: string;
 }) {
@@ -221,7 +227,7 @@ export function HubDashStartYearStages({ insights, storageKeyPrefix }: {
         <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>
       ) : (
         <div className="hub-dash-start__bars">
-          <StageBars insights={insights} selectedYears={selectedYears} />
+          <StageBars insights={insights} selectedYears={selectedYears} onPick={onPick} />
         </div>
       )}
     </div>

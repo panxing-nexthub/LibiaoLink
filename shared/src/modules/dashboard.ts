@@ -1,5 +1,5 @@
 import { z } from "../zod.ts";
-import { UuidSchema } from "../common/conventions.ts";
+import { DateOnlySchema, UuidSchema } from "../common/conventions.ts";
 import { StageKeySchema, TaskDisplayStatusSchema } from "../common/dicts.ts";
 import { IssueCategorySchema, IssueStateSchema } from "./issues.ts";
 
@@ -106,12 +106,30 @@ export const DashboardIssueProjectSchema = z
   })
   .openapi("DashboardIssueProject");
 
+/** 问题图表下钻行：只读展示用，不携带图片签名或写操作。 */
+export const DashboardIssueRecordSchema = z
+  .object({
+    id: UuidSchema,
+    projectId: UuidSchema,
+    projectCode: z.string(),
+    projectName: z.string(),
+    title: z.string(),
+    state: IssueStateSchema,
+    categories: z.array(IssueCategorySchema),
+    reporterName: z.string().nullable(),
+    ownerName: z.string().nullable(),
+    raisedAt: DateOnlySchema,
+    solution: z.string().nullable(),
+  })
+  .openapi("DashboardIssueRecord");
+
 export const DashboardIssuesResponseSchema = z
   .object({
     all: DashboardIssuesSchema,
     byProject: z.array(DashboardIssueProjectSchema).openapi({ description: "只含有问题记录的项目；没有问题的项目由前端补空统计" }),
+    details: z.array(DashboardIssueRecordSchema).openapi({ description: "全部可见项目的问题下钻行；一条问题只出现一次" }),
   })
-  .openapi("DashboardIssuesResponse", { description: "仪表盘问题分布聚合读面" });
+  .openapi("DashboardIssuesResponse", { description: "仪表盘问题分布与问题图表下钻读面" });
 
 /**
  * 全部项目维度统计（2026-11-21 业务口径）：项目数量按启动年份 × 项目类型、三类负责人 × 最新阶段、
@@ -169,6 +187,33 @@ export const DashboardProjectStartYearStageSchema = z
   })
   .openapi("DashboardProjectStartYearStage");
 
+export const DashboardProjectOwnerSchema = z
+  .object({
+    personId: UuidSchema,
+    name: z.string().nullable(),
+  })
+  .openapi("DashboardProjectOwner");
+
+/** 全部项目图表的项目下钻行。 */
+export const DashboardProjectSummarySchema = z
+  .object({
+    id: UuidSchema,
+    code: z.string(),
+    name: z.string(),
+    projectTypes: z.array(z.string()).openapi({ description: "项目命中的全部类型（去重，保留输入顺序）" }),
+    stageBucket: DashboardProjectStageBucketSchema,
+    startupAt: DateOnlySchema.nullable().openapi({ description: "项目启动任务实际完成日期；null = 未记录" }),
+    startupYear: z.number().int().min(1900).max(9999).nullable(),
+    owners: z
+      .object({
+        manager: z.array(DashboardProjectOwnerSchema),
+        sales: z.array(DashboardProjectOwnerSchema),
+        planning: z.array(DashboardProjectOwnerSchema),
+      })
+      .openapi({ description: "三类负责人的去重人员；空数组 = 待分配" }),
+  })
+  .openapi("DashboardProjectSummary");
+
 export const DashboardProjectAnalyticsResponseSchema = z
   .object({
     totalProjects: z.number().int().min(0),
@@ -177,8 +222,9 @@ export const DashboardProjectAnalyticsResponseSchema = z
     typeByYear: z.array(DashboardProjectTypeYearSchema).openapi({ description: "年份升序，未记录启动时间置末；多类型项目在每个命中类型各计一次" }),
     roles: z.array(DashboardProjectRoleStatsSchema).length(3).openapi({ description: "固定顺序：项目经理 / 销售负责人 / 规划负责人" }),
     startYearStages: z.array(DashboardProjectStartYearStageSchema).openapi({ description: "年份升序，未记录启动时间置末" }),
+    projects: z.array(DashboardProjectSummarySchema).openapi({ description: "全部可见项目的下钻行；顺序与项目列表默认排序一致" }),
   })
-  .openapi("DashboardProjectAnalyticsResponse", { description: "全部项目维度聚合读面（项目数量 / 负责人 / 启动年份 × 最新阶段）" });
+  .openapi("DashboardProjectAnalyticsResponse", { description: "全部项目维度聚合读面（项目数量 / 负责人 / 启动年份 × 最新阶段，附项目下钻行）" });
 
 export const DashboardWordSchema = z
   .object({

@@ -672,6 +672,7 @@ export function HubDashboard({ viewerId, data, state, issues, issuesState, onNee
             viewerId={viewerId}
             activeSlide={allSlide}
             issues={issuesView}
+            issueRecords={issues?.details ?? []}
             issuesState={issuesState}
             insights={insights}
             insightsState={insightsState}

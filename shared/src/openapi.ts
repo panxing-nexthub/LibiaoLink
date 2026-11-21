@@ -2288,7 +2288,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "get",
     path: "/api/v1/dashboard/project-insights",
     tags: ["dashboard"],
-    summary: "全部项目维度聚合：启动年份 × 项目类型、三类负责人 × 最新阶段、启动年份 × 最新阶段",
+    summary: "全部项目维度聚合：启动年份 × 项目类型、三类负责人 × 最新阶段、启动年份 × 最新阶段，附项目下钻行",
     responses: {
       200: { description: "项目维度聚合（按会话用户项目可见性过滤；只下发统计不下发明细）", ...json(DashboardProjectAnalyticsResponseSchema) },
       401: commonErrors[401],
@@ -2299,9 +2299,9 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "get",
     path: "/api/v1/dashboard/issues",
     tags: ["dashboard"],
-    summary: "仪表盘问题分布聚合：问题状态 × 归类；一次返回全部与逐项目统计",
+    summary: "仪表盘问题分布聚合与下钻行：一次返回全部 / 逐项目统计及全部可见项目的问题记录",
     responses: {
-      200: { description: "问题分布聚合（按会话用户项目可见性过滤）", ...json(DashboardIssuesResponseSchema) },
+      200: { description: "问题分布与下钻行（按会话用户项目可见性过滤）", ...json(DashboardIssuesResponseSchema) },
       401: commonErrors[401],
     },
   });

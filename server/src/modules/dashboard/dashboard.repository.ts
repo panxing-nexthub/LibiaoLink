@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { and, asc, count, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
@@ -21,9 +22,11 @@ export interface DashboardProjectRow {
   managerNames: (string | null)[] | null;
 }
 
-/** 全部项目维度统计的项目行（2026-11-21；只读，不暴露项目详情）。 */
+/** 全部项目维度统计的项目行（2026-11-21；只读；供聚合与图表下钻列表使用）。 */
 export interface DashboardAnalyticsProjectRow {
   id: string;
+  code: string;
+  name: string;
   projectType: string;
   additionalProjectTypes: string[];
   stageKey: string;
@@ -64,10 +67,29 @@ export interface DashboardIssueRow {
   categories: string[];
 }
 
+/** 问题图表下钻行（全部可见项目）。 */
+export interface DashboardIssueDetailRow {
+  id: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  title: string;
+  state: string;
+  categories: string[];
+  reporterName: string | null;
+  ownerName: string | null;
+  raisedAt: string;
+  solution: string | null;
+}
+
 export interface DashboardChangeRow {
   projectId: string;
   reason: string;
 }
+
+/** 问题下钻的提出人 / 责任人显示名。 */
+const DASHBOARD_ISSUE_REPORTER = alias(users, "dashboard_issue_reporter");
+const DASHBOARD_ISSUE_OWNER = alias(users, "dashboard_issue_owner");
 
 /** 项目经理姓名数组：与 manager_ids 同下标；缺失 / 停用用户该位为 null。 */
 const MANAGER_NAMES_SQL = sql<(string | null)[] | null>`(
@@ -181,13 +203,15 @@ export class DashboardRepository {
       .orderBy(desc(projects.createdAt), asc(projects.seqNo));
   }
 
-  /** 全部项目维度统计的项目行：类型 / 最新阶段 / 归档状态 / 项目经理。 */
+  /** 全部项目维度统计的项目行：编号 / 名称 / 类型 / 最新阶段 / 归档状态 / 项目经理。 */
   async listAnalyticsProjects(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardAnalyticsProjectRow[]> {
     if (scope.kind === "ids" && scope.ids.length === 0) return [];
     const conditions: SQL[] = [isNull(projects.deletedAt), ...scopeCondition(projects.id, scope)];
     const rows = await client
       .select({
         id: projects.id,
+        code: projects.code,
+        name: projects.name,
         projectType: projects.projectType,
         additionalProjectTypes: ADDITIONAL_PROJECT_TYPES_SQL,
         stageKey: projects.stageKey,
@@ -296,6 +320,32 @@ export class DashboardRepository {
       .from(issues)
       .innerJoin(projects, eq(projects.id, issues.projectId))
       .where(and(...conditions));
+  }
+
+  /** 问题图表下钻：按当前可见项目范围返回只读问题行，不在聚合结果里夹带图片签名。 */
+  async listIssueDetails(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardIssueDetailRow[]> {
+    if (scope.kind === "ids" && scope.ids.length === 0) return [];
+    const conditions: SQL[] = [isNull(projects.deletedAt), ...scopeCondition(issues.projectId, scope)];
+    return client
+      .select({
+        id: issues.id,
+        projectId: issues.projectId,
+        projectCode: projects.code,
+        projectName: projects.name,
+        title: issues.title,
+        state: issues.state,
+        categories: issues.categories,
+        reporterName: DASHBOARD_ISSUE_REPORTER.displayName,
+        ownerName: DASHBOARD_ISSUE_OWNER.displayName,
+        raisedAt: issues.raisedAt,
+        solution: issues.solution,
+      })
+      .from(issues)
+      .innerJoin(projects, eq(projects.id, issues.projectId))
+      .leftJoin(DASHBOARD_ISSUE_REPORTER, eq(DASHBOARD_ISSUE_REPORTER.id, issues.reporterId))
+      .leftJoin(DASHBOARD_ISSUE_OWNER, eq(DASHBOARD_ISSUE_OWNER.id, issues.ownerId))
+      .where(and(...conditions))
+      .orderBy(desc(issues.raisedAt), desc(issues.createdAt), asc(issues.id));
   }
 
   /** 变更原因原文（只下发给词频计算；不返回变更明细）。 */

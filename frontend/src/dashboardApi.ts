@@ -1,9 +1,9 @@
 /**
  * 仪表盘取数（B4 / M7-02 · 2026-10-21 服务端收口）：
  * - 首屏 GET /api/v1/dashboard/progress 一次拿全部与逐项目任务聚合，不再逐项目拉任务；
- * - 「问题」/「词频图」分别懒加载 GET /api/v1/dashboard/issues 与 /change-words，只拿统计；
- * - 点柱 / 扇区 / 词打开的「数据详情」才按选中项目取一次明细（任务 / 问题 + 日报 / 变更 + 任务 + 目录），
- *   组件层缓存到下一次聚合刷新，避免重复请求。
+ * - 「问题」懒加载 GET /api/v1/dashboard/issues，返回聚合与全部项目问题下钻行；「词频图」只拿统计；
+ * - 单项目点柱 / 扇区 / 词打开的「数据详情」才按选中项目取一次明细（任务 / 问题 + 日报 / 变更 + 任务 + 目录），
+ *   组件层缓存到下一次聚合刷新，避免重复请求；全部项目图表使用 project-insights / issues 自带下钻行。
  */
 import { apiRequest } from "./api";
 import type { DashboardChangeWords } from "./data/changeWords";
@@ -11,12 +11,13 @@ import type { DashboardProjectInsights } from "./data/dashboardProjectInsights";
 import {
   dashboardIssueKey,
   type DashboardDelivery,
+  type DashboardIssueRecord,
   type DashboardIssues,
   type DashboardProgress,
   type DashboardStatus,
 } from "./data/dashboardProgress";
 import type { Member } from "./data/members";
-import type { DailyReport, Issue } from "./data/reports";
+import type { DailyReport, Issue, IssueState } from "./data/reports";
 import { directoryMemberOptions, loadDirectory } from "./directory";
 import { fetchProjectChanges, type ApiChangeRequest } from "./fileApi";
 import { fetchProjectIssues, fetchProjectReports, ISSUE_STATE_NAMES } from "./reportApi";
@@ -45,6 +46,8 @@ export type DashboardDataset = {
 export type DashboardIssueDataset = {
   readonly all: DashboardIssues;
   readonly byProject: ReadonlyMap<string, DashboardIssues>;
+  /** 全部可见项目的问题下钻行（问题图表点柱后使用）。 */
+  readonly details: readonly DashboardIssueRecord[];
 };
 
 /** 词频统计（只含全部 / 逐项目聚合；明细在 fetchDashboardWordDetail 按需取）。 */
@@ -81,9 +84,24 @@ type ApiDashboardIssues = {
   totalIssues: number;
 };
 
+type ApiDashboardIssueRecord = {
+  id: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  title: string;
+  state: IssueState;
+  categories: string[];
+  reporterName: string | null;
+  ownerName: string | null;
+  raisedAt: string;
+  solution: string | null;
+};
+
 type ApiDashboardIssuesResponse = {
   all: ApiDashboardIssues;
   byProject: Array<{ projectId: string; issues: ApiDashboardIssues }>;
+  details: ApiDashboardIssueRecord[];
 };
 
 type ApiDashboardChangeWordsResponse = {
@@ -143,7 +161,23 @@ export async function fetchDashboardIssues(): Promise<DashboardIssueDataset> {
   for (const project of response.byProject) {
     byProject.set(project.projectId, toDashboardIssues(project.issues));
   }
-  return { all: toDashboardIssues(response.all), byProject };
+  return {
+    all: toDashboardIssues(response.all),
+    byProject,
+    details: response.details.map((issue) => ({
+      id: issue.id,
+      projectId: issue.projectId,
+      projectCode: issue.projectCode,
+      projectName: issue.projectName,
+      title: issue.title,
+      state: issue.state,
+      categories: [...issue.categories],
+      reporterName: issue.reporterName,
+      ownerName: issue.ownerName,
+      raisedAt: issue.raisedAt,
+      solution: issue.solution,
+    })),
+  };
 }
 
 /** 全部项目维度聚合（默认「全部项目」总览页懒加载；单项目视图不使用）。 */

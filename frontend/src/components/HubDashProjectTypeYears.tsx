@@ -26,12 +26,14 @@ function includesYear(years: readonly YearKey[], year: YearKey): boolean { retur
 /**
  * 「全部项目」项目统计：x = 启动年份，柱状图为每组三根柱，折线图为三条按年份连接的趋势线。
  * 年份与类型均可点击筛选；年份默认最近 5 年，左右按钮切换年份窗口；最左侧「全选」为液态玻璃按钮。
- * 右侧按钮切换柱状图 / 折线图；两种图形共用年份、类型筛选和悬停统计。
+ * 右侧按钮切换柱状图 / 折线图；两种图形共用年份、类型筛选和悬停统计；点柱 / 数据点按「年份 × 类型」下钻项目列表。
  */
-export function HubDashProjectTypeYears({ insights, expanded = false, onChartTypeChange, storageKeyPrefix }: {
+export function HubDashProjectTypeYears({ insights, expanded = false, onChartTypeChange, onPick, storageKeyPrefix }: {
   readonly insights: DashboardProjectInsights;
   readonly expanded?: boolean;
   readonly onChartTypeChange?: (chartType: DashboardProjectChartKind) => void;
+  /** 点柱 / 点折线数据点：按启动年份 × 项目类型打开项目列表。 */
+  readonly onPick?: (year: YearKey, type: DashboardProjectTypeCode) => void;
   /** 全部项目仪表盘传入时，按账号记住年份 / 类型 / 图表类型筛选。 */
   readonly storageKeyPrefix?: string;
 }) {
@@ -184,7 +186,7 @@ export function HubDashProjectTypeYears({ insights, expanded = false, onChartTyp
                   const color = DASHBOARD_PROJECT_TYPE_COLORS[item.type];
                   return (
                     <g key={item.type}>
-                      {count > 0 ? <rect className="hub-dash-project-types__bar" style={{ animationDelay: yearIndex * 55 + typeIndex * 30 + "ms" }} x={x} y={y} width={barW} height={Math.max(height, 2)} rx={4} fill={color} onMouseEnter={(event) => { setHoverYear(null); setTip(hoverTipAt(event, baselineLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color }], item.type)); }} onMouseMove={(event) => { setHoverYear(null); setTip(hoverTipAt(event, baselineLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color }], item.type)); }} /> : null}
+                      {count > 0 ? <rect className="hub-dash-project-types__bar" data-drill={onPick === undefined ? undefined : "true"} style={{ animationDelay: yearIndex * 55 + typeIndex * 30 + "ms" }} x={x} y={y} width={barW} height={Math.max(height, 2)} rx={4} fill={color} onClick={onPick === undefined ? undefined : () => { onPick(row.year, item.type); }} onMouseEnter={(event) => { setHoverYear(null); setTip(hoverTipAt(event, baselineLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color }], item.type)); }} onMouseMove={(event) => { setHoverYear(null); setTip(hoverTipAt(event, baselineLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color }], item.type)); }} /> : null}
                       {count > 0 && hoverYear !== yearKey(row.year) ? <text className="hub-dash-project-types__num" style={{ animationDelay: yearIndex * 55 + typeIndex * 30 + 300 + "ms" }} x={x + barW / 2} y={y - 8} textAnchor="middle" fontSize={13} fontWeight={600} fill="#374151" pointerEvents="none">{count}</text> : null}
                     </g>
                   );
@@ -216,10 +218,12 @@ export function HubDashProjectTypeYears({ insights, expanded = false, onChartTyp
                   <g key={"point-" + series.type + "-" + key}>
                     <circle
                       className="hub-dash-project-types__pointHit"
+                      data-drill={onPick === undefined ? undefined : "true"}
                       cx={point.x}
                       cy={point.y}
                       r={11}
                       fill="transparent"
+                      onClick={onPick === undefined ? undefined : () => { onPick(point.row.year, series.type); }}
                       onMouseEnter={(event) => { setHoverYear(null); setTip(hoverTipAt(event, baselineLabel, [{ label: t("hub.dash.projects.projectCount"), value: point.count, color: series.color }], series.type)); }}
                       onMouseMove={(event) => { setHoverYear(null); setTip(hoverTipAt(event, baselineLabel, [{ label: t("hub.dash.projects.projectCount"), value: point.count, color: series.color }], series.type)); }}
                     />

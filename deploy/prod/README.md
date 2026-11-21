@@ -1,5 +1,15 @@
 ***
 
+> **2026-11-21 11:25 项目管理甘特-实施时间筛选弹层说明文案精简（正式机 frontend-only · prod-20261121-1121-px-pm-gantt-filter-copy-eb766751）**：代码来源 main `eb766751`（PR [#984](https://github.com/panxing-nexthub/LibiaoLink/pull/984)；功能 PR [#983](https://github.com/panxing-nexthub/LibiaoLink/pull/983)）。正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261121-1121-px-pm-gantt-filter-copy-eb766751`，previous live = `prod-20261121-0015-px-pm-gantt-nav-click-c166cf6c`；staging = `/srv/data/deploy-prod-20261121-1121-px-pm-gantt-filter-copy-eb766751/staging`，备份 = `/srv/data/backups/before-prod-20261121-1121-px-pm-gantt-filter-copy-eb766751`。
+>
+> **改动 / 验收**：移除时间筛选弹层内「默认显示全部项目；选择周期范围后，以今天为中心向前后展开」与「范围跟随右侧时间刻度，当前为「周 / 月 / 季 / 年」」两段说明，并移除触发按钮旧悬停提示；保留「全部显示 / 周期范围」、当前范围和右侧时间刻度。正式站真实 Chrome 强制加载新 bundle 后，弹层只剩标题、两个模式和当前范围，两段旧说明与旧 title 均不存在；周期模式显示 `当前范围：10-21 – 12-21`。仅前端展示调整，无 API、字段、权限、DDL 或迁移变化。
+>
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,596,707 B / SHA-256 `1fa0b2d8…` / 692 归档条目 / 678 文件；`build-info.json` 1,437 B / `87f45708…`；`frontend-files.sha256` 91,081 B / `18f60a86…`；`release-files.sha256` 257 B / `179878d6…`，发布件 3 / 3 校验通过。按内容哈希增量替换 `index.html`、`assets/index-BGCcE2Xl.js`、`assets/index-Dso_MpaA.css`、`assets/es-Do5WEFYI.js`；旧 hashed 资源全部保留，线上 1,458 → 1,461 文件，staging / live 均 678 / 678 哈希通过。
+>
+> **验证 / 备份 / 清单**：正式机 `/`、`/healthz`、`/readyz` 均 200，未登录 `/api/v1/projects` 401，readyz 四项全 true；web / api / worker / postgres / minio / CAD / SVG preview / OnlyOffice 八个容器 healthy，RestartCount 0、OOM false，未重启后端；公网新主包、CSS、ES 分块哈希与构建逐字节一致，旧主包 / CSS / ES 分块仍 200。备份 94,477,321 B / SHA-256SUMS `4ab53dad…`，3 / 3 校验通过；新 `RELEASE_MANIFEST.json` 5,821 B / `6a760af9…`，`root:root 644` 原子替换。
+>
+> **边界 / 回滚**：仅正式机前端 dist、release manifest、staging 与备份；无 server / shared / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。回滚恢复本次 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-21 11:12 项目管理甘特-实施时间筛选弹层说明文案精简（测试机 frontend-only · test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4）**：代码来源 PR [#983](https://github.com/panxing-nexthub/LibiaoLink/pull/983)（CI 6 / 6，run `44859626902`，squash 合入 main `8ace67c4`）。测试机 `test-pm.libiaorobot.com`（`10.1.104.44`）release = `test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4`，previous live = `test-20261121-1054-px-pm-gantt-period-anchor-a770ef7b`；staging = `/srv/data/deploy-test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4/staging`，备份 = `/srv/data/backups/before-test-20261121-1112-px-pm-gantt-filter-copy-8ace67c4`。
 >
 > **改动 / 验收**：移除弹层内「默认显示全部项目；选择周期范围后，以今天为中心向前后展开」与「范围跟随右侧时间刻度，当前为「周 / 月 / 季 / 年」」两段说明，并移除触发按钮旧悬停提示；保留「全部显示 / 周期范围」、当前范围和右侧时间刻度。仅前端展示调整，无 API、字段、权限、DDL 或迁移变化。

@@ -1,12 +1,12 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ProjectAiSummaryReportSchema, type ProjectAiContext, type ProjectAiSummaryReport } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import { ModelConfigService, type ActiveModelConnection } from "../model-config/index.js";
 
 /** 单次生成超时：项目上下文可能很大，给足时间；超时按 INTERNAL 失败，不写缓存。 */
 const AI_SUMMARY_TIMEOUT_MS = 120_000;
-/** 输出上限：REPORT_SCHEMA v2 正常 2～4k token，留余量防止 JSON 被截断。 */
-const AI_SUMMARY_MAX_TOKENS = 4_000;
+/** 输出上限：v2 报告字段多、未闭环问题要逐条列出；4k 会把 JSON 截断，放宽到 8k。 */
+const AI_SUMMARY_MAX_TOKENS = 8_000;
 /** prompt 侧条数上限：只影响送模型的量，不影响接口返回的完整上下文。 */
 const PROMPT_MAX_TASKS = 300;
 const PROMPT_MAX_REPORTS = 80;
@@ -110,8 +110,10 @@ const SYSTEM_PROMPT = [
 ].join("\n");
 
 interface ChatCompletionReply {
-  choices?: Array<{ message?: { content?: unknown } }>;
+  choices?: Array<{ message?: { content?: unknown }; finish_reason?: unknown }>;
 }
+
+type ModelCallResult = { content: string; finishReason: string | null };
 
 function truncate(value: string | null, max: number): string | null {
   if (value === null) return null;
@@ -248,10 +250,11 @@ function buildPromptInput(context: ProjectAiContext): { facts: unknown; records:
 
 /** 模型返回值可能带 markdown 代码块或前后缀：截取第一个 { 到最后一个 }。 */
 function extractJsonObject(raw: string): string {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
+  const cleaned = raw.trim().replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/, "");
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
   if (start < 0 || end <= start) return "";
-  return raw.slice(start, end + 1);
+  return cleaned.slice(start, end + 1);
 }
 
 export interface ProjectAiModelResult {
@@ -266,6 +269,8 @@ export interface ProjectAiModelResult {
  */
 @Injectable()
 export class ProjectAiModelClient {
+  private readonly logger = new Logger(ProjectAiModelClient.name);
+
   constructor(private readonly models: ModelConfigService) {}
 
   async summarize(context: ProjectAiContext): Promise<ProjectAiModelResult> {
@@ -289,21 +294,38 @@ export class ProjectAiModelClient {
     ];
 
     const first = await this.call(active, messages);
-    const firstParsed = this.parse(first);
+    const firstParsed = this.parse(first.content);
     if (firstParsed.ok) return { modelId: active.modelId, report: firstParsed.report };
+    this.logParseFailure("首次", first, firstParsed.error);
 
+    // 重试只回灌错误原因，不把上一次的畸形 / 截断输出塞回上下文 —— 否则模型会顺着半截 JSON 继续写，
+    // 最终仍不是完整可解析对象。要求它从头输出一个更紧凑的完整 JSON。
     const retryMessages = [
       ...messages,
-      { role: "assistant" as const, content: first.slice(0, 4_000) },
       {
         role: "user" as const,
-        content: "上一次输出未通过结构校验（" + firstParsed.error + "）。请只返回修正后的合法 JSON 对象，不要输出其他文字。",
+        content:
+          "上一次输出未通过结构校验（" + firstParsed.error + "）。请从头重新输出一个完整、紧凑、合法的 JSON 对象：" +
+          "不要 Markdown 代码围栏，不要解释文字，不要省略未闭环问题；字段严格按 REPORT_SCHEMA。",
       },
     ];
     const second = await this.call(active, retryMessages);
-    const secondParsed = this.parse(second);
+    const secondParsed = this.parse(second.content);
     if (secondParsed.ok) return { modelId: active.modelId, report: secondParsed.report };
+    this.logParseFailure("重试", second, secondParsed.error);
     throw new AppError("INTERNAL", "AI 模型返回内容不符合约定结构（" + secondParsed.error + "），请重试");
+  }
+
+  /** 只记录长度 / 结束原因 / 首尾位置，不把项目正文写进日志。 */
+  private logParseFailure(attempt: string, result: ModelCallResult, reason: string): void {
+    const raw = result.content;
+    this.logger.warn(
+      "AI 项目总结" + attempt + "输出校验失败：" + reason +
+      "；finishReason=" + String(result.finishReason) +
+      "；chars=" + String(raw.length) +
+      "；startsBrace=" + String(raw.trimStart().startsWith("{")) +
+      "；endsBrace=" + String(raw.trimEnd().endsWith("}")),
+    );
   }
 
   private parse(raw: string): { ok: true; report: ProjectAiSummaryReport } | { ok: false; error: string } {
@@ -327,7 +349,7 @@ export class ProjectAiModelClient {
   private async call(
     active: ActiveModelConnection,
     messages: ReadonlyArray<{ role: "system" | "user" | "assistant"; content: string }>,
-  ): Promise<string> {
+  ): Promise<ModelCallResult> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (active.apiKey !== "") headers.Authorization = "Bearer " + active.apiKey;
 
@@ -354,9 +376,10 @@ export class ProjectAiModelClient {
     }
 
     const data = (await response.json().catch(() => null)) as ChatCompletionReply | null;
-    const content = data?.choices?.[0]?.message?.content;
+    const choice = data?.choices?.[0];
+    const content = choice?.message?.content;
     const raw = typeof content === "string" ? content : "";
     if (raw.trim() === "") throw new AppError("INTERNAL", "AI 模型响应缺少内容，请重试");
-    return raw;
+    return { content: raw, finishReason: typeof choice?.finish_reason === "string" ? choice.finish_reason : null };
   }
 }

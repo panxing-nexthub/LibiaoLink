@@ -81,8 +81,9 @@ source_hash = sha256(上下文 JSON，去掉 generatedAt)
 
 - 用 `model-config` 当前启用的模型（OpenAI 兼容 `POST {baseUrl}/chat/completions`）。
 - 未启用模型 → 400 `VALIDATION_FAILED`「尚未启用 AI 模型」。
-- 超时 120s；返回必须是 JSON 对象，服务端按契约再校验一遍结构。
-- 首次输出不合法会把校验失败原因回灌给模型自动重试一次；仍不合法才报错、不落库。
+- 超时 120s；`max_tokens = 8000`（v2 字段多，4k 会截断 JSON）；返回必须是 JSON 对象，服务端按契约再校验一遍结构。
+- 首次输出不合法会自动重试一次：只回灌校验失败原因，不把上一次的畸形 / 截断输出塞回上下文；仍不合法才报错、不落库。
+- 校验失败日志只记 `finishReason`、字符数、首尾是否为花括号，不记录项目正文。
 - prompt 侧压缩：任务最多 300 条、日报 80 条、问题 200 条、变更 100 条，并递归去掉 null / 空数组。
   接口返回的 `ai-context` 不受影响（完整数据 + `truncated`）。
 

@@ -5152,7 +5152,7 @@ body {
   }
 }
 
-/* 低高度电脑：两张图不再压进一屏，卡片加高到 48rem 并在页内滚动，继续拉长 Y 轴。 */
+/* 低高度电脑：两张图必须一屏完整显示；卡片改为撑满可用高度，不再用固定 48rem 把下方图顶出视口。 */
 @media (max-height: 820px) {
   .hub-dash-all__slide[data-section="project-stats"] {
     overflow-x: hidden;
@@ -5161,13 +5161,45 @@ body {
   }
 
   .hub-dash-all__slideCard--stacked {
-    flex: 0 0 auto;
-    min-height: 48rem;
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
     padding: 0;
     overflow: visible;
     border: 0;
     background: transparent;
     box-shadow: none;
+  }
+}
+
+/* 宽而矮的电脑（如 1440×715）：两图改为左右双栏，既完整落在一屏内，又保留较高 Y 轴。 */
+@media (max-height: 820px) and (min-width: 1360px) {
+  .hub-dash-all__slide[data-section="project-stats"] {
+    overflow-y: hidden;
+  }
+
+  .hub-dash-combined {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0.4rem;
+  }
+
+  .hub-dash-combined[data-line-expanded="true"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .hub-dash-combined[data-line-expanded="true"] .hub-dash-combined__panel[data-panel="project-stage"] {
+    transform: none;
+  }
+
+  .hub-dash-combined__panel {
+    padding: 0.35rem 0.2rem 0.3rem;
+  }
+
+  .hub-dash-combined__panel > .hub-dash-all__heading h3 {
+    font-size: 0.92rem;
   }
 }
 

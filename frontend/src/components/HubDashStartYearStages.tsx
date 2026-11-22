@@ -13,7 +13,7 @@ import {
   type DashboardProjectStageBucket,
 } from "../data/dashboardProjectInsights";
 
-const MIN_SLOT_W = 44;
+const MIN_SLOT_W = 43;
 const EDGE_MIN = 32;
 const EDGE_MAX = 48;
 const PLOT_TOP = 18;
@@ -29,10 +29,10 @@ function includesYear(years: readonly DashboardYearKey[], year: DashboardYearKey
   return years.some((item) => item === year);
 }
 
-/** 将阶段名称拆成最多两行，避免 12 个横轴分类在英文 / 日文下互相压字。 */
-function stageLabelLines(label: string): readonly string[] {
+/** 将阶段名称拆成最多两行，避免 12 个横轴分类在英文 / 日文 / 低高度双栏下互相压字。 */
+function stageLabelLines(label: string, maxChars = 7): readonly string[] {
   const text = label.trim();
-  if (text.length <= 7) return [text];
+  if (text.length <= maxChars) return [text];
   const words = text.split(" ");
   if (words.length > 1) {
     let bestIndex = 1;
@@ -89,7 +89,8 @@ function StageBars({ insights, selectedYears, onPick }: {
     : locale === "en"
       ? Math.max(11.2, Math.min(14.5, chartWidth * 0.006))
       : Math.max(11.5, Math.min(15, chartWidth * 0.0062));
-  const axisFontSize = Math.max(10.2, Math.min(baseAxisFontSize, slotW * 0.26));
+  const axisFontSize = Math.max(10.2, Math.min(baseAxisFontSize, slotW * 0.24));
+  const labelMaxChars = Math.max(3, Math.floor(slotW / (axisFontSize * 1.15)));
   const labelLineH = axisFontSize + 2.2;
   const axisY = chartHeight - labelLineH * 2 - 12;
   const unit = (axisY - PLOT_TOP) / tickMax;
@@ -124,7 +125,7 @@ function StageBars({ insights, selectedYears, onPick }: {
               const height = count * unit;
               const y = axisY - height;
               const label = stageText(locale, dashboardProjectStageLabel(bucket));
-              const labelLines = stageLabelLines(label);
+              const labelLines = stageLabelLines(label, labelMaxChars);
               const yearRows = selectedRows
                 .map((row) => ({
                   label: yearLabel(row.year, t("hub.dash.projects.unknownYear")),

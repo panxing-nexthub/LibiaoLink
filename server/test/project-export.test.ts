@@ -244,7 +244,7 @@ describe("项目数据导出工作簿", () => {
 
     const task = workbook.getWorksheet("英国项目")!;
     expect(headersOf(task)).toEqual([
-      "任务描述", "项目经理", "任务负责人", "任务状态", "项目进度", "是否按时交付", "输出成果文件", "项目进展描述",
+      "任务名称", "项目经理", "任务负责人", "任务状态", "项目进度", "是否按时交付", "输出成果文件", "任务描述",
       "开始日期", "预计完成日期", "预计所需施工人数", "预计所需天数", "实际完成日期", "阶段性里程", "紧急重要度",
       "最近变更日期", "文件", "变更关联",
     ]);
@@ -356,7 +356,7 @@ describe("项目数据导出工作簿", () => {
     expect(changeFile.hyperlink).toContain("/#/project/" + PROJECT_ID + "?view=files");
   });
 
-  it("多行任务描述按微软雅黑行距预留行高，避免相邻行重叠", async () => {
+  it("多行任务名称按微软雅黑行距预留行高，避免相邻行重叠", async () => {
     const sample = payload();
     sample.tasks[0]!.description = "工作站安装及定位弹线\nWorkstation Installation and Positioning Chalk Line and cabinet installation and cable management";
     const result = await buildProjectExportWorkbook(sample);
@@ -369,7 +369,7 @@ describe("项目数据导出工作簿", () => {
     expect(sheet.getCell(3, 1).alignment).toMatchObject({ horizontal: "center", vertical: "middle", wrapText: true });
   });
 
-  it("任务描述中文与英文分行，英文为空时不保留空行", () => {
+  it("任务名称中文与英文分行，英文为空时不保留空行", () => {
     const task = {
       title: " 布局定档 ",
       titleEn: " Layout scheduling ",

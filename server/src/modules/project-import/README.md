@@ -20,6 +20,12 @@
 
 - 任务表「阶段性里程」与变更表「变更阶段」同时识别旧「生产阶段」和新「投产阶段」，内部统一落 `production`；`stageRaw` 保留源表原文，预览提醒不再把旧名判为 `UNKNOWN_STAGE`。这里只做导入别名，不把用户任务名、日报或问题正文做全局替换。
 
+## 任务表列名兼容（2026-11-22）
+
+- 系统导出自 2026-11-22 起，任务表第 1 列表头为「任务名称」（对应 `Task.title` / `Task.titleEn`），第 8 列表头为「任务描述」（对应 `Task.note`）。
+- 导入同时兼容新旧两套表头：新表「任务名称」+「任务描述」；旧表「任务描述」+「项目进展描述」。旧表的「任务描述」仍按**任务名称**解析，「项目进展描述」仍按**任务描述**解析，列位置与字段口径不变。
+- 判定优先看「任务名称」：存在时任务名取该列、说明取「任务描述」（缺失再回落「项目进展描述」）；只有旧「任务描述」时，任务名取旧列、说明取「项目进展描述」。
+
 ## 文件
 
 ```text
@@ -50,7 +56,7 @@ index.ts                      # 唯一公开出口（跨模块只允许 import �
 - 任务节点：无对应按文件原名导入，不写节点库；`nameEn` 优先节点库标准英文，其次源表英文或模型补全。阶段外按临时任务处理。
 - 公共节点申请（2026-11-13 · 迁移 0096）：`commit.nodeRequests[{groupIndex,title?,titleEn?}]` 只允许「阶段内 + 保留 Excel 原名」的分组（精确匹配 / 已选已有节点 / 阶段外一律 400），同一分组不可重复提交；标题缺省 = 源表原名、英文缺省 = 预览补全结果（显式 `null` = 无英文）。申请在**导入事务内**写入：导入回滚则申请一起回滚；同阶段同名已有公共节点 → 不提交（warning `NODE_REQUEST_EXISTING_NODE`），同名 pending 申请 → 沿用（info `NODE_REQUEST_REUSED`）。导入结果 `nodeRequests` 回传本次提交（含沿用）的申请。
 - 变更：阶段映射 实施 → `install`、发货 → `assembly`；内容 / 原因合并落库（占位 = 内容待补 / 原因待补）。
-- 变更关联（Push 319 / Push 398）：①「关联」列（多值按逗号 / 顿号拆）按任务描述匹配（键 = 去全部空白 + 小写；对「标题+英文名」/「标题」/「英文名」三串）；② **R01**（`docs/rules/R01-R07-内置规则文案.md`）：变更时间 / 变更文件 / 变更后文件 / 变更后文件版本齐备时，按「变更文件 ∈ 任务输出成果文件（多值）」匹配，命中多条全部关联。两路去重 → 提交事务回写 `tasks.change_refs`（追加序 = 变更表行序 + 任务表行序）；未命中 / 多命中 / 日期不一致 / 任务侧落空出提醒（`CHANGE_RELATED_UNMATCHED` / `CHANGE_RELATED_AMBIGUOUS` / `CHANGE_DATE_MISMATCH` / `TASK_CHANGE_REF_UNMATCHED` + 汇总 `CHANGE_LINK_SUMMARY`），照常导入不阻断；预览 / 结果 counts 增 `changesLinked`。R01 解决「变更文件已上传但任务总览 / 变更记录找不到」的导入断链。
+- 变更关联（Push 319 / Push 398）：①「关联」列（多值按逗号 / 顿号拆）按任务名称匹配（键 = 去全部空白 + 小写；对「标题+英文名」/「标题」/「英文名」三串）；② **R01**（`docs/rules/R01-R07-内置规则文案.md`）：变更时间 / 变更文件 / 变更后文件 / 变更后文件版本齐备时，按「变更文件 ∈ 任务输出成果文件（多值）」匹配，命中多条全部关联。两路去重 → 提交事务回写 `tasks.change_refs`（追加序 = 变更表行序 + 任务表行序）；未命中 / 多命中 / 日期不一致 / 任务侧落空出提醒（`CHANGE_RELATED_UNMATCHED` / `CHANGE_RELATED_AMBIGUOUS` / `CHANGE_DATE_MISMATCH` / `TASK_CHANGE_REF_UNMATCHED` + 汇总 `CHANGE_LINK_SUMMARY`），照常导入不阻断；预览 / 结果 counts 增 `changesLinked`。R01 解决「变更文件已上传但任务总览 / 变更记录找不到」的导入断链。
 - 问题处理人（Push 319）：源表没有处理人字段 —— 未解决（open / in_progress）默认 `owner_id` = 项目经理首位（`managerIds[0] ?? actorId`；done = null）+ info 提醒 `ISSUE_OWNER_FALLBACK` —— 未解决问题随项目经理进入工作台「待我处理」，「我提出的问题」按 reporter（日报作者）照旧。
 - 变更读面（Push 319 · file 模块）：导入遗留变更没有 `file_versions` 行 —— 列表 / 详情 `fileId` / `versionId` / `versionSeq` 可为 null（`file` / `version` 给 null，前端标「变更后文件待补」）；本模块提交只写 `change_requests` 行、不建文件行。
 - 图片：表内嵌图 → 文件库（日报现场图 / 问题图挂 `file_links`；变更表「变更前 / 变更后」列内嵌图（Push 349）登记 `files` 后回填 `change_requests.before_summary_file_ids` / `after_summary_file_ids` —— 同 0052 应用内口径：不落 `file_links`、单条 ≤ 30 张）；微盘 / 本地路径 → 「需手动导入」清单（导入时不再抓取）；Push 396 起面板可就地选文件，提交结果按 `manualTargets` 回传任务 / 变更 id，前端用现成分片直传挂任务，`change_after` 再调回挂接口写 `file_versions.change_request_id` 并把文件状态置 `changed`（不能写 `final`，否则文件库显示「已定档」且与变更后文件语义冲突）。
@@ -78,7 +84,7 @@ index.ts                      # 唯一公开出口（跨模块只允许 import �
 - `server/test/import-admission-gate.test.ts`（7 用例）：小 / 中 / 重型权重、长度缺失保守计权、幂等归还、预算 1 串行回退、同票据提交单飞与提交并发上限。
 - `server/test/import-http-limits.test.ts`（6 用例）：`Content-Length` 预分配兼容入口、multipart 流式落盘区间、流式超限拒绝、实际请求体超出声明长度立即拒绝、preview 准入 429 与释放、sourceFile 入参接线。
 - `server/test/import-temp.test.ts`（3 用例）：启动清扫只删过期同前缀目录、磁盘余量预检、嵌套 ENOSPC 识别。
-- `server/test/project-import.test.ts`（**34 用例**；2026-11-13 增 5 例：公共节点申请随导入同事务提交并在完成页回传 / 缺省取源表原名与预览英文 / 只能对保留原名提交且拒绝重复分组 / 同名公共节点时不出申请并出提醒 / 同名申请在队列时沿用出提醒）：自带最小 xlsx 构造器（zip store + inlineStr + 图片锚点）—— 解析口径 / zh·en 文案 / 文件闸 400·422 / `IMAGE_ROW_MISSING` / **commit 准入（拒绝不写库 / 成功与取消释放额度）** / commit 主链路（`taskNodeId` / `sortIndex` / 图片挂问题 / 回退提醒 / purge / warmup / 审计）/ 账号在库直挂 / 不勾选补节点 / 票据状态机（403 / 409 / 410 / 400）/ **变更关联（Push 319：解析命中与提醒码 / 提交回写 `change_refs`；Push 398：R01 输出成果文件匹配 + 手动文件目标任务）** / **未解决问题默认处理人（含 done 不挂人）** / **写入取消两例（Push 321：上传途中 abort → 已传图片清理 + 票据 pending + 重提成功 + 源文件保留；事务内 abort → 回滚 + 已传图片全清）** / **过期票据清扫（Push 325：删除源对象成功置 expired；删除失败保留 pending 下轮重试）** / **干系人两例（Push 324：导入表内嵌转换（分类四值 / 联系方式拆分 / 提交时间）；导入表缺表 info 提醒，不导入干系人；提交写台账 + 项目关联（分类 / 提交时间 / 填写者匹配账号））** / **变更申请人·填写者（Push 347：源表「变更申请人」「填写者」两列命中库内账号 → `applied_by` / `writer_by`；未命中 = 回落导入人 / 留空 + `CHANGE_APPLICANT_MISSING` / `CHANGE_WRITER_MISSING`）** / **变更附图（Push 349：解析锚点列 / 行映射 + 列外提醒；提交落 files 并回填 change_requests 两列）**。
+- `server/test/project-import.test.ts`（**36 用例**；2026-11-13 增 5 例：公共节点申请随导入同事务提交并在完成页回传 / 缺省取源表原名与预览英文 / 只能对保留原名提交且拒绝重复分组 / 同名公共节点时不出申请并出提醒 / 同名申请在队列时沿用出提醒）：自带最小 xlsx 构造器（zip store + inlineStr + 图片锚点）—— 解析口径 / zh·en 文案 / 文件闸 400·422 / `IMAGE_ROW_MISSING` / **commit 准入（拒绝不写库 / 成功与取消释放额度）** / commit 主链路（`taskNodeId` / `sortIndex` / 图片挂问题 / 回退提醒 / purge / warmup / 审计）/ 账号在库直挂 / 不勾选补节点 / 票据状态机（403 / 409 / 410 / 400）/ **变更关联（Push 319：解析命中与提醒码 / 提交回写 `change_refs`；Push 398：R01 输出成果文件匹配 + 手动文件目标任务）** / **未解决问题默认处理人（含 done 不挂人）** / **写入取消两例（Push 321：上传途中 abort → 已传图片清理 + 票据 pending + 重提成功 + 源文件保留；事务内 abort → 回滚 + 已传图片全清）** / **过期票据清扫（Push 325：删除源对象成功置 expired；删除失败保留 pending 下轮重试）** / **干系人两例（Push 324：导入表内嵌转换（分类四值 / 联系方式拆分 / 提交时间）；导入表缺表 info 提醒，不导入干系人；提交写台账 + 项目关联（分类 / 提交时间 / 填写者匹配账号））** / **变更申请人·填写者（Push 347：源表「变更申请人」「填写者」两列命中库内账号 → `applied_by` / `writer_by`；未命中 = 回落导入人 / 留空 + `CHANGE_APPLICANT_MISSING` / `CHANGE_WRITER_MISSING`）** / **变更附图（Push 349：解析锚点列 / 行映射 + 列外提醒；提交落 files 并回填 change_requests 两列）**。
 - 日报表头兼容回归（2026-11-04）：测试覆盖 `时间time` / `当日完成工作Work completed today` / `现场发现问题Problem` / `今日施工人数Number of people today` 等历史混排表头，并验证日报与第 5 / 9 列图片锚点一起导入；真实原文件预览为 38 任务 / 12 日报 / 2 问题 / 45 图片（现场 43 / 问题 2），正式机与测试机同文件解析结果一致。
 - `server/test/resource-change.test.ts`：commit 的资源变更登记（projects / tasks / reports / issues / files / templates）。
 

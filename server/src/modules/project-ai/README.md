@@ -15,6 +15,7 @@
 |---|---|---|
 | 项目 | `id` `code` `name` `region` `projectTypes` `status` `managerNames` | `projects` |
 | 项目 | `startedAt` | 派生：任务名「项目启动」或 `titleEn = Project Startup` 的最早 `planned_start`；无则 null，**不回落 `projects.created_at`** |
+| 统计 | `metrics` | **采集器算好，模型只能引用不能重算**：`taskDone` / `taskTotal` / `percent`（0～100，total=0 为 null）/ `latestStageKey` / `latestStage`（已动工任务 progress ≥ 0.25 中阶段序最靠后者）/ `slowestStageKey` / `slowestStage`（阶段序中第一个仍有未完成任务的阶段）/ `planStart` / `planEnd` / `reportStart` / `reportEnd` / `issueTotal` / `issueDone` / `issueInProgress` / `issueOpen` / `changeTotal` |
 | 阶段 | `stageKey` `name` `seq` `status` `plannedStart` `plannedEnd` `actualStart` `actualEnd` | `project_stages`（经 `FlowService.listStages`） |
 | 阶段 | `taskDoneCount` / `taskTotalCount` | `tasks.status = 'done'` 计数；`stage_key IS NULL` 不计入任何阶段 |
 | 阶段 | `advancedAt/By`、`rolledBackAt/By`、`rollbackReason` | 阶段最近一次推进 / 回退留痕，无则 null |
@@ -80,19 +81,38 @@ source_hash = sha256(上下文 JSON，去掉 generatedAt)
 
 - 用 `model-config` 当前启用的模型（OpenAI 兼容 `POST {baseUrl}/chat/completions`）。
 - 未启用模型 → 400 `VALIDATION_FAILED`「尚未启用 AI 模型」。
-- 超时 120s；返回必须是 JSON 对象，服务端按契约再校验一遍结构，不合法即报错。
+- 超时 120s；返回必须是 JSON 对象，服务端按契约再校验一遍结构。
+- 首次输出不合法会把校验失败原因回灌给模型自动重试一次；仍不合法才报错、不落库。
 - prompt 侧压缩：任务最多 300 条、日报 80 条、问题 200 条、变更 100 条，并递归去掉 null / 空数组。
   接口返回的 `ai-context` 不受影响（完整数据 + `truncated`）。
 
-### Prompt 硬约束
+### Prompt 硬约束（v2）
 
-1. 只用给定数据，缺数据写「暂无数据」；
-2. 不编造日期 / 数量 / 人员 / 原因 / 进度，不做验收与质量结论，不承诺工期；
-3. 不评价个人绩效；
-4. `stageKey` 必须来自输入阶段；
-5. 风险必须给依据（`evidence`），无依据为 null。
+1. 只用给定数据，缺数据写「未记录」/「暂无数据」；
+2. 不编造日期 / 数量 / 人员 / 原因 / 进度，不把「系统已完成」写成客户验收通过；
+3. 不评价个人绩效，不评论数据导入 / 补录 / 迁移；
+4. 项目启动时间只用启动任务的最早 `plannedStart`，缺失写「未记录」；
+5. 完成百分比 / 最新阶段 / 最慢阶段只引用 `metrics`，不得自行重算或改写措辞；
+6. 正文、标题、来源均不得出现表名、字段名、SQL、接口名、内部 ID 或状态码；
+7. 未解决 / 处理中问题必须逐条列出；交接建议固定标 `suggestion` 且 `needsHumanConfirmation: true`。
+
+### 报告结构（v2）
+
+模型输出严格遵循 `ProjectAiSummaryReportSchema`，写入 `summary_json`：
+
+- `title`
+- `summary { text, claims[] }`
+- `overview { projectName, projectCode, status, managers[], startedAt, progress { done, total, percent, latestStage, slowestStage }, planRange, reportRange }`
+- `timeline[]`（5～8 个关键节点）
+- `issues { total, done, inProgress, open, summary, currentItems[] }`
+- `resultsAndRisks { text, claims[], risks[] }`
+- `handoff { existing[], suggestions[] }`
+- `notes[]`
+
+每条 claim 带 `type = fact | inference | suggestion` 与业务来源标签（如「任务记录 2026-10-20」）。
+接口顶层 `summaryText = report.summary.text`，供列表展示。
 
 ## 6. 后续（未实现）
 
-- 前端「AI 总结」入口与展示形态（`summaryText` + `summary` 结构化字段已就绪）。
+- 前端「AI 总结」入口与展示形态（`summaryText` + `report` 结构化字段已就绪）。
 - 文档正文提取 / 图片识别：**本期明确不做**。

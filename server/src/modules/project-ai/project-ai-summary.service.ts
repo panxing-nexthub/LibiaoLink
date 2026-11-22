@@ -10,7 +10,7 @@ import { ProjectAiModelClient } from "./project-ai.model.js";
 import { ProjectAiSummaryRepository, type ProjectAiSummaryRow } from "./project-ai-summary.repository.js";
 
 /** prompt 结构变更时递增：旧版本的缓存自动不再命中，不会被复用。 */
-export const PROJECT_AI_PROMPT_VERSION = "v1";
+export const PROJECT_AI_PROMPT_VERSION = "v2";
 
 /** 上下文指纹：去掉每次请求都会变的 generatedAt，其余字段按固定顺序序列化（构建时已排序）。 */
 export function hashProjectAiContext(context: ProjectAiContext): string {
@@ -44,7 +44,7 @@ export class ProjectAiSummaryService {
   async latest(projectId: string, actorId: string): Promise<ProjectAiSummary> {
     const context = await this.contexts.build(projectId, actorId);
     const sourceHash = hashProjectAiContext(context);
-    const row = await this.repository.findLatest(projectId);
+    const row = await this.repository.findLatest(projectId, PROJECT_AI_PROMPT_VERSION);
     if (row === null) throw new AppError("NOT_FOUND", "尚未生成 AI 项目总结");
     return this.toView(row, sourceHash);
   }
@@ -82,8 +82,8 @@ export class ProjectAiSummaryService {
       sourceHash,
       promptVersion: PROJECT_AI_PROMPT_VERSION,
       modelId: generated.modelId,
-      summaryText: generated.summaryText,
-      summaryJson: generated.summary as unknown as Record<string, unknown>,
+      summaryText: generated.report.summary.text,
+      summaryJson: generated.report as unknown as Record<string, unknown>,
       generatedBy: actorId,
     });
     await this.audit.record(this.database.db, {
@@ -116,7 +116,7 @@ export class ProjectAiSummaryService {
       promptVersion: row.promptVersion,
       modelId: row.modelId,
       summaryText: row.summaryText,
-      summary: row.summaryJson as unknown as ProjectAiSummary["summary"],
+      report: row.summaryJson as unknown as ProjectAiSummary["report"],
       generatedBy: row.generatedBy,
       generatedByName: await this.nameOf(row.generatedBy),
       generatedAt: row.generatedAt.toISOString(),

@@ -5,6 +5,7 @@ import { ProjectImportCommitBodySchema, ProjectImportPreviewSchema, ProjectImpor
 import { CadJobSchema, CadJobCreateBodySchema, CadJobCreateResponseSchema, CadNameCodepageSchema } from "./modules/cad.ts";
 import { DateOnlySchema, IdempotencyKeySchema, UuidSchema } from "./common/conventions.ts";
 import { StageKeySchema } from "./common/dicts.ts";
+import { ProjectAiContextSchema } from "./modules/project-ai.ts";
 import { ApiErrorSchema } from "./common/errors.ts";
 import {
   ProjectArchiveBodySchema,
@@ -1424,6 +1425,19 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     request: { params: idParams },
     responses: {
       200: { description: "阶段列表", ...json(StageListResponseSchema) },
+      404: commonErrors[404],
+    },
+  });
+
+  // ---- AI 项目总结读面（只读聚合；不触发模型调用）----
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/projects/{id}/ai-context",
+    tags: ["project-ai"],
+    summary: "AI 项目总结读面：项目 / 阶段 / 任务快照 / 变更 / 日报 / 问题",
+    request: { params: idParams },
+    responses: {
+      200: { description: "项目 AI 上下文", ...json(ProjectAiContextSchema) },
       404: commonErrors[404],
     },
   });

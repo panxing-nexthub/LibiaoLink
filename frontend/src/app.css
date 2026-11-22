@@ -4367,6 +4367,15 @@ body {
   flex: 0 0 auto;
 }
 
+/* 全部项目首屏只保留两张内部统计卡片，去掉整个仪表盘外层卡框。 */
+[data-hub-deck-cell="dashboard"]:has([data-hub-dash-all-projects]) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .hub-dash-all {
   display: flex;
   flex-direction: column;
@@ -4915,8 +4924,13 @@ body {
 }
 
 .hub-dash-all__slideCard--stacked {
-  gap: 0.45rem;
-  padding: 0.7rem 0.8rem 0.65rem;
+  gap: 0.55rem;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .hub-dash-combined {
@@ -5091,8 +5105,24 @@ body {
     padding: 0.2rem 0.35rem 0.3rem;
   }
 
+  .hub-dash-all__slide[data-section="project-stats"] {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
   .hub-dash-all__slideCard {
     padding: 0.7rem 0.55rem 0.55rem;
+  }
+
+  .hub-dash-all__slideCard--stacked {
+    flex: 0 0 auto;
+    min-height: 40rem;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .hub-dash-role-section--slide .hub-dash-role__legend {

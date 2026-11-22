@@ -5,6 +5,7 @@ import { splitChangeReasonColumns } from "../data/changeWords";
 import type { ApiChangeRequest } from "../fileApi";
 import { stageNameOf, type ApiTaskListItem } from "../taskApi";
 import { fieldText, stageText, useLocale, useT } from "../i18n";
+import { projectFocusHref, projectViewHref } from "../useHashRoute";
 import { docTypeCapsule } from "./DeliverablePicker";
 import { STAGE_TAG_CLASS } from "./TaskKanban";
 import { TableScrollbar } from "./TableScrollbar";
@@ -57,7 +58,8 @@ function memberLabelOf(members: readonly Member[], id: string): string {
   return handle === "" ? name : name + "(" + handle + ")";
 }
 
-export function HubDashWordDetail({ rows, members, tasks, onClose }: {
+export function HubDashWordDetail({ projectId, rows, members, tasks, onClose }: {
+  readonly projectId: string;
   readonly rows: readonly ApiChangeRequest[];
   readonly members: readonly Member[];
   /** 所属项目任务明细（nodeId → 任务，取「输出成果文件」类型回落展示变更文件；数据详情那一轮取数里已有）。 */
@@ -106,7 +108,7 @@ export function HubDashWordDetail({ rows, members, tasks, onClose }: {
     const after = row.afterSummary ?? "";
     const stageLabel = stage === "" ? "" : stageText(locale, stage);
     const hay = [date, stageLabel, docType ?? "", split.content, split.cause, before, after, applicant, writer].join(" ").toLowerCase();
-    return { id: row.id, date, stage, stageLabel, docType, content: split.content, cause: split.cause, before, after, applicant, writer, hay };
+    return { id: row.id, taskId: row.nodeId, date, stage, stageLabel, docType, content: split.content, cause: split.cause, before, after, applicant, writer, hay };
   }), [rows, members, taskByNodeId, locale]);
   const filtered = query === "" ? cards : cards.filter((card) => card.hay.includes(query));
   return createPortal(
@@ -162,20 +164,45 @@ export function HubDashWordDetail({ rows, members, tasks, onClose }: {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((card, index) => (
-                  <tr key={card.id}>
+                {filtered.map((card, index) => {
+                  /** 行点击 = 有归属任务时进项目总览并打开任务抽屉，否则回项目总览。 */
+                  const href = card.taskId === null
+                    ? projectViewHref(projectId, "overview")
+                    : projectFocusHref(projectId, { kind: "task", id: card.taskId });
+                  const openProject = (): void => {
+                    onClose();
+                    window.location.hash = href;
+                  };
+                  return (
+                  <tr
+                    key={card.id}
+                    data-row-link="true"
+                    tabIndex={0}
+                    aria-label={t("hub.dash.detail.openProject")}
+                    onClick={(event) => {
+                      if ((event.target as HTMLElement).closest("a, button, input, label")) return;
+                      openProject();
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      if ((event.target as HTMLElement).closest("a, button, input, label")) return;
+                      event.preventDefault();
+                      openProject();
+                    }}
+                  >
                     <td className="hub-dash-detail__no">{index + 1}</td>
                     <td><span className="hub-dash-detail__date">{card.date}</span></td>
                     <td>{card.stageLabel === "" ? <span className="hub-dash-detail__blank">—</span> : <span className={"hub-dash-detail__tag " + (STAGE_TAG_CLASS[card.stage] ?? "bg-zinc-100 text-zinc-600")}>{card.stageLabel}</span>}</td>
                     <td>{card.docType === null ? <span className="hub-dash-detail__blank">—</span> : <span>{docTypeCapsule(card.docType, locale)}</span>}</td>
-                    <td>{card.content === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__note" title={card.content}>{card.content}</span>}</td>
+                    <td>{card.content === "" ? <span className="hub-dash-detail__blank">—</span> : <a className="hub-dash-detail__rowLink hub-dash-detail__note" href={href} title={card.content} onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onClose(); window.location.hash = href; }}>{card.content}</a>}</td>
                     <td>{card.before === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__note" title={card.before}>{card.before}</span>}</td>
                     <td>{card.after === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__note" title={card.after}>{card.after}</span>}</td>
                     <td>{card.cause === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__note" title={card.cause}>{card.cause}</span>}</td>
                     <td>{card.applicant === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__chip" title={card.applicant}>{card.applicant}</span>}</td>
                     <td>{card.writer === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__chip" title={card.writer}>{card.writer}</span>}</td>
                   </tr>
-                ))}
+                  );
+                })}
                 {filtered.length === 0 ? (
                   <tr>
                     <td className="hub-dash-detail__empty" colSpan={COLUMNS.length}>{t("hub.dash.wordDetail.empty")}</td>

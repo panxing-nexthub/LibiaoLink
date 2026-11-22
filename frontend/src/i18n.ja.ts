@@ -1914,6 +1914,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "hub.dash.detail.loading": "詳細を読み込み中…",
   "hub.dash.detail.loadFailed": "詳細の読み込みに失敗しました",
   "hub.dash.detail.empty": "一致するタスクはありません",
+  "hub.dash.detail.openProject": "クリックしてプロジェクト詳細を開く",
   "hub.dash.status.title": "タスクステータス",
   "hub.dash.status.aria": "タスクステータスチャート：5つのタスクステータスの円グラフ",
   "hub.dash.status.count": "記録",

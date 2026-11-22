@@ -2365,6 +2365,29 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* 2026-11-22：单项目仪表盘「数据详情」整行可点，进入项目详情（问题定位高亮 / 任务抽屉）。 */
+.hub-dash-detail__table tbody tr[data-row-link="true"] {
+  cursor: pointer;
+}
+
+.hub-dash-detail__table tbody tr[data-row-link="true"]:hover {
+  background: #f8fafc;
+}
+
+.hub-dash-detail__table tbody tr[data-row-link="true"]:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: -2px;
+}
+
+.hub-dash-detail__rowLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.hub-dash-detail__rowLink:hover {
+  text-decoration: underline;
+}
+
 .hub-dash-detail__task {
   display: inline-block;
   max-width: 24rem;

@@ -1914,6 +1914,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "hub.dash.detail.loading": "상세 정보 불러오는 중…",
   "hub.dash.detail.loadFailed": "상세 정보를 불러오지 못했습니다",
   "hub.dash.detail.empty": "일치하는 작업 없음",
+  "hub.dash.detail.openProject": "클릭하여 프로젝트 상세 열기",
   "hub.dash.status.title": "작업 상태",
   "hub.dash.status.aria": "작업 상태 차트: 5가지 작업 상태의 원형 차트",
   "hub.dash.status.count": "기록",

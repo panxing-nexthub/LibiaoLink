@@ -82,7 +82,11 @@ source_hash = sha256(上下文 JSON，去掉 generatedAt)
 - 用 `model-config` 当前启用的模型（OpenAI 兼容 `POST {baseUrl}/chat/completions`）。
 - 未启用模型 → 400 `VALIDATION_FAILED`「尚未启用 AI 模型」。
 - 超时 120s；`max_tokens = 8000`（v2 字段多，4k 会截断 JSON）；返回必须是 JSON 对象，服务端按契约再校验一遍结构。
-- 首次输出不合法会自动重试一次：只回灌校验失败原因，不把上一次的畸形 / 截断输出塞回上下文；仍不合法才报错、不落库。
+- 请求带 `response_format: {"type":"json_object"}`，压掉前后解释文字、降低截断概率；网关返回 400 / 422 时自动降级为纯文本 JSON 重发一次，并记住该网关不支持。
+- 输出不合法最多尝试 3 次：首次 → 结构重试 → **压缩兜底**（system 追加【压缩输出模式】，硬压摘要 / 时间线 / 问题 / 交接条数）。
+  每次只回灌校验失败原因和更紧的长度上限，不把上一次的畸形 / 截断输出塞回上下文；`finishReason=length` 时额外提示本次必须明显更短。
+- 每次调用记一条日志：`finishReason`、`promptTokens`、`completionTokens`、`maxTokens`、`compact`、`jsonMode`、字符数 —— 用于判断网关是否把输出截断在上限。
+- 3 次仍不合法才报错、不落库；截断失败返回「输出超出长度上限被截断，已自动压缩重试仍未完成」。
 - 校验失败日志只记 `finishReason`、字符数、首尾是否为花括号，不记录项目正文。
 - prompt 侧压缩：任务最多 300 条、日报 80 条、问题 200 条、变更 100 条，并递归去掉 null / 空数组。
   接口返回的 `ai-context` 不受影响（完整数据 + `truncated`）。
@@ -115,5 +119,5 @@ source_hash = sha256(上下文 JSON，去掉 generatedAt)
 
 ## 6. 后续（未实现）
 
-- 前端「AI 总结」入口与展示形态（`summaryText` + `report` 结构化字段已就绪）。
+- 历史报告的导出 / 下载与跨项目汇总（未实现；前端入口与报告弹窗已上线）。
 - 文档正文提取 / 图片识别：**本期明确不做**。

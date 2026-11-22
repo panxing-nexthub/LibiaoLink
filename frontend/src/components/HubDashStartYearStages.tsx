@@ -4,6 +4,7 @@ import { usePersistentDashboardFilter } from "../dashboardFilterStorage";
 import { dashboardAxisOf } from "../dashboardChartScale";
 import { DASHBOARD_YEAR_WINDOW, DashboardYearNavigator, type DashboardYearKey } from "./DashboardYearNavigator";
 import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
+import { useResponsiveChartSize } from "./useResponsiveChartSize";
 import {
   DASHBOARD_PROJECT_STAGE_BUCKETS,
   DASHBOARD_PROJECT_STAGE_COLORS,
@@ -12,16 +13,13 @@ import {
   type DashboardProjectStageBucket,
 } from "../data/dashboardProjectInsights";
 
-const BAR_W = 1400;
-const BAR_H = 320;
-const LEFT = 64;
-const RIGHT = 28;
-const TOP = 24;
-const AXIS_Y = 254;
-const LABEL_Y = 276;
-const LABEL_LINE_H = 14.5;
-const BAR_MAX_W = 58;
+const MIN_SLOT_W = 44;
+const EDGE_MIN = 32;
+const EDGE_MAX = 48;
+const PLOT_TOP = 18;
+const BAR_MAX_W = 56;
 const BAR_INSET_RATIO = 0.22;
+const MIN_CHART_H = 112;
 
 function yearLabel(year: DashboardYearKey, unknownLabel: string): string {
   return year === null ? unknownLabel : String(year);
@@ -69,101 +67,125 @@ function StageBars({ insights, selectedYears, onPick }: {
   const t = useT();
   const locale = useLocale();
   const [tip, setTip] = useState<DashboardHoverTip | null>(null);
-  const axisFontSize = locale === "zh" ? 14.3 : locale === "en" ? 11.8 : 12.6;
+  const { ref: chartRef, width: availableWidth, height: availableHeight } = useResponsiveChartSize(720, 220);
   const selectedRows = insights.startYearStages.filter((row) => includesYear(selectedYears, row.year));
   if (selectedRows.length === 0) return <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>;
   const totals = DASHBOARD_PROJECT_STAGE_BUCKETS.map((_, stageIndex) =>
     selectedRows.reduce((sum, row) => sum + (row.stageCounts[stageIndex] ?? 0), 0));
   const maxValue = totals.reduce((max, count) => Math.max(max, count), 0);
   const { max: tickMax, step } = dashboardAxisOf(maxValue);
-  const unit = (AXIS_Y - TOP) / tickMax;
-  const slotW = (BAR_W - LEFT - RIGHT) / DASHBOARD_PROJECT_STAGE_BUCKETS.length;
+  const chartWidth = Math.max(
+    availableWidth,
+    DASHBOARD_PROJECT_STAGE_BUCKETS.length * MIN_SLOT_W + EDGE_MIN * 2,
+  );
+  const chartHeight = Math.max(availableHeight, MIN_CHART_H);
+  const marginX = Math.max(EDGE_MIN, Math.min(EDGE_MAX, Math.round(chartWidth * 0.024)));
+  const plotW = chartWidth - marginX * 2;
+  const slotW = plotW / DASHBOARD_PROJECT_STAGE_BUCKETS.length;
+  const tickFontSize = Math.max(11.2, Math.min(14, chartWidth * 0.0058));
+  const numberFontSize = Math.max(12.5, Math.min(15, chartWidth * 0.0062));
+  const baseAxisFontSize = locale === "zh"
+    ? Math.max(12.5, Math.min(16.5, chartWidth * 0.0067))
+    : locale === "en"
+      ? Math.max(11.2, Math.min(14.5, chartWidth * 0.006))
+      : Math.max(11.5, Math.min(15, chartWidth * 0.0062));
+  const axisFontSize = Math.max(10.2, Math.min(baseAxisFontSize, slotW * 0.26));
+  const labelLineH = axisFontSize + 2.2;
+  const axisY = chartHeight - labelLineH * 2 - 12;
+  const unit = (axisY - PLOT_TOP) / tickMax;
   const barW = Math.min(BAR_MAX_W, slotW * (1 - BAR_INSET_RATIO * 2));
   const ticks: number[] = [];
   for (let value = 0; value <= tickMax; value += step) ticks.push(value);
   return (
     <>
-      <svg
-        className="hub-dash-start-stage"
-        viewBox={"0 0 " + BAR_W + " " + BAR_H}
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-label={t("hub.dash.projects.startYear.aria")}
-        onMouseLeave={() => setTip(null)}
-      >
-        {ticks.map((value) => value > 0 ? (
-          <line key={"grid-" + value} x1={LEFT} y1={AXIS_Y - value * unit} x2={BAR_W - RIGHT} y2={AXIS_Y - value * unit} stroke="#e8eaee" strokeDasharray="3 4" />
-        ) : null)}
-        <line x1={LEFT - 8} y1={AXIS_Y} x2={BAR_W - RIGHT + 8} y2={AXIS_Y} stroke="#b8bec6" />
-        {ticks.map((value) => (
-          <text key={"tick-" + value} x={LEFT - 12} y={AXIS_Y - value * unit + 4} textAnchor="end" fontSize={13.2} fill="#8a9099">{value}</text>
-        ))}
-        {DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket, stageIndex) => {
-          const count = totals[stageIndex] ?? 0;
-          const center = LEFT + slotW * stageIndex + slotW / 2;
-          const x = center - barW / 2;
-          const height = count * unit;
-          const y = AXIS_Y - height;
-          const label = stageText(locale, dashboardProjectStageLabel(bucket));
-          const labelLines = stageLabelLines(label);
-          const yearRows = selectedRows
-            .map((row) => ({
-              label: yearLabel(row.year, t("hub.dash.projects.unknownYear")),
-              value: row.stageCounts[stageIndex] ?? 0,
-            }))
-            .filter((row) => row.value > 0)
-            .map((row) => ({ ...row, color: "#94a3b8" }));
-          const tipRows = [...yearRows, { label: t("hub.dash.projects.total"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }];
-          return (
-            <g key={bucket}>
-              <rect
-                className="hub-dash-start-stage__band"
-                x={LEFT + slotW * stageIndex}
-                y={TOP}
-                width={slotW}
-                height={AXIS_Y - TOP}
-                fill="transparent"
-                onMouseEnter={(event) => setTip(hoverTipAt(event, label, tipRows, t("hub.dash.projects.startYear.title")))}
-                onMouseMove={(event) => setTip(hoverTipAt(event, label, tipRows, t("hub.dash.projects.startYear.title")))}
-              />
-              {count > 0 ? (
-                <rect
-                  className="hub-dash-start-stage__bar"
-                  data-drill={onPick === undefined ? undefined : "true"}
-                  style={{ animationDelay: stageIndex * 35 + "ms" }}
-                  x={x}
-                  y={y}
-                  width={barW}
-                  height={Math.max(height, 2)}
-                  rx={5}
-                  fill={DASHBOARD_PROJECT_STAGE_COLORS[bucket]}
-                  onClick={onPick === undefined ? undefined : () => { onPick(bucket, selectedYears); }}
-                  onMouseEnter={(event) => setTip(hoverTipAt(event, label, tipRows, t("hub.dash.projects.startYear.title")))}
-                  onMouseMove={(event) => setTip(hoverTipAt(event, label, tipRows, t("hub.dash.projects.startYear.title")))}
-                />
-              ) : null}
-              {count > 0 ? (
-                <text
-                  className="hub-dash-start-stage__num"
-                  style={{ animationDelay: stageIndex * 35 + 250 + "ms" }}
-                  x={center}
-                  y={y - 8}
-                  textAnchor="middle"
-                  fontSize={13.5}
-                  fontWeight={650}
-                  fill="#374151"
-                  pointerEvents="none"
-                >{count}</text>
-              ) : null}
-              <text x={center} y={LABEL_Y} textAnchor="middle" fontSize={axisFontSize} fill="#4b5563" fontWeight={500}>
-                {labelLines.map((line, lineIndex) => (
-                  <tspan key={line + ":" + lineIndex} x={center} y={LABEL_Y + lineIndex * LABEL_LINE_H}>{line}</tspan>
-                ))}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+      <div ref={chartRef} className="hub-dash-chartViewport" data-chart="start-stage">
+        <div className="hub-dash-chartCanvas" style={{ width: chartWidth + "px" }}>
+          <svg
+            className="hub-dash-start-stage"
+            width={chartWidth}
+            height={chartHeight}
+            viewBox={"0 0 " + chartWidth + " " + chartHeight}
+            preserveAspectRatio="xMidYMid meet"
+            role="img"
+            aria-label={t("hub.dash.projects.startYear.aria")}
+            onMouseLeave={() => setTip(null)}
+          >
+            {ticks.map((value) => value > 0 ? (
+              <line key={"grid-" + value} x1={marginX} y1={axisY - value * unit} x2={chartWidth - marginX} y2={axisY - value * unit} stroke="#e8eaee" strokeDasharray="3 4" />
+            ) : null)}
+            <line x1={marginX - 8} y1={axisY} x2={chartWidth - marginX + 8} y2={axisY} stroke="#b8bec6" />
+            {ticks.map((value) => (
+              <text key={"tick-" + value} x={marginX - 9} y={axisY - value * unit + 4} textAnchor="end" fontSize={tickFontSize} fill="#8a9099">{value}</text>
+            ))}
+            {DASHBOARD_PROJECT_STAGE_BUCKETS.map((bucket, stageIndex) => {
+              const count = totals[stageIndex] ?? 0;
+              const center = marginX + slotW * stageIndex + slotW / 2;
+              const x = center - barW / 2;
+              const height = count * unit;
+              const y = axisY - height;
+              const label = stageText(locale, dashboardProjectStageLabel(bucket));
+              const labelLines = stageLabelLines(label);
+              const yearRows = selectedRows
+                .map((row) => ({
+                  label: yearLabel(row.year, t("hub.dash.projects.unknownYear")),
+                  value: row.stageCounts[stageIndex] ?? 0,
+                }))
+                .filter((row) => row.value > 0)
+                .map((row) => ({ ...row, color: "#94a3b8" }));
+              const tipRows = [...yearRows, { label: t("hub.dash.projects.total"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }];
+              const labelY = labelLines.length > 1 ? axisY + 17 : axisY + 20;
+              return (
+                <g key={bucket}>
+                  <rect
+                    className="hub-dash-start-stage__band"
+                    x={marginX + slotW * stageIndex}
+                    y={PLOT_TOP}
+                    width={slotW}
+                    height={axisY - PLOT_TOP}
+                    fill="transparent"
+                    onMouseEnter={(event) => setTip(hoverTipAt(event, label, tipRows, t("hub.dash.projects.startYear.title")))}
+                    onMouseMove={(event) => setTip(hoverTipAt(event, label, tipRows, t("hub.dash.projects.startYear.title")))}
+                  />
+                  {count > 0 ? (
+                    <rect
+                      className="hub-dash-start-stage__bar"
+                      data-drill={onPick === undefined ? undefined : "true"}
+                      style={{ animationDelay: stageIndex * 35 + "ms" }}
+                      x={x}
+                      y={y}
+                      width={barW}
+                      height={Math.max(height, 2)}
+                      rx={5}
+                      fill={DASHBOARD_PROJECT_STAGE_COLORS[bucket]}
+                      onClick={onPick === undefined ? undefined : () => { onPick(bucket, selectedYears); }}
+                      onMouseEnter={(event) => setTip(hoverTipAt(event, label, tipRows, t("hub.dash.projects.startYear.title")))}
+                      onMouseMove={(event) => setTip(hoverTipAt(event, label, tipRows, t("hub.dash.projects.startYear.title")))}
+                    />
+                  ) : null}
+                  {count > 0 ? (
+                    <text
+                      className="hub-dash-start-stage__num"
+                      style={{ animationDelay: stageIndex * 35 + 250 + "ms" }}
+                      x={center}
+                      y={y - 8}
+                      textAnchor="middle"
+                      fontSize={numberFontSize}
+                      fontWeight={650}
+                      fill="#374151"
+                      pointerEvents="none"
+                    >{count}</text>
+                  ) : null}
+                  <text x={center} y={labelY} textAnchor="middle" fontSize={axisFontSize} fill="#4b5563" fontWeight={500}>
+                    {labelLines.map((line, lineIndex) => (
+                      <tspan key={line + ":" + lineIndex} x={center} y={labelY + lineIndex * labelLineH}>{line}</tspan>
+                    ))}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      </div>
       <HubDashHoverTip tip={tip} />
     </>
   );
@@ -173,6 +195,7 @@ function StageBars({ insights, selectedYears, onPick }: {
  * 最新阶段 × 启动年份：
  * x = 九大阶段 + 异常归档 / 验收归档 / 归档-临时任务，y = 项目数；
  * 年份使用与项目统计图一致的多选方块筛选，悬停柱体显示所选年份的明细；点柱按「当前阶段 × 选中年份」下钻项目列表。
+ * 图表按容器实际像素绘制，字号不随屏幕等比缩放，绘图区左右留白对称。
  */
 export function HubDashStartYearStages({ insights, onPick, storageKeyPrefix }: {
   readonly insights: DashboardProjectInsights;

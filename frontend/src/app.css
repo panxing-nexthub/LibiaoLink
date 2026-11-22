@@ -5835,3 +5835,66 @@ body {
     padding-left: 0.9rem;
   }
 }
+
+
+/* ===== 仪表盘图表响应式画布（2026-11-22） =====
+   固定 viewBox 会让整张 SVG 随屏幕等比缩放，导致宽屏字变大、小屏字变小，并在比例不一致时
+   产生左右黑边。以下容器用实测像素作画布：字号保持 CSS 像素稳定，柱图坐标按可用宽高重算。 */
+.hub-dash-chartViewport {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.hub-dash-chartCanvas {
+  position: relative;
+  flex: 0 0 auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.hub-dash-chartCanvas > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
+.hub-dash-project-types__viewport {
+  min-height: 0;
+}
+
+.hub-dash-project-types__viewport > .hub-dash-chartCanvas > svg.hub-dash-project-types {
+  min-height: 0;
+  max-height: none;
+}
+
+.hub-dash-start__bars > .hub-dash-chartViewport {
+  flex: 1 1 auto;
+}
+
+.hub-dash-start__bars .hub-dash-start-stage,
+.hub-dash-combined__panel .hub-dash-start-stage {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
+.hub-dash-role__scroll.hub-dash-chartViewport {
+  width: 100%;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.hub-dash-role__scroll.hub-dash-chartViewport .hub-dash-role {
+  min-height: 0;
+  max-height: none;
+}

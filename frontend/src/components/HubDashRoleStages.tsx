@@ -4,6 +4,7 @@ import { stageText, useLocale, useT } from "../i18n";
 import { usePersistentDashboardFilter } from "../dashboardFilterStorage";
 import { dashboardAxisOf } from "../dashboardChartScale";
 import { HubDashHoverTip, hoverTipAt, type DashboardHoverTip } from "./HubDashHoverTip";
+import { useResponsiveChartSize } from "./useResponsiveChartSize";
 import {
   DASHBOARD_PROJECT_STAGE_BUCKETS,
   DASHBOARD_PROJECT_STAGE_COLORS,
@@ -27,15 +28,13 @@ export type DashboardRoleProjectPick = {
   readonly stageBuckets: readonly DashboardProjectStageBucket[];
 };
 
-const VIEW_H = 378;
-const PLOT_TOP = 24;
-const AXIS_Y = 306;
-const LABEL_Y = 334;
-const LEFT = 66;
-const RIGHT = 28;
-const MIN_VIEW_W = 900;
-const SLOT_W = 86;
-const BAR_MAX_W = 42;
+const PLOT_TOP = 18;
+const MIN_SLOT_W = 72;
+const MAX_SLOT_W = 148;
+const BAR_MAX_W = 46;
+const Y_AXIS_W = 44;
+const RIGHT_PAD = 10;
+const MIN_CHART_H = 132;
 
 function truncated(text: string, maxChars = 9): string {
   return text.length <= maxChars ? text : text.slice(0, maxChars - 1) + "…";
@@ -50,6 +49,7 @@ function RoleStageChart({ role, stats, visibleStages, onPick }: {
   const t = useT();
   const locale = useLocale();
   const [tip, setTip] = useState<DashboardHoverTip | null>(null);
+  const { ref: chartRef, width: availableWidth, height: availableHeight } = useResponsiveChartSize(900, 300);
   const people = stats?.people ?? [];
   const visibleStageEntries = DASHBOARD_PROJECT_STAGE_BUCKETS
     .map((bucket, stageIndex) => ({ bucket, stageIndex }))
@@ -64,95 +64,116 @@ function RoleStageChart({ role, stats, visibleStages, onPick }: {
   ));
   const maxTotal = visibleTotals.reduce((max, total) => Math.max(max, total), 0);
   const { max: tickMax, step } = dashboardAxisOf(maxTotal);
-  const unit = (AXIS_Y - PLOT_TOP) / tickMax;
-  const viewW = Math.max(MIN_VIEW_W, LEFT + RIGHT + people.length * SLOT_W);
-  const plotW = viewW - LEFT - RIGHT;
-  const slotW = plotW / people.length;
-  const barW = Math.min(BAR_MAX_W, slotW * 0.52);
+  const chartHeight = Math.max(availableHeight, MIN_CHART_H);
+  const minContentW = Y_AXIS_W + people.length * MIN_SLOT_W + RIGHT_PAD;
+  const chartWidth = Math.max(availableWidth, minContentW);
+  const fitSlotW = (chartWidth - Y_AXIS_W - RIGHT_PAD) / people.length;
+  const comfortableMaxSlotW = Math.min(230, Math.max(MAX_SLOT_W, fitSlotW));
+  const slotW = Math.max(MIN_SLOT_W, Math.min(comfortableMaxSlotW, fitSlotW));
+  const contentW = Y_AXIS_W + people.length * slotW + RIGHT_PAD;
+  const contentLeft = Math.max(0, (chartWidth - contentW) / 2);
+  const plotX0 = contentLeft + Y_AXIS_W;
+  const plotX1 = plotX0 + people.length * slotW;
+  const axisY = chartHeight - 36;
+  const unit = (axisY - PLOT_TOP) / tickMax;
+  const barMaxW = Math.max(BAR_MAX_W, Math.min(58, chartWidth * 0.022));
+  const barW = Math.min(barMaxW, slotW * 0.46);
+  const tickFontSize = Math.max(11.2, Math.min(14, chartWidth * 0.0058));
+  const numberFontSize = Math.max(10.5, Math.min(12.4, chartWidth * 0.0049));
+  const baseLabelFontSize = locale === "zh"
+    ? Math.max(12.4, Math.min(15, chartWidth * 0.0064))
+    : locale === "en"
+      ? Math.max(11, Math.min(13.4, chartWidth * 0.0057))
+      : Math.max(11.4, Math.min(14, chartWidth * 0.006));
+  const labelFontSize = Math.min(baseLabelFontSize, Math.max(10.2, slotW * 0.22));
+  const maxLabelChars = Math.max(4, Math.min(9, Math.floor((slotW - 8) / (labelFontSize * (locale === "zh" ? 1 : 0.62)))));
   const ticks: number[] = [];
   for (let value = 0; value <= tickMax; value += step) ticks.push(value);
   return (
-    <div className="hub-dash-role__scroll">
-      <svg
-        className="hub-dash-role"
-        viewBox={"0 0 " + viewW + " " + VIEW_H}
-        style={{ width: "100%", minWidth: viewW, height: "auto" }}
-        preserveAspectRatio="xMinYMid meet"
-        role="img"
-        aria-label={t("hub.dash.projects.role.aria", { role: t(ROLE_TITLE_KEYS[role]) })}
-        onMouseLeave={() => setTip(null)}
-      >
-        {ticks.map((value) => value > 0 ? (
-          <line key={"grid-" + value} x1={LEFT} y1={AXIS_Y - value * unit} x2={viewW - RIGHT} y2={AXIS_Y - value * unit} stroke="#e8eaee" strokeDasharray="3 4" />
-        ) : null)}
-        <line x1={LEFT - 8} y1={AXIS_Y} x2={viewW - RIGHT + 8} y2={AXIS_Y} stroke="#b8bec6" />
-        {ticks.map((value) => (
-          <text key={"tick-" + value} x={LEFT - 12} y={AXIS_Y - value * unit + 4} textAnchor="end" fontSize={11.5} fill="#8a9099">{value}</text>
-        ))}
-        {people.map((person, personIndex) => {
-          const center = LEFT + slotW * personIndex + slotW / 2;
-          const x = center - barW / 2;
-          const rawLabel = person.isUnassigned ? t("hub.dash.projects.unassigned") : person.name ?? t("hub.dash.projects.unknownPerson");
-          const personKey = person.isUnassigned ? "unassigned" : person.personId ?? rawLabel;
-          const label = truncated(rawLabel);
-          const visibleTotal = visibleTotals[personIndex] ?? 0;
-          const stageRows = visibleStageEntries.flatMap(({ bucket, stageIndex }) => {
-            const count = person.stageCounts[stageIndex] ?? 0;
-            return count > 0 ? [{ label: stageText(locale, dashboardProjectStageLabel(bucket)), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }] : [];
-          });
-          stageRows.push({ label: t("hub.dash.projects.total"), value: visibleTotal, color: "#94a3b8" });
-          let cursorY = AXIS_Y;
-          return (
-            <g key={personKey}>
-              <rect
-                className="hub-dash-role__band"
-                data-drill={onPick === undefined ? undefined : "true"}
-                x={center - slotW / 2 + 5}
-                y={PLOT_TOP - 6}
-                width={Math.max(slotW - 10, 1)}
-                height={AXIS_Y - PLOT_TOP + 6}
-                rx={8}
-                fill="transparent"
-                onClick={onPick === undefined ? undefined : () => { onPick({ personId: person.personId, name: rawLabel, isUnassigned: person.isUnassigned, stageBuckets: visibleStageEntries.map((entry) => entry.bucket) }); }}
-                onMouseEnter={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
-                onMouseMove={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
-              />
-              {visibleStageEntries.map(({ bucket, stageIndex }) => {
-                const count = person.stageCounts[stageIndex] ?? 0;
-                if (count <= 0) return null;
-                const height = count * unit;
-                const y = cursorY - height;
-                cursorY = y;
-                const stageLabel = stageText(locale, dashboardProjectStageLabel(bucket));
-                return (
-                  <g key={bucket}>
-                    <rect
-                      className="hub-dash-role__segment"
-                      data-drill={onPick === undefined ? undefined : "true"}
-                      style={{ animationDelay: personIndex * 45 + stageIndex * 18 + "ms" }}
-                      x={x}
-                      y={y}
-                      width={barW}
-                      height={Math.max(height, 1.5)}
-                      fill={DASHBOARD_PROJECT_STAGE_COLORS[bucket]}
-                      onClick={onPick === undefined ? undefined : () => { onPick({ personId: person.personId, name: rawLabel, isUnassigned: person.isUnassigned, stageBuckets: [bucket] }); }}
-                      onMouseEnter={(event) => setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
-                      onMouseMove={(event) => setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
-                    />
-                    {height >= 11 ? (
-                      <text x={center} y={y + height / 2 + 3.7} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={bucket === "purchase" ? "#313033" : "#ffffff"} pointerEvents="none">{count}</text>
-                    ) : null}
-                  </g>
-                );
-              })}
-              <text x={center} y={LABEL_Y} textAnchor="middle" fontSize={11.5} fill={person.isUnassigned ? "#9a5b13" : "#4b5563"}>
-                <title>{rawLabel}</title>
-                {label}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+    <div ref={chartRef} className="hub-dash-role__scroll hub-dash-chartViewport" data-chart="role-stage">
+      <div className="hub-dash-chartCanvas" style={{ width: chartWidth + "px" }}>
+        <svg
+          className="hub-dash-role"
+          width={chartWidth}
+          height={chartHeight}
+          viewBox={"0 0 " + chartWidth + " " + chartHeight}
+          preserveAspectRatio="xMidYMid meet"
+          role="img"
+          aria-label={t("hub.dash.projects.role.aria", { role: t(ROLE_TITLE_KEYS[role]) })}
+          onMouseLeave={() => setTip(null)}
+        >
+          {ticks.map((value) => value > 0 ? (
+            <line key={"grid-" + value} x1={plotX0} y1={axisY - value * unit} x2={plotX1} y2={axisY - value * unit} stroke="#e8eaee" strokeDasharray="3 4" />
+          ) : null)}
+          <line x1={plotX0 - 8} y1={axisY} x2={plotX1 + 8} y2={axisY} stroke="#b8bec6" />
+          {ticks.map((value) => (
+            <text key={"tick-" + value} x={plotX0 - 10} y={axisY - value * unit + 4} textAnchor="end" fontSize={tickFontSize} fill="#8a9099">{value}</text>
+          ))}
+          {people.map((person, personIndex) => {
+            const center = plotX0 + slotW * personIndex + slotW / 2;
+            const x = center - barW / 2;
+            const rawLabel = person.isUnassigned ? t("hub.dash.projects.unassigned") : person.name ?? t("hub.dash.projects.unknownPerson");
+            const personKey = person.isUnassigned ? "unassigned" : person.personId ?? rawLabel;
+            const label = truncated(rawLabel, maxLabelChars);
+            const visibleTotal = visibleTotals[personIndex] ?? 0;
+            const stageRows = visibleStageEntries.flatMap(({ bucket, stageIndex }) => {
+              const count = person.stageCounts[stageIndex] ?? 0;
+              return count > 0 ? [{ label: stageText(locale, dashboardProjectStageLabel(bucket)), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }] : [];
+            });
+            stageRows.push({ label: t("hub.dash.projects.total"), value: visibleTotal, color: "#94a3b8" });
+            let cursorY = axisY;
+            return (
+              <g key={personKey}>
+                <rect
+                  className="hub-dash-role__band"
+                  data-drill={onPick === undefined ? undefined : "true"}
+                  x={center - slotW / 2 + 5}
+                  y={PLOT_TOP - 6}
+                  width={Math.max(slotW - 10, 1)}
+                  height={axisY - PLOT_TOP + 6}
+                  rx={8}
+                  fill="transparent"
+                  onClick={onPick === undefined ? undefined : () => { onPick({ personId: person.personId, name: rawLabel, isUnassigned: person.isUnassigned, stageBuckets: visibleStageEntries.map((entry) => entry.bucket) }); }}
+                  onMouseEnter={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
+                  onMouseMove={(event) => setTip(hoverTipAt(event, rawLabel, stageRows, t(ROLE_TITLE_KEYS[role])))}
+                />
+                {visibleStageEntries.map(({ bucket, stageIndex }) => {
+                  const count = person.stageCounts[stageIndex] ?? 0;
+                  if (count <= 0) return null;
+                  const height = count * unit;
+                  const y = cursorY - height;
+                  cursorY = y;
+                  const stageLabel = stageText(locale, dashboardProjectStageLabel(bucket));
+                  return (
+                    <g key={bucket}>
+                      <rect
+                        className="hub-dash-role__segment"
+                        data-drill={onPick === undefined ? undefined : "true"}
+                        style={{ animationDelay: personIndex * 45 + stageIndex * 18 + "ms" }}
+                        x={x}
+                        y={y}
+                        width={barW}
+                        height={Math.max(height, 1.5)}
+                        fill={DASHBOARD_PROJECT_STAGE_COLORS[bucket]}
+                        onClick={onPick === undefined ? undefined : () => { onPick({ personId: person.personId, name: rawLabel, isUnassigned: person.isUnassigned, stageBuckets: [bucket] }); }}
+                        onMouseEnter={(event) => setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
+                        onMouseMove={(event) => setTip(hoverTipAt(event, rawLabel, [{ label: t("hub.dash.projects.projectCount"), value: count, color: DASHBOARD_PROJECT_STAGE_COLORS[bucket] }], stageLabel))}
+                      />
+                      {height >= 11 ? (
+                        <text x={center} y={y + height / 2 + 3.7} textAnchor="middle" fontSize={numberFontSize} fontWeight={600} fill={bucket === "purchase" ? "#313033" : "#ffffff"} pointerEvents="none">{count}</text>
+                      ) : null}
+                    </g>
+                  );
+                })}
+                <text x={center} y={axisY + 21} textAnchor="middle" fontSize={labelFontSize} fill={person.isUnassigned ? "#9a5b13" : "#4b5563"}>
+                  <title>{rawLabel}</title>
+                  {label}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
       <HubDashHoverTip tip={tip} />
     </div>
   );
@@ -203,6 +224,7 @@ export function HubDashProjectStageLegend({ visibleStages, onToggleStage, onSele
  * 同一项目同一角色同一人去重；未配置对应负责人落「待分配」。
  * 阶段图例可逐项显隐，隐藏阶段不再绘制，合计与纵轴按可见阶段重算；
  * 点人员柱底或阶段分段按「负责人 × 阶段」下钻项目列表。
+ * 图表按容器实际像素绘制；人员较少时整组（含纵轴）居中，人员过多时横向滚动。
  */
 export function HubDashRoleStage({ role, insights, onPick, storageKeyPrefix }: {
   readonly role: DashboardProjectRole;

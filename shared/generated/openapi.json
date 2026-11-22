@@ -10011,6 +10011,10 @@
             "maxLength": 20
           }
         },
+        "default": {
+          "from": null,
+          "to": null
+        },
         "required": [
           "from",
           "to"
@@ -10355,12 +10359,12 @@
                 "items": {
                   "$ref": "#/components/schemas/ProjectAiClaim"
                 },
-                "maxItems": 20
+                "maxItems": 20,
+                "default": []
               }
             },
             "required": [
-              "text",
-              "claims"
+              "text"
             ]
           },
           "overview": {
@@ -10385,7 +10389,8 @@
                   "type": "string",
                   "maxLength": 100
                 },
-                "maxItems": 10
+                "maxItems": 10,
+                "default": []
               },
               "startedAt": {
                 "type": "string",
@@ -10439,11 +10444,8 @@
               "projectName",
               "projectCode",
               "status",
-              "managers",
               "startedAt",
-              "progress",
-              "planRange",
-              "reportRange"
+              "progress"
             ]
           },
           "timeline": {
@@ -10451,7 +10453,8 @@
             "items": {
               "$ref": "#/components/schemas/ProjectAiTimelineItem"
             },
-            "maxItems": 8
+            "maxItems": 8,
+            "default": []
           },
           "issues": {
             "type": "object",
@@ -10474,23 +10477,23 @@
               },
               "summary": {
                 "type": "string",
-                "maxLength": 1000
+                "maxLength": 1000,
+                "default": ""
               },
               "currentItems": {
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/ProjectAiIssueItem"
                 },
-                "maxItems": 50
+                "maxItems": 50,
+                "default": []
               }
             },
             "required": [
               "total",
               "done",
               "inProgress",
-              "open",
-              "summary",
-              "currentItems"
+              "open"
             ]
           },
           "resultsAndRisks": {
@@ -10505,20 +10508,20 @@
                 "items": {
                   "$ref": "#/components/schemas/ProjectAiClaim"
                 },
-                "maxItems": 20
+                "maxItems": 20,
+                "default": []
               },
               "risks": {
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/ProjectAiClaim"
                 },
-                "maxItems": 20
+                "maxItems": 20,
+                "default": []
               }
             },
             "required": [
-              "text",
-              "claims",
-              "risks"
+              "text"
             ]
           },
           "handoff": {
@@ -10562,7 +10565,8 @@
                     "sources"
                   ]
                 },
-                "maxItems": 20
+                "maxItems": 20,
+                "default": []
               },
               "suggestions": {
                 "type": "array",
@@ -10611,31 +10615,27 @@
                     "sources"
                   ]
                 },
-                "maxItems": 20
+                "maxItems": 20,
+                "default": []
               }
-            },
-            "required": [
-              "existing",
-              "suggestions"
-            ]
+            }
           },
           "notes": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProjectAiClaim"
             },
-            "maxItems": 20
+            "maxItems": 20,
+            "default": []
           }
         },
         "required": [
           "title",
           "summary",
           "overview",
-          "timeline",
           "issues",
           "resultsAndRisks",
-          "handoff",
-          "notes"
+          "handoff"
         ],
         "description": "结构化正式报告（REPORT_SCHEMA v2）"
       },

@@ -14477,6 +14477,12 @@ export interface components {
             managerNames: (string | null)[];
             startedAt: components["schemas"]["DateOnly"] & (string | null);
         };
+        /**
+         * @default {
+         *       "from": null,
+         *       "to": null
+         *     }
+         */
         ProjectAiRange: {
             from: string | null;
             to: string | null;
@@ -14546,6 +14552,7 @@ export interface components {
             summary: {
                 /** @description 250～400 字项目摘要 */
                 text: string;
+                /** @default [] */
                 claims: components["schemas"]["ProjectAiClaim"][];
             };
             overview: {
@@ -14553,6 +14560,7 @@ export interface components {
                 projectCode: string;
                 /** @description 进行中 / 已暂停 / 已归档 / 已完成（中文，不输出状态码） */
                 status: string;
+                /** @default [] */
                 managers: string[];
                 /** @description YYYY-MM-DD 或「未记录」 */
                 startedAt: string;
@@ -14563,24 +14571,30 @@ export interface components {
                     latestStage: string;
                     slowestStage: string;
                 };
-                planRange: components["schemas"]["ProjectAiRange"];
-                reportRange: components["schemas"]["ProjectAiRange"];
+                planRange?: components["schemas"]["ProjectAiRange"];
+                reportRange?: components["schemas"]["ProjectAiRange"];
             };
+            /** @default [] */
             timeline: components["schemas"]["ProjectAiTimelineItem"][];
             issues: {
                 total: number;
                 done: number;
                 inProgress: number;
                 open: number;
+                /** @default  */
                 summary: string;
+                /** @default [] */
                 currentItems: components["schemas"]["ProjectAiIssueItem"][];
             };
             resultsAndRisks: {
                 text: string;
+                /** @default [] */
                 claims: components["schemas"]["ProjectAiClaim"][];
+                /** @default [] */
                 risks: components["schemas"]["ProjectAiClaim"][];
             };
             handoff: {
+                /** @default [] */
                 existing: {
                     text: string;
                     owner: string;
@@ -14588,6 +14602,7 @@ export interface components {
                     type: components["schemas"]["ProjectAiClaimType"];
                     sources: components["schemas"]["ProjectAiSource"][];
                 }[];
+                /** @default [] */
                 suggestions: {
                     text: string;
                     reason: string;
@@ -14598,6 +14613,7 @@ export interface components {
                     sources: components["schemas"]["ProjectAiSource"][];
                 }[];
             };
+            /** @default [] */
             notes: components["schemas"]["ProjectAiClaim"][];
         };
         ProjectAiTask: {

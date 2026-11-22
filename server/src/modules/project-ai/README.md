@@ -49,8 +49,50 @@ npx vitest run test/project-ai-context.test.ts
 覆盖：启动时间取最早、阶段日期兜底与 `datesFallback`、未分组统计、推进人 / 变更申请人姓名解析、
 日报 / 问题只计数、任务排序、无启动任务时 `startedAt = null`、契约自校验。
 
-## 5. 后续（未实现）
+## 5. 总结生成与缓存
 
-- 项目总结生成接口（调用模型）与 `project_ai_summaries` 缓存表。
-- 前端「AI 总结」入口与展示形态。
+### 接口
+
+| 方法 | 路径 | 权限 | 行为 |
+|---|---|---|---|
+| GET | `/api/v1/projects/{id}/ai-context` | 登录 + 项目可见 | 只读聚合，不调模型 |
+| GET | `/api/v1/projects/{id}/ai-summary` | 登录 + 项目可见 | 读最近一次结果（不调模型）；未生成 404；`stale=true` 表示数据已变化 |
+| POST | `/api/v1/projects/{id}/ai-summary` | 额外要求 `project.export` | 生成；默认复用缓存，`force=true` 强制重生成 |
+
+POST 用 `project.export` 而不是新增权限位：生成会把项目数据发到外部模型服务，属于数据出站动作，
+用「可导出项目数据」作门禁，权限矩阵零改动。
+
+### 缓存
+
+表 `project_ai_summaries`（迁移 0111）：
+
+```
+project_id + source_hash + prompt_version 唯一
+source_hash = sha256(上下文 JSON，去掉 generatedAt)
+```
+
+- 项目数据一变 → `source_hash` 变 → 下次生成写新行，旧行保留可追溯。
+- 只缓存**成功**结果；模型超时 / 报错 / 返回非法 JSON 一律不落库，直接报错让调用方重试。
+- 同一项目 + 同一指纹的并发请求在进程内合并，避免重复扣费。
+- `prompt_version` 常量在 `project-ai-summary.service.ts`；改 prompt 结构时递增，旧缓存自动失效。
+
+### 模型调用
+
+- 用 `model-config` 当前启用的模型（OpenAI 兼容 `POST {baseUrl}/chat/completions`）。
+- 未启用模型 → 400 `VALIDATION_FAILED`「尚未启用 AI 模型」。
+- 超时 120s；返回必须是 JSON 对象，服务端按契约再校验一遍结构，不合法即报错。
+- prompt 侧压缩：任务最多 300 条、日报 80 条、问题 200 条、变更 100 条，并递归去掉 null / 空数组。
+  接口返回的 `ai-context` 不受影响（完整数据 + `truncated`）。
+
+### Prompt 硬约束
+
+1. 只用给定数据，缺数据写「暂无数据」；
+2. 不编造日期 / 数量 / 人员 / 原因 / 进度，不做验收与质量结论，不承诺工期；
+3. 不评价个人绩效；
+4. `stageKey` 必须来自输入阶段；
+5. 风险必须给依据（`evidence`），无依据为 null。
+
+## 6. 后续（未实现）
+
+- 前端「AI 总结」入口与展示形态（`summaryText` + `summary` 结构化字段已就绪）。
 - 文档正文提取 / 图片识别：**本期明确不做**。

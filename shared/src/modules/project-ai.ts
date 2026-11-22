@@ -163,3 +163,66 @@ export type ProjectAiTask = z.infer<typeof ProjectAiTaskSchema>;
 export type ProjectAiChange = z.infer<typeof ProjectAiChangeSchema>;
 export type ProjectAiReport = z.infer<typeof ProjectAiReportSchema>;
 export type ProjectAiIssue = z.infer<typeof ProjectAiIssueSchema>;
+
+/* ------------------------------------------------------------------ *
+ * AI 项目总结生成（POST /projects/{id}/ai-summary）
+ * ------------------------------------------------------------------ */
+
+/** 风险等级：高 / 中 / 低（只做提示，不做验收结论）。 */
+export const ProjectAiRiskLevelSchema = z.enum(["high", "medium", "low"]).openapi("ProjectAiRiskLevel");
+
+export const ProjectAiSummaryRiskSchema = z
+  .object({
+    level: ProjectAiRiskLevelSchema,
+    text: z.string().min(1).max(500).openapi({ description: "风险描述" }),
+    evidence: z.string().max(500).nullable().openapi({ description: "依据（引用具体任务 / 问题 / 变更 / 日期），无依据为 null" }),
+  })
+  .openapi("ProjectAiSummaryRisk");
+
+/** 结构化总结（模型输出经服务端校验后落库）。 */
+export const ProjectAiSummaryPayloadSchema = z
+  .object({
+    stageHighlights: z
+      .array(
+        z.object({
+          stageKey: z.string().max(50),
+          summary: z.string().min(1).max(500),
+        }),
+      )
+      .max(20)
+      .openapi({ description: "有内容的阶段小结；stageKey 取输入阶段键，无内容阶段可省略" }),
+    risks: z.array(ProjectAiSummaryRiskSchema).max(20),
+    issueSummary: z.string().max(1500).nullable().openapi({ description: "问题小结；无问题为 null" }),
+    changeSummary: z.string().max(1500).nullable().openapi({ description: "变更小结；无变更为 null" }),
+    reportSummary: z.string().max(1500).nullable().openapi({ description: "日报小结；无日报为 null" }),
+    nextSteps: z.array(z.string().max(300)).max(10).openapi({ description: "建议关注事项；不得编造工期承诺" }),
+    dataGaps: z.array(z.string().max(300)).max(20).openapi({ description: "数据缺失 / 暂无记录的字段说明" }),
+  })
+  .openapi("ProjectAiSummaryPayload");
+
+export const ProjectAiSummarySchema = z
+  .object({
+    id: UuidSchema,
+    projectId: UuidSchema,
+    sourceHash: z.string().openapi({ description: "生成时的项目上下文指纹（sha256）" }),
+    promptVersion: z.string(),
+    modelId: z.string().nullable(),
+    summaryText: z.string().openapi({ description: "可直接展示的整体总结段落" }),
+    summary: ProjectAiSummaryPayloadSchema,
+    generatedBy: UuidSchema.nullable(),
+    generatedByName: z.string().nullable(),
+    generatedAt: DateTimeSchema,
+    stale: z.boolean().openapi({ description: "true = 当前项目数据已变化，缓存结果落后；可重新生成" }),
+  })
+  .openapi("ProjectAiSummary");
+
+/** 生成入参：force=true 忽略缓存强制重新生成（模型失败不覆盖已有缓存）。 */
+export const ProjectAiSummaryGenerateBodySchema = z
+  .object({
+    force: z.boolean().default(false).openapi({ description: "true = 忽略缓存重新生成" }),
+  })
+  .openapi("ProjectAiSummaryGenerateBody");
+
+export type ProjectAiSummary = z.infer<typeof ProjectAiSummarySchema>;
+export type ProjectAiSummaryPayload = z.infer<typeof ProjectAiSummaryPayloadSchema>;
+export type ProjectAiSummaryGenerateBody = z.infer<typeof ProjectAiSummaryGenerateBodySchema>;

@@ -5,7 +5,7 @@ import { ProjectImportCommitBodySchema, ProjectImportPreviewSchema, ProjectImpor
 import { CadJobSchema, CadJobCreateBodySchema, CadJobCreateResponseSchema, CadNameCodepageSchema } from "./modules/cad.ts";
 import { DateOnlySchema, IdempotencyKeySchema, UuidSchema } from "./common/conventions.ts";
 import { StageKeySchema } from "./common/dicts.ts";
-import { ProjectAiContextSchema } from "./modules/project-ai.ts";
+import { ProjectAiContextSchema, ProjectAiSummaryGenerateBodySchema, ProjectAiSummarySchema } from "./modules/project-ai.ts";
 import { ApiErrorSchema } from "./common/errors.ts";
 import {
   ProjectArchiveBodySchema,
@@ -1438,6 +1438,32 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     request: { params: idParams },
     responses: {
       200: { description: "项目 AI 上下文", ...json(ProjectAiContextSchema) },
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/projects/{id}/ai-summary",
+    tags: ["project-ai"],
+    summary: "最近一次 AI 项目总结（不调模型；未生成为 404，stale 表示数据已变化）",
+    request: { params: idParams },
+    responses: {
+      200: { description: "AI 项目总结", ...json(ProjectAiSummarySchema) },
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/ai-summary",
+    tags: ["project-ai"],
+    summary: "生成 AI 项目总结（默认复用缓存；force=true 重新生成；需 project.export）",
+    request: { params: idParams, body: json(ProjectAiSummaryGenerateBodySchema) },
+    responses: {
+      200: { description: "AI 项目总结", ...json(ProjectAiSummarySchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
       404: commonErrors[404],
     },
   });

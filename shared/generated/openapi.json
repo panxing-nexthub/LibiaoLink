@@ -652,7 +652,8 @@
           "group_access_admin",
           "task_node_reviewer_roster",
           "task_node_review_notification_settings",
-          "ai_model_provider"
+          "ai_model_provider",
+          "project_ai_summary"
         ],
         "description": "审计对象类型：project 项目 / project_member 名册 / task 任务 / node 节点 / stage 阶段 / dict_item 字典条目 / blueprint 蓝图 / calendar_day 日历例外（对象 id = 业务日期） / calendar_settings 顺延配置（对象 id = default） / file 文件（对象 id = fileId；上传会话事件经 metadata.uploadId 定位；仅用户点开具体预览（recordView=true）且实际送达时写 preview 审计，缩略图不写 —— 不为同一 fileId 开第二种对象类型） / change 变更记录（对象 id = changeRequestId，M4-04） / stakeholder 干系人（对象 id = stakeholderId；项目关联 / 解除经 metadata.projectId 记录，j6） / daily_report 日报（对象 id = reportId，M6-01 / M6-02） / issue 问题（对象 id = issueId，M6-02 / M6-03） / task_node 任务节点（对象 id = taskNodeId，M3-05 余：节点库新增 / 编辑 / 删除） / task_node_request 公共任务节点申请（对象 id = 申请 id；导入侧提交不单独留痕，审核通过 / 驳回 / 申请人撤销写审计） / task_template 任务模板（对象 id = templateId，M3-05 余第二段：模板新增 / 编辑 / 软删） / user 系统用户（对象 id = users.id；Push 173：离职回收 / 组织同步的停用 · 启用 · 软删；登录成功记 visit，metadata.operation=login） / wecom_dm_binding 企微绑定验证（对象 id = 机器人标识 + 掩码 open_userid；失败 / 锁定记 deny + denied，不落完整 userid 或绑定码） / automation_rule 自动化规则（对象 id = 规则 id；保存记录字段级 diff，metadata 带 code / beforeVersion / afterVersion，M5-06） / notify_delivery 发送记录（对象 id = 消息归档 id；仅管理员重发写 update + metadata.operation=resend，M5-06） / group_access_rule 部门访问规则（对象 id = 群组键；保存 / 删除写审计，2026-10-23） / group_access_admin 系统管理员（对象 id = users.id；手工授予 / 撤销写审计，2026-10-24） / task_node_reviewer_roster 公共节点审核人名单（对象 id = task_node_reviewer_roster；保存名单写审计，2026-11-14） / task_node_review_notification_settings 公共节点审核企微通知个人设置（对象 id = 审核人 users.id；开关 / 通知方式 / 固定时间变更写审计，2026-11-15） / ai_model_provider 模型服务（对象 id = 服务 id；不记录密钥）"
       },
@@ -9831,6 +9832,14 @@
           "photoCount"
         ]
       },
+      "ProjectAiRiskLevel": {
+        "type": "string",
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ]
+      },
       "ProjectAiStage": {
         "type": "object",
         "properties": {
@@ -9982,6 +9991,199 @@
           "rolledBackAt",
           "rolledBackByName",
           "rollbackReason"
+        ]
+      },
+      "ProjectAiSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "sourceHash": {
+            "type": "string",
+            "description": "生成时的项目上下文指纹（sha256）"
+          },
+          "promptVersion": {
+            "type": "string"
+          },
+          "modelId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "summaryText": {
+            "type": "string",
+            "description": "可直接展示的整体总结段落"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ProjectAiSummaryPayload"
+          },
+          "generatedBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "generatedByName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generatedAt": {
+            "$ref": "#/components/schemas/DateTime"
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "true = 当前项目数据已变化，缓存结果落后；可重新生成"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "sourceHash",
+          "promptVersion",
+          "modelId",
+          "summaryText",
+          "summary",
+          "generatedBy",
+          "generatedByName",
+          "generatedAt",
+          "stale"
+        ]
+      },
+      "ProjectAiSummaryGenerateBody": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "default": false,
+            "description": "true = 忽略缓存重新生成"
+          }
+        }
+      },
+      "ProjectAiSummaryPayload": {
+        "type": "object",
+        "properties": {
+          "stageHighlights": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "stageKey": {
+                  "type": "string",
+                  "maxLength": 50
+                },
+                "summary": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "stageKey",
+                "summary"
+              ]
+            },
+            "maxItems": 20,
+            "description": "有内容的阶段小结；stageKey 取输入阶段键，无内容阶段可省略"
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiSummaryRisk"
+            },
+            "maxItems": 20
+          },
+          "issueSummary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1500,
+            "description": "问题小结；无问题为 null"
+          },
+          "changeSummary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1500,
+            "description": "变更小结；无变更为 null"
+          },
+          "reportSummary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1500,
+            "description": "日报小结；无日报为 null"
+          },
+          "nextSteps": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "maxItems": 10,
+            "description": "建议关注事项；不得编造工期承诺"
+          },
+          "dataGaps": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "maxItems": 20,
+            "description": "数据缺失 / 暂无记录的字段说明"
+          }
+        },
+        "required": [
+          "stageHighlights",
+          "risks",
+          "issueSummary",
+          "changeSummary",
+          "reportSummary",
+          "nextSteps",
+          "dataGaps"
+        ]
+      },
+      "ProjectAiSummaryRisk": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/ProjectAiRiskLevel"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "风险描述"
+          },
+          "evidence": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500,
+            "description": "依据（引用具体任务 / 问题 / 变更 / 日期），无依据为 null"
+          }
+        },
+        "required": [
+          "level",
+          "text",
+          "evidence"
         ]
       },
       "ProjectAiTask": {
@@ -23139,6 +23341,115 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProjectAiContext"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{id}/ai-summary": {
+      "get": {
+        "tags": [
+          "project-ai"
+        ],
+        "summary": "最近一次 AI 项目总结（不调模型；未生成为 404，stale 表示数据已变化）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "AI 项目总结",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAiSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "project-ai"
+        ],
+        "summary": "生成 AI 项目总结（默认复用缓存；force=true 重新生成；需 project.export）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectAiSummaryGenerateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "AI 项目总结",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAiSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }

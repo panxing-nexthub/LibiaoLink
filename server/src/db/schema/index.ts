@@ -22,4 +22,5 @@ export * from "./translate.js";
 export * from "./ai-models.js";
 export * from "./imports.js";
 export * from "./automation.js";
+export * from "./project-ai.js";
 export * from "./todos.js";

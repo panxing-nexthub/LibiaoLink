@@ -10,7 +10,7 @@ import type { UserService } from "../src/modules/identity/index.js";
 import type { FlowService, ProjectService } from "../src/modules/project/index.js";
 import type { IssueService, ReportService } from "../src/modules/report-issue/index.js";
 import type { TaskService } from "../src/modules/task/index.js";
-import { ProjectAiContextService } from "../src/modules/project-ai/project-ai.service.js";
+import { ProjectAiContextService } from "../src/modules/project-ai/project-ai-context.service.js";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const MANAGER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";

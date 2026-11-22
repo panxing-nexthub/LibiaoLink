@@ -4924,6 +4924,8 @@ body {
 }
 
 .hub-dash-all__slideCard--stacked {
+  width: 100%;
+  min-width: 0;
   gap: 0.55rem;
   padding: 0;
   overflow: visible;

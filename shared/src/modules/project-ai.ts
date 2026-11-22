@@ -240,13 +240,13 @@ export const ProjectAiSummaryReportSchema = z
     title: z.string().min(1).max(200),
     summary: z.object({
       text: z.string().min(1).max(2000).openapi({ description: "250～400 字项目摘要" }),
-      claims: z.array(ProjectAiClaimSchema).max(20),
+      claims: z.array(ProjectAiClaimSchema).max(20).default([]),
     }),
     overview: z.object({
       projectName: z.string().max(200),
       projectCode: z.string().max(100),
       status: z.string().max(20).openapi({ description: "进行中 / 已暂停 / 已归档 / 已完成（中文，不输出状态码）" }),
-      managers: z.array(z.string().max(100)).max(10),
+      managers: z.array(z.string().max(100)).max(10).default([]),
       startedAt: z.string().max(20).openapi({ description: "YYYY-MM-DD 或「未记录」" }),
       progress: z.object({
         done: z.number().int().min(0),
@@ -255,22 +255,22 @@ export const ProjectAiSummaryReportSchema = z
         latestStage: z.string().max(50),
         slowestStage: z.string().max(50),
       }),
-      planRange: ProjectAiRangeSchema,
-      reportRange: ProjectAiRangeSchema,
+      planRange: ProjectAiRangeSchema.default({ from: null, to: null }),
+      reportRange: ProjectAiRangeSchema.default({ from: null, to: null }),
     }),
-    timeline: z.array(ProjectAiTimelineItemSchema).max(8),
+    timeline: z.array(ProjectAiTimelineItemSchema).max(8).default([]),
     issues: z.object({
       total: z.number().int().min(0),
       done: z.number().int().min(0),
       inProgress: z.number().int().min(0),
       open: z.number().int().min(0),
-      summary: z.string().max(1000),
-      currentItems: z.array(ProjectAiIssueItemSchema).max(50),
+      summary: z.string().max(1000).default(""),
+      currentItems: z.array(ProjectAiIssueItemSchema).max(50).default([]),
     }),
     resultsAndRisks: z.object({
       text: z.string().max(1500),
-      claims: z.array(ProjectAiClaimSchema).max(20),
-      risks: z.array(ProjectAiClaimSchema).max(20),
+      claims: z.array(ProjectAiClaimSchema).max(20).default([]),
+      risks: z.array(ProjectAiClaimSchema).max(20).default([]),
     }),
     handoff: z.object({
       existing: z
@@ -283,7 +283,8 @@ export const ProjectAiSummaryReportSchema = z
             sources: z.array(ProjectAiSourceSchema).min(1).max(10),
           }),
         )
-        .max(20),
+        .max(20)
+        .default([]),
       suggestions: z
         .array(
           z.object({
@@ -296,9 +297,10 @@ export const ProjectAiSummaryReportSchema = z
             sources: z.array(ProjectAiSourceSchema).min(1).max(10),
           }),
         )
-        .max(20),
+        .max(20)
+        .default([]),
     }),
-    notes: z.array(ProjectAiClaimSchema).max(20),
+    notes: z.array(ProjectAiClaimSchema).max(20).default([]),
   })
   .openapi("ProjectAiSummaryReport");
 

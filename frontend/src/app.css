@@ -4373,6 +4373,11 @@ body {
   flex: 0 0 auto;
 }
 
+/* 去掉外层卡框后，全部项目标题上移，减少标题与顶部导航之间的空白。 */
+[data-hub-page] [data-hub-main]:has([data-hub-dash-all-projects]) {
+  padding-top: 0.6rem !important;
+}
+
 /* 全部项目首屏只保留两张内部统计卡片，去掉整个仪表盘外层卡框。 */
 [data-hub-deck-cell="dashboard"]:has([data-hub-dash-all-projects]) {
   padding: 0;
@@ -5144,6 +5149,25 @@ body {
 
   .hub-dash-switch[data-all-projects="true"] {
     gap: 0.4rem 0.55rem;
+  }
+}
+
+/* 低高度电脑：两张图不再压进一屏，卡片加高到 48rem 并在页内滚动，继续拉长 Y 轴。 */
+@media (max-height: 820px) {
+  .hub-dash-all__slide[data-section="project-stats"] {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .hub-dash-all__slideCard--stacked {
+    flex: 0 0 auto;
+    min-height: 48rem;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
   }
 }
 

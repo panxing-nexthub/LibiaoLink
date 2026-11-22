@@ -7,6 +7,8 @@ import { ModelConfigService, type ActiveModelConnection } from "../model-config/
 const AI_SUMMARY_TIMEOUT_MS = 120_000;
 /** 输出上限：v2 报告字段多、未闭环问题要逐条列出；4k 会把 JSON 截断，放宽到 8k。 */
 const AI_SUMMARY_MAX_TOKENS = 8_000;
+/** 生成失败时最多尝试次数：首次 → 结构重试 → 压缩兜底。 */
+const AI_SUMMARY_MAX_ATTEMPTS = 3;
 /** prompt 侧条数上限：只影响送模型的量，不影响接口返回的完整上下文。 */
 const PROMPT_MAX_TASKS = 300;
 const PROMPT_MAX_REPORTS = 80;
@@ -82,6 +84,8 @@ const SYSTEM_PROMPT = [
   "- 相同事实不要在不同章节重复。",
   "- 使用平实、具体、可核对的中文，不使用广告式修辞。",
   "- 输入标记 promptTruncated 为 true 时，不解释系统限制，只在 notes 写“本次整理基于已提供的项目记录”。",
+  "- 长度上限为硬约束，超出即视为不合格输出：title ≤ 20 字；summary.text 250～350 字、claims ≤ 4 条；timeline 5～6 条、每条 text ≤ 50 字；issues.summary ≤ 80 字，currentItems 每条 text ≤ 60 字、handling ≤ 40 字、nextStep ≤ 30 字；resultsAndRisks.text ≤ 150 字、claims ≤ 4 条、risks ≤ 3 条；handoff.existing ≤ 3 条、suggestions ≤ 3 条、每条 ≤ 80 字；notes ≤ 2 条；整份 JSON 控制在 3000 个汉字以内。",
+  "- 未闭环问题超过 20 条时按阶段合并为不超过 20 条，合并项在 text 中写明合并条数，总条数仍按 metrics 的问题计数表述。",
   "",
   "【来源规则】",
   "",
@@ -107,6 +111,18 @@ const SYSTEM_PROMPT = [
   "9. 输出是否只有一个合法 JSON 对象。",
   "",
   "自检不通过时，删除无依据内容或改写为“未记录”，不得用推测补齐。"
+].join("\n");
+
+/** 压缩兜底提示：只在重试仍未通过校验时追加，硬性压到网关可返回的长度内。 */
+const COMPACT_SYSTEM_PROMPT = [
+  "【压缩输出模式】",
+  "本次只输出一个合法 JSON 对象，不输出任何解释，长度必须明显短于常规输出。",
+  "- title ≤ 20 字；summary.text 180～240 字，claims ≤ 3 条；",
+  "- timeline 固定 5 条，每条 text ≤ 40 字；",
+  "- issues.summary ≤ 60 字；currentItems 每条 text ≤ 50 字、handling ≤ 30 字、nextStep ≤ 25 字，owner 只写姓名或“未记录”；",
+  "- resultsAndRisks.text ≤ 100 字，claims ≤ 3 条，risks ≤ 2 条，每条 ≤ 40 字；",
+  "- handoff.existing ≤ 2 条，suggestions ≤ 2 条，每条 ≤ 60 字；notes ≤ 2 条。",
+  "不得为省字省略未闭环问题；问题超过 20 条时按阶段合并，并在 text 写明合并条数；整份 JSON 不超过 2200 个汉字。",
 ].join("\n");
 
 interface ChatCompletionReply {
@@ -270,6 +286,8 @@ export interface ProjectAiModelResult {
 @Injectable()
 export class ProjectAiModelClient {
   private readonly logger = new Logger(ProjectAiModelClient.name);
+  /** JSON 模式能力探测结果：unknown = 未验证，unsupported = 网关拒绝 response_format。 */
+  private jsonObjectMode: "unknown" | "unsupported" = "unknown";
 
   constructor(private readonly models: ModelConfigService) {}
 
@@ -293,27 +311,44 @@ export class ProjectAiModelClient {
       },
     ];
 
-    const first = await this.call(active, messages);
-    const firstParsed = this.parse(first.content);
-    if (firstParsed.ok) return { modelId: active.modelId, report: firstParsed.report };
-    this.logParseFailure("首次", first, firstParsed.error);
+    let lastError = "未知错误";
+    let truncated = false;
+    for (let attempt = 0; attempt < AI_SUMMARY_MAX_ATTEMPTS; attempt += 1) {
+      const compact = attempt === AI_SUMMARY_MAX_ATTEMPTS - 1;
+      const label = attempt === 0 ? "首次" : compact ? "压缩兜底" : "重试";
+      const attemptMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+        { role: "system", content: compact ? SYSTEM_PROMPT + "\n\n" + COMPACT_SYSTEM_PROMPT : SYSTEM_PROMPT },
+        messages[1]!,
+      ];
+      if (attempt > 0) {
+        // 重试只回灌失败原因与更紧的长度上限，不回灌上一次的畸形 / 截断输出，避免模型顺着半截 JSON 继续写。
+        attemptMessages.push({ role: "user", content: this.retryHint(compact, lastError, truncated) });
+      }
+      const result = await this.call(active, attemptMessages, compact);
+      const parsed = this.parse(result.content);
+      if (parsed.ok) return { modelId: active.modelId, report: parsed.report };
+      lastError = parsed.error;
+      truncated = result.finishReason === "length";
+      this.logParseFailure(label, result, parsed.error);
+    }
+    if (truncated) {
+      throw new AppError("INTERNAL", "AI 模型输出超出长度上限被截断，已自动压缩重试仍未完成，请稍后重试");
+    }
+    throw new AppError("INTERNAL", "AI 模型返回内容不符合约定结构（" + lastError + "），请重试");
+  }
 
-    // 重试只回灌错误原因，不把上一次的畸形 / 截断输出塞回上下文 —— 否则模型会顺着半截 JSON 继续写，
-    // 最终仍不是完整可解析对象。要求它从头输出一个更紧凑的完整 JSON。
-    const retryMessages = [
-      ...messages,
-      {
-        role: "user" as const,
-        content:
-          "上一次输出未通过结构校验（" + firstParsed.error + "）。请从头重新输出一个完整、紧凑、合法的 JSON 对象：" +
-          "不要 Markdown 代码围栏，不要解释文字，不要省略未闭环问题；字段严格按 REPORT_SCHEMA。",
-      },
+  /** 重试提示：只给失败原因和更紧的长度上限，不回灌上一次输出。 */
+  private retryHint(compact: boolean, error: string, truncated: boolean): string {
+    const lines = [
+      "上一次输出未通过结构校验（" + error + "）。请从头重新输出一个完整、合法的 JSON 对象：不要 Markdown 代码围栏，不要解释文字，不要省略未闭环问题，字段严格按 REPORT_SCHEMA。",
     ];
-    const second = await this.call(active, retryMessages);
-    const secondParsed = this.parse(second.content);
-    if (secondParsed.ok) return { modelId: active.modelId, report: secondParsed.report };
-    this.logParseFailure("重试", second, secondParsed.error);
-    throw new AppError("INTERNAL", "AI 模型返回内容不符合约定结构（" + secondParsed.error + "），请重试");
+    if (truncated) {
+      lines.push("上一次输出因超出长度上限被截断：本次必须明显更短（summary 240 字以内、timeline 5 条、问题每条 60 字以内、交接与风险各 2 条以内），整份 JSON 不超过 2600 个汉字。");
+    }
+    if (compact) {
+      lines.push("本次按【压缩输出模式】执行，任一字段超出长度上限即视为不合格。");
+    }
+    return lines.join("\n");
   }
 
   /** 只记录长度 / 结束原因 / 首尾位置，不把项目正文写进日志。 */
@@ -349,37 +384,65 @@ export class ProjectAiModelClient {
   private async call(
     active: ActiveModelConnection,
     messages: ReadonlyArray<{ role: "system" | "user" | "assistant"; content: string }>,
+    compact: boolean,
   ): Promise<ModelCallResult> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (active.apiKey !== "") headers.Authorization = "Bearer " + active.apiKey;
+    const endpoint = active.baseUrl.replace(/\/+$/, "") + "/chat/completions";
 
-    let response: Response;
-    try {
-      response = await fetch(active.baseUrl.replace(/\/+$/, "") + "/chat/completions", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: active.modelId,
-          messages,
-          temperature: 0.1,
-          max_tokens: AI_SUMMARY_MAX_TOKENS,
-        }),
-        redirect: "error",
-        signal: AbortSignal.timeout(AI_SUMMARY_TIMEOUT_MS),
-      });
-    } catch (error) {
-      throw new AppError("INTERNAL", "AI 模型不可用（" + (error instanceof Error ? error.message : String(error)) + "）");
+    let jsonObject = this.jsonObjectMode !== "unsupported";
+    for (let round = 0; round < 2; round += 1) {
+      const payload: Record<string, unknown> = {
+        model: active.modelId,
+        messages,
+        temperature: 0.1,
+        max_tokens: AI_SUMMARY_MAX_TOKENS,
+        stream: false,
+      };
+      // JSON 模式能压掉前后解释文字，直接降低被截断的概率；网关不接受时自动降级重发一次。
+      if (jsonObject) payload.response_format = { type: "json_object" };
+
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+          redirect: "error",
+          signal: AbortSignal.timeout(AI_SUMMARY_TIMEOUT_MS),
+        });
+      } catch (error) {
+        throw new AppError("INTERNAL", "AI 模型不可用（" + (error instanceof Error ? error.message : String(error)) + "）");
+      }
+
+      if (!response.ok) {
+        if (jsonObject && (response.status === 400 || response.status === 422)) {
+          this.jsonObjectMode = "unsupported";
+          this.logger.warn("AI 项目总结：模型网关不接受 response_format，已降级为纯文本 JSON 输出");
+          jsonObject = false;
+          continue;
+        }
+        throw new AppError("INTERNAL", "AI 模型返回 HTTP " + String(response.status) + "，请稍后重试");
+      }
+
+      const data = (await response.json().catch(() => null)) as ChatCompletionReply | null;
+      const choice = data?.choices?.[0];
+      const content = choice?.message?.content;
+      const raw = typeof content === "string" ? content : "";
+      const finishReason = typeof choice?.finish_reason === "string" ? choice.finish_reason : null;
+      const usage = (data as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } } | null)?.usage;
+      this.logger.log(
+        "AI 项目总结模型调用：finishReason=" + String(finishReason) +
+        "；promptTokens=" + String(usage?.prompt_tokens ?? "?") +
+        "；completionTokens=" + String(usage?.completion_tokens ?? "?") +
+        "；maxTokens=" + String(AI_SUMMARY_MAX_TOKENS) +
+        "；compact=" + String(compact) +
+        "；jsonMode=" + String(jsonObject) +
+        "；chars=" + String(raw.length),
+      );
+      if (raw.trim() === "") throw new AppError("INTERNAL", "AI 模型响应缺少内容，请重试");
+      return { content: raw, finishReason };
     }
-
-    if (!response.ok) {
-      throw new AppError("INTERNAL", "AI 模型返回 HTTP " + String(response.status) + "，请稍后重试");
-    }
-
-    const data = (await response.json().catch(() => null)) as ChatCompletionReply | null;
-    const choice = data?.choices?.[0];
-    const content = choice?.message?.content;
-    const raw = typeof content === "string" ? content : "";
-    if (raw.trim() === "") throw new AppError("INTERNAL", "AI 模型响应缺少内容，请重试");
-    return { content: raw, finishReason: typeof choice?.finish_reason === "string" ? choice.finish_reason : null };
+    throw new AppError("INTERNAL", "AI 模型返回 HTTP 400，请稍后重试");
   }
 }

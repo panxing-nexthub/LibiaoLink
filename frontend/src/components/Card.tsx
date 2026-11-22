@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { projectStatusTextOf, useLocale, useLocalizedText, useT } from "../i18n";
 import type { ProjectExportFormat } from "../projectApi";
 import type { ProjectArchiveKind, ProjectReadStatus } from "../types";
+import { ProjectAiIcon } from "./ProjectAiIcon";
 import { RowDeleteButton } from "./RowDeleteButton";
 import { usePopover } from "./usePopover";
 
@@ -77,6 +78,8 @@ type CardProps = {
   onExport?: (format: ProjectExportFormat) => void;
   /** 当前项目正在导出：按钮保持可见并显示忙碌态，防止重复点击。 */
   exporting?: boolean;
+  /** AI 项目总结（需 project.export；隐式：位于下载与删除之间）。 */
+  onAiSummary?: () => void;
   /** 移入项目回收站（首页卡片；隐式：与编辑同款；不传 = 不渲染）。 */
   onDelete?: () => void;
   /** 彻底删除项目（项目回收站：占用原删除按钮位；与 onDelete 互斥，优先渲染）。 */
@@ -108,6 +111,7 @@ export function Card({
   onRestore,
   onExport,
   exporting = false,
+  onAiSummary,
   onDelete,
   onPurge,
   restoreLabel,
@@ -304,6 +308,21 @@ export function Card({
               document.body,
             )
           : null}
+        {onAiSummary !== undefined ? (
+          <button
+            type="button"
+            data-card-ai-summary="true"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAiSummary();
+            }}
+            aria-label={t("card.ai")}
+            title={t("card.ai")}
+            className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg opacity-0 transition duration-200 hover:bg-white hover:shadow-xs focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-amber-400/60 group-hover:opacity-100"
+          >
+            <ProjectAiIcon className="h-[18px] w-[18px]" />
+          </button>
+        ) : null}
         {onPurge !== undefined ? (
           <span className="flex h-6 w-20 shrink-0 items-center">
             <RowDeleteButton

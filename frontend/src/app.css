@@ -5172,37 +5172,6 @@ body {
   }
 }
 
-/* 宽而矮的电脑（如 1440×715）：两图改为左右双栏，既完整落在一屏内，又保留较高 Y 轴。 */
-@media (max-height: 820px) and (min-width: 1360px) {
-  .hub-dash-all__slide[data-section="project-stats"] {
-    overflow-y: hidden;
-  }
-
-  .hub-dash-combined {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-    gap: 0.4rem;
-  }
-
-  .hub-dash-combined[data-line-expanded="true"] {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0fr);
-    grid-template-rows: minmax(0, 1fr);
-    gap: 0;
-  }
-
-  .hub-dash-combined[data-line-expanded="true"] .hub-dash-combined__panel[data-panel="project-stage"] {
-    transform: none;
-  }
-
-  .hub-dash-combined__panel {
-    padding: 0.35rem 0.2rem 0.3rem;
-  }
-
-  .hub-dash-combined__panel > .hub-dash-all__heading h3 {
-    font-size: 0.92rem;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .hub-dash-slide-track {
     transition: none;

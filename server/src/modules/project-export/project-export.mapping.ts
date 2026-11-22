@@ -112,7 +112,7 @@ function photoRefs(values: readonly { fileId: string; name: string }[]): Array<{
   return values.map((value) => ({ fileId: value.fileId, name: value.name }));
 }
 
-/** Excel 任务描述固定中文一行、英文一行；不要在导出单元格里把中英文拼成一整行。 */
+/** Excel 任务名称固定中文一行、英文一行；不要在导出单元格里把中英文拼成一整行。 */
 function taskDescription(title: string, titleEn: string | null): string {
   const zh = title.trim();
   const en = (titleEn ?? "").trim();

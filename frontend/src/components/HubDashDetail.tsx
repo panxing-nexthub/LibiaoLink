@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { dateOnlyText, isCompleteStatus, type TaskPriority } from "../data/tasks";
 import { fieldText, isLocalizedLocale, mdText, prefetchLocalizedText, priorityText, statusText, useLocale, useLocalizedTranslator, useT, type Locale } from "../i18n";
 import { displayStatusLabel, type ApiTaskListItem } from "../taskApi";
+import { projectFocusHref } from "../useHashRoute";
 import { docTypeCapsule } from "./DeliverablePicker";
 import { TableScrollbar } from "./TableScrollbar";
 import { PRIORITY_CAPSULE_CLASS, STATUS_CAPSULE_CLASS } from "./TaskBoard";
@@ -62,7 +63,8 @@ function onTimeLabelOf(task: ApiTaskListItem): "逾期未交付" | "逾期已交
   return task.onTime === null ? null : "按时交付";
 }
 
-export function HubDashDetail({ projectName, manager, tasks, onClose }: {
+export function HubDashDetail({ projectId, projectName, manager, tasks, onClose }: {
+  readonly projectId: string;
   readonly projectName: string;
   readonly manager: string;
   readonly tasks: readonly ApiTaskListItem[];
@@ -167,10 +169,32 @@ export function HubDashDetail({ projectName, manager, tasks, onClose }: {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row, index) => (
-                  <tr key={row.task.id}>
+                {filtered.map((row, index) => {
+                  /** 行点击 = 进入项目总览并自动打开该任务抽屉（与工作台任务深链同一口径）。 */
+                  const href = projectFocusHref(projectId, { kind: "task", id: row.task.id });
+                  const openProject = (): void => {
+                    onClose();
+                    window.location.hash = href;
+                  };
+                  return (
+                  <tr
+                    key={row.task.id}
+                    data-row-link="true"
+                    tabIndex={0}
+                    aria-label={t("hub.dash.detail.openProject")}
+                    onClick={(event) => {
+                      if ((event.target as HTMLElement).closest("a, button, input, label")) return;
+                      openProject();
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      if ((event.target as HTMLElement).closest("a, button, input, label")) return;
+                      event.preventDefault();
+                      openProject();
+                    }}
+                  >
                     <td className="hub-dash-detail__no">{index + 1}</td>
-                    <td><span className="hub-dash-detail__task" title={row.title}>{row.title}</span></td>
+                    <td><a className="hub-dash-detail__rowLink" href={href} title={row.title} onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onClose(); window.location.hash = href; }}>{row.title}</a></td>
                     <td>{manager === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__chip" title={manager}>{manager}</span>}</td>
                     <td>{row.owners === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__chip" title={row.owners}>{row.owners}</span>}</td>
                     <td><span className={"hub-dash-detail__tag " + STATUS_CAPSULE_CLASS[row.status]}>{statusText(locale, row.status)}</span></td>
@@ -190,7 +214,8 @@ export function HubDashDetail({ projectName, manager, tasks, onClose }: {
                     <td>{row.done === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__date">{row.done}</span>}</td>
                     <td>{row.changeCount === 0 ? <span className="hub-dash-detail__blank">—</span> : (<span className="hub-dash-detail__chips" title={row.changeTip}><span className="hub-dash-detail__tag bg-amber-100 text-amber-700">{t("board.change.chip")}</span>{row.changeCount > 1 ? <span className="text-[10px] text-zinc-400">+{row.changeCount - 1}</span> : null}</span>)}</td>
                   </tr>
-                ))}
+                  );
+                })}
                 {filtered.length === 0 ? (
                   <tr>
                     <td className="hub-dash-detail__empty" colSpan={COLUMNS.length}>{t("hub.dash.detail.empty")}</td>

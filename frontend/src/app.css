@@ -1921,6 +1921,12 @@ body {
   transform: translateY(-100%);
 }
 
+/* 仪表盘落屏时地图卡整卡在上一格，收掉其底边与投影，避免裁切线上露出一条地图底框。 */
+.hub-deck__strip[data-view="dashboard"] [data-hub-deck-cell="map"] {
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
+
 /* 滑轨里的两屏（静态排布，永不动 transform）：地图在上一格、仪表盘在下一格。 */
 .hub-deck__cell {
   position: absolute;

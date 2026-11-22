@@ -4995,6 +4995,11 @@ body {
   min-height: 0;
 }
 
+/* 合并页两图按容器宽度绘制，避免亚像素取整触发无意义的横向滚动条。 */
+.hub-dash-combined__panel .hub-dash-chartViewport {
+  overflow: hidden;
+}
+
 .hub-dash-combined__panel .hub-dash-project-types-wrap {
   gap: 0.35rem;
 }

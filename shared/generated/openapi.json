@@ -652,7 +652,8 @@
           "group_access_admin",
           "task_node_reviewer_roster",
           "task_node_review_notification_settings",
-          "ai_model_provider"
+          "ai_model_provider",
+          "project_ai_summary"
         ],
         "description": "审计对象类型：project 项目 / project_member 名册 / task 任务 / node 节点 / stage 阶段 / dict_item 字典条目 / blueprint 蓝图 / calendar_day 日历例外（对象 id = 业务日期） / calendar_settings 顺延配置（对象 id = default） / file 文件（对象 id = fileId；上传会话事件经 metadata.uploadId 定位；仅用户点开具体预览（recordView=true）且实际送达时写 preview 审计，缩略图不写 —— 不为同一 fileId 开第二种对象类型） / change 变更记录（对象 id = changeRequestId，M4-04） / stakeholder 干系人（对象 id = stakeholderId；项目关联 / 解除经 metadata.projectId 记录，j6） / daily_report 日报（对象 id = reportId，M6-01 / M6-02） / issue 问题（对象 id = issueId，M6-02 / M6-03） / task_node 任务节点（对象 id = taskNodeId，M3-05 余：节点库新增 / 编辑 / 删除） / task_node_request 公共任务节点申请（对象 id = 申请 id；导入侧提交不单独留痕，审核通过 / 驳回 / 申请人撤销写审计） / task_template 任务模板（对象 id = templateId，M3-05 余第二段：模板新增 / 编辑 / 软删） / user 系统用户（对象 id = users.id；Push 173：离职回收 / 组织同步的停用 · 启用 · 软删；登录成功记 visit，metadata.operation=login） / wecom_dm_binding 企微绑定验证（对象 id = 机器人标识 + 掩码 open_userid；失败 / 锁定记 deny + denied，不落完整 userid 或绑定码） / automation_rule 自动化规则（对象 id = 规则 id；保存记录字段级 diff，metadata 带 code / beforeVersion / afterVersion，M5-06） / notify_delivery 发送记录（对象 id = 消息归档 id；仅管理员重发写 update + metadata.operation=resend，M5-06） / group_access_rule 部门访问规则（对象 id = 群组键；保存 / 删除写审计，2026-10-23） / group_access_admin 系统管理员（对象 id = users.id；手工授予 / 撤销写审计，2026-10-24） / task_node_reviewer_roster 公共节点审核人名单（对象 id = task_node_reviewer_roster；保存名单写审计，2026-11-14） / task_node_review_notification_settings 公共节点审核企微通知个人设置（对象 id = 审核人 users.id；开关 / 通知方式 / 固定时间变更写审计，2026-11-15） / ai_model_provider 模型服务（对象 id = 服务 id；不记录密钥）"
       },
@@ -2526,7 +2527,14 @@
             ]
           },
           "changeType": {
-            "$ref": "#/components/schemas/ChangeType"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChangeType"
+              },
+              {
+                "description": "变更类型：普通文件变更 / 物料变更补发"
+              }
+            ]
           },
           "materialReissue": {
             "$ref": "#/components/schemas/MaterialReissueSnapshot"
@@ -2739,7 +2747,7 @@
           "file_change",
           "material_reissue"
         ],
-        "description": "变更类型：普通文件变更 / 物料变更补发"
+        "description": "变更类型：file_change = 目标文件变更（现有文件新版本）；material_reissue = 物料变更补发（线上补发单 + 自动生成 DOCX）"
       },
       "CreateMaterialReissueBody": {
         "allOf": [
@@ -6808,14 +6816,7 @@
             "description": "问题描述（自动生成 = 日报「现场发现问题」原文；超 500 字截短落库）"
           },
           "categories": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/IssueCategoryList"
-              },
-              {
-                "description": "问题归类（多值，≥1 项；C9 字典十项）"
-              }
-            ]
+            "$ref": "#/components/schemas/IssueCategoryList"
           },
           "state": {
             "$ref": "#/components/schemas/IssueState"
@@ -6965,7 +6966,7 @@
         },
         "minItems": 1,
         "maxItems": 10,
-        "description": "问题归类（多值 ≥1 项；C9 十项）"
+        "description": "问题归类（多值，≥1 项；C9 字典十项）"
       },
       "IssueDeleteResponse": {
         "type": "object",
@@ -9427,6 +9428,986 @@
           "deletedBy"
         ],
         "description": "项目（v0.2 §2.3 projects）"
+      },
+      "ProjectAiChange": {
+        "type": "object",
+        "properties": {
+          "changeId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "stageKey": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StageKey"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "changeType": {
+            "$ref": "#/components/schemas/ChangeType"
+          },
+          "reason": {
+            "type": "string",
+            "description": "变更原因（系统必填，真实数据）"
+          },
+          "beforeSummary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "afterSummary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "appliedAt": {
+            "$ref": "#/components/schemas/DateTime"
+          },
+          "appliedByName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChangeStatus"
+          }
+        },
+        "required": [
+          "changeId",
+          "stageKey",
+          "changeType",
+          "reason",
+          "beforeSummary",
+          "afterSummary",
+          "appliedAt",
+          "appliedByName",
+          "status"
+        ]
+      },
+      "ProjectAiContext": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAiProject"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiStage"
+            }
+          },
+          "ungroupedTasks": {
+            "type": "object",
+            "properties": {
+              "taskDoneCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "taskTotalCount": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "taskDoneCount",
+              "taskTotalCount"
+            ],
+            "description": "stageKey 为空的任务（不计入任何阶段，避免阶段加总对不上）"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiTask"
+            }
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiChange"
+            }
+          },
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiReport"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiIssue"
+            }
+          },
+          "generatedAt": {
+            "$ref": "#/components/schemas/DateTime"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "true = 任务 / 日报 / 问题 / 变更任一集合超出读取上限被截断"
+          }
+        },
+        "required": [
+          "project",
+          "stages",
+          "ungroupedTasks",
+          "tasks",
+          "changes",
+          "reports",
+          "issues",
+          "generatedAt",
+          "truncated"
+        ],
+        "description": "AI 项目总结读面（只读聚合；不触发任何模型调用）"
+      },
+      "ProjectAiIssue": {
+        "type": "object",
+        "properties": {
+          "issueId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "问题描述"
+          },
+          "categories": {
+            "$ref": "#/components/schemas/IssueCategoryList"
+          },
+          "state": {
+            "$ref": "#/components/schemas/IssueState"
+          },
+          "reporterName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ownerName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ownerDepartment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "raisedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "solution": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "closedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateTime"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "sourceReportId": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "taskId": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "photoCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "问题附图数量（不识别图片内容）"
+          }
+        },
+        "required": [
+          "issueId",
+          "title",
+          "categories",
+          "state",
+          "reporterName",
+          "ownerName",
+          "ownerDepartment",
+          "raisedAt",
+          "solution",
+          "closedAt",
+          "sourceReportId",
+          "taskId",
+          "photoCount"
+        ]
+      },
+      "ProjectAiProject": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "code": {
+            "type": "string",
+            "description": "项目编号"
+          },
+          "name": {
+            "type": "string",
+            "description": "项目名称"
+          },
+          "region": {
+            "type": "string",
+            "description": "项目落地地区（字典 region）"
+          },
+          "projectTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "项目类型（多选）"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProjectStatus"
+              },
+              {
+                "description": "项目状态"
+              }
+            ]
+          },
+          "managerNames": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": "项目经理姓名（与 managerIds 同下标）"
+          },
+          "startedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "项目启动时间：任务名 = 「项目启动」或 titleEn = 「Project Startup」的任务最早 plannedStart（用户确认口径 = 实际开始）；找不到为 null，不回落 projects.createdAt"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "region",
+          "projectTypes",
+          "status",
+          "managerNames",
+          "startedAt"
+        ]
+      },
+      "ProjectAiReport": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "date": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "authorName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/DailyReportState"
+          },
+          "doneWork": {
+            "type": "string"
+          },
+          "plan": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "headcount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "stageNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "submittedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateTime"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "photoCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "现场工作附图数量（不识别图片内容）"
+          }
+        },
+        "required": [
+          "reportId",
+          "date",
+          "authorName",
+          "state",
+          "doneWork",
+          "plan",
+          "headcount",
+          "stageNames",
+          "submittedAt",
+          "photoCount"
+        ]
+      },
+      "ProjectAiRiskLevel": {
+        "type": "string",
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ]
+      },
+      "ProjectAiStage": {
+        "type": "object",
+        "properties": {
+          "stageKey": {
+            "$ref": "#/components/schemas/StageKey"
+          },
+          "name": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "status": {
+            "$ref": "#/components/schemas/StageStatus"
+          },
+          "plannedStart": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "plannedEnd": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "actualStart": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "actualEnd": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "taskDoneCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "本阶段 status=done 的任务数（不含「未分组」任务）"
+          },
+          "taskTotalCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "本阶段任务总数（不含「未分组」任务）"
+          },
+          "datesFallback": {
+            "type": "boolean",
+            "description": "true = plannedStart / plannedEnd / actualEnd 至少一项由该阶段任务日期兜底（阶段表原值为空）"
+          },
+          "advancedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateTime"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "最近一次阶段推进时间（无留痕为 null）"
+              }
+            ]
+          },
+          "advancedByName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rolledBackAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateTime"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "最近一次阶段回退时间（无留痕为 null）"
+              }
+            ]
+          },
+          "rolledBackByName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rollbackReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "最近一次回退原因（无留痕为 null）"
+          }
+        },
+        "required": [
+          "stageKey",
+          "name",
+          "seq",
+          "status",
+          "plannedStart",
+          "plannedEnd",
+          "actualStart",
+          "actualEnd",
+          "taskDoneCount",
+          "taskTotalCount",
+          "datesFallback",
+          "advancedAt",
+          "advancedByName",
+          "rolledBackAt",
+          "rolledBackByName",
+          "rollbackReason"
+        ]
+      },
+      "ProjectAiSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "sourceHash": {
+            "type": "string",
+            "description": "生成时的项目上下文指纹（sha256）"
+          },
+          "promptVersion": {
+            "type": "string"
+          },
+          "modelId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "summaryText": {
+            "type": "string",
+            "description": "可直接展示的整体总结段落"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ProjectAiSummaryPayload"
+          },
+          "generatedBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "generatedByName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generatedAt": {
+            "$ref": "#/components/schemas/DateTime"
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "true = 当前项目数据已变化，缓存结果落后；可重新生成"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "sourceHash",
+          "promptVersion",
+          "modelId",
+          "summaryText",
+          "summary",
+          "generatedBy",
+          "generatedByName",
+          "generatedAt",
+          "stale"
+        ]
+      },
+      "ProjectAiSummaryGenerateBody": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "default": false,
+            "description": "true = 忽略缓存重新生成"
+          }
+        }
+      },
+      "ProjectAiSummaryPayload": {
+        "type": "object",
+        "properties": {
+          "stageHighlights": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "stageKey": {
+                  "type": "string",
+                  "maxLength": 50
+                },
+                "summary": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "stageKey",
+                "summary"
+              ]
+            },
+            "maxItems": 20,
+            "description": "有内容的阶段小结；stageKey 取输入阶段键，无内容阶段可省略"
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiSummaryRisk"
+            },
+            "maxItems": 20
+          },
+          "issueSummary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1500,
+            "description": "问题小结；无问题为 null"
+          },
+          "changeSummary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1500,
+            "description": "变更小结；无变更为 null"
+          },
+          "reportSummary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1500,
+            "description": "日报小结；无日报为 null"
+          },
+          "nextSteps": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "maxItems": 10,
+            "description": "建议关注事项；不得编造工期承诺"
+          },
+          "dataGaps": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "maxItems": 20,
+            "description": "数据缺失 / 暂无记录的字段说明"
+          }
+        },
+        "required": [
+          "stageHighlights",
+          "risks",
+          "issueSummary",
+          "changeSummary",
+          "reportSummary",
+          "nextSteps",
+          "dataGaps"
+        ]
+      },
+      "ProjectAiSummaryRisk": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/ProjectAiRiskLevel"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "风险描述"
+          },
+          "evidence": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500,
+            "description": "依据（引用具体任务 / 问题 / 变更 / 日期），无依据为 null"
+          }
+        },
+        "required": [
+          "level",
+          "text",
+          "evidence"
+        ]
+      },
+      "ProjectAiTask": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "stageKey": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StageKey"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "所属阶段；null = 未分组"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "任务名称"
+          },
+          "titleEn": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "任务描述（自然语言补充，不解析结构化字段）"
+          },
+          "ownerNames": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": "任务负责人姓名；空数组 = 待分配"
+          },
+          "managerNames": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": "本任务项目经理姓名"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TaskBaseStatus"
+              },
+              {
+                "description": "存储基础态（完成判定口径）"
+              }
+            ]
+          },
+          "displayStatus": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TaskDisplayStatus"
+              },
+              {
+                "description": "展示五态（读时派生）"
+              }
+            ]
+          },
+          "progress": {
+            "$ref": "#/components/schemas/TaskProgress"
+          },
+          "plannedStart": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "plannedEnd": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "actualEnd": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "estimatedDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "headcount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "priority": {
+            "$ref": "#/components/schemas/Priority"
+          },
+          "deliverableTypes": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/DeliverableType"
+                },
+                {
+                  "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
+                }
+              ]
+            }
+          },
+          "onTime": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "finalizedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateTime"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "changeLinks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiTaskChangeLink"
+            }
+          }
+        },
+        "required": [
+          "taskId",
+          "stageKey",
+          "title",
+          "titleEn",
+          "note",
+          "ownerNames",
+          "managerNames",
+          "status",
+          "displayStatus",
+          "progress",
+          "plannedStart",
+          "plannedEnd",
+          "actualEnd",
+          "estimatedDays",
+          "headcount",
+          "priority",
+          "deliverableTypes",
+          "onTime",
+          "finalizedAt",
+          "changeLinks"
+        ]
+      },
+      "ProjectAiTaskChangeLink": {
+        "type": "object",
+        "properties": {
+          "changeId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "appliedAt": {
+            "$ref": "#/components/schemas/DateTime"
+          }
+        },
+        "required": [
+          "changeId",
+          "reason",
+          "appliedAt"
+        ]
       },
       "ProjectArchiveBody": {
         "type": "object",
@@ -11928,7 +12909,14 @@
             "description": "问题描述（原文；问题记录标题超 500 字截短落库）"
           },
           "categories": {
-            "$ref": "#/components/schemas/IssueCategoryList"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IssueCategoryList"
+              },
+              {
+                "description": "问题归类（多值 ≥1 项；C9 十项）"
+              }
+            ]
           },
           "ownerId": {
             "type": [
@@ -16113,14 +17101,7 @@
             "type": "string"
           },
           "categories": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/IssueCategoryList"
-              },
-              {
-                "description": "问题归类（多值，≥1 项；C9 字典十项）"
-              }
-            ]
+            "$ref": "#/components/schemas/IssueCategoryList"
           },
           "state": {
             "$ref": "#/components/schemas/IssueState"
@@ -22319,6 +23300,156 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StageListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{id}/ai-context": {
+      "get": {
+        "tags": [
+          "project-ai"
+        ],
+        "summary": "AI 项目总结读面：项目 / 阶段 / 任务快照 / 变更 / 日报 / 问题",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "项目 AI 上下文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAiContext"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{id}/ai-summary": {
+      "get": {
+        "tags": [
+          "project-ai"
+        ],
+        "summary": "最近一次 AI 项目总结（不调模型；未生成为 404，stale 表示数据已变化）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "AI 项目总结",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAiSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "project-ai"
+        ],
+        "summary": "生成 AI 项目总结（默认复用缓存；force=true 重新生成；需 project.export）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectAiSummaryGenerateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "AI 项目总结",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAiSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }

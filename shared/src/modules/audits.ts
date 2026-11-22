@@ -45,6 +45,7 @@ export const AUDIT_OBJECT_TYPES = [
   "task_node_reviewer_roster",
   "task_node_review_notification_settings",
   "ai_model_provider",
+  "project_ai_summary",
 ] as const;
 export const AuditObjectTypeSchema = z.enum(AUDIT_OBJECT_TYPES).openapi("AuditObjectType", {
   description:

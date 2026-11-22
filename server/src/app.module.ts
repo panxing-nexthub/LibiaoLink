@@ -21,6 +21,7 @@ import { ProjectModule } from "./modules/project/index.js";
 import { ProjectManagementModule } from "./modules/project-management/index.js";
 import { ProjectImportModule } from "./modules/project-import/index.js";
 import { ProjectExportModule } from "./modules/project-export/index.js";
+import { ProjectAiModule } from "./modules/project-ai/index.js";
 import { ReportIssueModule } from "./modules/report-issue/index.js";
 import { StakeholderModule } from "./modules/stakeholder/index.js";
 import { TaskModule } from "./modules/task/index.js";
@@ -51,6 +52,7 @@ export class AppModule {
         ProjectManagementModule,
         ProjectImportModule,
         ProjectExportModule,
+        ProjectAiModule,
         StakeholderModule,
         TaskModule,
         TemplateModule,

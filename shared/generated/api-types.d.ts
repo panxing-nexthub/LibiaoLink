@@ -5344,6 +5344,156 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/ai-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** AI 项目总结读面：项目 / 阶段 / 任务快照 / 变更 / 日报 / 问题 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 项目 AI 上下文 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectAiContext"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{id}/ai-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 最近一次 AI 项目总结（不调模型；未生成为 404，stale 表示数据已变化） */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description AI 项目总结 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectAiSummary"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** 生成 AI 项目总结（默认复用缓存；force=true 重新生成；需 project.export） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProjectAiSummaryGenerateBody"];
+                };
+            };
+            responses: {
+                /** @description AI 项目总结 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectAiSummary"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{id}/stages/{key}/advance": {
         parameters: {
             query?: never;
@@ -11894,7 +12044,7 @@ export interface components {
          * @description 审计对象类型：project 项目 / project_member 名册 / task 任务 / node 节点 / stage 阶段 / dict_item 字典条目 / blueprint 蓝图 / calendar_day 日历例外（对象 id = 业务日期） / calendar_settings 顺延配置（对象 id = default） / file 文件（对象 id = fileId；上传会话事件经 metadata.uploadId 定位；仅用户点开具体预览（recordView=true）且实际送达时写 preview 审计，缩略图不写 —— 不为同一 fileId 开第二种对象类型） / change 变更记录（对象 id = changeRequestId，M4-04） / stakeholder 干系人（对象 id = stakeholderId；项目关联 / 解除经 metadata.projectId 记录，j6） / daily_report 日报（对象 id = reportId，M6-01 / M6-02） / issue 问题（对象 id = issueId，M6-02 / M6-03） / task_node 任务节点（对象 id = taskNodeId，M3-05 余：节点库新增 / 编辑 / 删除） / task_node_request 公共任务节点申请（对象 id = 申请 id；导入侧提交不单独留痕，审核通过 / 驳回 / 申请人撤销写审计） / task_template 任务模板（对象 id = templateId，M3-05 余第二段：模板新增 / 编辑 / 软删） / user 系统用户（对象 id = users.id；Push 173：离职回收 / 组织同步的停用 · 启用 · 软删；登录成功记 visit，metadata.operation=login） / wecom_dm_binding 企微绑定验证（对象 id = 机器人标识 + 掩码 open_userid；失败 / 锁定记 deny + denied，不落完整 userid 或绑定码） / automation_rule 自动化规则（对象 id = 规则 id；保存记录字段级 diff，metadata 带 code / beforeVersion / afterVersion，M5-06） / notify_delivery 发送记录（对象 id = 消息归档 id；仅管理员重发写 update + metadata.operation=resend，M5-06） / group_access_rule 部门访问规则（对象 id = 群组键；保存 / 删除写审计，2026-10-23） / group_access_admin 系统管理员（对象 id = users.id；手工授予 / 撤销写审计，2026-10-24） / task_node_reviewer_roster 公共节点审核人名单（对象 id = task_node_reviewer_roster；保存名单写审计，2026-11-14） / task_node_review_notification_settings 公共节点审核企微通知个人设置（对象 id = 审核人 users.id；开关 / 通知方式 / 固定时间变更写审计，2026-11-15） / ai_model_provider 模型服务（对象 id = 服务 id；不记录密钥）
          * @enum {string}
          */
-        AuditObjectType: "project" | "project_member" | "task" | "node" | "stage" | "dict_item" | "blueprint" | "calendar_day" | "calendar_settings" | "file" | "change" | "stakeholder" | "daily_report" | "issue" | "task_node" | "task_node_request" | "task_template" | "user" | "wecom_dm_binding" | "automation_rule" | "notify_delivery" | "group_access_rule" | "group_access_admin" | "task_node_reviewer_roster" | "task_node_review_notification_settings" | "ai_model_provider";
+        AuditObjectType: "project" | "project_member" | "task" | "node" | "stage" | "dict_item" | "blueprint" | "calendar_day" | "calendar_settings" | "file" | "change" | "stakeholder" | "daily_report" | "issue" | "task_node" | "task_node_request" | "task_template" | "user" | "wecom_dm_binding" | "automation_rule" | "notify_delivery" | "group_access_rule" | "group_access_admin" | "task_node_reviewer_roster" | "task_node_review_notification_settings" | "ai_model_provider" | "project_ai_summary";
         /**
          * @description 审计结果：succeeded 成功 / denied 越权尝试（C7-03）/ failed 业务拒绝（门禁等）
          * @enum {string}
@@ -12396,7 +12546,7 @@ export interface components {
             projectId: components["schemas"]["Uuid"];
             nodeId: components["schemas"]["Uuid"] & (string | null);
             stageKey: components["schemas"]["StageKey"] & (string | null);
-            changeType: components["schemas"]["ChangeType"];
+            changeType: components["schemas"]["ChangeType"] & unknown;
             materialReissue: components["schemas"]["MaterialReissueSnapshot"];
             /** @description 变更原因（必填） */
             reason: string;
@@ -12437,7 +12587,7 @@ export interface components {
          */
         ChangeStatus: "applied";
         /**
-         * @description 变更类型：普通文件变更 / 物料变更补发
+         * @description 变更类型：file_change = 目标文件变更（现有文件新版本）；material_reissue = 物料变更补发（线上补发单 + 自动生成 DOCX）
          * @enum {string}
          */
         ChangeType: "file_change" | "material_reissue";
@@ -13523,7 +13673,7 @@ export interface components {
             sourceReportId: components["schemas"]["Uuid"] & (string | null);
             /** @description 问题描述（自动生成 = 日报「现场发现问题」原文；超 500 字截短落库） */
             title: string;
-            categories: components["schemas"]["IssueCategoryList"] & unknown;
+            categories: components["schemas"]["IssueCategoryList"];
             state: components["schemas"]["IssueState"];
             reporterId: components["schemas"]["Uuid"];
             /** @description 提出人显示名（= 来源日报提交人） */
@@ -13548,7 +13698,7 @@ export interface components {
          * @enum {string}
          */
         IssueCategory: "机械部" | "采购部" | "规划部" | "项目部" | "物流原因" | "供应商原因" | "客户原因" | "客观原因" | "生产原因" | "其它原因";
-        /** @description 问题归类（多值 ≥1 项；C9 十项） */
+        /** @description 问题归类（多值，≥1 项；C9 字典十项） */
         IssueCategoryList: components["schemas"]["IssueCategory"][];
         /** @description 问题删除（成对删除来源日报） */
         IssueDeleteResponse: {
@@ -14226,6 +14376,183 @@ export interface components {
             deletedAt: components["schemas"]["DateTime"] & (string | null);
             deletedBy: components["schemas"]["Uuid"] & (string | null);
         };
+        ProjectAiChange: {
+            changeId: components["schemas"]["Uuid"];
+            stageKey: components["schemas"]["StageKey"] & (string | null);
+            changeType: components["schemas"]["ChangeType"];
+            /** @description 变更原因（系统必填，真实数据） */
+            reason: string;
+            beforeSummary: string | null;
+            afterSummary: string | null;
+            appliedAt: components["schemas"]["DateTime"];
+            appliedByName: string | null;
+            status: components["schemas"]["ChangeStatus"];
+        };
+        /** @description AI 项目总结读面（只读聚合；不触发任何模型调用） */
+        ProjectAiContext: {
+            project: components["schemas"]["ProjectAiProject"];
+            stages: components["schemas"]["ProjectAiStage"][];
+            /** @description stageKey 为空的任务（不计入任何阶段，避免阶段加总对不上） */
+            ungroupedTasks: {
+                taskDoneCount: number;
+                taskTotalCount: number;
+            };
+            tasks: components["schemas"]["ProjectAiTask"][];
+            changes: components["schemas"]["ProjectAiChange"][];
+            reports: components["schemas"]["ProjectAiReport"][];
+            issues: components["schemas"]["ProjectAiIssue"][];
+            generatedAt: components["schemas"]["DateTime"];
+            /** @description true = 任务 / 日报 / 问题 / 变更任一集合超出读取上限被截断 */
+            truncated: boolean;
+        };
+        ProjectAiIssue: {
+            issueId: components["schemas"]["Uuid"];
+            /** @description 问题描述 */
+            title: string;
+            categories: components["schemas"]["IssueCategoryList"];
+            state: components["schemas"]["IssueState"];
+            reporterName: string | null;
+            ownerName: string | null;
+            ownerDepartment: string | null;
+            raisedAt: components["schemas"]["DateOnly"] & unknown;
+            solution: string | null;
+            closedAt: components["schemas"]["DateTime"] & (string | null);
+            sourceReportId: components["schemas"]["Uuid"] & (string | null);
+            taskId: components["schemas"]["Uuid"] & (string | null);
+            /** @description 问题附图数量（不识别图片内容） */
+            photoCount: number;
+        };
+        ProjectAiProject: {
+            id: components["schemas"]["Uuid"];
+            /** @description 项目编号 */
+            code: string;
+            /** @description 项目名称 */
+            name: string;
+            /** @description 项目落地地区（字典 region） */
+            region: string;
+            /** @description 项目类型（多选） */
+            projectTypes: string[];
+            status: components["schemas"]["ProjectStatus"] & unknown;
+            /** @description 项目经理姓名（与 managerIds 同下标） */
+            managerNames: (string | null)[];
+            startedAt: components["schemas"]["DateOnly"] & (string | null);
+        };
+        ProjectAiReport: {
+            reportId: components["schemas"]["Uuid"];
+            date: components["schemas"]["DateOnly"] & unknown;
+            authorName: string | null;
+            state: components["schemas"]["DailyReportState"];
+            doneWork: string;
+            plan: string | null;
+            headcount: number | null;
+            stageNames: string[];
+            submittedAt: components["schemas"]["DateTime"] & (string | null);
+            /** @description 现场工作附图数量（不识别图片内容） */
+            photoCount: number;
+        };
+        /** @enum {string} */
+        ProjectAiRiskLevel: "high" | "medium" | "low";
+        ProjectAiStage: {
+            stageKey: components["schemas"]["StageKey"];
+            name: string;
+            seq: number;
+            status: components["schemas"]["StageStatus"];
+            plannedStart: components["schemas"]["DateOnly"] & (string | null);
+            plannedEnd: components["schemas"]["DateOnly"] & (string | null);
+            actualStart: components["schemas"]["DateOnly"] & (string | null);
+            actualEnd: components["schemas"]["DateOnly"] & (string | null);
+            /** @description 本阶段 status=done 的任务数（不含「未分组」任务） */
+            taskDoneCount: number;
+            /** @description 本阶段任务总数（不含「未分组」任务） */
+            taskTotalCount: number;
+            /** @description true = plannedStart / plannedEnd / actualEnd 至少一项由该阶段任务日期兜底（阶段表原值为空） */
+            datesFallback: boolean;
+            advancedAt: components["schemas"]["DateTime"] & (string | null);
+            advancedByName: string | null;
+            rolledBackAt: components["schemas"]["DateTime"] & (string | null);
+            rolledBackByName: string | null;
+            /** @description 最近一次回退原因（无留痕为 null） */
+            rollbackReason: string | null;
+        };
+        ProjectAiSummary: {
+            id: components["schemas"]["Uuid"];
+            projectId: components["schemas"]["Uuid"];
+            /** @description 生成时的项目上下文指纹（sha256） */
+            sourceHash: string;
+            promptVersion: string;
+            modelId: string | null;
+            /** @description 可直接展示的整体总结段落 */
+            summaryText: string;
+            summary: components["schemas"]["ProjectAiSummaryPayload"];
+            generatedBy: components["schemas"]["Uuid"] & (string | null);
+            generatedByName: string | null;
+            generatedAt: components["schemas"]["DateTime"];
+            /** @description true = 当前项目数据已变化，缓存结果落后；可重新生成 */
+            stale: boolean;
+        };
+        ProjectAiSummaryGenerateBody: {
+            /**
+             * @description true = 忽略缓存重新生成
+             * @default false
+             */
+            force: boolean;
+        };
+        ProjectAiSummaryPayload: {
+            /** @description 有内容的阶段小结；stageKey 取输入阶段键，无内容阶段可省略 */
+            stageHighlights: {
+                stageKey: string;
+                summary: string;
+            }[];
+            risks: components["schemas"]["ProjectAiSummaryRisk"][];
+            /** @description 问题小结；无问题为 null */
+            issueSummary: string | null;
+            /** @description 变更小结；无变更为 null */
+            changeSummary: string | null;
+            /** @description 日报小结；无日报为 null */
+            reportSummary: string | null;
+            /** @description 建议关注事项；不得编造工期承诺 */
+            nextSteps: string[];
+            /** @description 数据缺失 / 暂无记录的字段说明 */
+            dataGaps: string[];
+        };
+        ProjectAiSummaryRisk: {
+            level: components["schemas"]["ProjectAiRiskLevel"];
+            /** @description 风险描述 */
+            text: string;
+            /** @description 依据（引用具体任务 / 问题 / 变更 / 日期），无依据为 null */
+            evidence: string | null;
+        };
+        ProjectAiTask: {
+            taskId: components["schemas"]["Uuid"];
+            stageKey: components["schemas"]["StageKey"] & (string | null);
+            /** @description 任务名称 */
+            title: string;
+            titleEn: string | null;
+            /** @description 任务描述（自然语言补充，不解析结构化字段） */
+            note: string | null;
+            /** @description 任务负责人姓名；空数组 = 待分配 */
+            ownerNames: (string | null)[];
+            /** @description 本任务项目经理姓名 */
+            managerNames: (string | null)[];
+            status: components["schemas"]["TaskBaseStatus"] & unknown;
+            displayStatus: components["schemas"]["TaskDisplayStatus"] & unknown;
+            progress: components["schemas"]["TaskProgress"];
+            plannedStart: components["schemas"]["DateOnly"] & (string | null);
+            plannedEnd: components["schemas"]["DateOnly"] & (string | null);
+            actualEnd: components["schemas"]["DateOnly"] & (string | null);
+            estimatedDays: number | null;
+            headcount: number | null;
+            priority: components["schemas"]["Priority"];
+            deliverableTypes: (components["schemas"]["DeliverableType"] & unknown)[];
+            onTime: boolean | null;
+            finalizedAt: components["schemas"]["DateTime"] & (string | null);
+            changeLinks: components["schemas"]["ProjectAiTaskChangeLink"][];
+        };
+        ProjectAiTaskChangeLink: {
+            changeId: components["schemas"]["Uuid"];
+            reason: string | null;
+            appliedAt: components["schemas"]["DateTime"];
+        };
         ProjectArchiveBody: {
             version: components["schemas"]["Version"] & unknown;
             /**
@@ -14873,7 +15200,7 @@ export interface components {
         ReportIssueDraft: {
             /** @description 问题描述（原文；问题记录标题超 500 字截短落库） */
             title: string;
-            categories: components["schemas"]["IssueCategoryList"];
+            categories: components["schemas"]["IssueCategoryList"] & unknown;
             /**
              * Format: uuid
              * @description 问题处理人 / 责任人（缺省 / null = 按归类自动分派责任部门）
@@ -15982,7 +16309,7 @@ export interface components {
             projectName: string;
             taskId: components["schemas"]["Uuid"] & (string | null);
             title: string;
-            categories: components["schemas"]["IssueCategoryList"] & unknown;
+            categories: components["schemas"]["IssueCategoryList"];
             state: components["schemas"]["IssueState"];
             reporterId: components["schemas"]["Uuid"];
             reporterName: string | null;

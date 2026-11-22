@@ -2385,7 +2385,8 @@ body {
 }
 
 .hub-dash-detail__rowLink:hover {
-  text-decoration: underline;
+  color: #2563eb;
+  text-decoration: none;
 }
 
 .hub-dash-detail__task {

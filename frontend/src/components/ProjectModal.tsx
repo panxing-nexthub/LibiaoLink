@@ -286,7 +286,8 @@ export function ProjectModal({ mode, initial, initialArchiveKind, hasOpenPostArc
           {isEdit ? t("modal.subtitle.edit") : t("modal.subtitle.new")}
         </p>
 
-        <ScrollArea viewportClassName="mt-5 min-h-0 flex-1" className="overscroll-contain space-y-4 px-0.5 pb-1" ariaLabel={t("modal.form.aria")} thumbAlwaysVisible>
+        {/* 滚动条与日报编辑弹窗一致：默认隐藏，只在滚动 / 悬停时浮现，避免小屏弹窗的常驻轨道压住输入框。 */}
+        <ScrollArea viewportClassName="mt-5 min-h-0 flex-1" className="overscroll-contain space-y-4 px-0.5 pb-1" ariaLabel={t("modal.form.aria")}>
         <form id="project-modal-form" className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
           <fieldset
             disabled={archivedLock}

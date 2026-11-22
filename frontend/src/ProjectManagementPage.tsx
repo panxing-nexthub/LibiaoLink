@@ -384,6 +384,7 @@ const MEMBER_FILTER_TONES = [
 ];
 const PM_TABLE_TAG_CLASS = "inline-block max-w-full truncate whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-medium";
 const PM_GANTT_TAG_CLASS = "inline-block max-w-full truncate whitespace-nowrap rounded-full px-1 py-0 text-[length:var(--pm-gantt-tag-size,9px)] leading-[var(--pm-gantt-tag-leading,16px)] font-normal";
+const PM_GANTT_MEMBER_TAG_CLASS = "inline-block shrink-0 whitespace-nowrap rounded-full px-1 py-0 text-[length:var(--pm-gantt-tag-size,9px)] leading-[var(--pm-gantt-tag-leading,16px)] font-normal";
 
 const memberFilterToneOf = (value: string): string => {
   let hash = 0;
@@ -803,7 +804,7 @@ function MemberCell({
         {statusActive ? (
           <span className={tagClass + " bg-[#f02b2b] font-semibold text-white"}>{label}</span>
         ) : label === "" ? null : (
-          <PmMemberChips names={names} compact={compact} max={compact ? 2 : 6} />
+          <PmMemberChips names={names} compact={compact} max={compact ? names.length : 6} />
         )}
       </div>
     );
@@ -828,7 +829,7 @@ function MemberCell({
         ) : label === "" ? (
           <span className="min-w-0 truncate text-zinc-300">{placeholder}</span>
         ) : (
-          <PmMemberChips names={names} compact={compact} max={compact ? 2 : 6} />
+          <PmMemberChips names={names} compact={compact} max={compact ? names.length : 6} />
         )}
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={(compact ? "h-2.5 w-2.5" : "h-3 w-3") + " shrink-0 text-zinc-300"}>
           <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -1584,7 +1585,7 @@ type PmGanttGroup = {
 type PmGanttColumn = {
   key: "rowNo" | "code" | "name" | "manager" | "engineer" | "method" | "dates" | "stage" | "location";
   minWidth: number;
-  maxWidth: number;
+  maxWidth?: number;
   labelKey: TextKey | null;
 };
 
@@ -1592,8 +1593,8 @@ const PM_GANTT_COLUMNS: readonly PmGanttColumn[] = [
   { key: "rowNo", minWidth: 24, maxWidth: 24, labelKey: null },
   { key: "code", minWidth: 128, maxWidth: 150, labelKey: "pm.column.code" },
   { key: "name", minWidth: 84, maxWidth: 104, labelKey: "pm.column.name" },
-  { key: "manager", minWidth: 48, maxWidth: 72, labelKey: "pm.column.manager" },
-  { key: "engineer", minWidth: 54, maxWidth: 80, labelKey: "pm.column.engineer" },
+  { key: "manager", minWidth: 48, labelKey: "pm.column.manager" },
+  { key: "engineer", minWidth: 54, labelKey: "pm.column.engineer" },
   { key: "method", minWidth: 50, maxWidth: 82, labelKey: "pm.column.method" },
   { key: "dates", minWidth: 72, maxWidth: 84, labelKey: "pm.column.implementationWindow" },
   { key: "stage", minWidth: 30, maxWidth: 70, labelKey: "pm.column.stageShort" },
@@ -1693,12 +1694,7 @@ const pmGanttMembersCellWidth = (names: readonly string[], scale = 1): number =>
   if (names.length === 0) {
     return pmGanttTextCellWidth("—", pmGanttFont(400, pmGanttScaledPx(10, scale)), scale);
   }
-  const visible = names.slice(0, 2);
-  const rest = names.length - visible.length;
-  const chipWidths = visible.map((name) => pmGanttChipTextWidth(name, chipFont, scale));
-  if (rest > 0) {
-    chipWidths.push(pmGanttChipTextWidth("+" + String(rest), chipFont, scale));
-  }
+  const chipWidths = names.map((name) => pmGanttChipTextWidth(name, chipFont, scale));
   return chipWidths.reduce((total, width) => total + width, 0) +
     pmGanttScaledPx(PM_GANTT_CHIP_GAP, scale) * Math.max(0, chipWidths.length - 1) +
     pmGanttScaledPx(PM_GANTT_CELL_PADDING, scale);
@@ -2260,12 +2256,13 @@ function PmMemberChips({
   }
   const visible = names.slice(0, max);
   const rest = names.length - visible.length;
-  const chipClass = compact ? PM_GANTT_TAG_CLASS : PM_TABLE_TAG_CLASS;
+  const chipClass = compact ? PM_GANTT_MEMBER_TAG_CLASS : PM_TABLE_TAG_CLASS;
   return (
     <span
       className={
-        "flex min-w-0 items-center overflow-hidden " +
-        (compact ? "gap-[var(--pm-gantt-chip-gap,2px)]" : "gap-1")
+        compact
+          ? "flex shrink-0 items-center gap-[var(--pm-gantt-chip-gap,2px)]"
+          : "flex min-w-0 items-center gap-1 overflow-hidden"
       }
     >
       {visible.map((name, index) => (
@@ -2274,9 +2271,7 @@ function PmMemberChips({
           title={name}
           className={
             chipClass +
-            (compact
-              ? " max-w-[var(--pm-gantt-member-max-width,180px)] shrink-0 "
-              : " max-w-[180px] shrink-0 ") +
+            (compact ? " " : " max-w-[180px] shrink-0 ") +
             memberFilterToneOf(name)
           }
         >
@@ -2599,7 +2594,9 @@ function PmImplementationGantt({
     const scaledMinWidth = (column: PmGanttColumn): number =>
       Math.round(column.minWidth * ganttUiScale);
     const scaledMaxWidth = (column: PmGanttColumn): number =>
-      Math.round(column.maxWidth * ganttUiScale);
+      column.maxWidth === undefined
+        ? Number.POSITIVE_INFINITY
+        : Math.round(column.maxWidth * ganttUiScale);
     const widths = new Map<PmGanttColumn["key"], number>(
       PM_GANTT_COLUMNS.map((column) => [column.key, scaledMinWidth(column)]),
     );
@@ -2623,7 +2620,7 @@ function PmImplementationGantt({
         bump(
           "manager",
           pmGanttMembersCellWidth(memberDisplayNames(row.managerIds, row.managerNames, directory), ganttUiScale) +
-            pmGanttScaledPx(12, ganttUiScale),
+            pmGanttScaledPx(18, ganttUiScale),
         );
         if (row.implementationHandedOver) {
           bump(
@@ -2637,7 +2634,7 @@ function PmImplementationGantt({
             pmGanttMembersCellWidth(
               memberDisplayNames(row.implementationEngineerIds, row.implementationEngineerNames, directory),
               ganttUiScale,
-            ) + pmGanttScaledPx(12, ganttUiScale),
+            ) + pmGanttScaledPx(18, ganttUiScale),
           );
         }
         const method = row.implementationMethod;

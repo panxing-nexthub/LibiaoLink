@@ -138,9 +138,35 @@ export const ProjectAiIssueSchema = z
   })
   .openapi("ProjectAiIssue");
 
+/**
+ * 采集器预先算好的项目统计。模型**只能引用、不能重算**（提示词硬约束）：
+ * 完成百分比不得由 done/total 反推、最新 / 最慢阶段不得由模型自行判断。
+ */
+export const ProjectAiMetricsSchema = z
+  .object({
+    taskDone: z.number().int().min(0),
+    taskTotal: z.number().int().min(0),
+    percent: z.number().int().min(0).max(100).nullable().openapi({ description: "完成百分比；total = 0 时为 null" }),
+    latestStageKey: StageKeySchema.nullable().openapi({ description: "已动工任务（progress ≥ 0.25）中阶段序最靠后者；无则 null" }),
+    latestStage: z.string().nullable().openapi({ description: "最新阶段中文名，与 latestStageKey 对应" }),
+    slowestStageKey: StageKeySchema.nullable().openapi({ description: "阶段序中第一个仍有未完成任务的阶段；无则 null" }),
+    slowestStage: z.string().nullable().openapi({ description: "最慢阶段中文名，与 slowestStageKey 对应" }),
+    planStart: DateOnlySchema.nullable().openapi({ description: "任务计划开始的最早日期" }),
+    planEnd: DateOnlySchema.nullable().openapi({ description: "任务计划结束的最晚日期" }),
+    reportStart: DateOnlySchema.nullable().openapi({ description: "日报最早日期；无日报为 null" }),
+    reportEnd: DateOnlySchema.nullable().openapi({ description: "日报最晚日期；无日报为 null" }),
+    issueTotal: z.number().int().min(0),
+    issueDone: z.number().int().min(0),
+    issueInProgress: z.number().int().min(0),
+    issueOpen: z.number().int().min(0),
+    changeTotal: z.number().int().min(0),
+  })
+  .openapi("ProjectAiMetrics");
+
 export const ProjectAiContextSchema = z
   .object({
     project: ProjectAiProjectSchema,
+    metrics: ProjectAiMetricsSchema,
     stages: z.array(ProjectAiStageSchema),
     ungroupedTasks: z
       .object({ taskDoneCount: z.number().int().min(0), taskTotalCount: z.number().int().min(0) })
@@ -157,6 +183,7 @@ export const ProjectAiContextSchema = z
   });
 
 export type ProjectAiContext = z.infer<typeof ProjectAiContextSchema>;
+export type ProjectAiMetrics = z.infer<typeof ProjectAiMetricsSchema>;
 export type ProjectAiProject = z.infer<typeof ProjectAiProjectSchema>;
 export type ProjectAiStage = z.infer<typeof ProjectAiStageSchema>;
 export type ProjectAiTask = z.infer<typeof ProjectAiTaskSchema>;
@@ -165,40 +192,115 @@ export type ProjectAiReport = z.infer<typeof ProjectAiReportSchema>;
 export type ProjectAiIssue = z.infer<typeof ProjectAiIssueSchema>;
 
 /* ------------------------------------------------------------------ *
- * AI 项目总结生成（POST /projects/{id}/ai-summary）
+ * AI 项目总结生成（POST /projects/{id}/ai-summary）· REPORT_SCHEMA v2
  * ------------------------------------------------------------------ */
 
-/** 风险等级：高 / 中 / 低（只做提示，不做验收结论）。 */
-export const ProjectAiRiskLevelSchema = z.enum(["high", "medium", "low"]).openapi("ProjectAiRiskLevel");
+/** 结论类型：事实 / 推断 / 建议（提示词要求逐条标注，推断与建议不得标成事实）。 */
+export const ProjectAiClaimTypeSchema = z.enum(["fact", "inference", "suggestion"]).openapi("ProjectAiClaimType");
 
-export const ProjectAiSummaryRiskSchema = z
-  .object({
-    level: ProjectAiRiskLevelSchema,
-    text: z.string().min(1).max(500).openapi({ description: "风险描述" }),
-    evidence: z.string().max(500).nullable().openapi({ description: "依据（引用具体任务 / 问题 / 变更 / 日期），无依据为 null" }),
-  })
-  .openapi("ProjectAiSummaryRisk");
+/** 来源标签：只用业务名称 + 日期（如「任务记录 2026-10-20」），不得出现表名 / 字段名 / 内部 ID。 */
+export const ProjectAiSourceSchema = z.string().min(1).max(100).openapi("ProjectAiSource");
 
-/** 结构化总结（模型输出经服务端校验后落库）。 */
-export const ProjectAiSummaryPayloadSchema = z
+export const ProjectAiClaimSchema = z
   .object({
-    stageHighlights: z
-      .array(
-        z.object({
-          stageKey: z.string().max(50),
-          summary: z.string().min(1).max(500),
-        }),
-      )
-      .max(20)
-      .openapi({ description: "有内容的阶段小结；stageKey 取输入阶段键，无内容阶段可省略" }),
-    risks: z.array(ProjectAiSummaryRiskSchema).max(20),
-    issueSummary: z.string().max(1500).nullable().openapi({ description: "问题小结；无问题为 null" }),
-    changeSummary: z.string().max(1500).nullable().openapi({ description: "变更小结；无变更为 null" }),
-    reportSummary: z.string().max(1500).nullable().openapi({ description: "日报小结；无日报为 null" }),
-    nextSteps: z.array(z.string().max(300)).max(10).openapi({ description: "建议关注事项；不得编造工期承诺" }),
-    dataGaps: z.array(z.string().max(300)).max(20).openapi({ description: "数据缺失 / 暂无记录的字段说明" }),
+    text: z.string().min(1).max(1000),
+    type: ProjectAiClaimTypeSchema,
+    sources: z.array(ProjectAiSourceSchema).min(1).max(10),
   })
-  .openapi("ProjectAiSummaryPayload");
+  .openapi("ProjectAiClaim");
+
+export const ProjectAiTimelineItemSchema = z
+  .object({
+    date: z.string().max(20).openapi({ description: "业务日期 YYYY-MM-DD；仅记录已有日期" }),
+    title: z.string().min(1).max(100),
+    text: z.string().min(1).max(600),
+    type: ProjectAiClaimTypeSchema,
+    sources: z.array(ProjectAiSourceSchema).min(1).max(10),
+  })
+  .openapi("ProjectAiTimelineItem");
+
+export const ProjectAiIssueItemSchema = z
+  .object({
+    text: z.string().min(1).max(600),
+    owner: z.string().max(100).openapi({ description: "责任人；未记录写「未记录」" }),
+    handling: z.string().max(600).openapi({ description: "已知处理情况；未记录写「未记录」" }),
+    nextStep: z.string().max(300).openapi({ description: "已知下一步；未记录写「未记录」" }),
+    type: ProjectAiClaimTypeSchema,
+    sources: z.array(ProjectAiSourceSchema).min(1).max(10),
+  })
+  .openapi("ProjectAiIssueItem");
+
+export const ProjectAiRangeSchema = z
+  .object({ from: z.string().max(20).nullable(), to: z.string().max(20).nullable() })
+  .openapi("ProjectAiRange");
+
+/** 正式报告结构（提示词 REPORT_SCHEMA v2；summary_text = summary.text）。 */
+export const ProjectAiSummaryReportSchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    summary: z.object({
+      text: z.string().min(1).max(2000).openapi({ description: "250～400 字项目摘要" }),
+      claims: z.array(ProjectAiClaimSchema).max(20),
+    }),
+    overview: z.object({
+      projectName: z.string().max(200),
+      projectCode: z.string().max(100),
+      status: z.string().max(20).openapi({ description: "进行中 / 已暂停 / 已归档 / 已完成（中文，不输出状态码）" }),
+      managers: z.array(z.string().max(100)).max(10),
+      startedAt: z.string().max(20).openapi({ description: "YYYY-MM-DD 或「未记录」" }),
+      progress: z.object({
+        done: z.number().int().min(0),
+        total: z.number().int().min(0),
+        percent: z.number().int().min(0).max(100).nullable(),
+        latestStage: z.string().max(50),
+        slowestStage: z.string().max(50),
+      }),
+      planRange: ProjectAiRangeSchema,
+      reportRange: ProjectAiRangeSchema,
+    }),
+    timeline: z.array(ProjectAiTimelineItemSchema).max(8),
+    issues: z.object({
+      total: z.number().int().min(0),
+      done: z.number().int().min(0),
+      inProgress: z.number().int().min(0),
+      open: z.number().int().min(0),
+      summary: z.string().max(1000),
+      currentItems: z.array(ProjectAiIssueItemSchema).max(50),
+    }),
+    resultsAndRisks: z.object({
+      text: z.string().max(1500),
+      claims: z.array(ProjectAiClaimSchema).max(20),
+      risks: z.array(ProjectAiClaimSchema).max(20),
+    }),
+    handoff: z.object({
+      existing: z
+        .array(
+          z.object({
+            text: z.string().min(1).max(600),
+            owner: z.string().max(100),
+            nextStep: z.string().max(300),
+            type: ProjectAiClaimTypeSchema,
+            sources: z.array(ProjectAiSourceSchema).min(1).max(10),
+          }),
+        )
+        .max(20),
+      suggestions: z
+        .array(
+          z.object({
+            text: z.string().min(1).max(600),
+            reason: z.string().max(600),
+            nextStep: z.string().max(300),
+            acceptance: z.string().max(300),
+            type: ProjectAiClaimTypeSchema,
+            needsHumanConfirmation: z.boolean(),
+            sources: z.array(ProjectAiSourceSchema).min(1).max(10),
+          }),
+        )
+        .max(20),
+    }),
+    notes: z.array(ProjectAiClaimSchema).max(20),
+  })
+  .openapi("ProjectAiSummaryReport");
 
 export const ProjectAiSummarySchema = z
   .object({
@@ -207,8 +309,8 @@ export const ProjectAiSummarySchema = z
     sourceHash: z.string().openapi({ description: "生成时的项目上下文指纹（sha256）" }),
     promptVersion: z.string(),
     modelId: z.string().nullable(),
-    summaryText: z.string().openapi({ description: "可直接展示的整体总结段落" }),
-    summary: ProjectAiSummaryPayloadSchema,
+    summaryText: z.string().openapi({ description: "= report.summary.text，列表展示用" }),
+    report: ProjectAiSummaryReportSchema.openapi({ description: "结构化正式报告（REPORT_SCHEMA v2）" }),
     generatedBy: UuidSchema.nullable(),
     generatedByName: z.string().nullable(),
     generatedAt: DateTimeSchema,
@@ -223,6 +325,7 @@ export const ProjectAiSummaryGenerateBodySchema = z
   })
   .openapi("ProjectAiSummaryGenerateBody");
 
+export type ProjectAiSummaryReport = z.infer<typeof ProjectAiSummaryReportSchema>;
+export type ProjectAiClaim = z.infer<typeof ProjectAiClaimSchema>;
 export type ProjectAiSummary = z.infer<typeof ProjectAiSummarySchema>;
-export type ProjectAiSummaryPayload = z.infer<typeof ProjectAiSummaryPayloadSchema>;
 export type ProjectAiSummaryGenerateBody = z.infer<typeof ProjectAiSummaryGenerateBodySchema>;

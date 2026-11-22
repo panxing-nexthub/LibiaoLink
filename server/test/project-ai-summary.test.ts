@@ -28,6 +28,24 @@ function baseContext(overrides: Partial<ProjectAiContext> = {}): ProjectAiContex
       managerNames: ["项目经理乙"],
       startedAt: "2026-01-03",
     },
+    metrics: {
+      taskDone: 0,
+      taskTotal: 0,
+      percent: null,
+      latestStageKey: null,
+      latestStage: null,
+      slowestStageKey: null,
+      slowestStage: null,
+      planStart: null,
+      planEnd: null,
+      reportStart: null,
+      reportEnd: null,
+      issueTotal: 0,
+      issueDone: 0,
+      issueInProgress: 0,
+      issueOpen: 0,
+      changeTotal: 0,
+    },
     stages: [],
     ungroupedTasks: { taskDoneCount: 0, taskTotalCount: 0 },
     tasks: [],
@@ -42,22 +60,40 @@ function baseContext(overrides: Partial<ProjectAiContext> = {}): ProjectAiContex
 
 const MODEL_OUTPUT = {
   modelId: "deepseek-test",
-  summaryText: "项目整体按计划推进，暂无异常。",
-  summary: {
-    stageHighlights: [],
-    risks: [],
-    issueSummary: null,
-    changeSummary: null,
-    reportSummary: null,
-    nextSteps: [],
-    dataGaps: ["阶段日期暂无数据"],
+  report: {
+    title: "测试项目总结",
+    summary: {
+      text: "项目整体按计划推进，暂无异常。",
+      claims: [{ text: "项目当前为进行中。", type: "fact", sources: ["项目统计"] }],
+    },
+    overview: {
+      projectName: "测试项目",
+      projectCode: "CNBJ-20260101-0001",
+      status: "进行中",
+      managers: ["项目经理乙"],
+      startedAt: "2026-01-03",
+      progress: { done: 0, total: 0, percent: null, latestStage: "全部完成或暂无已动工任务", slowestStage: "全部完成或暂无任务" },
+      planRange: { from: null, to: null },
+      reportRange: { from: null, to: null },
+    },
+    timeline: [
+      { date: "2026-01-03", title: "项目启动", text: "任务记录显示项目启动。", type: "fact", sources: ["任务记录 2026-01-03"] },
+    ],
+    issues: { total: 0, done: 0, inProgress: 0, open: 0, summary: "暂无问题记录", currentItems: [] },
+    resultsAndRisks: { text: "暂无成果记录。", claims: [], risks: [] },
+    handoff: { existing: [], suggestions: [] },
+    notes: [{ text: "暂无交接事项", type: "fact", sources: ["项目统计"] }],
   },
 };
 
 class FakeRepository {
   rows: ProjectAiSummaryRow[] = [];
-  async findLatest(projectId: string): Promise<ProjectAiSummaryRow | null> {
-    return this.rows.filter((row) => row.projectId === projectId).at(-1) ?? null;
+  async findLatest(projectId: string, promptVersion: string): Promise<ProjectAiSummaryRow | null> {
+    return (
+      this.rows
+        .filter((row) => row.projectId === projectId && row.promptVersion === promptVersion)
+        .at(-1) ?? null
+    );
   }
   async findBySource(projectId: string, sourceHash: string, promptVersion: string): Promise<ProjectAiSummaryRow | null> {
     return this.rows.find((row) => row.projectId === projectId && row.sourceHash === sourceHash && row.promptVersion === promptVersion) ?? null;
@@ -112,7 +148,8 @@ describe("ProjectAiSummaryService", () => {
 
     expect(summarize).toHaveBeenCalledTimes(1);
     expect(repository.rows).toHaveLength(1);
-    expect(result.summaryText).toBe(MODEL_OUTPUT.summaryText);
+    expect(result.summaryText).toBe(MODEL_OUTPUT.report.summary.text);
+    expect(result.report.title).toBe("测试项目总结");
     expect(result.modelId).toBe("deepseek-test");
     expect(result.stale).toBe(false);
     expect(result.generatedByName).toBe("操作人甲");

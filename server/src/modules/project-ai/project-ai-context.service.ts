@@ -3,6 +3,7 @@ import type {
   ProjectAiChange,
   ProjectAiContext,
   ProjectAiIssue,
+  ProjectAiMetrics,
   ProjectAiReport,
   ProjectAiStage,
   ProjectAiTask,
@@ -206,7 +207,36 @@ export class ProjectAiContextService {
       }))
       .sort((a, b) => a.raisedAt.localeCompare(b.raisedAt) || a.issueId.localeCompare(b.issueId));
 
+    // 采集器预先算好的统计：模型只引用、不重算（提示词硬约束）。
+    const taskTotal = tasks.length;
+    const taskDone = tasks.filter((task) => task.status === "done").length;
+    const latestTask = tasks
+      .filter((task) => task.stageKey !== null && task.progress >= 0.25)
+      .sort((a, b) => (stageSeq.get(b.stageKey!) ?? 0) - (stageSeq.get(a.stageKey!) ?? 0))[0];
+    const slowestStageEntry = stages.find(
+      (stage) => stage.taskTotalCount > stage.taskDoneCount,
+    );
+    const metrics: ProjectAiMetrics = {
+      taskDone,
+      taskTotal,
+      percent: taskTotal === 0 ? null : Math.round((taskDone / taskTotal) * 100),
+      latestStageKey: latestTask?.stageKey ?? null,
+      latestStage: latestTask === undefined ? null : (stages.find((stage) => stage.stageKey === latestTask.stageKey)?.name ?? null),
+      slowestStageKey: slowestStageEntry?.stageKey ?? null,
+      slowestStage: slowestStageEntry?.name ?? null,
+      planStart: minDate(tasks.map((task) => task.plannedStart)),
+      planEnd: maxDate(tasks.map((task) => task.plannedEnd)),
+      reportStart: reports[0]?.date ?? null,
+      reportEnd: reports[reports.length - 1]?.date ?? null,
+      issueTotal: issues.length,
+      issueDone: issues.filter((issue) => issue.state === "done").length,
+      issueInProgress: issues.filter((issue) => issue.state === "in_progress").length,
+      issueOpen: issues.filter((issue) => issue.state === "open").length,
+      changeTotal: changes.length,
+    };
+
     return {
+      metrics,
       project: {
         id: project.id,
         code: project.code,

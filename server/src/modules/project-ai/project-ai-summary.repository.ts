@@ -21,12 +21,21 @@ export interface ProjectAiSummaryWrite {
 export class ProjectAiSummaryRepository {
   constructor(private readonly database: DatabaseService) {}
 
-  /** 该项目最近一次生成（不论数据是否已变化），用于 GET 展示与 stale 判定。 */
-  async findLatest(projectId: string, client: DbClient = this.database.db): Promise<ProjectAiSummaryRow | null> {
+  /**
+   * 该项目在当前 prompt 版本下最近一次生成（不论数据是否已变化），用于 GET 展示与 stale 判定。
+   * 必须按 promptVersion 过滤：不同版本的 summaryJson 结构不兼容，旧版本行不能被当成当前结构返回。
+   */
+  async findLatest(
+    projectId: string,
+    promptVersion: string,
+    client: DbClient = this.database.db,
+  ): Promise<ProjectAiSummaryRow | null> {
     const rows = await client
       .select()
       .from(projectAiSummaries)
-      .where(eq(projectAiSummaries.projectId, projectId))
+      .where(
+        and(eq(projectAiSummaries.projectId, projectId), eq(projectAiSummaries.promptVersion, promptVersion)),
+      )
       .orderBy(desc(projectAiSummaries.generatedAt))
       .limit(1);
     return rows[0] ?? null;

@@ -14388,9 +14388,17 @@ export interface components {
             appliedByName: string | null;
             status: components["schemas"]["ChangeStatus"];
         };
+        ProjectAiClaim: {
+            text: string;
+            type: components["schemas"]["ProjectAiClaimType"];
+            sources: components["schemas"]["ProjectAiSource"][];
+        };
+        /** @enum {string} */
+        ProjectAiClaimType: "fact" | "inference" | "suggestion";
         /** @description AI 项目总结读面（只读聚合；不触发任何模型调用） */
         ProjectAiContext: {
             project: components["schemas"]["ProjectAiProject"];
+            metrics: components["schemas"]["ProjectAiMetrics"];
             stages: components["schemas"]["ProjectAiStage"][];
             /** @description stageKey 为空的任务（不计入任何阶段，避免阶段加总对不上） */
             ungroupedTasks: {
@@ -14422,6 +14430,38 @@ export interface components {
             /** @description 问题附图数量（不识别图片内容） */
             photoCount: number;
         };
+        ProjectAiIssueItem: {
+            text: string;
+            /** @description 责任人；未记录写「未记录」 */
+            owner: string;
+            /** @description 已知处理情况；未记录写「未记录」 */
+            handling: string;
+            /** @description 已知下一步；未记录写「未记录」 */
+            nextStep: string;
+            type: components["schemas"]["ProjectAiClaimType"];
+            sources: components["schemas"]["ProjectAiSource"][];
+        };
+        ProjectAiMetrics: {
+            taskDone: number;
+            taskTotal: number;
+            /** @description 完成百分比；total = 0 时为 null */
+            percent: number | null;
+            latestStageKey: components["schemas"]["StageKey"] & (string | null);
+            /** @description 最新阶段中文名，与 latestStageKey 对应 */
+            latestStage: string | null;
+            slowestStageKey: components["schemas"]["StageKey"] & (string | null);
+            /** @description 最慢阶段中文名，与 slowestStageKey 对应 */
+            slowestStage: string | null;
+            planStart: components["schemas"]["DateOnly"] & (string | null);
+            planEnd: components["schemas"]["DateOnly"] & (string | null);
+            reportStart: components["schemas"]["DateOnly"] & (string | null);
+            reportEnd: components["schemas"]["DateOnly"] & (string | null);
+            issueTotal: number;
+            issueDone: number;
+            issueInProgress: number;
+            issueOpen: number;
+            changeTotal: number;
+        };
         ProjectAiProject: {
             id: components["schemas"]["Uuid"];
             /** @description 项目编号 */
@@ -14437,6 +14477,10 @@ export interface components {
             managerNames: (string | null)[];
             startedAt: components["schemas"]["DateOnly"] & (string | null);
         };
+        ProjectAiRange: {
+            from: string | null;
+            to: string | null;
+        };
         ProjectAiReport: {
             reportId: components["schemas"]["Uuid"];
             date: components["schemas"]["DateOnly"] & unknown;
@@ -14450,8 +14494,7 @@ export interface components {
             /** @description 现场工作附图数量（不识别图片内容） */
             photoCount: number;
         };
-        /** @enum {string} */
-        ProjectAiRiskLevel: "high" | "medium" | "low";
+        ProjectAiSource: string;
         ProjectAiStage: {
             stageKey: components["schemas"]["StageKey"];
             name: string;
@@ -14481,9 +14524,9 @@ export interface components {
             sourceHash: string;
             promptVersion: string;
             modelId: string | null;
-            /** @description 可直接展示的整体总结段落 */
+            /** @description = report.summary.text，列表展示用 */
             summaryText: string;
-            summary: components["schemas"]["ProjectAiSummaryPayload"];
+            report: components["schemas"]["ProjectAiSummaryReport"];
             generatedBy: components["schemas"]["Uuid"] & (string | null);
             generatedByName: string | null;
             generatedAt: components["schemas"]["DateTime"];
@@ -14497,30 +14540,65 @@ export interface components {
              */
             force: boolean;
         };
-        ProjectAiSummaryPayload: {
-            /** @description 有内容的阶段小结；stageKey 取输入阶段键，无内容阶段可省略 */
-            stageHighlights: {
-                stageKey: string;
+        /** @description 结构化正式报告（REPORT_SCHEMA v2） */
+        ProjectAiSummaryReport: {
+            title: string;
+            summary: {
+                /** @description 250～400 字项目摘要 */
+                text: string;
+                claims: components["schemas"]["ProjectAiClaim"][];
+            };
+            overview: {
+                projectName: string;
+                projectCode: string;
+                /** @description 进行中 / 已暂停 / 已归档 / 已完成（中文，不输出状态码） */
+                status: string;
+                managers: string[];
+                /** @description YYYY-MM-DD 或「未记录」 */
+                startedAt: string;
+                progress: {
+                    done: number;
+                    total: number;
+                    percent: number | null;
+                    latestStage: string;
+                    slowestStage: string;
+                };
+                planRange: components["schemas"]["ProjectAiRange"];
+                reportRange: components["schemas"]["ProjectAiRange"];
+            };
+            timeline: components["schemas"]["ProjectAiTimelineItem"][];
+            issues: {
+                total: number;
+                done: number;
+                inProgress: number;
+                open: number;
                 summary: string;
-            }[];
-            risks: components["schemas"]["ProjectAiSummaryRisk"][];
-            /** @description 问题小结；无问题为 null */
-            issueSummary: string | null;
-            /** @description 变更小结；无变更为 null */
-            changeSummary: string | null;
-            /** @description 日报小结；无日报为 null */
-            reportSummary: string | null;
-            /** @description 建议关注事项；不得编造工期承诺 */
-            nextSteps: string[];
-            /** @description 数据缺失 / 暂无记录的字段说明 */
-            dataGaps: string[];
-        };
-        ProjectAiSummaryRisk: {
-            level: components["schemas"]["ProjectAiRiskLevel"];
-            /** @description 风险描述 */
-            text: string;
-            /** @description 依据（引用具体任务 / 问题 / 变更 / 日期），无依据为 null */
-            evidence: string | null;
+                currentItems: components["schemas"]["ProjectAiIssueItem"][];
+            };
+            resultsAndRisks: {
+                text: string;
+                claims: components["schemas"]["ProjectAiClaim"][];
+                risks: components["schemas"]["ProjectAiClaim"][];
+            };
+            handoff: {
+                existing: {
+                    text: string;
+                    owner: string;
+                    nextStep: string;
+                    type: components["schemas"]["ProjectAiClaimType"];
+                    sources: components["schemas"]["ProjectAiSource"][];
+                }[];
+                suggestions: {
+                    text: string;
+                    reason: string;
+                    nextStep: string;
+                    acceptance: string;
+                    type: components["schemas"]["ProjectAiClaimType"];
+                    needsHumanConfirmation: boolean;
+                    sources: components["schemas"]["ProjectAiSource"][];
+                }[];
+            };
+            notes: components["schemas"]["ProjectAiClaim"][];
         };
         ProjectAiTask: {
             taskId: components["schemas"]["Uuid"];
@@ -14552,6 +14630,14 @@ export interface components {
             changeId: components["schemas"]["Uuid"];
             reason: string | null;
             appliedAt: components["schemas"]["DateTime"];
+        };
+        ProjectAiTimelineItem: {
+            /** @description 业务日期 YYYY-MM-DD；仅记录已有日期 */
+            date: string;
+            title: string;
+            text: string;
+            type: components["schemas"]["ProjectAiClaimType"];
+            sources: components["schemas"]["ProjectAiSource"][];
         };
         ProjectArchiveBody: {
             version: components["schemas"]["Version"] & unknown;

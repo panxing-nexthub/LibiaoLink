@@ -9492,11 +9492,48 @@
           "status"
         ]
       },
+      "ProjectAiClaim": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "type": {
+            "$ref": "#/components/schemas/ProjectAiClaimType"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiSource"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "text",
+          "type",
+          "sources"
+        ]
+      },
+      "ProjectAiClaimType": {
+        "type": "string",
+        "enum": [
+          "fact",
+          "inference",
+          "suggestion"
+        ]
+      },
       "ProjectAiContext": {
         "type": "object",
         "properties": {
           "project": {
             "$ref": "#/components/schemas/ProjectAiProject"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/ProjectAiMetrics"
           },
           "stages": {
             "type": "array",
@@ -9556,6 +9593,7 @@
         },
         "required": [
           "project",
+          "metrics",
           "stages",
           "ungroupedTasks",
           "tasks",
@@ -9678,6 +9716,208 @@
           "photoCount"
         ]
       },
+      "ProjectAiIssueItem": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 600
+          },
+          "owner": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "责任人；未记录写「未记录」"
+          },
+          "handling": {
+            "type": "string",
+            "maxLength": 600,
+            "description": "已知处理情况；未记录写「未记录」"
+          },
+          "nextStep": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "已知下一步；未记录写「未记录」"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ProjectAiClaimType"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiSource"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "text",
+          "owner",
+          "handling",
+          "nextStep",
+          "type",
+          "sources"
+        ]
+      },
+      "ProjectAiMetrics": {
+        "type": "object",
+        "properties": {
+          "taskDone": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "taskTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "percent": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100,
+            "description": "完成百分比；total = 0 时为 null"
+          },
+          "latestStageKey": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StageKey"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "已动工任务（progress ≥ 0.25）中阶段序最靠后者；无则 null"
+              }
+            ]
+          },
+          "latestStage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "最新阶段中文名，与 latestStageKey 对应"
+          },
+          "slowestStageKey": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StageKey"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "阶段序中第一个仍有未完成任务的阶段；无则 null"
+              }
+            ]
+          },
+          "slowestStage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "最慢阶段中文名，与 slowestStageKey 对应"
+          },
+          "planStart": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "任务计划开始的最早日期"
+              }
+            ]
+          },
+          "planEnd": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "任务计划结束的最晚日期"
+              }
+            ]
+          },
+          "reportStart": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "日报最早日期；无日报为 null"
+              }
+            ]
+          },
+          "reportEnd": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "日报最晚日期；无日报为 null"
+              }
+            ]
+          },
+          "issueTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "issueDone": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "issueInProgress": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "issueOpen": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "changeTotal": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "taskDone",
+          "taskTotal",
+          "percent",
+          "latestStageKey",
+          "latestStage",
+          "slowestStageKey",
+          "slowestStage",
+          "planStart",
+          "planEnd",
+          "reportStart",
+          "reportEnd",
+          "issueTotal",
+          "issueDone",
+          "issueInProgress",
+          "issueOpen",
+          "changeTotal"
+        ]
+      },
       "ProjectAiProject": {
         "type": "object",
         "properties": {
@@ -9751,6 +9991,29 @@
           "status",
           "managerNames",
           "startedAt"
+        ]
+      },
+      "ProjectAiRange": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 20
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 20
+          }
+        },
+        "required": [
+          "from",
+          "to"
         ]
       },
       "ProjectAiReport": {
@@ -9832,13 +10095,10 @@
           "photoCount"
         ]
       },
-      "ProjectAiRiskLevel": {
+      "ProjectAiSource": {
         "type": "string",
-        "enum": [
-          "high",
-          "medium",
-          "low"
-        ]
+        "minLength": 1,
+        "maxLength": 100
       },
       "ProjectAiStage": {
         "type": "object",
@@ -10017,10 +10277,10 @@
           },
           "summaryText": {
             "type": "string",
-            "description": "可直接展示的整体总结段落"
+            "description": "= report.summary.text，列表展示用"
           },
-          "summary": {
-            "$ref": "#/components/schemas/ProjectAiSummaryPayload"
+          "report": {
+            "$ref": "#/components/schemas/ProjectAiSummaryReport"
           },
           "generatedBy": {
             "allOf": [
@@ -10056,7 +10316,7 @@
           "promptVersion",
           "modelId",
           "summaryText",
-          "summary",
+          "report",
           "generatedBy",
           "generatedByName",
           "generatedAt",
@@ -10073,118 +10333,311 @@
           }
         }
       },
-      "ProjectAiSummaryPayload": {
+      "ProjectAiSummaryReport": {
         "type": "object",
         "properties": {
-          "stageHighlights": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "stageKey": {
-                  "type": "string",
-                  "maxLength": 50
-                },
-                "summary": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 500
-                }
-              },
-              "required": [
-                "stageKey",
-                "summary"
-              ]
-            },
-            "maxItems": 20,
-            "description": "有内容的阶段小结；stageKey 取输入阶段键，无内容阶段可省略"
-          },
-          "risks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProjectAiSummaryRisk"
-            },
-            "maxItems": 20
-          },
-          "issueSummary": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 1500,
-            "description": "问题小结；无问题为 null"
-          },
-          "changeSummary": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 1500,
-            "description": "变更小结；无变更为 null"
-          },
-          "reportSummary": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 1500,
-            "description": "日报小结；无日报为 null"
-          },
-          "nextSteps": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "maxLength": 300
-            },
-            "maxItems": 10,
-            "description": "建议关注事项；不得编造工期承诺"
-          },
-          "dataGaps": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "maxLength": 300
-            },
-            "maxItems": 20,
-            "description": "数据缺失 / 暂无记录的字段说明"
-          }
-        },
-        "required": [
-          "stageHighlights",
-          "risks",
-          "issueSummary",
-          "changeSummary",
-          "reportSummary",
-          "nextSteps",
-          "dataGaps"
-        ]
-      },
-      "ProjectAiSummaryRisk": {
-        "type": "object",
-        "properties": {
-          "level": {
-            "$ref": "#/components/schemas/ProjectAiRiskLevel"
-          },
-          "text": {
+          "title": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 500,
-            "description": "风险描述"
+            "maxLength": 200
           },
-          "evidence": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 500,
-            "description": "依据（引用具体任务 / 问题 / 变更 / 日期），无依据为 null"
+          "summary": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000,
+                "description": "250～400 字项目摘要"
+              },
+              "claims": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ProjectAiClaim"
+                },
+                "maxItems": 20
+              }
+            },
+            "required": [
+              "text",
+              "claims"
+            ]
+          },
+          "overview": {
+            "type": "object",
+            "properties": {
+              "projectName": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "projectCode": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "status": {
+                "type": "string",
+                "maxLength": 20,
+                "description": "进行中 / 已暂停 / 已归档 / 已完成（中文，不输出状态码）"
+              },
+              "managers": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "maxItems": 10
+              },
+              "startedAt": {
+                "type": "string",
+                "maxLength": 20,
+                "description": "YYYY-MM-DD 或「未记录」"
+              },
+              "progress": {
+                "type": "object",
+                "properties": {
+                  "done": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "total": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "percent": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "latestStage": {
+                    "type": "string",
+                    "maxLength": 50
+                  },
+                  "slowestStage": {
+                    "type": "string",
+                    "maxLength": 50
+                  }
+                },
+                "required": [
+                  "done",
+                  "total",
+                  "percent",
+                  "latestStage",
+                  "slowestStage"
+                ]
+              },
+              "planRange": {
+                "$ref": "#/components/schemas/ProjectAiRange"
+              },
+              "reportRange": {
+                "$ref": "#/components/schemas/ProjectAiRange"
+              }
+            },
+            "required": [
+              "projectName",
+              "projectCode",
+              "status",
+              "managers",
+              "startedAt",
+              "progress",
+              "planRange",
+              "reportRange"
+            ]
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiTimelineItem"
+            },
+            "maxItems": 8
+          },
+          "issues": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "done": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "inProgress": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "open": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "summary": {
+                "type": "string",
+                "maxLength": 1000
+              },
+              "currentItems": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ProjectAiIssueItem"
+                },
+                "maxItems": 50
+              }
+            },
+            "required": [
+              "total",
+              "done",
+              "inProgress",
+              "open",
+              "summary",
+              "currentItems"
+            ]
+          },
+          "resultsAndRisks": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "maxLength": 1500
+              },
+              "claims": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ProjectAiClaim"
+                },
+                "maxItems": 20
+              },
+              "risks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ProjectAiClaim"
+                },
+                "maxItems": 20
+              }
+            },
+            "required": [
+              "text",
+              "claims",
+              "risks"
+            ]
+          },
+          "handoff": {
+            "type": "object",
+            "properties": {
+              "existing": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 600
+                    },
+                    "owner": {
+                      "type": "string",
+                      "maxLength": 100
+                    },
+                    "nextStep": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "type": {
+                      "$ref": "#/components/schemas/ProjectAiClaimType"
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProjectAiSource"
+                      },
+                      "minItems": 1,
+                      "maxItems": 10
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "owner",
+                    "nextStep",
+                    "type",
+                    "sources"
+                  ]
+                },
+                "maxItems": 20
+              },
+              "suggestions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 600
+                    },
+                    "reason": {
+                      "type": "string",
+                      "maxLength": 600
+                    },
+                    "nextStep": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "acceptance": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "type": {
+                      "$ref": "#/components/schemas/ProjectAiClaimType"
+                    },
+                    "needsHumanConfirmation": {
+                      "type": "boolean"
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProjectAiSource"
+                      },
+                      "minItems": 1,
+                      "maxItems": 10
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "reason",
+                    "nextStep",
+                    "acceptance",
+                    "type",
+                    "needsHumanConfirmation",
+                    "sources"
+                  ]
+                },
+                "maxItems": 20
+              }
+            },
+            "required": [
+              "existing",
+              "suggestions"
+            ]
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiClaim"
+            },
+            "maxItems": 20
           }
         },
         "required": [
-          "level",
-          "text",
-          "evidence"
-        ]
+          "title",
+          "summary",
+          "overview",
+          "timeline",
+          "issues",
+          "resultsAndRisks",
+          "handoff",
+          "notes"
+        ],
+        "description": "结构化正式报告（REPORT_SCHEMA v2）"
       },
       "ProjectAiTask": {
         "type": "object",
@@ -10407,6 +10860,44 @@
           "changeId",
           "reason",
           "appliedAt"
+        ]
+      },
+      "ProjectAiTimelineItem": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "业务日期 YYYY-MM-DD；仅记录已有日期"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 600
+          },
+          "type": {
+            "$ref": "#/components/schemas/ProjectAiClaimType"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiSource"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "date",
+          "title",
+          "text",
+          "type",
+          "sources"
         ]
       },
       "ProjectArchiveBody": {

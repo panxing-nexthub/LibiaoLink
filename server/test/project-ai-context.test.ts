@@ -249,6 +249,26 @@ describe("ProjectAiContextService", () => {
     expect(context.project.startedAt).toBe("2026-01-03");
     expect(context.project.managerNames).toEqual(["项目经理乙"]);
 
+    // 采集器预先算好的统计：模型只引用、不重算。
+    expect(context.metrics).toEqual({
+      taskDone: 3,
+      taskTotal: 4,
+      percent: 75,
+      latestStageKey: "presale",
+      latestStage: "售前规划",
+      slowestStageKey: "presale",
+      slowestStage: "售前规划",
+      planStart: "2026-01-02",
+      planEnd: "2026-01-25",
+      reportStart: "2026-01-12",
+      reportEnd: "2026-01-12",
+      issueTotal: 1,
+      issueDone: 0,
+      issueInProgress: 0,
+      issueOpen: 1,
+      changeTotal: 1,
+    });
+
     const stage = context.stages[0]!;
     expect(stage.plannedStart).toBe("2026-01-02");
     expect(stage.plannedEnd).toBe("2026-01-25");

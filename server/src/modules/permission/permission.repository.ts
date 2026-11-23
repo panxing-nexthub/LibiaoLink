@@ -47,6 +47,8 @@ export interface ProjectAccessContext {
   /** 名册成员或项目经理（只代表项目内关系，不等于项目编辑权）。 */
   member: boolean;
   projectManager: boolean;
+  /** 当前账号是否为系统管理员（可管理任意项目的项目内仅浏览授权）；非管理员可缺省。 */
+  admin?: boolean;
   /** 当前账号是否至少负责该项目的一条未删除任务（Pro 逐人权限：可见整个项目，编辑仅本人任务）。 */
   taskOwner?: boolean;
   /** 当前账号在该项目的部门 / 个人规则权限（所有命中范围取最高）；null = 关系可见但部门规则未命中。 */

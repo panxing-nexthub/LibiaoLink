@@ -90,13 +90,11 @@ export function ProjectViewGrantsPanel({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="grid max-w-5xl gap-5 py-4">
+    <div className="mx-auto grid w-full max-w-5xl gap-5 py-4">
       <section aria-labelledby="project-grant-import" className="rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <h2 id="project-grant-import" className="text-base font-semibold text-zinc-900">{t("pd.grants.import")}</h2>
-        <p id="project-grant-format" className="mt-1 text-sm text-zinc-600">{t("pd.grants.format")}</p>
         <textarea
           aria-label={t("pd.grants.members")}
-          aria-describedby="project-grant-format"
           className="my-3 w-full resize-y rounded-lg border border-zinc-300 p-3 text-sm"
           rows={4}
           value={text}

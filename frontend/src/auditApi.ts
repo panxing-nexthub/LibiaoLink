@@ -41,7 +41,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
 export const AUDIT_OBJECT_TYPE_LABELS: Record<string, string> = {
   project: "项目",
   project_member: "项目名册",
-  project_view_grant: "项目只读授权",
+  project_view_grant: "项目仅浏览授权",
   task: "任务",
   node: "节点",
   stage: "阶段",

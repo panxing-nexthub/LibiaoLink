@@ -465,6 +465,20 @@ describe("策略服务：可见集 / 项目上下文 / 404·403 / 缓存", () =>
     expect(repository.visibleCalls).toBe(0);
   });
 
+  it("resolveProjectAccess：系统管理员上下文带 admin，且可管理任意项目的仅浏览授权", async () => {
+    const repository = new FakePermissionRepository();
+    repository.refs.set(PROJECT_ID, { managerIds: [MANAGER_ID], deletedAt: null });
+    repository.manualAdmin = true;
+    const config = new AppConfig({
+      GROUP_ACCESS_ENFORCED: "true",
+      GROUP_ACCESS_ADMIN_GROUP_KEYS: "",
+      GROUP_ACCESS_ADMIN_USER_IDS: "",
+    } as Env);
+    const { service } = makeService([admin], repository, config);
+    const access = await service.assertProjectVisible(ACTOR_ID, PROJECT_ID);
+    expect(access).toMatchObject({ admin: true, projectManager: false, accessLevel: "edit" });
+  });
+
   it("projectScope：成员 → ids 并集（名册 ∪ 责任人）", async () => {
     const repository = new FakePermissionRepository();
     repository.memberIds = [PROJECT_ID];

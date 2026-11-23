@@ -5,7 +5,6 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "access.sourceProjectViewGrant": "プロジェクトの閲覧権限",
   "pd.grants.import": "閲覧権限を一括追加",
   "pd.grants.members": "WeCom グループメンバー一覧",
-  "pd.grants.format": "WeCom からコピーした一覧を貼り付けます。セミコロンか改行で区切り、社員番号やメールアドレスも入力できます。",
   "pd.grants.preview": "一覧をプレビュー",
   "pd.grants.add": "閲覧権限を付与（{n} 人）",
   "pd.grants.confirmAccount": "社員番号かメールでアカウントを確認",

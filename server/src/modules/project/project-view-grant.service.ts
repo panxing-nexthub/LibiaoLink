@@ -179,8 +179,8 @@ export class ProjectViewGrantService {
 
   private async assertManager(projectId: string, actorId: string): Promise<void> {
     const access = await this.permission.assertProjectVisible(actorId, projectId);
-    if (!access.projectManager) {
-      throw new AppError("FORBIDDEN", "仅本项目的项目经理可以管理项目只读授权");
+    if (!access.projectManager && access.admin !== true) {
+      throw new AppError("FORBIDDEN", "仅本项目的项目经理或系统管理员可以管理项目仅浏览授权");
     }
   }
 }

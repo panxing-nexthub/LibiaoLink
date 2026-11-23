@@ -2337,7 +2337,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                       }
                     >
                       <div className="mb-3 shrink-0">
-                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm">
+                        <div className="flex min-w-0 items-center text-sm">
                           <input
                             id={"template-name-" + template.id}
                             type="text"
@@ -2357,12 +2357,54 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                             }
                             className={
                               "-mx-1 flex-1 truncate rounded px-1 font-semibold text-zinc-800 outline-none transition hover:bg-white/40 focus:bg-white/70 disabled:cursor-not-allowed " +
-                              // 英文名用 12rem 换行阈值；中文也保留 8.5rem，避免「编辑中 + 保存 + 删除 + 计数」把模板名压成「硬...」。
+                              // 名称独占第一行；中英文都保留可读最小宽度，不再和按钮抢行。
                               (isLocalizedLocale(locale) ? "min-w-[12rem]" : "min-w-[8.5rem]")
                             }
                           />
-                          {/* 「计数 / 添加节点 / 保存 / 删除」收成一组：放得下就一行右对齐；英文面板放不下时整组换到第二行（名字优先占满第一行）。 */}
-                          <span className="ml-auto flex min-w-0 items-center gap-2">
+                        </div>
+                        <div
+                          data-template-creator={template.id}
+                          data-template-visibility={template.visibility}
+                          className="mt-1.5 flex min-h-5 flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] leading-5 text-zinc-500"
+                        >
+                          <span
+                            className="min-w-0 truncate"
+                            title={t("tpl.creator", { name: template.createdByName ?? t("tpl.creatorSystem") })}
+                          >
+                            {t("tpl.creator", { name: template.createdByName ?? t("tpl.creatorSystem") })}
+                          </span>
+                          <span aria-hidden="true" className="shrink-0 text-zinc-300">·</span>
+                          {canChangeTemplateVisibility(template.createdBy) && isEditing ? (
+                            <div data-template-visibility-control={template.id} className="w-[8.75rem] shrink-0">
+                              <SelectMenu
+                                compact
+                                value={template.visibility}
+                                options={[
+                                  { value: "private", label: t("tpl.visibility.private") },
+                                  { value: "public", label: t("tpl.visibility.public") },
+                                ]}
+                                onChange={(next) => {
+                                  setTemplateVisibility(template.id, next as TemplateVisibility);
+                                }}
+                                ariaLabel={t("tpl.visibility.editTitle")}
+                                disabled={savingTemplateId === template.id}
+                                popoverClassName="z-[80]"
+                              />
+                            </div>
+                          ) : (
+                            <span
+                              className="shrink-0"
+                              title={
+                                canChangeTemplateVisibility(template.createdBy)
+                                  ? t("tpl.edit.visibilityLockedTitle")
+                                  : t("tpl.visibility.systemHint")
+                              }
+                            >
+                              {t(template.visibility === "private" ? "tpl.visibility.private" : "tpl.visibility.public")}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs">
                             <span aria-label={t("tpl.nodes.selectedAria")} className="shrink-0 text-xs text-zinc-500">
                               {t("tpl.nodes.n", { n: nodeCount })}
                             </span>
@@ -2457,49 +2499,6 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                                 scope="panel"
                               />
                             ) : null}
-                          </span>
-                        </div>
-                        <div
-                          data-template-creator={template.id}
-                          data-template-visibility={template.visibility}
-                          className="mt-1.5 flex min-h-5 flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] leading-5 text-zinc-500"
-                        >
-                          <span
-                            className="min-w-0 truncate"
-                            title={t("tpl.creator", { name: template.createdByName ?? t("tpl.creatorSystem") })}
-                          >
-                            {t("tpl.creator", { name: template.createdByName ?? t("tpl.creatorSystem") })}
-                          </span>
-                          <span aria-hidden="true" className="shrink-0 text-zinc-300">·</span>
-                          {canChangeTemplateVisibility(template.createdBy) && isEditing ? (
-                            <div data-template-visibility-control={template.id} className="w-[8.75rem] shrink-0">
-                              <SelectMenu
-                                compact
-                                value={template.visibility}
-                                options={[
-                                  { value: "private", label: t("tpl.visibility.private") },
-                                  { value: "public", label: t("tpl.visibility.public") },
-                                ]}
-                                onChange={(next) => {
-                                  setTemplateVisibility(template.id, next as TemplateVisibility);
-                                }}
-                                ariaLabel={t("tpl.visibility.editTitle")}
-                                disabled={savingTemplateId === template.id}
-                                popoverClassName="z-[80]"
-                              />
-                            </div>
-                          ) : (
-                            <span
-                              className="shrink-0"
-                              title={
-                                canChangeTemplateVisibility(template.createdBy)
-                                  ? t("tpl.edit.visibilityLockedTitle")
-                                  : t("tpl.visibility.systemHint")
-                              }
-                            >
-                              {t(template.visibility === "private" ? "tpl.visibility.private" : "tpl.visibility.public")}
-                            </span>
-                          )}
                         </div>
                         {/* 提示行固定高度：出现 / 消失都不顶动下方列表（否则拖拽时会跟着抖）；
                             不拖拽时这一行留给「未保存 / 冲突」状态 + 「放弃改动」出路（Push 264 追订） */}

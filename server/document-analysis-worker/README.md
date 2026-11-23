@@ -27,6 +27,7 @@ LibiaoLink 项目文件 AI 读取 worker。独立容器运行，避免把 LibreO
 
 - DB_HOST / DB_PORT / DB_NAME（默认 postgres / 5432 / libiaolink）
 - S3_ENDPOINT / S3_REGION / S3_BUCKET / S3_FORCE_PATH_STYLE
+  - **正式生产**且 worker 与 MinIO 同处 `libiaolink-prod` 网络时，使用 `S3_ENDPOINT=http://minio:9000`、`S3_FORCE_PATH_STYLE=true`。不要用公网域名 `https://pm.libiaorobot.com` 作为 boto3 S3 端点：Nginx / MinIO 的桶路径 301 会触发 botocore 区域探测递归，导致 worker 下载失败。
 - DOCUMENT_ANALYSIS_MAX_PAGES（默认 20）
 - DOCUMENT_ANALYSIS_MAX_FILE_MB（默认 200）
 - DOCUMENT_ANALYSIS_MAX_TOKENS（默认 6000）

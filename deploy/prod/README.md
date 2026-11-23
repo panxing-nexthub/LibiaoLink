@@ -134,6 +134,16 @@
 
 > **边界 / 回滚**：仅测试机 `10.1.104.44` 与正式机 `10.1.103.44`；测试机先行验证后，正式机使用同一前端发布件。回滚：恢复各自 `frontend-dist-before.tar.gz` 到 `/opt/libiaolink/frontend/dist`，恢复 `RELEASE_MANIFEST.json.before`；测试机重建 web，正式机使用 base + CAD compose 重建 web。
 
+> **2026-11-22 01:07 仪表盘项目当前阶段改用项目空间最新阶段（正式机 server/shared · prod-20261122-0107-px-dashboard-latest-stage-eb8ab8c6）**：代码来源 PR #991 / main `eb8ab8c6`；release = `prod-20261122-0107-px-dashboard-latest-stage-eb8ab8c6`，previous = `prod-20261122-0050-px-dashboard-drilldown-d3a0acfe`；staging = `/srv/data/deploy-prod-20261122-0107-px-dashboard-latest-stage-eb8ab8c6/staging`。
+
+> **改动 / 验收**：全部项目仪表盘的「项目当前阶段」、负责人阶段堆叠 / 分段及项目下钻「当前阶段」改取项目空间 `ProjectSummary.latestStage` 同口径；未归档项目取已动工任务中九阶段序最靠后的阶段，无动工任务回落 `projects.stage_key`；归档项目继续按异常归档 / 验收归档 / 归档-临时任务分组。正式机 2026 年项目分布为售前 2 / 装配 1 / 安装 2 / 生产 1 / 验收 2，阶段列 5 个，不再全部落在售前；console error 0。
+
+> **发布件 / 安装**：`server-dist.tar.gz` 1,352,426 B / `e05c89a3…`；`shared-dist.tar.gz` 274,727 B / `fb9ab9a2…`；`build-info.json` 394 B / `dfa3c2e8…`；`release-meta.json` 709 B / `41b4aa85…`；`server-files.sha256` 81,768 B / `0b98ea81…`；`shared-files.sha256` 10,581 B / `90c8526b…`；`release-files.sha256` 508 B / `89ea1671…`。线上 server 795 / shared 120 文件；frontend 不变；api / worker / web 强制重建。
+
+> **验证 / 备份 / 清单**：`/`、`/healthz`、`/readyz` 200，readyz 四项 true；web / api / worker healthy，RestartCount 0 / OOM false、近 10 分钟错误 0。备份 `/srv/data/backups/before-prod-20261122-0107-px-dashboard-latest-stage-eb8ab8c6`，1,664,122 B / 6 文件 / SHA256SUMS `454f98bb…`；server 1,356,143 B / `eb292f26…`、shared 299,793 B / `936dd7b5…`、原 manifest 7,717 B / `44c6cad7…`。新 manifest 4,508 B / `43656c4a…`。
+
+> **边界 / 回滚**：仅正式机 `10.1.103.44`；测试机已先行验证；无前端 / 数据库结构 / 迁移 / Compose / env / Secret / Nginx / MinIO / CAD 变更。回滚：恢复 server / shared 备份 dist 并重建 api / worker / web，再恢复 `RELEASE_MANIFEST.json.before`。
+
 > **2026-11-22 00:50–00:53 全部项目仪表盘下钻与问题追踪改造（正式机 full-stack + 迁移 0106–0110 · prod-20261122-0050-px-dashboard-drilldown-d3a0acfe）**：代码来源 PR [#989](https://github.com/panxing-nexthub/LibiaoLink/pull/989) / main `d3a0acfe`；正式机 `pm.libiaorobot.com`（`10.1.103.44`）release = `prod-20261122-0050-px-dashboard-drilldown-d3a0acfe`，previous = `prod-20261121-1455-px-project-legacy-done-e3e26632`；staging = `/srv/data/deploy-prod-20261122-0050-px-dashboard-drilldown-d3a0acfe/staging`，备份 = `/srv/data/backups/before-prod-20261122-0050-px-dashboard-drilldown-d3a0acfe`。PR CI 6 / 6；同时带入 main #987 编辑并归档原子保存与 #988 归档恢复字段锁定。
 
 > **改动 / 验收**：正式机首次上线全部项目仪表盘改造：项目统计 / 项目当前阶段 / 三类负责人 / 问题归纳联动下钻；项目长列表、项目详情入口、问题附图预览与问题行定位高亮。shared typecheck / generate / check、server typecheck / build / 全量 2021 tests（75 skipped）、frontend typecheck / build 与回放脚本语法均通过。Chrome 实测正式机仪表盘加载、T-sort 2026 项目列表 2 项、点击项目进入「虹迪广州NIKE分拣改造项目」总览并正常渲染，console error 0。

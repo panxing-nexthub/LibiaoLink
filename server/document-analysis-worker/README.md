@@ -90,3 +90,11 @@ docker run -d --name libiaolink-document-analysis --restart unless-stopped --net
 - 不支持 .docm / .xlsm 宏文件
 - 单文件大小、单文档页数、模型超时和 LibreOffice 超时均有上限
 - 失败只写 status=failed，不覆盖历史成功结果以外的其他项目数据
+
+## API 与 AI 总结接入
+
+- `POST /api/v1/projects/{id}/document-analysis` 只插入 queued run；
+- worker 轮询 queued run，完成后写 `project_file_analyses`；
+- `GET /api/v1/projects/{id}/document-analysis` 返回最近 run + 当前文件版本摘要；
+- `GET /api/v1/projects/{id}/ai-context` 的 `fileAnalyses[]` 只消费当前文件版本的成功摘要；
+- AI 项目总结 prompt 升为 v3，文件摘要只作补充证据，不覆盖结构化项目数据。

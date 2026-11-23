@@ -5494,6 +5494,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/document-analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 项目文件 AI 分析视图：最近一次 run + 当前文件版本摘要 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 项目文件 AI 分析视图 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectDocumentAnalysisView"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** 排队项目文件 AI 分析（需 project.export；由 document-analysis worker 消费） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 排队后的 run */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectDocumentAnalysisRun"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{id}/stages/{key}/advance": {
         parameters: {
             query?: never;
@@ -14409,6 +14498,11 @@ export interface components {
             changes: components["schemas"]["ProjectAiChange"][];
             reports: components["schemas"]["ProjectAiReport"][];
             issues: components["schemas"]["ProjectAiIssue"][];
+            /**
+             * @description 项目文件 AI 分析摘要（仅当前文件版本的成功分析；日报 / 问题图片不进入）
+             * @default []
+             */
+            fileAnalyses: components["schemas"]["ProjectFileAiSummary"][];
             generatedAt: components["schemas"]["DateTime"];
             /** @description true = 任务 / 日报 / 问题 / 变更任一集合超出读取上限被截断 */
             truncated: boolean;
@@ -14821,6 +14915,28 @@ export interface components {
         ProjectDeliverableTypeCreateBody: {
             name: components["schemas"]["DeliverableType"];
         };
+        ProjectDocumentAnalysisRun: {
+            id: components["schemas"]["Uuid"];
+            projectId: components["schemas"]["Uuid"];
+            status: components["schemas"]["ProjectDocumentAnalysisRunStatus"];
+            promptVersion: string;
+            fileCount: number;
+            succeededCount: number;
+            failedCount: number;
+            skippedCount: number;
+            error: string | null;
+            startedAt: components["schemas"]["DateTime"] & (string | null);
+            finishedAt: components["schemas"]["DateTime"] & (string | null);
+            createdAt: components["schemas"]["DateTime"];
+            updatedAt: components["schemas"]["DateTime"];
+        } | null;
+        /** @enum {string} */
+        ProjectDocumentAnalysisRunStatus: "queued" | "running" | "succeeded" | "failed";
+        /** @description 项目文件 AI 分析：最近一次 run + 当前文件版本的成功摘要 */
+        ProjectDocumentAnalysisView: {
+            run: components["schemas"]["ProjectDocumentAnalysisRun"];
+            analyses: components["schemas"]["ProjectFileAnalysis"][];
+        };
         /** @description 首页分类计数；计数与列表同口径（同筛选条件）；五组固定返回，前端按需展示（A6） */
         ProjectFacets: {
             total: number;
@@ -14840,6 +14956,62 @@ export interface components {
             status: {
                 [key: string]: number;
             };
+        };
+        ProjectFileAiSummary: {
+            fileId: components["schemas"]["Uuid"];
+            fileVersionId: components["schemas"]["Uuid"];
+            fileName: string;
+            fileKind: components["schemas"]["ProjectFileAnalysisKind"];
+            summary: components["schemas"]["ProjectFileAnalysisSummary"];
+        };
+        ProjectFileAnalysis: {
+            id: components["schemas"]["Uuid"];
+            projectId: components["schemas"]["Uuid"];
+            fileId: components["schemas"]["Uuid"];
+            fileVersionId: components["schemas"]["Uuid"];
+            fileName: string;
+            fileKind: components["schemas"]["ProjectFileAnalysisKind"];
+            status: components["schemas"]["ProjectFileAnalysisStatus"];
+            summary: components["schemas"]["ProjectFileAnalysisSummary"] & (Record<string, never> | null);
+            modelId: string | null;
+            promptVersion: string;
+            error: string | null;
+            generatedAt: components["schemas"]["DateTime"] & (string | null);
+            createdAt: components["schemas"]["DateTime"];
+            updatedAt: components["schemas"]["DateTime"];
+        };
+        ProjectFileAnalysisFact: {
+            /** @enum {string} */
+            category: "basic_info" | "business" | "performance" | "scope" | "responsibility" | "site" | "network" | "power" | "team" | "schedule" | "safety" | "delivery" | "other";
+            key: string;
+            value: string | number | boolean | string[] | null;
+            unit?: string | null;
+            evidence: string;
+            confidence: number;
+            sourcePage?: {
+                pdfPage: number;
+                printedPageLabel: string | null;
+            };
+        };
+        /** @enum {string} */
+        ProjectFileAnalysisKind: "pdf" | "image" | "word" | "excel";
+        /** @enum {string} */
+        ProjectFileAnalysisStatus: "succeeded" | "failed" | "skipped";
+        ProjectFileAnalysisSummary: {
+            documentType: string;
+            purpose: string;
+            /** @default [] */
+            summaries: string[];
+            /** @default [] */
+            keyFacts: components["schemas"]["ProjectFileAnalysisFact"][];
+            /** @default [] */
+            risks: string[];
+            /** @default [] */
+            decisions: string[];
+            /** @default [] */
+            warnings: string[];
+            /** @default [] */
+            missing: string[];
         };
         /** @description 项目流程（阶段 + 节点 + 约束 + 状态）；导入即快照 */
         ProjectFlow: {

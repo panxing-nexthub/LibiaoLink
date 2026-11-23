@@ -13,6 +13,7 @@ import { UserService } from "../identity/index.js";
 import { FlowService, ProjectService } from "../project/index.js";
 import { IssueService, ReportService } from "../report-issue/index.js";
 import { TaskService } from "../task/index.js";
+import { DocumentAnalysisService } from "../document-analysis/index.js";
 
 /** 单页读取条数：与导出批次同量级，避免一次拉全表。 */
 const PAGE_LIMIT = 200;
@@ -73,18 +74,20 @@ export class ProjectAiContextService {
     private readonly reports: ReportService,
     private readonly issues: IssueService,
     private readonly users: UserService,
+    private readonly documentAnalyses: DocumentAnalysisService,
   ) {}
 
   async build(projectId: string, actorId: string): Promise<ProjectAiContext> {
     // 记录级可见性由 ProjectAccessGuard 先判；这里再取一次项目视图（同时兜 404）。
     const project = await this.projects.getProject(projectId, actorId);
 
-    const [stageList, taskResult, changeResult, reportResult, issueResult] = await Promise.all([
+    const [stageList, taskResult, changeResult, reportResult, issueResult, fileAnalyses] = await Promise.all([
       this.flow.listStages(projectId),
       this.collect((page, limit) => this.tasks.listForExport(projectId, { page, limit })),
       this.collect((page, limit) => this.changes.listProjectChangesForExport(projectId, { page, limit })),
       this.collect((page, limit) => this.reports.listForExport(projectId, { page, limit })),
       this.collect((page, limit) => this.issues.listForExport(projectId, { page, limit })),
+      this.documentAnalyses.forAi(projectId),
     ]);
 
     const tasks = taskResult.items.map((item): ProjectAiTask => ({
@@ -256,6 +259,7 @@ export class ProjectAiContextService {
       changes,
       reports,
       issues,
+      fileAnalyses,
       generatedAt: new Date().toISOString(),
       truncated:
         taskResult.truncated ||

@@ -52,6 +52,7 @@ function baseContext(overrides: Partial<ProjectAiContext> = {}): ProjectAiContex
     changes: [],
     reports: [],
     issues: [],
+    fileAnalyses: [],
     generatedAt: "2026-11-22T12:00:00.000Z",
     truncated: false,
     ...overrides,

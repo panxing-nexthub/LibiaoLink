@@ -9582,6 +9582,14 @@
               "$ref": "#/components/schemas/ProjectAiIssue"
             }
           },
+          "fileAnalyses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectFileAiSummary"
+            },
+            "default": [],
+            "description": "项目文件 AI 分析摘要（仅当前文件版本的成功分析；日报 / 问题图片不进入）"
+          },
           "generatedAt": {
             "$ref": "#/components/schemas/DateTime"
           },
@@ -11472,6 +11480,123 @@
         ],
         "description": "仅当前项目的项目编辑者（管理员、所管本项目的项目经理或部门 / 个人规则 edit）可新增；条目进入全站 deliverableType 字典，所有账号与项目可见"
       },
+      "ProjectDocumentAnalysisRun": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectDocumentAnalysisRunStatus"
+          },
+          "promptVersion": {
+            "type": "string"
+          },
+          "fileCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "succeededCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failedCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "skippedCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "startedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateTime"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "finishedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateTime"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/DateTime"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/DateTime"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "status",
+          "promptVersion",
+          "fileCount",
+          "succeededCount",
+          "failedCount",
+          "skippedCount",
+          "error",
+          "startedAt",
+          "finishedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "ProjectDocumentAnalysisRunStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "running",
+          "succeeded",
+          "failed"
+        ]
+      },
+      "ProjectDocumentAnalysisView": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/ProjectDocumentAnalysisRun"
+          },
+          "analyses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectFileAnalysis"
+            }
+          }
+        },
+        "required": [
+          "run",
+          "analyses"
+        ],
+        "description": "项目文件 AI 分析：最近一次 run + 当前文件版本的成功摘要"
+      },
       "ProjectFacets": {
         "type": "object",
         "properties": {
@@ -11525,6 +11650,301 @@
           "status"
         ],
         "description": "首页分类计数；计数与列表同口径（同筛选条件）；五组固定返回，前端按需展示（A6）"
+      },
+      "ProjectFileAiSummary": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "fileVersionId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "fileName": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "fileKind": {
+            "$ref": "#/components/schemas/ProjectFileAnalysisKind"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ProjectFileAnalysisSummary"
+          }
+        },
+        "required": [
+          "fileId",
+          "fileVersionId",
+          "fileName",
+          "fileKind",
+          "summary"
+        ]
+      },
+      "ProjectFileAnalysis": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "fileId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "fileVersionId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "fileName": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "fileKind": {
+            "$ref": "#/components/schemas/ProjectFileAnalysisKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectFileAnalysisStatus"
+          },
+          "summary": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProjectFileAnalysisSummary"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "modelId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "promptVersion": {
+            "type": "string"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generatedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateTime"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/DateTime"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/DateTime"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "fileId",
+          "fileVersionId",
+          "fileName",
+          "fileKind",
+          "status",
+          "summary",
+          "modelId",
+          "promptVersion",
+          "error",
+          "generatedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "ProjectFileAnalysisFact": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "basic_info",
+              "business",
+              "performance",
+              "scope",
+              "responsibility",
+              "site",
+              "network",
+              "power",
+              "team",
+              "schedule",
+              "safety",
+              "delivery",
+              "other"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 600
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "sourcePage": {
+            "type": "object",
+            "properties": {
+              "pdfPage": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "printedPageLabel": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "pdfPage",
+              "printedPageLabel"
+            ]
+          }
+        },
+        "required": [
+          "category",
+          "key",
+          "value",
+          "evidence",
+          "confidence"
+        ]
+      },
+      "ProjectFileAnalysisKind": {
+        "type": "string",
+        "enum": [
+          "pdf",
+          "image",
+          "word",
+          "excel"
+        ]
+      },
+      "ProjectFileAnalysisStatus": {
+        "type": "string",
+        "enum": [
+          "succeeded",
+          "failed",
+          "skipped"
+        ]
+      },
+      "ProjectFileAnalysisSummary": {
+        "type": "object",
+        "properties": {
+          "documentType": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 600
+          },
+          "summaries": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1500
+            },
+            "maxItems": 30,
+            "default": []
+          },
+          "keyFacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectFileAnalysisFact"
+            },
+            "maxItems": 30,
+            "default": []
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 600
+            },
+            "maxItems": 20,
+            "default": []
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 600
+            },
+            "maxItems": 20,
+            "default": []
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 20,
+            "default": []
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "maxItems": 20,
+            "default": []
+          }
+        },
+        "required": [
+          "documentType",
+          "purpose"
+        ]
       },
       "ProjectFlow": {
         "type": "object",
@@ -23930,6 +24350,96 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{id}/document-analysis": {
+      "get": {
+        "tags": [
+          "project-ai"
+        ],
+        "summary": "项目文件 AI 分析视图：最近一次 run + 当前文件版本摘要",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "项目文件 AI 分析视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocumentAnalysisView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "project-ai"
+        ],
+        "summary": "排队项目文件 AI 分析（需 project.export；由 document-analysis worker 消费）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "排队后的 run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocumentAnalysisRun"
                 }
               }
             }

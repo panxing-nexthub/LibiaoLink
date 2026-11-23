@@ -6,6 +6,7 @@ import { CadJobSchema, CadJobCreateBodySchema, CadJobCreateResponseSchema, CadNa
 import { DateOnlySchema, IdempotencyKeySchema, UuidSchema } from "./common/conventions.ts";
 import { StageKeySchema } from "./common/dicts.ts";
 import { ProjectAiContextSchema, ProjectAiSummaryGenerateBodySchema, ProjectAiSummarySchema } from "./modules/project-ai.ts";
+import { ProjectDocumentAnalysisViewSchema, ProjectDocumentAnalysisRunSchema } from "./modules/document-analysis.ts";
 import { ApiErrorSchema } from "./common/errors.ts";
 import {
   ProjectArchiveBodySchema,
@@ -1463,6 +1464,31 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     responses: {
       200: { description: "AI 项目总结", ...json(ProjectAiSummarySchema) },
       400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/projects/{id}/document-analysis",
+    tags: ["project-ai"],
+    summary: "项目文件 AI 分析视图：最近一次 run + 当前文件版本摘要",
+    request: { params: idParams },
+    responses: {
+      200: { description: "项目文件 AI 分析视图", ...json(ProjectDocumentAnalysisViewSchema) },
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/document-analysis",
+    tags: ["project-ai"],
+    summary: "排队项目文件 AI 分析（需 project.export；由 document-analysis worker 消费）",
+    request: { params: idParams },
+    responses: {
+      200: { description: "排队后的 run", ...json(ProjectDocumentAnalysisRunSchema) },
       403: commonErrors[403],
       404: commonErrors[404],
     },

@@ -10,7 +10,7 @@ import { ProjectAiModelClient } from "./project-ai.model.js";
 import { ProjectAiSummaryRepository, type ProjectAiSummaryRow } from "./project-ai-summary.repository.js";
 
 /** prompt 结构变更时递增：旧版本的缓存自动不再命中，不会被复用。 */
-export const PROJECT_AI_PROMPT_VERSION = "v2";
+export const PROJECT_AI_PROMPT_VERSION = "v3";
 
 /** 上下文指纹：去掉每次请求都会变的 generatedAt，其余字段按固定顺序序列化（构建时已排序）。 */
 export function hashProjectAiContext(context: ProjectAiContext): string {
@@ -100,6 +100,7 @@ export class ProjectAiSummaryService {
         tasks: context.tasks.length,
         reports: context.reports.length,
         issues: context.issues.length,
+        files: context.fileAnalyses.length,
       },
     });
     this.logger.log(

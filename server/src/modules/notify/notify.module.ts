@@ -27,6 +27,8 @@ import { RESOURCE_CHANGE_SINK } from "../../common/realtime/resource-change.js";
 import { createWecomAibotClientFromEnv, WecomAibotClient } from "./wecom.aibot.js";
 import { createWecomClientFromEnv, WecomClient } from "./wecom.client.js";
 import { PgRateWindowStore } from "./wecom.rate.pg.js";
+import { WecomProjectAccessRepository } from "./wecom-project-access.repository.js";
+import { WecomProjectAccessService } from "./wecom-project-access.service.js";
 
 /**
  * notify 模块（平台 · S7-4 · j1 / M5-04 首刀）：站内信投递内核 —— outbox `notify.message` 消费 +
@@ -64,6 +66,8 @@ import { PgRateWindowStore } from "./wecom.rate.pg.js";
     { provide: RESOURCE_CHANGE_SINK, useExisting: ResourceChangePublisher },
     NotifyGroupRepository,
     NotifyGroupService,
+    WecomProjectAccessRepository,
+    WecomProjectAccessService,
     ProjectGroupDeliveryAlertService,
     NotifyAppRepository,
     NotifyAppService,
@@ -93,6 +97,7 @@ import { PgRateWindowStore } from "./wecom.rate.pg.js";
     NotifyDeliveryService,
     NotifyDeliveryReadRepository,
     NotifyGroupService,
+    WecomProjectAccessService,
     ProjectGroupDeliveryAlertService,
     NotifyAppService,
     NotifyDmService,

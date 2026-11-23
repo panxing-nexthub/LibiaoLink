@@ -340,6 +340,47 @@ describe("企微智能机器人长连接客户端（M5-03-2 · P5）", () => {
     await client.stop();
   });
 
+  it("绑定提示和领取成功卡都仅定向更新点击人", async () => {
+    const { client, sockets } = makeClient();
+    const socket = await connect(client, sockets);
+    const card = {
+      card_type: "button_interaction" as const,
+      main_title: { title: "请先绑定企业微信" },
+      button_list: [{ text: "绑定后再领取", key: "claim-project-view", style: 1 }],
+      task_id: "original-card",
+    };
+    const pending = client.updateGroupCardForUser({
+      reqId: "button-callback-1", chatid: "group-chatid-0001", userid: "clicker", card,
+    });
+    await sleep(0);
+    expect(socket.lastFrame()).toEqual({
+      cmd: "aibot_respond_update_msg",
+      headers: { req_id: "button-callback-1" },
+      body: { response_type: "update_template_card", userids: ["clicker"], template_card: card },
+    });
+    socket.ackLast(0);
+    expect(await pending).toEqual({ ok: true, attempts: 1 });
+
+    const confirmation = {
+      card_type: "text_notice" as const,
+      task_id: card.task_id,
+      main_title: { title: "已领取项目只读权限" },
+      card_action: { type: 1 as const, url: "https://pm.libiaorobot.com/#/projects" },
+    };
+    const confirmationPending = client.updateGroupCardForUser({
+      reqId: "button-callback-2", chatid: "group-chatid-0001", userid: "clicker", card: confirmation,
+    });
+    await sleep(0);
+    expect(socket.lastFrame()).toEqual({
+      cmd: "aibot_respond_update_msg",
+      headers: { req_id: "button-callback-2" },
+      body: { response_type: "update_template_card", userids: ["clicker"], template_card: confirmation },
+    });
+    socket.ackLast(0);
+    expect(await confirmationPending).toEqual({ ok: true, attempts: 1 });
+    await client.stop();
+  });
+
   it("会话内回执（群）：传 chatid → 计入群桶（与主动群推送共享配额）", async () => {
     const { client, sockets } = makeClient({
       windows: [

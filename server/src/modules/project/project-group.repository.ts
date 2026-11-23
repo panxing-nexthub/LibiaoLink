@@ -106,6 +106,7 @@ export class ProjectGroupRepository {
           target: [wecomGroups.projectId],
           set: {
             chatid: input.chatid,
+            accessEpoch: sql`case when ${wecomGroups.chatid} <> excluded.chatid then gen_random_uuid() else ${wecomGroups.accessEpoch} end`,
             name: input.name,
             activatedAt: input.activatedAt,
             updatedAt: at,

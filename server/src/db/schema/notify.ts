@@ -188,6 +188,7 @@ export const wecomGroups = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     /** 企微会话 id（群消息回调 body.chatid 自动落库；契约同形正则）。 */
     chatid: text("chatid").notNull(),
+    accessEpoch: uuid("access_epoch").notNull().defaultRandom(),
     /** 群名 / 备注（维护用；可空）。 */
     name: text("name"),
     /** 绑定启用态（false = 暂停播报 / 群失效标记；投递层跳过）。 */
@@ -281,6 +282,39 @@ export const wecomAibotDmActivations = pgTable(
       "ck_wecom_aibot_dm_activations_last_binding_msgid",
       sql`${table.lastBindingMsgid} is null or char_length(${table.lastBindingMsgid}) between 1 and 128`,
     ),
+  ],
+);
+
+/** 群卡只能为发卡时的同一绑定版本授予只读访问。 */
+export const wecomProjectAccessCards = pgTable(
+  "wecom_project_access_cards",
+  {
+    id: uuid("id").primaryKey(),
+    groupId: bigint("group_id", { mode: "number" }).notNull().references(() => wecomGroups.id, { onDelete: "cascade" }),
+    groupEpoch: uuid("group_epoch").notNull(),
+    botId: text("bot_id").notNull(),
+    issuedBy: uuid("issued_by").notNull().references(() => users.id),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [index("ix_wecom_project_access_cards_group").on(table.groupId)],
+);
+
+/** 同一项目群绑定下，系统账号只能领取一次。 */
+export const wecomProjectReadGrants = pgTable(
+  "wecom_project_read_grants",
+  {
+    groupId: bigint("group_id", { mode: "number" }).notNull().references(() => wecomGroups.id, { onDelete: "cascade" }),
+    groupEpoch: uuid("group_epoch").notNull(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    activationId: bigint("activation_id", { mode: "number" }).notNull()
+      .references(() => wecomAibotDmActivations.id, { onDelete: "cascade" }),
+    cardId: uuid("card_id").notNull().references(() => wecomProjectAccessCards.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: "wecom_project_read_grants_pkey", columns: [table.groupId, table.groupEpoch, table.userId] }),
+    uniqueIndex("uq_wecom_project_read_grants_card_actor").on(table.cardId, table.activationId),
+    index("ix_wecom_project_read_grants_user").on(table.userId),
   ],
 );
 

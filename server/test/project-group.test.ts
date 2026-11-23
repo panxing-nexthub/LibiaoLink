@@ -73,6 +73,7 @@ function candidateRow(
 function groupRow(overrides: Partial<WecomGroupRow> & { projectId: string; chatid: string }): WecomGroupRow {
   return {
     id: 1,
+    accessEpoch: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     name: null,
     enabled: true,
     activatedAt: null,

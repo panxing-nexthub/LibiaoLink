@@ -21,7 +21,12 @@ if (!botId || !secret || !chatid) {
   process.exit(2);
 }
 
-const env = loadEnv({ WECOM_BOT_ID: botId, WECOM_BOT_SECRET: secret });
+const env = loadEnv({
+  // The shared config validator requires a URL, but this probe does not open a database connection.
+  DATABASE_URL: "postgresql://127.0.0.1:1/unused",
+  WECOM_BOT_ID: botId,
+  WECOM_BOT_SECRET: secret,
+});
 const { aibot } = createWecomAibotClientFromEnv(env);
 const expected = { botId, chatid, taskId: "group-card-probe_" + randomUUID(), eventKey: "verify" };
 const participants = new Map();

@@ -7,7 +7,10 @@ import {
   type ProjectManagementRecordDeleteResponse,
 } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
+import type { AuditChangeEntry } from "../../db/schema/admin.js";
 import type { ProjectManagementRecordRow } from "../../db/schema/project-management.js";
+import { DatabaseService } from "../../db/database.service.js";
+import { AuditService } from "../audit/index.js";
 import { ProjectManagerEligibilityService } from "../permission/index.js";
 import {
   isBlankProjectManagementFields,
@@ -31,9 +34,11 @@ const DEFAULT_REGION = "未分类";
 @Injectable()
 export class ProjectManagementService {
   constructor(
+    private readonly database: DatabaseService,
     private readonly records: ProjectManagementRepository,
     private readonly managerEligibility: ProjectManagerEligibilityService,
     private readonly projectSnapshots: ProjectManagementSnapshotRepository,
+    private readonly audits: AuditService,
   ) {}
 
   async list(): Promise<ProjectManagementRecordList> {
@@ -45,7 +50,7 @@ export class ProjectManagementService {
     return { items: rows.map((row) => this.toContract(row, names, snapshotOf(snapshots, row.code))) };
   }
 
-  async create(body: ProjectManagementRecordCreateBody): Promise<ProjectManagementRecord> {
+  async create(body: ProjectManagementRecordCreateBody, actorId: string | null = null): Promise<ProjectManagementRecord> {
     const managerIds = uniqueIds(body.managerIds ?? []);
     const implementationHandedOver = body.implementationHandedOver ?? false;
     const implementationEngineerIds = implementationHandedOver ? [] : uniqueIds(body.implementationEngineerIds ?? []);
@@ -74,7 +79,22 @@ export class ProjectManagementService {
       throw new AppError("VALIDATION_FAILED", "空记录不创建；请至少填写一项项目准备信息");
     }
 
-    const row = await this.records.insert(values, new Date());
+    const at = new Date();
+    const row = await this.database.db.transaction(async (tx) => {
+      const inserted = await this.records.insert(values, at, tx);
+      await this.audits.record(tx, {
+        actorId,
+        action: "create",
+        objectType: "project_management_record",
+        objectId: inserted.id,
+        projectCode: auditProjectCodeOf(inserted),
+        projectName: auditProjectNameOf(inserted),
+        summary: "新建项目管理记录" + auditRecordSuffix(inserted),
+        changes: null,
+        metadata: { source: "project_management", versionAfter: inserted.version },
+      });
+      return inserted;
+    });
     const [names, snapshots] = await Promise.all([
       this.namesOf([...managerIds, ...implementationEngineerIds]),
       this.projectSnapshots.loadByCodes([row.code]),
@@ -82,7 +102,7 @@ export class ProjectManagementService {
     return this.toContract(row, names, snapshotOf(snapshots, row.code));
   }
 
-  async update(id: string, body: ProjectManagementRecordUpdateBody): Promise<ProjectManagementRecord> {
+  async update(id: string, body: ProjectManagementRecordUpdateBody, actorId: string | null = null): Promise<ProjectManagementRecord> {
     const current = await this.records.findById(id);
     if (current === null) {
       throw new AppError("NOT_FOUND", "项目管理记录不存在：" + id);
@@ -132,7 +152,41 @@ export class ProjectManagementService {
       throw new AppError("VALIDATION_FAILED", "清空后的空记录请使用 DELETE 删除，不能保存为空记录");
     }
 
-    const row = await this.records.updateIfVersion(id, body.version, patch, new Date());
+    const auditNames = await this.namesOf(
+      uniqueIds([
+        ...current.managerIds,
+        ...current.implementationEngineerIds,
+        ...(patch.managerIds ?? []),
+        ...(patch.implementationEngineerIds ?? []),
+      ]),
+    );
+    const beforeAudit = auditSnapshotOf(current, auditNames);
+    const at = new Date();
+    const row = await this.database.db.transaction(async (tx) => {
+      const updated = await this.records.updateIfVersion(id, body.version, patch, at, tx);
+      if (updated === null) {
+        return null;
+      }
+      const changes = auditChangesOf(beforeAudit, auditSnapshotOf(updated, auditNames));
+      if (changes.length > 0) {
+        await this.audits.record(tx, {
+          actorId,
+          action: "update",
+          objectType: "project_management_record",
+          objectId: updated.id,
+          projectCode: auditProjectCodeOf(updated),
+          projectName: auditProjectNameOf(updated),
+          summary: "修改项目管理记录" + auditRecordSuffix(updated),
+          changes,
+          metadata: {
+            source: "project_management",
+            versionBefore: current.version,
+            versionAfter: updated.version,
+          },
+        });
+      }
+      return updated;
+    });
     if (row === null) {
       throw new AppError("VERSION_CONFLICT", "记录已被其他账号更新，请刷新后重试");
     }
@@ -143,14 +197,31 @@ export class ProjectManagementService {
     return this.toContract(row, names, snapshotOf(snapshots, row.code));
   }
 
-  async remove(id: string, version: number): Promise<ProjectManagementRecordDeleteResponse> {
-    const deleted = await this.records.deleteIfVersion(id, version);
-    if (deleted !== null) {
-      return { id: deleted, deleted: true };
-    }
+  async remove(id: string, version: number, actorId: string | null = null): Promise<ProjectManagementRecordDeleteResponse> {
     const current = await this.records.findById(id);
     if (current === null) {
       throw new AppError("NOT_FOUND", "项目管理记录不存在：" + id);
+    }
+    const deleted = await this.database.db.transaction(async (tx) => {
+      const deletedId = await this.records.deleteIfVersion(id, version, tx);
+      if (deletedId === null) {
+        return null;
+      }
+      await this.audits.record(tx, {
+        actorId,
+        action: "delete",
+        objectType: "project_management_record",
+        objectId: current.id,
+        projectCode: auditProjectCodeOf(current),
+        projectName: auditProjectNameOf(current),
+        summary: "删除项目管理记录" + auditRecordSuffix(current),
+        changes: null,
+        metadata: { source: "project_management", versionBefore: current.version },
+      });
+      return deletedId;
+    });
+    if (deleted !== null) {
+      return { id: deleted, deleted: true };
     }
     throw new AppError("VERSION_CONFLICT", "记录已被其他账号更新，请刷新后重试");
   }
@@ -241,5 +312,49 @@ function snapshotOf(
 function sameIds(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
+
+const auditProjectCodeOf = (row: ProjectManagementRecordRow): string | null =>
+  row.code.trim() === "" ? null : row.code.trim();
+
+const auditProjectNameOf = (row: ProjectManagementRecordRow): string | null =>
+  row.name.trim() === "" ? null : row.name.trim();
+
+const auditRecordSuffix = (row: ProjectManagementRecordRow): string => {
+  const parts = [row.code.trim(), row.name.trim()].filter((part) => part !== "");
+  return parts.length === 0 ? "" : "「" + parts.join(" / ") + "」";
+};
+
+const auditSnapshotOf = (
+  row: ProjectManagementRecordRow,
+  names: ReadonlyMap<string, string>,
+): Record<string, unknown> => ({
+  code: row.code,
+  name: row.name,
+  managerIds: row.managerIds.map((id) => names.get(id) ?? id),
+  implementationEngineerIds: row.implementationEngineerIds.map((id) => names.get(id) ?? id),
+  implementationHandedOver: row.implementationHandedOver,
+  implementationMethod: row.implementationMethod,
+  riskReminder: row.riskReminder,
+  region: row.region,
+  currentStageOverride: row.currentStageOverride,
+  startupCompletedAtOverride: row.startupCompletedAtOverride,
+  arrivalDateOverride: row.arrivalDateOverride,
+  plannedStartDateOverride: row.plannedStartDateOverride,
+  plannedEndDateOverride: row.plannedEndDateOverride,
+  implementationDaysOverride: row.implementationDaysOverride,
+});
+
+const auditChangesOf = (
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): AuditChangeEntry[] => {
+  const changes: AuditChangeEntry[] = [];
+  for (const field of Object.keys(before)) {
+    if (JSON.stringify(before[field]) !== JSON.stringify(after[field])) {
+      changes.push({ field, from: before[field], to: after[field] });
+    }
+  }
+  return changes;
+};
 
 export type { ProjectManagementUserSnapshot };

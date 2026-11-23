@@ -13,8 +13,10 @@ type TaskNodeCardProps = {
    * 原生 HTML5 拖拽已撤回：拖动期间浏览器会把 `wheel` 吞掉，「拖着的同时滚轮翻列表」就不成立。
    */
   grab?: boolean;
-  /** 按下卡片（指针拖动）：真拖动由调用方按位移阈值判定，没过阈值就是点一下。 */
+  /** 按下卡片（指针拖动）：真拖动由调用方按位移阈值判定；没过阈值就是一次 click（可由 `onClick` 接住）。 */
   onPointerDown?: (event: PointerEvent<HTMLElement>) => void;
+  /** 点击卡片主体（例如左列节点点一下加入当前「编辑中」的模板）；卡内编辑 / 删除按钮会自行阻止冒泡。 */
+  onClick?: () => void;
   /** 拖动中跟着鼠标走的那一块（半透明 + 轻磨砂，能透出底下的插入线）。 */
   ghost?: boolean;
   /**
@@ -50,6 +52,7 @@ export function TaskNodeCard({
   subtitle,
   grab,
   onPointerDown,
+  onClick,
   ghost,
   onDelete,
   deleteLabel,
@@ -66,12 +69,15 @@ export function TaskNodeCard({
         (ghost === true
           ? "bg-white/[0.6] shadow-[0_18px_40px_-18px_rgba(15,23,42,0.35)] backdrop-blur-[5px] backdrop-saturate-150"
           : "bg-white shadow-[0_8px_24px_rgba(149,157,165,0.2)]") +
-        (grab === true ? " cursor-grab active:cursor-grabbing" : "") +
+        (grab === true
+          ? " cursor-grab active:cursor-grabbing"
+          : onClick === undefined ? "" : " cursor-pointer") +
         (highlighted === true ? " ring-2 ring-amber-400/80" : "") +
         (dimmed === true ? " opacity-40" : "")
       }
       title={subtitle === undefined || subtitle === "" ? title : title + " / " + subtitle}
       onPointerDown={onPointerDown}
+      onClick={onClick}
     >
       <svg
         className="absolute -left-[31px] top-[32px] w-20 rotate-90 fill-[#04e4003a]"

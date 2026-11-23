@@ -11,9 +11,9 @@
  *
  * 它做什么：用一条**临时会话**（跑完撤销）+ 一个**临时节点**（跑完删）+ 一份**临时模板**（跑完软删）+ 一个**临时项目**（跑完硬删）在真机浏览器里跑一遍：
  *   ① 模板页右侧面板 = 模板接口（面板数 / 名称 / 节点顺序与 GET /api/v1/task-templates?stage= 一致）；
- *   ② 「＋ 新建模板」→ POST 落库（默认名「未命名模板」、插到最前、焦点在名字上）；
- *   ③ 左列拖一个节点进新面板 → 面板内出现（本地草稿）；「保存」→ PATCH（nodeIds 全量替换 + version 0 → 1）；
- *   ④ **刷新页面**：新模板 / 名字 / 节点都还在（落库 = 刷新后保留）—— 这是第二段的核心验收点；
+ *   ② 「＋ 新建模板」→ POST 落库（默认名「未命名模板」、插到最前、焦点在名字上、自动进入唯一「编辑中」）；
+ *   ③ 编辑中左列拖一个节点进新面板 → 面板内出现（本地草稿）；「保存」→ PATCH（nodeIds 全量替换 + version 0 → 1）并退出编辑；
+ *   ④ **刷新页面**：新模板 / 名字 / 节点都还在（落库 = 刷新后保留）—— 这是第二段的核心验收点；刷新后再验「未编辑不能加节点」「下拉选编辑中后点击节点自动加入」「同时只一份编辑中」；
  *   ⑤ 面板红胶囊删除 → 底部确认条 → DELETE 软删（deleted_at 置位、读面 404、审计 action=delete）；
  *   ⑥ 乐观锁：拿旧 version 再 PATCH → 409 VERSION_CONFLICT；
  *   ⑦ 「项目总览 → 添加任务」卡片的「模板」标签 = 同一份模板接口（名称 / 节点数与接口一致）→ 点一条 → 任务落库；
@@ -136,6 +136,18 @@ const PANEL_NAMES = "(function(){var ss=document.querySelectorAll(" + q("[data-t
 const PANEL_COUNTS = "(function(){var ss=document.querySelectorAll(" + q("[data-template-panel]") + ");var out=[];for(var i=0;i<ss.length;i++){var cs=ss[i].querySelectorAll(" + q("span") + ");var v=" + q("") + ";for(var j=0;j<cs.length;j++){if((cs[j].getAttribute(" + q("aria-label") + ")||" + q("") + ")===" + q("已选节点数") + "){v=(cs[j].textContent||" + q("") + ").trim();}}out.push(v);}return out;})()";
 /** 某块面板的「保存 / 已保存 / 保存中…」按钮文案（面板不存在 / 只读 = null）。 */
 const PANEL_SAVE_TEXT = (name) => "(function(){var s=" + PANEL(name) + ";if(s===null){return null;}var bs=s.querySelectorAll(" + q("button") + ");for(var i=0;i<bs.length;i++){var t=(bs[i].textContent||" + q("") + ").trim();if(t===" + q("保存") + "||t===" + q("已保存") + "||t===" + q("保存中…") + "){return t;}}return null;})()";
+/** 面板的编辑状态（saved / editing）。 */
+const PANEL_STATUS = (name) => "(function(){var s=" + PANEL(name) + ";return s===null?null:s.getAttribute(" + q("data-template-status") + ");})()";
+/** 点模板列头的状态下拉触发器。 */
+const CLICK_TEMPLATE_STATUS = (name) => "(function(){var s=" + PANEL(name) + ";if(s===null){return false;}var w=s.querySelector(" + q("[data-template-status-menu]") + ");if(w===null){return false;}var b=w.querySelector(" + q("button") + ");if(b===null){return false;}b.click();return true;})()";
+/** 点已打开状态下拉里的选项（按文案；编辑中 / 已保存）。 */
+const CLICK_STATUS_OPTION = (label) => "(function(){var bs=document.querySelectorAll(" + q("[role=option]") + ");for(var i=0;i<bs.length;i++){if(((bs[i].textContent||" + q("") + ").trim())===" + JSON.stringify(label) + "){bs[i].click();return true;}}return false;})()";
+/** 当前处于编辑中的模板名（数组；只允许一份）。 */
+const EDITING_PANELS = "(function(){var ss=document.querySelectorAll(" + q("[data-template-editing=true]") + ");var out=[];for(var i=0;i<ss.length;i++){var t=ss[i].querySelector(" + q("input") + ");out.push(t===null?" + q("") + ":t.value);}return out;})()";
+/** 是否有信息档 Toast（未编辑时点节点应给出的提示）。 */
+const HAS_INFO_TOAST = "(function(){return document.querySelector(" + q("[data-toast=info]") + ")!=null;})()";
+/** 点面板里的「放弃改动」。 */
+const CLICK_TEMPLATE_DISCARD = (name) => "(function(){var s=" + PANEL(name) + ";if(s===null){return false;}var b=s.querySelector(" + q("[data-template-discard]") + ");if(b===null){return false;}b.click();return true;})()";
 /** 某块面板的名称输入框（用来改名 / 读回名字）。 */
 const PANEL_NAME_INPUT = (name) => "(function(){var s=" + PANEL(name) + ";if(s===null){return null;}return s.querySelector(" + q("input") + ");})()";
 /** 用 aria-label 点某块面板里的按钮（保存 / 删除模板 X）。 */
@@ -144,6 +156,12 @@ const CLICK_BY_LABEL = (label) => "(function(){var bs=document.querySelectorAll(
 const LEFT_SECTION = "(function(){var ss=document.querySelectorAll(" + q("section") + ");for(var i=0;i<ss.length;i++){if((ss[i].innerText||" + q("") + ").indexOf(" + q("任务节点") + ")===0){return ss[i];}}return null;})()";
 /** 左列里某标题的卡片（返回 DOM 元素给 CDP 量坐标；不要交给 returnByValue）。 */
 const LEFT_CARD = (title) => "(function(){var s=" + LEFT_SECTION + ";if(s===null){return null;}var es=s.querySelectorAll(" + q("article") + ");for(var i=0;i<es.length;i++){var t=es[i].getAttribute(" + q("title") + ")||" + q("") + ";if(t.indexOf(" + JSON.stringify(title) + ")===0){return es[i];}}return null;})()";
+/** 点左列第一张节点卡片（程序化 click，走 React 的 onClick）。 */
+const CLICK_FIRST_LEFT_CARD = "(function(){var s=" + LEFT_SECTION + ";if(s===null){return false;}var es=s.querySelectorAll(" + q("article") + ");if(es.length===0){return false;}es[0].click();return true;})()";
+/** 左列节点滚动区：面板是否按视口封顶、列表是否真的能内部滚动。 */
+const LEFT_NODE_SCROLL_STATS = "(function(){var s=" + LEFT_SECTION + ";if(s===null){return null;}var sc=s.querySelector(" + q("[data-template-node-scroll]") + ");if(sc===null){return null;}var r=s.getBoundingClientRect();var cs=getComputedStyle(sc);var before=sc.scrollTop;sc.scrollTop=120;var moved=sc.scrollTop>0;sc.scrollTop=before;return {panelTop:r.top,panelBottom:r.bottom,panelHeight:r.height,viewportHeight:window.innerHeight,clientHeight:sc.clientHeight,scrollHeight:sc.scrollHeight,overflowY:cs.overflowY,canScroll:moved};})()";
+/** 某块模板面板的节点滚动区：同上。 */
+const PANEL_SCROLL_STATS = (name) => "(function(){var panel=" + PANEL(name) + ";if(panel===null){return null;}var sc=panel.querySelector(" + q("[data-template-panel-scroll]") + ");if(sc===null){return null;}var r=panel.getBoundingClientRect();var cs=getComputedStyle(sc);var before=sc.scrollTop;sc.scrollTop=120;var moved=sc.scrollTop>0;sc.scrollTop=before;return {panelTop:r.top,panelBottom:r.bottom,panelHeight:r.height,viewportHeight:window.innerHeight,clientHeight:sc.clientHeight,scrollHeight:sc.scrollHeight,overflowY:cs.overflowY,canScroll:moved};})()";
 /** 点某块面板里的「保存」按钮（按钮无 aria-label，按文案点）。 */
 const CLICK_PANEL_SAVE = (name) => "(function(){var s=" + PANEL(name) + ";if(s===null){return false;}var bs=s.querySelectorAll(" + q("button") + ");for(var i=0;i<bs.length;i++){if((bs[i].textContent||" + q("") + ").trim()===" + q("保存") + "){bs[i].click();return true;}}return false;})()";
 /** 按 aria-label 填输入框（React 受控输入：用原生 setter + input 事件）。 */
@@ -250,6 +268,28 @@ try {
   check("面板内卡片顺序 = 服务端 seq 顺序（前 3 条）", firstNodes !== null && expectTitles.every((title, index) => String(firstNodes[index]).indexOf(title) === 0), flat(firstNodes === null ? "" : firstNodes.slice(0, 3).join(" / ")));
   check("「＋ 新建模板」入口在（写权限账号）", (await ev(HAS_NEW_TEMPLATE_BUTTON)) === true);
 
+  // 2026-11-23：节点再多也只在面板内滚，面板底边不能越过视口。
+  const leftScroll = await ev(LEFT_NODE_SCROLL_STATS);
+  check(
+    "左列节点区按视口封顶，并可在面板内滚动",
+    leftScroll !== null &&
+      leftScroll.panelBottom <= leftScroll.viewportHeight + 1 &&
+      leftScroll.overflowY === "auto" &&
+      leftScroll.scrollHeight > leftScroll.clientHeight &&
+      leftScroll.canScroll === true,
+    JSON.stringify(leftScroll),
+  );
+  const firstPanelScroll = baselineFirst === null ? null : await ev(PANEL_SCROLL_STATS(baselineFirst.name));
+  check(
+    "模板节点区按视口封顶，并可在面板内滚动",
+    firstPanelScroll !== null &&
+      firstPanelScroll.panelBottom <= firstPanelScroll.viewportHeight + 1 &&
+      firstPanelScroll.overflowY === "auto" &&
+      firstPanelScroll.scrollHeight > firstPanelScroll.clientHeight &&
+      firstPanelScroll.canScroll === true,
+    JSON.stringify(firstPanelScroll),
+  );
+
   // ---------- ② 新建模板（POST）----------
   check("点「＋ 新建模板」", (await ev(CLICK_NEW_TEMPLATE)) === true);
   await sleep(2600);
@@ -257,6 +297,7 @@ try {
   check("新建落库：total +1", afterCreate.json !== null && afterCreate.json.total === baselineTotal + 1, String(baselineTotal) + " -> " + String(afterCreate.json === null ? -1 : afterCreate.json.total));
   const namesAfterCreate = await ev(PANEL_NAMES);
   check("新面板插到最前（默认名「未命名模板」）", namesAfterCreate !== null && namesAfterCreate[0] === "未命名模板" && namesAfterCreate.length === baselineTotal + 1, flat(namesAfterCreate === null ? "" : namesAfterCreate.join(" / ")));
+  check("新建模板自动进入编辑中（唯一编辑项）", (await ev(PANEL_STATUS("未命名模板"))) === "editing" && (await ev(EDITING_PANELS)).length === 1, String(await ev(PANEL_STATUS("未命名模板"))) + " / " + flat(await ev(EDITING_PANELS)));
   const created = afterCreate.json === null ? undefined : afterCreate.json.items.filter((item) => item.name === "未命名模板")[0];
   templateId = created === undefined ? "" : created.id;
   check("服务端那份是新模板（version 0 / nodes 空）", created !== undefined && created.version === 0 && created.nodes.length === 0, created === undefined ? "未找到" : JSON.stringify({ id: created.id, version: created.version, nodes: created.nodes.length }));
@@ -289,6 +330,7 @@ try {
   check("PATCH 落库：nodes = 拖进去的那一条（seq 10）", saved !== undefined && saved.nodes.length === 1 && saved.nodes[0].nodeId === nodeId && saved.nodes[0].seq === 10, saved === undefined ? "" : JSON.stringify(saved.nodes));
   check("乐观锁 version 0 -> 1", saved !== undefined && saved.version === 1, saved === undefined ? "" : "v" + String(saved.version));
   check("按钮回到「已保存」", (await ev(PANEL_SAVE_TEXT(templateName))) === "已保存", String(await ev(PANEL_SAVE_TEXT(templateName))));
+  check("保存后退出编辑中（状态 = saved）", (await ev(PANEL_STATUS(templateName))) === "saved" && (await ev(EDITING_PANELS)).length === 0);
   const dbTemplate = templateId === "" ? { rows: [] } : await db.query("select name, stage_key, version, deleted_at from task_templates where id = $1", [templateId]);
   check("DB 行：task_templates 有名字 / 阶段 / version=1 / 未软删", dbTemplate.rows.length === 1 && dbTemplate.rows[0].name === templateName && dbTemplate.rows[0].stage_key === stageKey && dbTemplate.rows[0].version === 1 && dbTemplate.rows[0].deleted_at === null, JSON.stringify(dbTemplate.rows[0]));
   const dbLinks = templateId === "" ? { rows: [] } : await db.query("select seq from task_template_nodes where template_id = $1 order by seq", [templateId]);
@@ -299,6 +341,11 @@ try {
 
   // ---------- ④ 硬刷新后保留（落库的核心验收点）----------
   // 先做一处**不保存**的本地改名：硬刷新后它必须消失 —— 否则说明页面根本没重载，"刷新后还在"就是假的
+  check("点模板状态下拉", (await ev(CLICK_TEMPLATE_STATUS(templateName))) === true);
+  await sleep(250);
+  check("下拉选「编辑中」", (await ev(CLICK_STATUS_OPTION("编辑中"))) === true);
+  await sleep(450);
+  check("改名前已进入编辑中", (await ev(PANEL_STATUS(templateName))) === "editing");
   check("刷新前先留一处未保存的本地改名", (await ev("(function(){var el=" + PANEL_NAME_INPUT(templateName) + ";if(el===null){return false;}var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype," + q("value") + ").set;setter.call(el," + JSON.stringify(templateName + "-未保存") + ");el.dispatchEvent(new Event(" + q("input") + ",{bubbles:true}));return true;})()")) === true);
   await sleep(400);
   check("未保存态：按钮显示「保存」", (await ev(PANEL_SAVE_TEXT(templateName + "-未保存"))) === "保存", String(await ev(PANEL_SAVE_TEXT(templateName + "-未保存"))));
@@ -313,6 +360,30 @@ try {
   const nodesAfterReload = await ev(PANEL_TITLES(templateName));
   check("刷新后节点还在面板里（落库 + 读面 join 节点库）", nodesAfterReload !== null && nodesAfterReload.length === 1 && String(nodesAfterReload[0]).indexOf(nodeTitle) === 0, flat(nodesAfterReload === null ? "" : nodesAfterReload.join(" / ")));
   check("刷新后是已保存态", (await ev(PANEL_SAVE_TEXT(templateName))) === "已保存", String(await ev(PANEL_SAVE_TEXT(templateName))));
+
+  // ---------- ④b 状态门控 + 点击节点加入当前编辑模板（2026-11-23）----------
+  const countsBeforeGate = await ev(PANEL_COUNTS);
+  check("刷新后没有任何模板处于编辑中", (await ev(EDITING_PANELS)).length === 0);
+  check("未进入编辑中：点左列节点卡片", (await ev(CLICK_FIRST_LEFT_CARD)) === true);
+  await sleep(450);
+  check("未进入编辑中：不会加入模板（计数不变）", JSON.stringify(await ev(PANEL_COUNTS)) === JSON.stringify(countsBeforeGate), flat(await ev(PANEL_COUNTS)));
+  check("未进入编辑中：给出「先选编辑中」提示", (await ev(HAS_INFO_TOAST)) === true);
+  check("点模板状态下拉进入编辑中", (await ev(CLICK_TEMPLATE_STATUS(templateName))) === true);
+  await sleep(250);
+  check("下拉选「编辑中」", (await ev(CLICK_STATUS_OPTION("编辑中"))) === true);
+  await sleep(450);
+  check("只有这一份模板显示编辑中", (await ev(PANEL_STATUS(templateName))) === "editing" && (await ev(EDITING_PANELS)).length === 1, flat(await ev(EDITING_PANELS)));
+  check("编辑中：点击左列节点卡片", (await ev(CLICK_FIRST_LEFT_CARD)) === true);
+  await sleep(750);
+  check("编辑中：点击后节点自动追加（计数 +1）", (await ev(PANEL_COUNTS))[0] === "2 个", flat(await ev(PANEL_COUNTS)));
+  check("点「放弃改动」撤回点击加入", (await ev(CLICK_TEMPLATE_DISCARD(templateName))) === true);
+  await sleep(2600);
+  check("放弃改动恢复到 1 个节点", (await ev(PANEL_COUNTS))[0] === "1 个", flat(await ev(PANEL_COUNTS)));
+  check("无改动时把状态改回「已保存」", (await ev(CLICK_TEMPLATE_STATUS(templateName))) === true);
+  await sleep(250);
+  check("下拉选「已保存」并退出编辑", (await ev(CLICK_STATUS_OPTION("已保存"))) === true);
+  await sleep(450);
+  check("已退出编辑中（唯一编辑项清零）", (await ev(PANEL_STATUS(templateName))) === "saved" && (await ev(EDITING_PANELS)).length === 0);
 
   // ---------- ⑤ 乐观锁：旧 version → 409 ----------
   const stale = templateId === "" ? { status: 0, json: null, text: "（模板未建出，跳过）" } : await api("/api/v1/task-templates/" + templateId, "PATCH", { name: "过期写入", version: 0 });

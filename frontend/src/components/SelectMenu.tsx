@@ -141,6 +141,10 @@ type SelectMenuProps = {
   popoverClassName?: string;
   /** 紧凑触发器：用于卡片元信息行等低层级内联场景（浮层选项仍保持常规密度）。 */
   compact?: boolean;
+  /** 触发器附加样式（例如模板「编辑中」状态的高亮）。追加在默认样式之后，可用 `bg-amber-50!` 这类 important 后缀覆盖默认底色 / 边框。 */
+  triggerClassName?: string;
+  /** 触发器悬停说明。 */
+  triggerTitle?: string;
 };
 
 /** 普通下拉（不可搜索）：状态 / 紧急重要度这类枚举字段。 */
@@ -153,6 +157,8 @@ export function SelectMenu({
   disabled = false,
   popoverClassName = "z-50",
   compact = false,
+  triggerClassName,
+  triggerTitle,
 }: SelectMenuProps) {
   const { open, setOpen, position, triggerRef, popoverRef } = usePopover(160, selectMenuPopoverHeight(options.length));
   const t = useT();
@@ -174,12 +180,14 @@ export function SelectMenu({
           }
           setOpen((previous) => !previous);
         }}
+        title={triggerTitle}
         className={
           "flex w-full items-center rounded-lg border text-left transition " +
           (compact ? "gap-1.5 px-2 py-0.5 text-[11px] " : "gap-2 px-3 py-2 text-sm ") +
           (disabled
             ? "cursor-not-allowed border-zinc-200 bg-zinc-50"
-            : "border-zinc-200 bg-white shadow-sm hover:border-zinc-300 hover:bg-zinc-50")
+            : "border-zinc-200 bg-white shadow-sm hover:border-zinc-300 hover:bg-zinc-50") +
+          (triggerClassName === undefined ? "" : " " + triggerClassName)
         }
       >
         {selected === null ? (

@@ -2489,17 +2489,6 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                             </span>
                           )}
                         </div>
-                        {isEditing ? (
-                          <div
-                            data-template-editing-banner=""
-                            role="status"
-                            className="mb-2 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-lg border border-amber-300/90 bg-amber-50/90 px-2.5 py-1.5 text-[11px] leading-5 text-amber-900"
-                          >
-                            <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-amber-500" />
-                            <span className="font-bold">{t("tpl.status.editing")}</span>
-                            <span className="text-amber-700">{t("tpl.edit.hint")}</span>
-                          </div>
-                        ) : null}
                         {/* 提示行固定高度：出现 / 消失都不顶动下方列表（否则拖拽时会跟着抖）；
                             不拖拽时这一行留给「未保存 / 冲突」状态 + 「放弃改动」出路（Push 264 追订） */}
                         <div className="flex h-4 items-center gap-1.5 text-xs">

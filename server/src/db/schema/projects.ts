@@ -121,7 +121,7 @@ export const projectMembers = pgTable(
   ],
 );
 
-/** project_view_grants（0113）：项目经理在项目内添加的只读权限。 */
+/** project_view_grants（0114）：项目经理在项目内添加的只读权限。 */
 export const projectViewGrants = pgTable(
   "project_view_grants",
   {

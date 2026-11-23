@@ -256,17 +256,7 @@ export class StakeholderService {
     }
     for (const projectId of uniqueProjectIds) {
       const access = await this.permission.assertProjectVisible(actorId, projectId);
-      await this.permission.assertCan(
-        actorId,
-        "stakeholder.manage",
-        {
-          member: access.member,
-          projectManager: access.projectManager,
-          groupAccessLevel: access.groupAccessLevel,
-          accessLevel: access.accessLevel,
-        },
-        message,
-      );
+      await this.permission.assertCan(actorId, "stakeholder.manage", access, message);
     }
   }
 

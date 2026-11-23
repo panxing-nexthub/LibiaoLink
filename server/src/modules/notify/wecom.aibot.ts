@@ -72,6 +72,26 @@ export type AibotImageMimeType = "image/png" | "image/jpeg" | "image/gif";
 
 export type AibotConnectionState = "stopped" | "connecting" | "subscribed" | "backoff";
 
+export interface AibotButtonCard {
+  card_type: "button_interaction";
+  main_title: { title: string; desc?: string };
+  button_list: Array<{ text: string; key: string; style?: number }>;
+  task_id: string;
+}
+
+interface AibotTextNoticeCard {
+  card_type: "text_notice";
+  main_title: { title: string; desc?: string };
+  card_action: { type: 1; url: string };
+  task_id: string;
+}
+
+interface AibotTemplateCardClick {
+  botId: string;
+  taskId: string;
+  eventKey: string;
+}
+
 /** 回执帧（订阅 / 推送 / 心跳共形）：errcode 在帧顶层；字段逐项 typeof 松读。 */
 interface AibotAckFrame {
   errcode?: unknown;
@@ -99,6 +119,24 @@ export interface AibotIncomingMessage {
   text: string | null;
   /** 事件类型（cmd = aibot_event_callback 时取 body.event.eventtype；消息回调为 null）。 */
   eventType: string | null;
+  /** 按钮交互卡片的回调数据，取自企微的嵌套事件对象。 */
+  templateCardClick?: AibotTemplateCardClick;
+}
+
+/** 仅匹配企微回调标识。调用方仍需验证点击人对应的系统账号。 */
+export function matchesGroupButtonCardClick(
+  message: AibotIncomingMessage,
+  expected: AibotTemplateCardClick & { chatid: string },
+): boolean {
+  const click = message.templateCardClick;
+  return click !== undefined &&
+    message.chattype === "group" &&
+    message.chatid === expected.chatid &&
+    Boolean(message.fromUserId?.trim()) &&
+    Boolean(message.msgid?.trim()) &&
+    click.botId === expected.botId &&
+    click.taskId === expected.taskId &&
+    click.eventKey === expected.eventKey;
 }
 
 export type AibotSendResult =
@@ -355,6 +393,23 @@ export class WecomAibotClient {
     });
   }
 
+  /** 群交互卡片走现有群消息限速与回执（企微长连接文档 101463）。 */
+  async sendGroupButtonCard(params: {
+    chatid: string;
+    card: AibotButtonCard;
+    groupActivated: boolean;
+  }): Promise<AibotSendResult> {
+    return this.sendMessage({
+      target: params.chatid,
+      chatType: 2,
+      rateKind: "group",
+      channel: "wecom_group",
+      bucketId: chatBucketId(params.chatid),
+      activated: params.groupActivated,
+      message: { msgtype: "template_card", template_card: params.card },
+    });
+  }
+
   /**
    * 群图片推送：先上传图片素材取得 media_id，再走 aibot_send_msg 的 image 消息。
    *
@@ -506,6 +561,31 @@ export class WecomAibotClient {
     /** 群聊回调传 chatid：限速计入该群桶；单聊不传，沿用 userid 单聊桶。 */
     chatid?: string | null;
   }): Promise<AibotSendResult> {
+    return this.sendCallbackResponse(params, "aibot_respond_msg", () => ({
+      msgtype: "stream",
+      stream: { id: this.nextReqId("stream"), finish: true, content: params.content },
+    }));
+  }
+
+  /** 使用卡片事件的 req_id，只更新点击人的卡片副本。 */
+  async updateGroupCardForUser(params: {
+    reqId: string;
+    chatid: string;
+    userid: string;
+    card: AibotButtonCard | AibotTextNoticeCard;
+  }): Promise<AibotSendResult> {
+    return this.sendCallbackResponse(params, "aibot_respond_update_msg", () => ({
+      response_type: "update_template_card",
+      userids: [params.userid],
+      template_card: params.card,
+    }));
+  }
+
+  private async sendCallbackResponse(
+    params: { reqId: string; userid: string; chatid?: string | null },
+    cmd: "aibot_respond_msg" | "aibot_respond_update_msg",
+    buildBody: () => Record<string, unknown>,
+  ): Promise<AibotSendResult> {
     if (this.state !== "subscribed" || this.socket === null) {
       return {
         ok: false,
@@ -538,9 +618,9 @@ export class WecomAibotClient {
     }
     const ack = this.waitAck(params.reqId);
     const sent = this.sendFrame({
-      cmd: "aibot_respond_msg",
+      cmd,
       headers: { req_id: params.reqId },
-      body: { msgtype: "stream", stream: { id: this.nextReqId("stream"), finish: true, content: params.content } },
+      body: buildBody(),
     });
     if (!sent) {
       this.cancelAck(params.reqId, "closed");
@@ -997,6 +1077,15 @@ export class WecomAibotClient {
     };
     if (chatName !== null && chatName.trim() !== "") {
       message.chatName = chatName.trim();
+    }
+    if (cmd === "aibot_event_callback" && message.msgtype === "event" && message.eventType === "template_card_event") {
+      const click = asRecord(event?.["template_card_event"]);
+      const botId = readString(body, "aibotid");
+      const taskId = readString(click, "task_id");
+      const eventKey = readString(click, "event_key");
+      if (readString(click, "card_type") === "button_interaction" && botId && taskId && eventKey) {
+        message.templateCardClick = { botId, taskId, eventKey };
+      }
     }
     for (const handler of this.handlers) {
       try {

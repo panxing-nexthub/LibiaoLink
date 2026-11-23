@@ -4612,9 +4612,11 @@ body {
 
 .hub-dash-start {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 0.9rem;
   min-width: 0;
+  min-height: 0;
 }
 
 .hub-dash-start__yearFilter {
@@ -4652,7 +4654,9 @@ body {
 /* 项目当前阶段的饼图视图：沿用任务状态饼图的图例 / 扇区 / 引线标签体系，按年份逐张展示。 */
 .hub-dash-start__pieGrid {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+  align-items: stretch;
   gap: 0.65rem;
   min-width: 0;
   min-height: 0;
@@ -4664,12 +4668,12 @@ body {
 
 .hub-dash-start__pieCard {
   display: flex;
-  flex: 0 0 clamp(28rem, 34vw, 36rem);
+  flex: 1 1 24rem;
   flex-direction: column;
   gap: 0.32rem;
-  min-width: clamp(28rem, 34vw, 36rem);
-  min-height: 24rem;
-  height: 100%;
+  min-width: 24rem;
+  min-height: 0;
+  align-self: stretch;
   padding: 0.55rem 0.65rem 0.35rem;
   border: 1px solid #edf0f3;
   border-radius: 10px;
@@ -4721,18 +4725,30 @@ body {
   border-radius: 2px;
 }
 
+.hub-dash-start__pieChartViewport {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 76rem;
+  min-width: 0;
+  min-height: 0;
+  margin-inline: auto;
+  overflow: hidden;
+}
+
 .hub-dash-start__pieChart {
   display: block;
   flex: 1 1 auto;
   width: 100%;
-  min-height: 18rem;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
 .hub-dash-start__pieArc {
   stroke: #ffffff;
   stroke-width: 1.5;
   transform-box: view-box;
-  transform-origin: 280px 168px;
   animation: ll-hub-pie-in 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 

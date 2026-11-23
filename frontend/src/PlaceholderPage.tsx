@@ -325,6 +325,8 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
    * 只有这份模板允许改名 / 调整可见范围 / 加删节点 / 拖动排序；其它面板一律保持「已保存」。
    */
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  /** 点击左列节点加入模板后，等新卡片落 DOM 再把这个模板的节点区滚到最底部。 */
+  const [autoScrollTemplateId, setAutoScrollTemplateId] = useState<string | null>(null);
   /** 模板取数版本号：首次进入 / 失败重试 / 节点库改动 / 冲突重取后 +1（重取按面板合并：只有脏草稿会保留）。 */
   const [templatesVersion, setTemplatesVersion] = useState(0);
   /** 模板名展示态（Push 301 追订）：未聚焦 = 英文界面出机翻译文；聚焦 = 回原文供编辑（保存回写原文，译文不落库）。 */
@@ -439,6 +441,20 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       setEditingTemplateId(null);
     }
   }, [editingTemplateId, templatesByStage, templatesLoading]);
+
+  // 点击节点加入后，模板节点区会多出一张末尾卡片：等 React 提交后直接滚到底，让新增内容立即可见。
+  useEffect(() => {
+    if (autoScrollTemplateId === null) {
+      return;
+    }
+    const scroller = document.querySelector<HTMLElement>(
+      '[data-template-panel-scroll="' + autoScrollTemplateId + '"]',
+    );
+    if (scroller !== null) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+    setAutoScrollTemplateId(null);
+  }, [autoScrollTemplateId, templates]);
 
   /** 左列「任务节点」的搜索词：按中 / 英文名过滤当前板块的节点卡片。 */
   const [nodeQuery, setNodeQuery] = useState("");
@@ -774,6 +790,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
           : template,
       ),
     );
+    setAutoScrollTemplateId(target.id);
   }
 
   /**

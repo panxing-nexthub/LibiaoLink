@@ -2340,9 +2340,8 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                             }
                             className={
                               "-mx-1 flex-1 truncate rounded px-1 font-semibold text-zinc-800 outline-none transition hover:bg-white/40 focus:bg-white/70 disabled:cursor-not-allowed " +
-                              // 2026-10-13 业务口径（英文界面「模板名称省略」）：英文模板名比中文长，名字和「计数 / 保存 / 删除」抢一行 ——
-                              // 用最小宽 12rem 当换行阈值：整行放不下时这一组整组换到下一行右对齐，名字（Hardware Implementation）不再被截成 Hardware Implementa…。
-                              (isLocalizedLocale(locale) ? "min-w-[12rem]" : "min-w-0")
+                              // 英文名用 12rem 换行阈值；中文也保留 8.5rem，避免「编辑中 + 保存 + 删除 + 计数」把模板名压成「硬...」。
+                              (isLocalizedLocale(locale) ? "min-w-[12rem]" : "min-w-[8.5rem]")
                             }
                           />
                           {/* 「计数 / 添加节点 / 保存 / 删除」收成一组：放得下就一行右对齐；英文面板放不下时整组换到第二行（名字优先占满第一行）。 */}

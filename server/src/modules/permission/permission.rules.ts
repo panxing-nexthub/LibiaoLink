@@ -93,6 +93,10 @@ export interface ProjectResourceContext {
 }
 
 /** 有效项目编辑权：管理员、本项目项目经理或规则 edit（均汇总进 accessLevel）；成员 / 任务负责人关系不提升。 */
+export function projectManagerIdsChanged(current: readonly string[], next: readonly string[]): boolean {
+  return current.length !== next.length || next.some((id, index) => id.toLowerCase() !== current[index]?.toLowerCase());
+}
+
 export function isProjectEditor(context?: Pick<ProjectResourceContext, "accessLevel" | "groupAccessLevel">): boolean {
   return context?.accessLevel === "edit" || (context?.accessLevel === undefined && context?.groupAccessLevel === "edit");
 }

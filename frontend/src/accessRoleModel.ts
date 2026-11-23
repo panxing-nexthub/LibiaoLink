@@ -30,6 +30,7 @@ export type EffectiveMemberPermission = {
   isAdmin: boolean;
   visibleAll: boolean;
   visibleProjectIds: string[];
+  projectViewGrantIds: readonly string[];
   editAll: boolean;
   editProjectIds: string[];
   taskOnlyCount: number;
@@ -121,12 +122,13 @@ export function effectiveMemberPermission(
   userId: string,
   automatic: AutomaticRoleSummary,
   isAdmin: boolean,
+  projectViewGrantIds: readonly string[],
 ): EffectiveMemberPermission {
   const manual = manualScopeOfMember(data, userId);
   const managerIds = new Set(automatic.role.projectManagerProjectIds);
   const memberIds = new Set(automatic.role.projectMemberProjectIds);
   const taskOwnerIds = new Set(automatic.role.taskOwnerProjectIds);
-  const relationshipIds = new Set([...managerIds, ...memberIds, ...taskOwnerIds]);
+  const relationshipIds = new Set([...managerIds, ...memberIds, ...taskOwnerIds, ...projectViewGrantIds]);
   const allProjectIds = data.projects.map((project) => project.id);
   const levelOf = (scope: GroupAccessDataProjectScope): "edit" | "view" | null =>
     manual.permissions.find((permission) => permission.projectScope === scope)?.accessLevel ?? null;
@@ -164,6 +166,7 @@ export function effectiveMemberPermission(
     isAdmin,
     visibleAll: allVisible,
     visibleProjectIds: [...visible].sort(),
+    projectViewGrantIds,
     editAll,
     editProjectIds: [...edit].sort(),
     taskOnlyCount: automatic.taskOwnerTaskCount,

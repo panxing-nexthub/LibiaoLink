@@ -31,7 +31,7 @@ export const ProjectSchema = z
       description: "项目经理姓名数组：服务端按 managerIds 解析后随行下发，与 managerIds 同下标一一对应（列表 / 详情 / 创建与编辑返回均含，免前端二次查目录）；人员停用 / 离职后仍返回姓名，取不到时该位为 null（前端显示「—」）",
     }),
     accessLevel: GroupAccessAccessLevelSchema.openapi({
-      description: "当前登录账号对该项目的最终有效访问级别：edit = 可执行项目级写操作 / view = 仅浏览。管理员、所管本项目的项目经理或部门 / 个人规则命中 edit 时为 edit；项目成员、任务负责人及项目只读授权仅保证浏览，且项目经理身份不外溢到其他项目",
+      description: "当前登录账号对该项目的最终有效访问级别：edit = 可执行项目级写操作 / view = 仅浏览。管理员、所管本项目的项目经理或部门 / 个人规则命中 edit 时为 edit；项目成员、任务负责人及项目仅浏览授权仅保证浏览，且项目经理身份不外溢到其他项目",
     }),
     canManageProjectManagers: z.boolean().optional().describe("项目列表与工作台的经理任命能力，仅本项目经理或系统管理员为 true"),
     stageKey: StageKeySchema,
@@ -59,7 +59,7 @@ export const ProjectSchema = z
   .openapi("Project", { description: "项目（v0.2 §2.3 projects）" });
 
 export const ProjectDetailSchema = ProjectSchema.extend({
-  canManageViewGrants: z.boolean().describe("当前账号是本项目经理，可管理本项目的只读授权"),
+  canManageViewGrants: z.boolean().describe("当前账号是本项目经理或系统管理员，可管理本项目的仅浏览授权"),
 }).openapi("ProjectDetail");
 
 export const PROJECT_VIEW_GRANT_BATCH_LIMIT = 300;

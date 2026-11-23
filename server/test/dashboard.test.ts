@@ -183,7 +183,7 @@ describe("仪表盘任务聚合规则", () => {
 });
 
 describe("全部项目维度聚合", () => {
-  it("按启动年份 / 类型 / 三类负责人 / 最新阶段聚合，多类型逐项计数、归档优先", () => {
+  it("按启动年份 / 类型 / 三类负责人 / 最新阶段聚合，多类型逐项计数、暂停与归档统一", () => {
     const projects: DashboardAnalyticsProjectRow[] = [
       {
         id: PROJECT_A,
@@ -195,8 +195,6 @@ describe("全部项目维度聚合", () => {
         status: "active",
         managerIds: [P1, P2],
         managerNames: ["张三", "李四"],
-        archiveKind: null,
-        hasOpenPostArchiveTask: false,
       },
       {
         id: PROJECT_B,
@@ -208,8 +206,6 @@ describe("全部项目维度聚合", () => {
         status: "archived",
         managerIds: [P1],
         managerNames: ["张三"],
-        archiveKind: "accepted",
-        hasOpenPostArchiveTask: false,
       },
       {
         id: "33333333-3333-4333-8333-333333333333",
@@ -221,8 +217,6 @@ describe("全部项目维度聚合", () => {
         status: "archived",
         managerIds: [P3],
         managerNames: ["王五"],
-        archiveKind: "accepted",
-        hasOpenPostArchiveTask: true,
       },
       {
         id: "44444444-4444-4444-8444-444444444444",
@@ -231,11 +225,9 @@ describe("全部项目维度聚合", () => {
         projectType: "T-sort",
         additionalProjectTypes: [],
         stageKey: "design",
-        status: "archived",
+        status: "paused",
         managerIds: [P2],
         managerNames: ["李四"],
-        archiveKind: "unaccepted",
-        hasOpenPostArchiveTask: false,
       },
     ];
     const roleTasks: DashboardProjectRoleTaskRow[] = [
@@ -267,6 +259,8 @@ describe("全部项目维度聚合", () => {
     const taskBuckets: DashboardTaskBucketRow[] = [
       { projectId: PROJECT_A, stageKey: "presale", progressBin: 2, displayStatus: "active", deliveryBucket: null, count: 1 },
       { projectId: PROJECT_A, stageKey: "production", progressBin: 4, displayStatus: "done", deliveryBucket: 0, count: 1 },
+      { projectId: PROJECT_B, stageKey: "install", progressBin: 2, displayStatus: "active", deliveryBucket: null, count: 1 },
+      { projectId: "44444444-4444-4444-8444-444444444444", stageKey: "design", progressBin: 4, displayStatus: "done", deliveryBucket: 0, count: 1 },
     ];
     const result = buildProjectAnalytics(projects, roleTasks, startups, taskBuckets);
     expect(() => DashboardProjectAnalyticsResponseSchema.parse(result)).not.toThrow();
@@ -274,7 +268,7 @@ describe("全部项目维度聚合", () => {
     expect(result.projectTypes).toEqual(["T-sort", "3D分拣", "飞箱"]);
     expect(result.stageBuckets).toEqual([
       "presale", "design", "purchase", "assembly", "install", "deploy", "trial", "production", "acceptance",
-      "archive_exception", "archive_accepted", "archive_temporary",
+      "paused", "archive_handover",
     ]);
     expect(result.projects).toHaveLength(4);
     expect(result.projects[0]).toMatchObject({
@@ -295,15 +289,18 @@ describe("全部项目维度聚合", () => {
       { personId: P2, name: "李四" },
       { personId: P5, name: "赵六" },
     ]);
+    expect(result.projects.map((project) => project.stageBucket)).toEqual([
+      "production", "archive_handover", "archive_handover", "paused",
+    ]);
     expect(result.typeByYear).toEqual([
       { year: 2025, counts: [1, 0, 2], total: 3 },
       { year: 2026, counts: [0, 1, 0], total: 1 },
       { year: null, counts: [1, 0, 0], total: 1 },
     ]);
-    expect(result.startYearStages.find((row) => row.year === 2025)?.stageCounts).toMatchObject([
-      0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0,
+    expect(result.startYearStages.find((row) => row.year === 2025)?.stageCounts).toEqual([
+      0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1,
     ]);
-    expect(result.startYearStages.find((row) => row.year === 2026)?.stageCounts[11]).toBe(1);
+    expect(result.startYearStages.find((row) => row.year === 2026)?.stageCounts[10]).toBe(1);
     expect(result.startYearStages.find((row) => row.year === null)?.stageCounts[9]).toBe(1);
     const manager = result.roles.find((role) => role.role === "manager");
     const sales = result.roles.find((role) => role.role === "sales");
@@ -312,20 +309,21 @@ describe("全部项目维度聚合", () => {
     expect(manager?.people.find((person) => person.name === "张三")?.stageCounts[10]).toBe(1);
     expect(sales?.people.find((person) => person.name === "张三")?.total).toBe(1);
     expect(sales?.people.find((person) => person.isUnassigned)?.stageCounts[9]).toBe(1);
+    expect(sales?.people.find((person) => person.isUnassigned)?.stageCounts[10]).toBe(1);
     expect(planning?.people.find((person) => person.name === "李四")?.stageCounts[7]).toBe(1);
-    expect(planning?.people.find((person) => person.name === "李四")?.stageCounts[11]).toBe(1);
+    expect(planning?.people.find((person) => person.name === "李四")?.stageCounts[10]).toBe(1);
     expect(planning?.people.find((person) => person.name === "赵六")?.total).toBe(1);
     expect(planning?.people.find((person) => person.isUnassigned)?.stageCounts[10]).toBe(1);
   });
 
-  it("无可见项目返回固定阶段桶 / 类型 / 三类空角色", async () => {
+  it("无可见项目返回固定阶段桶 / 类型 / 三类空角色（九阶段 + 暂停 + 归档-移交售后）", async () => {
     const repo = new FakeDashboardRepository();
     const permission = new FakePermissionService();
     permission.scope = { kind: "ids", ids: [] };
     const response = await makeService(repo, permission).projectInsights("actor-1");
     expect(() => DashboardProjectAnalyticsResponseSchema.parse(response)).not.toThrow();
     expect(response.totalProjects).toBe(0);
-    expect(response.stageBuckets).toHaveLength(12);
+    expect(response.stageBuckets).toHaveLength(11);
     expect(response.roles.map((role) => role.role)).toEqual(["manager", "sales", "planning"]);
     expect(response.roles.every((role) => role.people.length === 0)).toBe(true);
     expect(response.projects).toEqual([]);
@@ -375,8 +373,6 @@ describe("仪表盘聚合服务", () => {
       status: "active",
       managerIds: [P1],
       managerNames: ["张三"],
-      archiveKind: null,
-      hasOpenPostArchiveTask: false,
     }];
     repo.taskRows = [
       { projectId: PROJECT_A, stageKey: "presale", progressBin: 1, displayStatus: "active", deliveryBucket: null, count: 1 },

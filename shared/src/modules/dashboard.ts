@@ -139,17 +139,17 @@ export const DashboardIssuesResponseSchema = z
  *
  * 口径：
  * - 启动年份 = 标题为「项目启动 / Project Startup」的任务实际完成日期所属年份；多条取最晚，未完成 = null。
- * - 最新阶段 = 未归档项目取项目空间同一口径的任务派生「最新阶段」（已动工任务中阶段序最靠后者），无动工任务回落 projects.stage_key；归档项目按归档状态拆成异常归档 / 验收归档 / 归档-临时任务。
+ * - 最新阶段 = 未归档且未暂停项目取项目空间同一口径的任务派生「最新阶段」（已动工任务中阶段序最靠后者），无动工任务回落 projects.stage_key；暂停项目统一落 paused，归档项目统一落 archive_handover，不再按归档类型拆分。
  * - 三类负责人 = 项目经理（projects.manager_ids）、销售负责人（合同签署任务负责人）、
  *   规划负责人（技术协议定档任务负责人）。同一项目同一人多条命中只计一次。
  */
 export const DashboardProjectStageBucketSchema = z
   .union([
     StageKeySchema,
-    z.enum(["archive_exception", "archive_accepted", "archive_temporary"]),
+    z.enum(["paused", "archive_handover"]),
   ])
   .openapi("DashboardProjectStageBucket", {
-    description: "项目最新阶段桶：九阶段 key，或 archive_exception / archive_accepted / archive_temporary",
+    description: "项目最新阶段桶：九阶段 key，或 paused（暂停）/ archive_handover（归档-移交售后）",
   });
 
 export const DashboardProjectRoleSchema = z
@@ -169,7 +169,7 @@ export const DashboardProjectRolePersonSchema = z
     personId: UuidSchema.nullable().openapi({ description: "人员账号 id；待分配 = null" }),
     name: z.string().nullable().openapi({ description: "人员显示名；账号姓名缺失 = null" }),
     isUnassigned: z.boolean(),
-    stageCounts: z.array(z.number().int().min(0)).length(12).openapi({ description: "与 stageBuckets 同序的项目数量" }),
+    stageCounts: z.array(z.number().int().min(0)).length(11).openapi({ description: "与 stageBuckets 同序的项目数量" }),
     total: z.number().int().min(0),
   })
   .openapi("DashboardProjectRolePerson");
@@ -184,7 +184,7 @@ export const DashboardProjectRoleStatsSchema = z
 export const DashboardProjectStartYearStageSchema = z
   .object({
     year: z.number().int().min(1900).max(9999).nullable().openapi({ description: "启动年份；null = 未记录启动时间" }),
-    stageCounts: z.array(z.number().int().min(0)).length(12).openapi({ description: "与 stageBuckets 同序的项目数量" }),
+    stageCounts: z.array(z.number().int().min(0)).length(11).openapi({ description: "与 stageBuckets 同序的项目数量" }),
     total: z.number().int().min(0),
   })
   .openapi("DashboardProjectStartYearStage");
@@ -220,7 +220,7 @@ export const DashboardProjectAnalyticsResponseSchema = z
   .object({
     totalProjects: z.number().int().min(0),
     projectTypes: z.array(z.string()).length(3).openapi({ description: "固定顺序：T-sort / 3D分拣 / 飞箱" }),
-    stageBuckets: z.array(DashboardProjectStageBucketSchema).length(12).openapi({ description: "固定顺序：九阶段 + 异常归档 / 验收归档 / 归档-临时任务" }),
+    stageBuckets: z.array(DashboardProjectStageBucketSchema).length(11).openapi({ description: "固定顺序：九阶段 + 暂停 / 归档-移交售后" }),
     typeByYear: z.array(DashboardProjectTypeYearSchema).openapi({ description: "年份升序，未记录启动时间置末；多类型项目在每个命中类型各计一次" }),
     roles: z.array(DashboardProjectRoleStatsSchema).length(3).openapi({ description: "固定顺序：项目经理 / 销售负责人 / 规划负责人" }),
     startYearStages: z.array(DashboardProjectStartYearStageSchema).openapi({ description: "年份升序，未记录启动时间置末" }),

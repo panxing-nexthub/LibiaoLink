@@ -7,7 +7,7 @@ import { stageNameOf } from "../taskApi";
  * - 启动年份 × 项目最新阶段（柱状图 + 饼图）。
  *
  * 「启动年份」= 标题为「项目启动 / Project Startup」的任务实际完成日期所属年份；
- * 「最新阶段」= 未归档项目按项目空间同口径取任务派生最新阶段（已动工任务中阶段序最靠后者，无动工任务回落 projects.stage_key）；归档项目按异常归档 / 验收归档 / 归档-临时任务拆分。
+ * 「最新阶段」= 未归档且未暂停项目按项目空间同口径取任务派生最新阶段（已动工任务中阶段序最靠后者，无动工任务回落 projects.stage_key）；暂停项目统一为「暂停」，归档项目统一为「归档-移交售后」。
  * 聚合在服务端完成，见 server/src/modules/dashboard/dashboard.rules.ts。
  */
 
@@ -24,9 +24,8 @@ export const DASHBOARD_PROJECT_STAGE_BUCKETS = [
   "trial",
   "production",
   "acceptance",
-  "archive_exception",
-  "archive_accepted",
-  "archive_temporary",
+  "paused",
+  "archive_handover",
 ] as const;
 export type DashboardProjectStageBucket = (typeof DASHBOARD_PROJECT_STAGE_BUCKETS)[number];
 
@@ -40,7 +39,7 @@ export const DASHBOARD_PROJECT_TYPE_COLORS: Readonly<Record<DashboardProjectType
   飞箱: "#6cc46a",
 };
 
-/** 十二个最新阶段桶的固定配色（三类归档用项目卡片同族深色）。 */
+/** 十一个最新阶段桶的固定配色（暂停沿用项目状态橙色，归档移交售后用深蓝色）。 */
 export const DASHBOARD_PROJECT_STAGE_COLORS: Readonly<Record<DashboardProjectStageBucket, string>> = {
   presale: "#5aa9f7",
   design: "#22c55e",
@@ -51,16 +50,14 @@ export const DASHBOARD_PROJECT_STAGE_COLORS: Readonly<Record<DashboardProjectSta
   trial: "#ec4899",
   production: "#84cc16",
   acceptance: "#10b981",
-  archive_exception: "#8c2d35",
-  archive_accepted: "#194c78",
-  archive_temporary: "#4338ca",
+  paused: "#f29900",
+  archive_handover: "#194c78",
 };
 
 /** 阶段桶中文名（再交给 i18n 的 stageText 做英 / 日 / 韩本地化）。 */
 export function dashboardProjectStageLabel(bucket: string): string {
-  if (bucket === "archive_exception") return "异常归档";
-  if (bucket === "archive_accepted") return "验收归档";
-  if (bucket === "archive_temporary") return "归档-临时任务";
+  if (bucket === "paused") return "暂停";
+  if (bucket === "archive_handover") return "归档-移交售后";
   return stageNameOf(bucket) || bucket;
 }
 

@@ -1928,7 +1928,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "hub.dash.projects.role.planning": "계획 담당",
   "hub.dash.projects.stageLegend": "최신 단계 범례",
   "hub.dash.projects.startYear.title": "시작 연도와 최신 단계",
-  "hub.dash.projects.startYear.subtitle": "시작 연도는 '프로젝트 시작' 작업의 실제 완료일 기준이며, 오른쪽 파이 차트에서 연도를 전환할 수 있습니다",
+  "hub.dash.projects.startYear.subtitle": "가로축은 9단계·일시 중지·보관(애프터서비스 인계)이며, 연도를 여러 개 선택해 필터링하고 세로축은 프로젝트 수입니다",
   "hub.dash.projects.startYear.aria": "시작 연도와 최신 단계: 연도별 누적 막대",
   "hub.dash.projects.startYear.pieAria": "시작 연도와 최신 단계 파이 차트: {year}",
   "hub.dash.projects.startYear.pickYear": "파이 차트 연도 선택",

@@ -216,7 +216,6 @@ export class PermissionService {
   }
 
   async can(actorId: string, key: PermissionKey, context?: ProjectResourceContext): Promise<boolean> {
-    if (context?.wecomReadOnly === true && PROJECT_GROUP_WRITE_KEYS.includes(key)) return false;
     if (!can(await this.getAuthorization(actorId), key, context)) return false;
     const groupAccess = await this.groupAccessOf(actorId);
     if (key === "blueprint.manage") return groupAccess.admin;
@@ -423,12 +422,8 @@ export class PermissionService {
         ]);
     const baseIds = intersectProjectIds(roleIds, groupIds);
     if (baseIds === null) return { kind: "all" };
-    const botId = this.wecomReadGrantBotId();
-    const [relatedIds, wecomIds] = await Promise.all([
-      this.repository.listRelatedProjectIds(actorId),
-      botId === null ? [] : this.repository.listWecomReadGrantProjectIds(actorId, botId),
-    ]);
-    return { kind: "ids", ids: uniqueIds([...baseIds, ...relatedIds, ...wecomIds]) };
+    const relatedIds = await this.repository.listRelatedProjectIds(actorId);
+    return { kind: "ids", ids: uniqueIds([...baseIds, ...relatedIds]) };
   }
 
   /** 解析项目上下文：不可见 / 不存在返回 null（调用方转 404）；回收站写口可选包含已软删项目。 */
@@ -457,13 +452,7 @@ export class PermissionService {
     const ownProject = managerOfRecord || rosterMember;
     const groupAccessLevel = projectGroupAccessLevelOf(groupAccess, projectId, ownProject);
     const visible = groupAccess.admin || relationVisible || (roleVisible && groupAccessLevel !== null);
-    if (!visible) {
-      const botId = this.wecomReadGrantBotId();
-      if (ref.deletedAt !== null || botId === null || !(await this.repository.hasWecomReadGrant(actorId, botId, projectId))) {
-        return null;
-      }
-      return { projectId, member: false, projectManager: false, groupAccessLevel: null, accessLevel: "view", wecomReadOnly: true };
-    }
+    if (!visible) return null;
     return {
       projectId,
       member: rosterMember || managerOfRecord,
@@ -472,11 +461,6 @@ export class PermissionService {
       groupAccessLevel,
       accessLevel: groupAccess.admin || projectManager || groupAccessLevel === "edit" ? "edit" : "view",
     };
-  }
-
-  private wecomReadGrantBotId(): string | null {
-    const env = this.config?.env;
-    return env?.WECOM_PROJECT_GROUP_ACCESS_ENABLED === "true" && env.WECOM_BOT_ID !== "" ? env.WECOM_BOT_ID : null;
   }
 
   /** 记录级门禁：不可见 → 404（防 IDOR，ADR-011 不变量 3）；includeDeleted 仅供项目回收站恢复 / 彻底删除。 */

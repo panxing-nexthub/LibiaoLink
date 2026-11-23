@@ -6,7 +6,7 @@
  * 不触外网（socketFactory 全替身；生产 `ws` 实现见 wecom.aibot.ts createWsSocketFactory）。
  */
 import { describe, expect, it } from "vitest";
-import { WecomAibotClient, type AibotIncomingMessage, type AibotSocket } from "../src/modules/notify/wecom.aibot.js";
+import { matchesGroupButtonCardClick, WecomAibotClient, type AibotIncomingMessage, type AibotSocket } from "../src/modules/notify/wecom.aibot.js";
 import {
   InMemoryRateWindowStore,
   WECOM_BOT_WINDOW_PER_HOUR_MS,
@@ -197,6 +197,35 @@ describe("企微智能机器人长连接客户端（M5-03-2 · P5）", () => {
     const result = await pending;
     expect(result).toEqual({ ok: true, attempts: 1 });
     await client.stop();
+  });
+
+  it("向群发送按钮卡片，使用群限速桶和标准推送回执", async () => {
+    const { client, sockets } = makeClient({
+      windows: [{ kind: "group", windowMs: WECOM_BOT_WINDOW_PER_MINUTE_MS, limit: 1 }],
+    });
+    const socket = await connect(client, sockets);
+    const card = {
+      card_type: "button_interaction" as const,
+      main_title: { title: "卡片验证" },
+      button_list: [{ text: "测试按钮", key: "verify" }],
+      task_id: "card-1",
+    };
+
+    try {
+      const pending = client.sendGroupButtonCard({ chatid: "chat-1", card, groupActivated: true });
+      await sleep(0);
+      expect(socket.lastFrame()).toMatchObject({
+        cmd: "aibot_send_msg",
+        body: { chatid: "chat-1", chat_type: 2, msgtype: "template_card", template_card: card },
+      });
+      socket.ackLast(0);
+      await expect(pending).resolves.toEqual({ ok: true, attempts: 1 });
+      await expect(client.sendGroupMarkdown({ chatid: "chat-1", content: "下一条" })).resolves.toMatchObject({
+        ok: false, kind: "rate_limited", attempts: 0,
+      });
+    } finally {
+      await client.stop();
+    }
   });
 
   it("846607 双语义：groupActivated=false → permanent；true / 未传 → rate_limited", async () => {
@@ -551,6 +580,53 @@ describe("企微智能机器人长连接客户端（M5-03-2 · P5）", () => {
     socket.deliver({ cmd: "aibot_event_callback", headers: { req_id: "req-cb-2" }, body: { chatid: "chat-9" } });
     expect(received).toHaveLength(2);
     await client.stop();
+  });
+
+  it("从嵌套事件读取按钮回调，只匹配指定机器人在指定群发出的按钮", async () => {
+    const { client, sockets } = makeClient();
+    const socket = await connect(client, sockets);
+    const received: AibotIncomingMessage[] = [];
+    client.onMessage((message) => received.push(message));
+    const expected = { botId: "bot-1", chatid: "chat-1", taskId: "card-1", eventKey: "verify" };
+    const callback = {
+      aibotid: "bot-1",
+      chatid: "chat-1",
+      chattype: "group",
+      from: { userid: "user-1" },
+      msgid: "event-1",
+      msgtype: "event",
+      event: {
+        eventtype: "template_card_event",
+        template_card_event: { card_type: "button_interaction", task_id: "card-1", event_key: "verify" },
+      },
+    };
+
+    try {
+      for (const body of [
+        callback,
+        { ...callback, from: { userid: "user-2" }, msgid: "event-2" },
+        { ...callback, chatid: "chat-2" },
+        { ...callback, chattype: "single", chatid: undefined },
+        { ...callback, chatid: undefined },
+        { ...callback, from: {} },
+        { ...callback, aibotid: "bot-2" },
+        { ...callback, msgid: undefined },
+        { ...callback, event: { eventtype: "template_card_event", task_id: "card-1", event_key: "verify" } },
+      ]) {
+        socket.deliver({ cmd: "aibot_event_callback", headers: { req_id: "req-card" }, body });
+      }
+
+      expect(received[0]).toMatchObject({
+        chatid: "chat-1", fromUserId: "user-1", templateCardClick: { botId: "bot-1", taskId: "card-1", eventKey: "verify" },
+      });
+      expect(received.map((message) => matchesGroupButtonCardClick(message, expected))).toEqual([
+        true, true, false, false, false, false, false, false, false,
+      ]);
+      expect(matchesGroupButtonCardClick(received[0]!, { ...expected, taskId: "another-card" })).toBe(false);
+      expect(matchesGroupButtonCardClick(received[0]!, { ...expected, eventKey: "another-action" })).toBe(false);
+    } finally {
+      await client.stop();
+    }
   });
 
   it("未就绪发送：state ≠ subscribed → retryable、attempts=0（不发帧）", async () => {

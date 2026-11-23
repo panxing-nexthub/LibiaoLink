@@ -22,8 +22,8 @@ function includesYear(years: readonly YearKey[], year: YearKey): boolean { retur
 
 /**
  * 「全部项目」项目统计：x = 启动年份，柱状图为每组三根柱，折线图为三条按年份连接的趋势线。
- * 年份与类型均可点击筛选；年份默认最近 5 年，左右按钮切换年份窗口；最左侧「全选」为液态玻璃按钮。
- * 右侧按钮切换柱状图 / 折线图；两种图形共用年份、类型筛选和悬停统计；点柱 / 数据点按「年份 × 类型」下钻项目列表。
+ * 年份与类型均可点击筛选；年份默认最近 5 年，左右按钮切换年份窗口；最左侧「全选」与「折线图 / 柱状图」按钮同排。
+ * 图表按钮切换柱状图 / 折线图；两种图形共用年份、类型筛选和悬停统计；点柱 / 数据点按「年份 × 类型」下钻项目列表。
  * 绘图区按容器实际像素重算，字号不随屏幕等比缩放，柱状图和折线图共用同一套居中坐标。
  */
 export function HubDashProjectTypeYears({ insights, expanded = false, onChartTypeChange, onPick, storageKeyPrefix }: {

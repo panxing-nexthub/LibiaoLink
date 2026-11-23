@@ -616,6 +616,36 @@ body {
   display: none;
 }
 
+/* 任务模板页节点面板（2026-11-23）：面板高度按视口封顶后，节点列表在面板内独立滚动。
+   原生细滚动条常显，鼠标滚轮 / 触控板只滚当前列表，到边界不把整页继续带着滚。 */
+[data-template-node-scroll],
+[data-template-panel-scroll] {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(212 212 216 / 0.9) transparent;
+  scrollbar-gutter: stable;
+}
+
+[data-template-node-scroll]::-webkit-scrollbar,
+[data-template-panel-scroll]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-template-node-scroll]::-webkit-scrollbar-track,
+[data-template-panel-scroll]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-template-node-scroll]::-webkit-scrollbar-thumb,
+[data-template-panel-scroll]::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(212 212 216 / 0.9);
+}
+
+[data-template-node-scroll]::-webkit-scrollbar-thumb:hover,
+[data-template-panel-scroll]::-webkit-scrollbar-thumb:hover {
+  background: rgb(161 161 170 / 0.95);
+}
+
 
 /* 项目卡片：悬停投影取字典主题色（--card-glow 由 Card 组件按 metadata.accent 内联注入，M2-07 · A3） */
 .project-card:hover {

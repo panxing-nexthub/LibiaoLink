@@ -5314,7 +5314,11 @@ export default function ProjectManagementPage({
                                   triggerClassName="min-h-11 w-full !justify-start px-2 py-3 !text-left text-xs leading-5 text-zinc-600 hover:bg-blue-50/40"
                                   display={stageLabel === "" ? <span className="text-zinc-300">—</span> : <span className={PM_TABLE_TAG_CLASS + " " + pmStageTagClass(stageName)}>{stageLabel}</span>}
                                   onPick={(value) => {
-                                    handleStageOverrideChange(row, value === "" ? null : value);
+                                    // 单选阶段再次点击已勾选项 = 取消人工覆盖，回到「自动识别」。
+                                    handleStageOverrideChange(
+                                      row,
+                                      value !== "" && value !== row.currentStageOverride ? value : null,
+                                    );
                                   }}
                                 />
                               </div>

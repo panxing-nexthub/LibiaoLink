@@ -15,6 +15,7 @@ import {
 import {
   ProjectCreateBodySchema,
   ProjectDeliverableTypeCreateBodySchema,
+  ProjectDetailSchema,
   ProjectGroupPutBodySchema,
   ProjectListQuerySchema,
   ProjectMemberCreateBodySchema,
@@ -103,8 +104,8 @@ export class ProjectsController {
   }
 
   /**
-   * 蓝图地图总览：有项目浏览权的账号读到全部未删项目的最少字段；
-   * 每个项目随行 accessLevel，null = 不可进入详情（详情接口仍按项目可见集 404）。
+   * 蓝图地图总览：原有全量概况资格继续生效；仅靠项目内授权浏览时只返回可见项目。
+   * 每个项目随行 accessLevel，null = 不可进入详情。
    */
   @Get("map-overview")
   mapOverview(
@@ -122,8 +123,12 @@ export class ProjectsController {
 
   /** 详情：软删 / 不存在统一 404 NOT_FOUND。 */
   @Get(":id")
-  detail(@Param("id", uuidParam) id: string, @CurrentActorId() actorId: string): Promise<ProjectView> {
-    return this.projects.getProject(id, actorId);
+  async detail(
+    @Param("id", uuidParam) id: string,
+    @CurrentActorId() actorId: string,
+    @CurrentProjectAccess() access: ProjectAccessContext,
+  ): Promise<z.infer<typeof ProjectDetailSchema>> {
+    return { ...await this.projects.getProject(id, actorId), canManageViewGrants: access.projectManager };
   }
 
   /** 记录访问（2026-10-23）：前端进入项目详情时调用一次；每次进入写一条 action=visit。 */

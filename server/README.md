@@ -771,7 +771,7 @@ server/
 - 从对象存储下载当前文件版本，Office 通过 LibreOffice 转 PDF，PDF 用 PyMuPDF 拆页，图片规范化为 PNG。
 - 每页发送图片 + 文本给当前启用模型，输出摘要型 JSON（最多 8 条 keyFacts，不逐行抄录长表）。
 - 结果写入 `project_file_analyses`，按 `(file_version_id, prompt_version)` 缓存；`project_document_analysis_runs` 负责排队与状态。
-- 容器独立运行：entrypoint 读取 Docker Secret 后降权到 uid 10001。需要迁移 `0113_project_document_analyses.sql`。
+- 容器独立运行：entrypoint 读取 Docker Secret 后降权到 uid 10001。需要迁移 `0114_project_document_analyses.sql`。
 - 构建与运行命令见 `server/document-analysis-worker/README.md`。
 
 当前已接 `GET/POST /api/v1/projects/{id}/document-analysis` 与 AI 上下文 `fileAnalyses[]`；前端在用户点击「生成项目总结 / 重新生成」时先入队并轮询文件分析，完成后自动生成总结。AI 项目总结 prompt 已升 v3。

@@ -6,6 +6,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -117,6 +118,20 @@ export const projectMembers = pgTable(
       "ck_project_members_role",
       sql`${table.roleInProject} in ${sql.raw(sqlValueList(PROJECT_MEMBER_ROLES))}`,
     ),
+  ],
+);
+
+/** project_view_grants（0113）：项目经理在项目内添加的只读权限。 */
+export const projectViewGrants = pgTable(
+  "project_view_grants",
+  {
+    projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: "project_view_grants_pkey", columns: [table.projectId, table.userId] }),
+    index("ix_project_view_grants_user").on(table.userId),
   ],
 );
 

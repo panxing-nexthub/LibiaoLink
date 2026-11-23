@@ -92,10 +92,20 @@ class PageSummary(BaseModel):
     def truncate_facts(cls, value: Any) -> Any:
         return value[:MAX_FACTS] if isinstance(value, list) else value
 
-    @field_validator("risks", "decisions", "warnings", "missing", mode="before")
+    @field_validator("risks", "decisions", mode="before")
     @classmethod
-    def truncate_strings(cls, value: Any) -> Any:
-        return value[:12] if isinstance(value, list) else value
+    def truncate_risks_decisions(cls, value: Any) -> Any:
+        return [str(item)[:600] for item in value[:8]] if isinstance(value, list) else value
+
+    @field_validator("warnings", mode="before")
+    @classmethod
+    def truncate_warnings(cls, value: Any) -> Any:
+        return [str(item)[:500] for item in value[:10]] if isinstance(value, list) else value
+
+    @field_validator("missing", mode="before")
+    @classmethod
+    def truncate_missing(cls, value: Any) -> Any:
+        return [str(item)[:300] for item in value[:10]] if isinstance(value, list) else value
 
 
 def jsonable(value: Any) -> Any:

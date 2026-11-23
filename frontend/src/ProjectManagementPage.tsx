@@ -1800,6 +1800,27 @@ const pmGanttResponsiveScale = (viewportWidth: number): number => {
   return Math.round((1 + (PM_GANTT_UI_MAX_SCALE - 1) * wideProgress) * 20) / 20;
 };
 
+/**
+ * 甘特响应式倍率只使用「页面纵向滚动条出现前后不变」的布局宽度。
+ * 根滚动条按需出现时 clientWidth 会少一截；若直接拿它算倍率，
+ * 会形成「倍率变小 -> 内容变矮 -> 滚动条消失 -> 倍率变大 -> 内容变高」的持续抽搐。
+ * 当前浏览器滚动条宽度可以从 window.innerWidth 与根 clientWidth 的差值还原。
+ */
+const pmGanttStableScaleWidth = (viewportWidth: number): number => {
+  if (
+    viewportWidth <= 0 ||
+    typeof window === "undefined" ||
+    typeof document === "undefined"
+  ) {
+    return viewportWidth;
+  }
+  const pageScrollbarWidth = Math.max(
+    0,
+    window.innerWidth - document.documentElement.clientWidth,
+  );
+  return viewportWidth + pageScrollbarWidth;
+};
+
 const pmGanttVisualMetricsOf = (scale: number) => {
   const px = (value: number): number => pmGanttScaledPx(value, scale);
   const cellSize = px(10);
@@ -1988,6 +2009,8 @@ type PmGanttOccupancySegment = {
   endIndex: number;
   count: number;
   itemIndexes: number[];
+  /** 今天及未来的重叠才算冲突；过去重叠保留展示但不标红、不计入冲突。 */
+  conflict: boolean;
 };
 
 type PmGanttAvailableSegment = {
@@ -2026,6 +2049,7 @@ const pmGanttOccupancyOf = (
   items: readonly PmGanttItem[],
   timelineStartIso: string,
   dayCount: number,
+  conflictStartIndex: number,
 ): PmGanttOccupancy => {
   if (dayCount <= 0) {
     return {
@@ -2038,6 +2062,7 @@ const pmGanttOccupancyOf = (
     };
   }
   const rangeStart = pmGanttTimeOf(timelineStartIso);
+  const futureStartIndex = Math.max(0, Math.min(dayCount, conflictStartIndex));
   const blockingRanges: Array<{ itemIndex: number; startIndex: number; endIndex: number }> = [];
   const parallelRanges: Array<{ itemIndex: number; startIndex: number; endIndex: number }> = [];
   items.forEach((item, itemIndex) => {
@@ -2073,17 +2098,36 @@ const pmGanttOccupancyOf = (
       availableSegments.push({ startIndex: cursor, endIndex });
     } else {
       occupiedDays += spanDays;
-      if (count > 1) {
-        conflictDays += spanDays;
+      const itemIndexes = blockingRanges
+        .filter((range) => range.startIndex <= endIndex && range.endIndex >= cursor)
+        .map((range) => range.itemIndex);
+      if (count > 1 && endIndex >= futureStartIndex) {
+        conflictDays += endIndex - Math.max(cursor, futureStartIndex) + 1;
       }
-      busySegments.push({
-        startIndex: cursor,
-        endIndex,
-        count,
-        itemIndexes: blockingRanges
-          .filter((range) => range.startIndex <= endIndex && range.endIndex >= cursor)
-          .map((range) => range.itemIndex),
-      });
+      if (count > 1 && cursor < futureStartIndex && endIndex >= futureStartIndex) {
+        busySegments.push({
+          startIndex: cursor,
+          endIndex: futureStartIndex - 1,
+          count,
+          itemIndexes,
+          conflict: false,
+        });
+        busySegments.push({
+          startIndex: futureStartIndex,
+          endIndex,
+          count,
+          itemIndexes,
+          conflict: true,
+        });
+      } else {
+        busySegments.push({
+          startIndex: cursor,
+          endIndex,
+          count,
+          itemIndexes,
+          conflict: count > 1 && endIndex >= futureStartIndex,
+        });
+      }
     }
     cursor = endIndex + 1;
   }
@@ -2103,6 +2147,7 @@ const pmGanttOccupancyOf = (
         itemIndexes: parallelRanges
           .filter((range) => range.startIndex <= endIndex && range.endIndex >= cursor)
           .map((range) => range.itemIndex),
+        conflict: false,
       });
     }
     cursor = endIndex + 1;
@@ -2568,7 +2613,9 @@ function PmImplementationGantt({
     [ganttFilteredRows, directory, locale, handedOverLabel, unassignedLabel],
   );
   const [ganttViewportWidth, setGanttViewportWidth] = useState(0);
-  const ganttUiScale = pmGanttResponsiveScale(ganttViewportWidth);
+  const ganttUiScale = pmGanttResponsiveScale(
+    pmGanttStableScaleWidth(ganttViewportWidth),
+  );
   const ganttMetrics = pmGanttVisualMetricsOf(ganttUiScale);
   const ganttCssVariables = {
     "--pm-gantt-cell-size": `${ganttMetrics.cellSize}px`,
@@ -3457,6 +3504,12 @@ function PmImplementationGantt({
 
   const renderedGroups = useMemo(() => {
     let sequence = 0;
+    const conflictStartIndex =
+      timeline.todayIndex >= 0
+        ? timeline.todayIndex
+        : pmGanttTimeOf(pmGanttTodayIso()) < pmGanttTimeOf(timeline.startIso)
+          ? 0
+          : timeline.days.length;
     return groups.map((group) => {
       let groupStart: string | null = null;
       let groupEnd: string | null = null;
@@ -3468,7 +3521,12 @@ function PmImplementationGantt({
           groupEnd = item.end;
         }
       });
-      const occupancy = pmGanttOccupancyOf(group.items, timeline.startIso, timeline.days.length);
+      const occupancy = pmGanttOccupancyOf(
+        group.items,
+        timeline.startIso,
+        timeline.days.length,
+        conflictStartIndex,
+      );
       return {
         ...group,
         groupStart,
@@ -3484,7 +3542,7 @@ function PmImplementationGantt({
         }),
       };
     });
-  }, [groups, timeline.days.length, timeline.startIso]);
+  }, [groups, timeline.days.length, timeline.startIso, timeline.todayIndex]);
 
   const indexOfIso = (iso: string, fallback: number): number => {
     const parsed = Date.parse(iso + "T00:00:00Z");
@@ -4122,23 +4180,34 @@ function PmImplementationGantt({
                       const segmentTitles = segmentItems.map((item) =>
                         item.row.name.trim() === "" ? item.row.code.trim() || t("pm.board.untitled") : item.row.name.trim(),
                       );
-                      const segmentConflict = isPersonGroup && segment.count > 1;
+                      const segmentConflict = isPersonGroup && segment.conflict;
+                      const segmentHistoricalOverlap =
+                        isPersonGroup && segment.count > 1 && !segment.conflict;
                       const segmentLabel = segmentConflict
                         ? t("pm.gantt.conflictCount", { n: segment.count })
-                        : segmentTitles[0] ?? t("pm.gantt.noDates");
+                        : segmentHistoricalOverlap
+                          ? t("pm.gantt.historicalOverlapCount", { n: segment.count })
+                          : segmentTitles[0] ?? t("pm.gantt.noDates");
                       const segmentTitle = segmentConflict
                         ? t("pm.gantt.conflictHint", {
                             n: segment.count,
                             start: fullDateText(locale, segmentStartIso),
                             end: fullDateText(locale, segmentEndIso),
                           }) + (segmentTitles.length === 0 ? "" : " · " + segmentTitles.join(" / "))
-                        : segmentLabel + " · " + fullDateText(locale, segmentStartIso) + " - " + fullDateText(locale, segmentEndIso);
+                        : segmentHistoricalOverlap
+                          ? t("pm.gantt.historicalOverlapHint", {
+                              n: segment.count,
+                              start: fullDateText(locale, segmentStartIso),
+                              end: fullDateText(locale, segmentEndIso),
+                            }) + (segmentTitles.length === 0 ? "" : " · " + segmentTitles.join(" / "))
+                          : segmentLabel + " · " + fullDateText(locale, segmentStartIso) + " - " + fullDateText(locale, segmentEndIso);
                       return (
                         <button
                           key={group.key + "-busy-" + String(segment.startIndex)}
                           type="button"
                           data-project-management-gantt-group-segment={group.key + "-" + String(segment.startIndex)}
                           data-project-management-gantt-conflict={segmentConflict ? "true" : undefined}
+                          data-project-management-gantt-historical-overlap={segmentHistoricalOverlap ? "true" : undefined}
                           aria-label={t("pm.gantt.jumpToDates") + " · " + segmentTitle}
                           title={segmentTitle}
                           onClick={() => revealGanttEntry(group.key + "-segment-" + String(segment.startIndex), segmentLeft)}
@@ -4151,13 +4220,19 @@ function PmImplementationGantt({
                               "pointer-events-none absolute inset-x-0 bottom-0 h-2 rounded-full " +
                               (segmentConflict
                                 ? "bg-rose-400/85 group-hover:bg-rose-500"
-                                : "bg-sky-400/80 group-hover:bg-sky-500")
+                                : segmentHistoricalOverlap
+                                  ? "bg-amber-400/80 group-hover:bg-amber-500"
+                                  : "bg-sky-400/80 group-hover:bg-sky-500")
                             }
                           />
                           <span
                             className={
                               "relative min-w-0 truncate px-0.5 pt-px text-[length:var(--pm-gantt-bar-size,10px)] font-medium leading-[var(--pm-gantt-group-name-leading,16px)] " +
-                              (segmentConflict ? "text-rose-700" : "text-zinc-600")
+                              (segmentConflict
+                                ? "text-rose-700"
+                                : segmentHistoricalOverlap
+                                  ? "text-amber-800"
+                                  : "text-zinc-600")
                             }
                           >
                             {segmentLabel}

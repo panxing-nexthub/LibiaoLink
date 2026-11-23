@@ -27,6 +27,22 @@ class WorkerUnitTests(unittest.TestCase):
         summary = PageSummary(documentType="pdf", purpose="test", summary="test", keyFacts=facts)
         self.assertEqual(len(summary.keyFacts), 8)
 
+    def test_page_summary_truncates_lists_and_long_items(self):
+        summary = PageSummary(
+            documentType="pdf",
+            purpose="test",
+            summary="test",
+            risks=[f"risk-{i}" for i in range(12)],
+            decisions=[f"decision-{i}" for i in range(12)],
+            warnings=["warning-" + "x" * 700],
+            missing=["missing-" + "y" * 400],
+        )
+        self.assertEqual(len(summary.risks), 8)
+        self.assertEqual(len(summary.decisions), 8)
+        self.assertEqual(len(summary.warnings), 1)
+        self.assertEqual(len(summary.warnings[0]), 500)
+        self.assertEqual(len(summary.missing[0]), 300)
+
     def test_page_summary_rejects_empty_evidence(self):
         with self.assertRaises(Exception):
             PageSummary(documentType="pdf", purpose="test", summary="test", keyFacts=[{"category": "other", "key": "k", "value": 1, "unit": None, "evidence": "", "confidence": 0.9}])

@@ -8,7 +8,7 @@ import { CasdoorDirectorySource, OrgSyncService } from "../modules/identity/inde
 import { CadArchiveWorker, FileService, PreviewService, RECYCLE_SWEEP_BATCH as FILE_RECYCLE_SWEEP_BATCH } from "../modules/file/index.js";
 import { PROJECT_RECYCLE_SWEEP_BATCH, ProjectService } from "../modules/project/index.js";
 import { IMPORT_PREVIEW_SWEEP_INTERVAL_MS, ProjectImportService } from "../modules/project-import/index.js";
-import { NotifyDmService, NotifyGroupService, NotifyService, WecomAibotClient, WecomProjectAccessService } from "../modules/notify/index.js";
+import { NotifyDmService, NotifyGroupService, NotifyService, WecomAibotClient } from "../modules/notify/index.js";
 import { ReportQueryService } from "../modules/report-query/index.js";
 import { TaskNodeRequestService, TaskNodeReviewNotificationService } from "../modules/template/index.js";
 import {
@@ -50,7 +50,6 @@ async function bootstrap(): Promise<void> {
   const groupNotify = app.get(NotifyGroupService);
   const dmNotify = app.get(NotifyDmService);
   const reportQuery = app.get(ReportQueryService);
-  const projectGroupAccess = app.get(WecomProjectAccessService);
   const taskNodeRequests = app.get(TaskNodeRequestService);
   const taskNodeReviewNotifications = app.get(TaskNodeReviewNotificationService);
   const dispatcher = app.get(OutboxDispatcher);
@@ -230,12 +229,6 @@ async function bootstrap(): Promise<void> {
         message.text !== null &&
         taskNodeRequests.looksLikeWecomReview(message.text);
       const ingest = (async (): Promise<void> => {
-        const handledProjectAccess = await projectGroupAccess.handle(message).catch((error: unknown) => {
-          // 数据库错误可能附带企微回调标识，日志只记录异常类型。
-          logger.warn("企微项目群授权回调处理失败：" + (error instanceof Error ? error.name : "UnknownError"));
-          return true;
-        });
-        if (handledProjectAccess) return;
         if (reviewCandidate) {
           const actorId = await dmNotify.resolveBoundDmActor(message);
           const reply = actorId === null

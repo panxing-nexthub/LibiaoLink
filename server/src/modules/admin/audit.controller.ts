@@ -1,8 +1,8 @@
 import { Controller, Get, Query, UseGuards } from "@nestjs/common";
-import { AuditLogListQuerySchema, z } from "@libiaolink/contracts";
+import { AuditLogListQuerySchema, canUseProjectManagement, z } from "@libiaolink/contracts";
 import type { AuditLogListQuery, AuditLogListResponse } from "@libiaolink/contracts";
 import { ZodValidationPipe } from "../../common/http/zod-validation.pipe.js";
-import { CsrfGuard, CurrentActorId, SessionGuard } from "../identity/index.js";
+import { CsrfGuard, CurrentActorId, CurrentUser, SessionGuard, type MeUser } from "../identity/index.js";
 import { GroupAccessGuard, PermissionService, RequireAccessPage } from "../permission/index.js";
 import { AuditService } from "../audit/index.js";
 
@@ -25,12 +25,14 @@ export class AuditLogsController {
   async list(
     @Query(new ZodValidationPipe(AuditLogListQuerySchema)) query: AuditLogListQuery,
     @CurrentActorId() actorId: string,
+    @CurrentUser() user: MeUser,
   ): Promise<AuditLogListResponse> {
     const access = await this.permission.auditAccessOf(actorId);
-    if (access.scope === "all") return this.audits.list(query);
     return this.audits.list(query, {
       actorId,
+      scope: access.scope,
       managedProjectIds: access.scope === "project_manager" ? access.managedProjectIds : [],
+      canViewProjectManagement: canUseProjectManagement(user.email),
     });
   }
 }

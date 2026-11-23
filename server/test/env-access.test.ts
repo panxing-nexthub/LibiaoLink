@@ -35,15 +35,6 @@ describe("生产环境部门权限开关", () => {
   });
 });
 
-describe("企微项目群只读授权开关", () => {
-  it("默认关闭，只接收 true / false", () => {
-    const base = { DATABASE_URL: "postgres://test/test" };
-    expect(loadEnv(base).WECOM_PROJECT_GROUP_ACCESS_ENABLED).toBe("false");
-    expect(loadEnv({ ...base, WECOM_PROJECT_GROUP_ACCESS_ENABLED: "true" }).WECOM_PROJECT_GROUP_ACCESS_ENABLED).toBe("true");
-    expect(() => loadEnv({ ...base, WECOM_PROJECT_GROUP_ACCESS_ENABLED: "1" })).toThrow(/WECOM_PROJECT_GROUP_ACCESS_ENABLED/);
-  });
-});
-
 describe("企微机器人日报查询开关", () => {
   it("缺省均为关闭，不改变现有单聊与群聊回调", () => {
     const env = loadEnv({ DATABASE_URL: "postgres://test/test" });

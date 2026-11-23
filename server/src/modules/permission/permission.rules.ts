@@ -82,8 +82,6 @@ export function isProjectVisible(
 
 /** 项目内上下文：记录级解析结果（名册角色 + 项目主数据），can 的项目级来源。 */
 export interface ProjectResourceContext {
-  /** 唯一可见来源为企微群授权时，既有项目写权限不得被放行。 */
-  wecomReadOnly?: boolean;
   member: boolean;
   projectManager: boolean;
   /** 当前账号是否负责本项目任一未删除任务（只读项目浏览来源）。 */
@@ -95,6 +93,10 @@ export interface ProjectResourceContext {
 }
 
 /** 有效项目编辑权：管理员、本项目项目经理或规则 edit（均汇总进 accessLevel）；成员 / 任务负责人关系不提升。 */
+export function projectManagerIdsChanged(current: readonly string[], next: readonly string[]): boolean {
+  return current.length !== next.length || next.some((id, index) => id.toLowerCase() !== current[index]?.toLowerCase());
+}
+
 export function isProjectEditor(context?: Pick<ProjectResourceContext, "accessLevel" | "groupAccessLevel">): boolean {
   return context?.accessLevel === "edit" || (context?.accessLevel === undefined && context?.groupAccessLevel === "edit");
 }

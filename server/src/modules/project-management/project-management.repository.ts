@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
+import type { DbClient } from "../../db/db-client.js";
 import { users } from "../../db/schema/identity.js";
 import {
   projectManagementRecords,
@@ -95,8 +96,8 @@ export class ProjectManagementRepository {
     return rows[0] ?? null;
   }
 
-  async insert(values: ProjectManagementRecordInsert, at: Date): Promise<ProjectManagementRecordRow> {
-    const rows = await this.database.db
+  async insert(values: ProjectManagementRecordInsert, at: Date, client: DbClient = this.database.db): Promise<ProjectManagementRecordRow> {
+    const rows = await client
       .insert(projectManagementRecords)
       .values({ ...values, createdAt: at, updatedAt: at })
       .returning();
@@ -112,8 +113,9 @@ export class ProjectManagementRepository {
     version: number,
     patch: ProjectManagementRecordPatch,
     at: Date,
+    client: DbClient = this.database.db,
   ): Promise<ProjectManagementRecordRow | null> {
-    const rows = await this.database.db
+    const rows = await client
       .update(projectManagementRecords)
       .set({
         ...patch,
@@ -125,8 +127,8 @@ export class ProjectManagementRepository {
     return rows[0] ?? null;
   }
 
-  async deleteIfVersion(id: string, version: number): Promise<string | null> {
-    const rows = await this.database.db
+  async deleteIfVersion(id: string, version: number, client: DbClient = this.database.db): Promise<string | null> {
+    const rows = await client
       .delete(projectManagementRecords)
       .where(and(eq(projectManagementRecords.id, id), eq(projectManagementRecords.version, version)))
       .returning({ id: projectManagementRecords.id });

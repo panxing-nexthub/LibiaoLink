@@ -83,6 +83,7 @@ export type GroupAccessOverview = {
   groups: GroupAccessGroup[];
   projects: GroupAccessProject[];
   automaticRoles: GroupAccessAutomaticRole[];
+  projectViewGrants?: Array<{ userId: string; projectId: string }>;
 };
 
 export type GroupAccessRuleInput = {

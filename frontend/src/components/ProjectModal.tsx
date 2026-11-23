@@ -59,6 +59,7 @@ type ProjectModalProps = {
   canManageDicts: boolean;
   /** 项目经理候选（有效项目部成员 ∪ 系统管理员；编辑时另含本项目存量经理，用于兼容历史数据）。 */
   managerOptions: Member[];
+  canEditManagers?: boolean;
   /** 是否持有 project.archive（Push 262）：决定「已归档」选项的呈现（服务端仍是最终裁决）。 */
   canArchive?: boolean;
   onClose: () => void;
@@ -86,7 +87,7 @@ function projectTypeContent(name: string, item: DictItem | null): ReactNode {
   );
 }
 
-export function ProjectModal({ mode, initial, initialArchiveKind, hasOpenPostArchiveTask, dicts, dictTools, canManageDicts, managerOptions, canArchive = false, onClose, onSubmit }: ProjectModalProps) {
+export function ProjectModal({ mode, initial, initialArchiveKind, hasOpenPostArchiveTask, dicts, dictTools, canManageDicts, managerOptions, canEditManagers = mode === "create", canArchive = false, onClose, onSubmit }: ProjectModalProps) {
   const isEdit = mode === "edit";
   const t = useT();
   const locale = useLocale();
@@ -313,15 +314,21 @@ export function ProjectModal({ mode, initial, initialArchiveKind, hasOpenPostArc
             </label>
             <div className="block">
               <span className="mb-1.5 block text-sm font-medium text-zinc-700">
-                {fieldText(locale, "项目经理")}<span className="ml-1 text-xs font-normal text-zinc-400">{t("modal.managers.any")}</span>
+                {fieldText(locale, "项目经理")}{canEditManagers && <span className="ml-1 text-xs font-normal text-zinc-400">{t("modal.managers.any")}</span>}
               </span>
-              <MemberMultiSelect
-                values={managerIds}
-                onChange={setManagerIds}
-                options={managerOptions}
-                placeholder={t("drawer.manager.placeholder")}
-                ariaLabel={t("drawer.manager.aria")}
-              />
+              {canEditManagers ? (
+                <MemberMultiSelect
+                  values={managerIds}
+                  onChange={setManagerIds}
+                  options={managerOptions}
+                  placeholder={t("drawer.manager.placeholder")}
+                  ariaLabel={t("drawer.manager.aria")}
+                />
+              ) : (
+                <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+                  {managerIds.map((id) => managerOptions.find((member) => member.id === id)?.name ?? id).join(isLocalizedLocale(locale) ? ", " : "、")}
+                </p>
+              )}
             </div>
             <div className="block">
               <span className="mb-1.5 block text-sm font-medium text-zinc-700">{t("modal.province")}</span>

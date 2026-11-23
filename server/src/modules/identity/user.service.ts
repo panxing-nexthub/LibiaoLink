@@ -90,6 +90,11 @@ export class UserService {
     };
   }
 
+  async findActiveDirectoryMatches(keys: readonly string[]): Promise<UserDirectoryItem[]> {
+    const rows = await this.users.findActiveDirectoryMatches(keys);
+    return rows.map((row) => this.toDirectoryItem(row));
+  }
+
   /** 导出专用用户总数：只统计启用用户。 */
   async countForExport(): Promise<number> {
     return this.users.countDirectoryForExport();

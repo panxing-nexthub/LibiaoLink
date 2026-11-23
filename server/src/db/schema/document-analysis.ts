@@ -4,7 +4,7 @@ import { users } from "./identity.js";
 import { projects } from "./projects.js";
 import { files, fileVersions } from "./files.js";
 
-/** project_document_analysis_runs（0113）：项目级 AI 文件分析 run。 */
+/** project_document_analysis_runs（0114）：项目级 AI 文件分析 run。 */
 export const projectDocumentAnalysisRuns = pgTable(
   "project_document_analysis_runs",
   {
@@ -36,7 +36,7 @@ export const projectDocumentAnalysisRuns = pgTable(
   ],
 );
 
-/** project_file_analyses（0113）：按 file_version_id + prompt_version 缓存文件摘要。 */
+/** project_file_analyses（0114）：按 file_version_id + prompt_version 缓存文件摘要。 */
 export const projectFileAnalyses = pgTable(
   "project_file_analyses",
   {

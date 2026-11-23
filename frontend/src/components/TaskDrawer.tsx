@@ -242,7 +242,7 @@ type TaskDrawerProps = {
   /** 当前账号是否可对该任务定档 / 取消定档（服务端投影 canFinalize，且任务已设定输出成果文件）。 */
   canFinalize?: boolean;
   allowFileChanges?: boolean;
-  /** 项目经理是项目级字段：仅当前项目编辑者可改并同步全项目；任务负责人不得改。 */
+  /** 仅本项目经理和系统管理员可变更经理字段。 */
   canEditManagers?: boolean;
   task: ProjectTask | null;
   /** 抽屉内直接改字段后的即时保存；不传 = 抽屉只读（不渲染可编辑控件）。 */

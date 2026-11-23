@@ -144,11 +144,3 @@
 - **站内信删除 · 0065（2026-10-23 · C5-01 / C5-03）**：新增 `notifications.deleted_at` 收件箱软删列；`DELETE /api/v1/notifications/{id}` 删除指定项、`DELETE /api/v1/notifications` 一键删除全部，权限均为个人资源（会话 + CSRF）。只隐藏本人已投递主行，删除时取消未触发的稍后提醒并回收未读角标；收件箱列表 / 未读计数 / 合并目标 / 稍后提醒扫描 / 标记与删除写口统一过滤 `deleted_at is null`；合并落库改为条件更新，主行在查目标后被删除 / 标读时改走正常投递，避免新消息静默挂到隐藏主行。C5-03 全量留档、合并子行与 `notify_delivery_messages` 不删，每日投递上限历史计数不变。契约 = `NotificationDeleteResponse` / `NotificationDeleteAllResponse`；前端顶栏弹窗提供单条垃圾桶与「全部删除」二次确认。
 
 - **A01 已提醒回读 · M5-06-3（2026-10-20 · Push 276 · lan）**：`NotifyDeliveryReadRepository.findReminderSentAt` 按规则码 + 业务日 + 收件人批量拼键回读 `notify_delivery_messages`；A01 同时匹配 `A01:<memberId>:<date>`、`:aibot`、`:app`，仅 `last_state = sent` 计入并取最早 `sentAt`。日报 `reports/missing` 只调用该读面生成 `reminderSentAt`，不写日报主体；管理员重发产生的 `resend:` 归档不单独算「已提醒」。
-
-## 企微项目群只读授权
-
-API 和 worker 同时启用 `WECOM_PROJECT_GROUP_ACCESS_ENABLED=true`，并使用同一个机器人。先迁移数据库，再在系统设置中绑定企微账号，并把群绑定到对应项目。具有项目成员管理权限的已绑定用户在群里发「@机器人 发放项目只读授权卡」。
-
-卡片 24 小时内可领取。点击必须来自发卡机器人、当前绑定的原群和有效卡片，点击者须有该机器人下的企微绑定和正常系统账号。每个系统账号在一次项目群绑定下领取一次。领取和审计同事务落库，重复点击无额外写入。群解绑、换绑或停用，以及企微身份不再绑定到领取账号时，失去相应的访问。卡片到期仅关闭新领取。
-
-未绑定的用户点击有效卡片时，机器人仅更新该点击人看到的卡片，提示到系统设置绑定企微。提示卡保留相同任务 ID 和按钮标识，绑定后可再次领取。领取成功或该账号已在当前群绑定下领取时，只将点击人看到的卡片更新为「已领取项目只读权限」，移除领取按钮。

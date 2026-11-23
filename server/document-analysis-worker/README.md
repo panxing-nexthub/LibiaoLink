@@ -48,7 +48,7 @@ docker build -t libiaolink/document-analysis-worker:local server/document-analys
 
 ## 运行
 
-先对测试数据库执行迁移 `database/migrations/0113_project_document_analyses.sql`。
+先对测试数据库执行迁移 `database/migrations/0114_project_document_analyses.sql`。
 
 enqueue：
 

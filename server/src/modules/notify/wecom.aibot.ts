@@ -79,13 +79,6 @@ export interface AibotButtonCard {
   task_id: string;
 }
 
-interface AibotTextNoticeCard {
-  card_type: "text_notice";
-  main_title: { title: string; desc?: string };
-  card_action: { type: 1; url: string };
-  task_id: string;
-}
-
 interface AibotTemplateCardClick {
   botId: string;
   taskId: string;
@@ -561,31 +554,6 @@ export class WecomAibotClient {
     /** 群聊回调传 chatid：限速计入该群桶；单聊不传，沿用 userid 单聊桶。 */
     chatid?: string | null;
   }): Promise<AibotSendResult> {
-    return this.sendCallbackResponse(params, "aibot_respond_msg", () => ({
-      msgtype: "stream",
-      stream: { id: this.nextReqId("stream"), finish: true, content: params.content },
-    }));
-  }
-
-  /** 使用卡片事件的 req_id，只更新点击人的卡片副本。 */
-  async updateGroupCardForUser(params: {
-    reqId: string;
-    chatid: string;
-    userid: string;
-    card: AibotButtonCard | AibotTextNoticeCard;
-  }): Promise<AibotSendResult> {
-    return this.sendCallbackResponse(params, "aibot_respond_update_msg", () => ({
-      response_type: "update_template_card",
-      userids: [params.userid],
-      template_card: params.card,
-    }));
-  }
-
-  private async sendCallbackResponse(
-    params: { reqId: string; userid: string; chatid?: string | null },
-    cmd: "aibot_respond_msg" | "aibot_respond_update_msg",
-    buildBody: () => Record<string, unknown>,
-  ): Promise<AibotSendResult> {
     if (this.state !== "subscribed" || this.socket === null) {
       return {
         ok: false,
@@ -618,9 +586,9 @@ export class WecomAibotClient {
     }
     const ack = this.waitAck(params.reqId);
     const sent = this.sendFrame({
-      cmd,
+      cmd: "aibot_respond_msg",
       headers: { req_id: params.reqId },
-      body: buildBody(),
+      body: { msgtype: "stream", stream: { id: this.nextReqId("stream"), finish: true, content: params.content } },
     });
     if (!sent) {
       this.cancelAck(params.reqId, "closed");

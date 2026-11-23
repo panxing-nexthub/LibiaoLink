@@ -15,6 +15,7 @@ import {
   ProjectArchiveViewSchema,
   ProjectCreateBodySchema,
   ProjectDeliverableTypeCreateBodySchema,
+  ProjectDetailSchema,
   ProjectDeleteHeadersSchema,
   ProjectFacetsSchema,
   ProjectGroupBindingSchema,
@@ -32,6 +33,11 @@ import {
   ProjectSchema,
   ProjectSummarySchema,
   ProjectUpdateBodySchema,
+  ProjectViewGrantAddBodySchema,
+  ProjectViewGrantAddResultSchema,
+  ProjectViewGrantListSchema,
+  ProjectViewGrantPreviewBodySchema,
+  ProjectViewGrantPreviewSchema,
 } from "./modules/projects.ts";
 import {
   ProjectManagementRecordCreateBodySchema,
@@ -470,9 +476,9 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "get",
     path: "/api/v1/projects/map-overview",
     tags: ["projects"],
-    summary: "蓝图地图项目概况（有项目浏览权即可读取全部未删除项目的最少字段；accessLevel=null 不可进入详情）",
+    summary: "蓝图地图项目概况（全量概况资格沿用原判定；仅凭项目内分享可见时按项目过滤；accessLevel=null 不可进入详情）",
     responses: {
-      200: { description: "全部未删除项目概况 + 当前账号可否进入详情", ...json(ProjectMapOverviewResponseSchema) },
+      200: { description: "按地图读取范围返回未删除项目概况及详情访问级别", ...json(ProjectMapOverviewResponseSchema) },
       403: commonErrors[403],
     },
   });
@@ -484,7 +490,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     summary: "项目详情",
     request: { params: idParams },
     responses: {
-      200: { description: "项目", ...json(ProjectSchema) },
+      200: { description: "项目", ...json(ProjectDetailSchema) },
       404: commonErrors[404],
     },
   });
@@ -629,6 +635,60 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
       403: commonErrors[403],
       404: commonErrors[404],
       409: commonErrors[409],
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/projects/{id}/view-grants",
+    tags: ["projects"],
+    summary: "本项目经理列出此入口添加的项目只读授权",
+    request: { params: idParams },
+    responses: {
+      200: { description: "授权列表", ...json(ProjectViewGrantListSchema) },
+      403: commonErrors[403],
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/view-grants/preview",
+    tags: ["projects"],
+    summary: "本项目经理预览粘贴名单和启用账号的匹配结果",
+    request: { params: idParams, body: json(ProjectViewGrantPreviewBodySchema) },
+    responses: {
+      200: { description: "逐项匹配结果", ...json(ProjectViewGrantPreviewSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/view-grants",
+    tags: ["projects"],
+    summary: "本项目经理按确认的系统用户 ID 批量追加项目只读授权",
+    request: { params: idParams, body: json(ProjectViewGrantAddBodySchema) },
+    responses: {
+      200: { description: "实际新增数", ...json(ProjectViewGrantAddResultSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "delete",
+    path: "/api/v1/projects/{id}/view-grants/{userId}",
+    tags: ["projects"],
+    summary: "本项目经理撤销指定账号从此入口获取的项目只读授权",
+    request: { params: idParams.extend({ userId: UuidSchema }) },
+    responses: {
+      204: { description: "授权已撤销或不存在" },
+      403: commonErrors[403],
+      404: commonErrors[404],
     },
   });
 

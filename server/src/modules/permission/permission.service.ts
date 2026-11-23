@@ -10,6 +10,7 @@ import {
 } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import { AppConfig } from "../../config/config.module.js";
+import type { DbClient } from "../../db/db-client.js";
 import { casdoorGroupKey, DepartmentService, RoleService, type ActorAuthorization } from "../identity/index.js";
 import {
   intersectProjectIds,
@@ -206,6 +207,18 @@ export class PermissionService {
     return (await this.groupAccessOf(actorId)).admin;
   }
 
+  /** 在经理写入事务内使用当前项目名单，并用同一事务读取名册经理身份。 */
+  async assertCanManageProjectManagers(
+    actorId: string,
+    project: { id: string; managerIds: readonly string[] },
+    client: DbClient,
+  ): Promise<void> {
+    if (await this.canManageGroupAccess(actorId)) return;
+    const membership = await this.repository.findMembership(actorId, project.id, client);
+    if (isProjectManager(project.managerIds.includes(actorId), membership)) return;
+    throw new AppError("FORBIDDEN", "仅本项目的项目经理或系统管理员可以变更项目经理");
+  }
+
   async canAccessPage(actorId: string, page: GroupAccessPage): Promise<boolean> {
     return (await this.groupAccessOf(actorId)).pages.includes(page);
   }
@@ -216,7 +229,6 @@ export class PermissionService {
   }
 
   async can(actorId: string, key: PermissionKey, context?: ProjectResourceContext): Promise<boolean> {
-    if (context?.wecomReadOnly === true && PROJECT_GROUP_WRITE_KEYS.includes(key)) return false;
     if (!can(await this.getAuthorization(actorId), key, context)) return false;
     const groupAccess = await this.groupAccessOf(actorId);
     if (key === "blueprint.manage") return groupAccess.admin;
@@ -373,20 +385,28 @@ export class PermissionService {
     throw new AppError("FORBIDDEN", message ?? "该操作需要全部项目编辑权限");
   }
 
-  /**
-   * 批量裁决项目的最终有效权限；用于项目列表 / 详情 / 工作台随行下发，避免逐项目查库。
-   * 规则档位只决定数据范围与基础权限；本项目的项目经理（主数据 manager_ids 或名册 project_manager）
-   * 额外获得该项目编辑权，但不会外溢到其他项目。
-   */
   async projectGroupAccessLevelsOf(
     actorId: string,
     projectIds: readonly string[],
   ): Promise<Map<string, GroupAccessAccessLevel>> {
-    const levels = new Map<string, GroupAccessAccessLevel>();
+    const summaries = await this.projectAccessSummariesOf(actorId, projectIds);
+    return new Map([...summaries].map(([projectId, summary]) => [projectId, summary.accessLevel]));
+  }
+
+  /**
+   * 批量裁决项目的最终有效权限及经理任命能力，避免逐项目查库。
+   * 规则档位只决定数据范围与基础权限；本项目的项目经理（主数据 manager_ids 或名册 project_manager）
+   * 额外获得该项目编辑权，但不会外溢到其他项目。
+   */
+  async projectAccessSummariesOf(
+    actorId: string,
+    projectIds: readonly string[],
+  ): Promise<Map<string, ProjectAccessSummary>> {
+    const summaries = new Map<string, ProjectAccessSummary>();
     const groupAccess = await this.groupAccessOf(actorId);
     if (groupAccess.admin) {
-      for (const projectId of projectIds) levels.set(projectId, "edit");
-      return levels;
+      for (const projectId of projectIds) summaries.set(projectId, { accessLevel: "edit", canManageProjectManagers: true });
+      return summaries;
     }
     let ownProjectIds = new Set<string>();
     if (groupAccess.enforced && groupAccess.ownProjects) {
@@ -400,9 +420,13 @@ export class PermissionService {
     ]);
     for (const projectId of projectIds) {
       const ruleLevel = projectGroupAccessLevelOf(groupAccess, projectId, ownProjectIds.has(projectId));
-      levels.set(projectId, managed.has(projectId) || ruleLevel === "edit" ? "edit" : "view");
+      const canManageProjectManagers = managed.has(projectId);
+      summaries.set(projectId, {
+        accessLevel: canManageProjectManagers || ruleLevel === "edit" ? "edit" : "view",
+        canManageProjectManagers,
+      });
     }
-    return levels;
+    return summaries;
   }
 
   /**
@@ -423,12 +447,11 @@ export class PermissionService {
         ]);
     const baseIds = intersectProjectIds(roleIds, groupIds);
     if (baseIds === null) return { kind: "all" };
-    const botId = this.wecomReadGrantBotId();
-    const [relatedIds, wecomIds] = await Promise.all([
+    const [relatedIds, viewGrantIds] = await Promise.all([
       this.repository.listRelatedProjectIds(actorId),
-      botId === null ? [] : this.repository.listWecomReadGrantProjectIds(actorId, botId),
+      this.repository.listProjectViewGrantIds(actorId),
     ]);
-    return { kind: "ids", ids: uniqueIds([...baseIds, ...relatedIds, ...wecomIds]) };
+    return { kind: "ids", ids: uniqueIds([...baseIds, ...relatedIds, ...viewGrantIds]) };
   }
 
   /** 解析项目上下文：不可见 / 不存在返回 null（调用方转 404）；回收站写口可选包含已软删项目。 */
@@ -447,7 +470,7 @@ export class PermissionService {
     ]);
     const rosterMember = membershipRole !== null;
     const managerOfRecord = ref.managerIds.includes(actorId);
-    const projectManager = managerOfRecord || membershipRole === "project_manager";
+    const projectManager = isProjectManager(managerOfRecord, membershipRole);
     const relationVisible = managerOfRecord || rosterMember || taskOwner;
     const roleVisible = isProjectVisible(spec, {
       rosterMember,
@@ -457,12 +480,8 @@ export class PermissionService {
     const ownProject = managerOfRecord || rosterMember;
     const groupAccessLevel = projectGroupAccessLevelOf(groupAccess, projectId, ownProject);
     const visible = groupAccess.admin || relationVisible || (roleVisible && groupAccessLevel !== null);
-    if (!visible) {
-      const botId = this.wecomReadGrantBotId();
-      if (ref.deletedAt !== null || botId === null || !(await this.repository.hasWecomReadGrant(actorId, botId, projectId))) {
-        return null;
-      }
-      return { projectId, member: false, projectManager: false, groupAccessLevel: null, accessLevel: "view", wecomReadOnly: true };
+    if (!visible && (ref.deletedAt !== null || !(await this.repository.hasProjectViewGrant(actorId, projectId)))) {
+      return null;
     }
     return {
       projectId,
@@ -472,11 +491,6 @@ export class PermissionService {
       groupAccessLevel,
       accessLevel: groupAccess.admin || projectManager || groupAccessLevel === "edit" ? "edit" : "view",
     };
-  }
-
-  private wecomReadGrantBotId(): string | null {
-    const env = this.config?.env;
-    return env?.WECOM_PROJECT_GROUP_ACCESS_ENABLED === "true" && env.WECOM_BOT_ID !== "" ? env.WECOM_BOT_ID : null;
   }
 
   /** 记录级门禁：不可见 → 404（防 IDOR，ADR-011 不变量 3）；includeDeleted 仅供项目回收站恢复 / 彻底删除。 */
@@ -527,6 +541,15 @@ export class PermissionService {
     if (hasActiveProject) return "allowed";
     return hasProjectDataScope(groupAccess) ? "empty" : "denied";
   }
+}
+
+export type ProjectAccessSummary = {
+  accessLevel: GroupAccessAccessLevel;
+  canManageProjectManagers: boolean;
+};
+
+function isProjectManager(managerOfRecord: boolean, membershipRole: string | null): boolean {
+  return managerOfRecord || membershipRole === "project_manager";
 }
 
 /** 没有任何数据范围（或只有 none 规则）= 仅登录；至少一个 all / own / selected 才有业务数据读取范围。 */

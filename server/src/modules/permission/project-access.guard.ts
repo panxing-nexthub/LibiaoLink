@@ -84,7 +84,13 @@ export class ProjectAccessGuard implements CanActivate {
       const access = await this.permission.assertProjectVisible(actorId, projectId, { includeDeleted });
       request.projectAccess = access;
       if (required !== undefined) {
-        await this.permission.assertCan(actorId, required, access);
+        await this.permission.assertCan(actorId, required, {
+          member: access.member,
+          projectManager: access.projectManager,
+          taskOwner: access.taskOwner,
+          groupAccessLevel: access.groupAccessLevel,
+          accessLevel: access.accessLevel,
+        });
       }
       return true;
     }

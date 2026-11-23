@@ -1,6 +1,5 @@
 /** notify 模块唯一公开出口（api / worker 组合根与 outbox 注册表使用）。 */
 export { NotifyModule } from "./notify.module.js";
-export { WecomProjectAccessService } from "./wecom-project-access.service.js";
 export {
   composeGroupMarkdown,
   GROUP_DEGRADE_PREFIX,

@@ -237,8 +237,6 @@ export const EnvSchema = z
     WECOM_REPORT_QUERY_DM_ENABLED: z.enum(["true", "false"]).default("false"),
     /** 企微机器人日报查询（群聊）：false = 不改现有群回调行为；S0 仅暴露开关，查询接线在 S3 启用。 */
     WECOM_REPORT_QUERY_GROUP_ENABLED: z.enum(["true", "false"]).default("false"),
-    /** 企微项目群授权卡与只读访问。 */
-    WECOM_PROJECT_GROUP_ACCESS_ENABLED: z.enum(["true", "false"]).default("false"),
     /** R06 动态海报开关：true = 按项目真实数据生成姓名墙 PNG；生成失败回退下方静态图。 */
     WECOM_R06_DYNAMIC_POSTER: z.enum(["true", "false"]).default("true"),
     /** R06 动态海报字体（可选）：空 = 使用服务端资产思源宋体（SemiBold / Bold，随仓库发布）；可指向其它已授权字体。 */

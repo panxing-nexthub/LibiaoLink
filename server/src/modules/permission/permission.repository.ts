@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, eq, inArray, isNotNull, isNull, notExists, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import type {
   GroupAccessAccessLevel,
   GroupAccessAutomaticRole,
@@ -22,7 +22,6 @@ import {
 } from "../../db/schema/access.js";
 import { users } from "../../db/schema/identity.js";
 import { projectNodes } from "../../db/schema/flow.js";
-import { wecomAibotDmActivations, wecomGroups, wecomProjectReadGrants } from "../../db/schema/notify.js";
 import { projectMembers, projects } from "../../db/schema/projects.js";
 import { tasks } from "../../db/schema/tasks.js";
 import {
@@ -32,7 +31,7 @@ import {
   type GroupAccessMemberRuleData,
   type GroupAccessRuleData,
 } from "./group-access.rules.js";
-import { visibleProjectIds, type ProjectResourceContext, type ProjectScopeSpec } from "./permission.rules.js";
+import { visibleProjectIds, type ProjectScopeSpec } from "./permission.rules.js";
 
 /** 项目数据面引用：可见性解析需要的项目主数据字段（不做软删过滤，由调用方判定）。 */
 export interface ProjectRef {
@@ -42,7 +41,7 @@ export interface ProjectRef {
 }
 
 /** 记录级解析结果：可见项目上下文 + 项目内角色（can 的项目级来源）。 */
-export interface ProjectAccessContext extends ProjectResourceContext {
+export interface ProjectAccessContext {
   projectId: string;
   /** 名册成员或项目经理（只代表项目内关系，不等于项目编辑权）。 */
   member: boolean;
@@ -178,41 +177,6 @@ export class PermissionRepository {
       ownedIds: await this.listOwnedProjectIds(actorId),
       managedRosterIds: await this.listManagedRosterProjectIds(actorId),
     });
-  }
-
-  async listWecomReadGrantProjectIds(actorId: string, botId: string): Promise<string[]> {
-    const rows = await this.wecomReadGrants(actorId, botId);
-    return rows.map((row) => row.projectId);
-  }
-
-  async hasWecomReadGrant(actorId: string, botId: string, projectId: string): Promise<boolean> {
-    return (await this.wecomReadGrants(actorId, botId, projectId).limit(1)).length > 0;
-  }
-
-  private wecomReadGrants(actorId: string, botId: string, projectId?: string) {
-    return this.database.db
-      .select({ projectId: wecomGroups.projectId })
-      .from(wecomProjectReadGrants)
-      .innerJoin(wecomGroups, and(
-        eq(wecomProjectReadGrants.groupId, wecomGroups.id),
-        eq(wecomProjectReadGrants.groupEpoch, wecomGroups.accessEpoch),
-        eq(wecomGroups.enabled, true),
-      ))
-      .innerJoin(wecomAibotDmActivations, and(
-        eq(wecomProjectReadGrants.activationId, wecomAibotDmActivations.id),
-        eq(wecomProjectReadGrants.userId, wecomAibotDmActivations.userId),
-        eq(wecomAibotDmActivations.botId, botId),
-        isNotNull(wecomAibotDmActivations.boundAt),
-      ))
-      .innerJoin(users, and(
-        eq(wecomProjectReadGrants.userId, users.id),
-        eq(users.status, "active"),
-        isNull(users.removedAt),
-      ))
-      .where(and(
-        eq(wecomProjectReadGrants.userId, actorId),
-        projectId === undefined ? undefined : eq(wecomGroups.projectId, projectId),
-      ));
   }
 
   /** 项目主数据引用（不存在返回 null；软删由调用方判定）。 */

@@ -117,3 +117,43 @@ export function generateProjectAiSummary(projectId: string, force: boolean): Pro
     { force },
   );
 }
+
+export type ProjectDocumentAnalysisRun = {
+  id: string;
+  projectId: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  promptVersion: string;
+  fileCount: number;
+  succeededCount: number;
+  failedCount: number;
+  skippedCount: number;
+  error: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectDocumentAnalysisView = {
+  run: ProjectDocumentAnalysisRun | null;
+  analyses: Array<{
+    id: string;
+    fileName: string;
+    fileKind: "pdf" | "image" | "word" | "excel";
+    status: "succeeded" | "failed" | "skipped";
+    summary: unknown;
+  }>;
+};
+
+export function enqueueProjectDocumentAnalysis(projectId: string): Promise<ProjectDocumentAnalysisRun> {
+  return apiSend<ProjectDocumentAnalysisRun>(
+    "/api/v1/projects/" + encodeURIComponent(projectId) + "/document-analysis",
+    "POST",
+  );
+}
+
+export function fetchProjectDocumentAnalysis(projectId: string): Promise<ProjectDocumentAnalysisView> {
+  return apiRequest<ProjectDocumentAnalysisView>(
+    "/api/v1/projects/" + encodeURIComponent(projectId) + "/document-analysis",
+  );
+}

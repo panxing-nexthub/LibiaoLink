@@ -774,4 +774,4 @@ server/
 - 容器独立运行：entrypoint 读取 Docker Secret 后降权到 uid 10001。需要迁移 `0113_project_document_analyses.sql`。
 - 构建与运行命令见 `server/document-analysis-worker/README.md`。
 
-当前已接 `GET/POST /api/v1/projects/{id}/document-analysis` 与 AI 上下文 `fileAnalyses[]`；前端触发入口尚未接。AI 项目总结 prompt 已升 v3。
+当前已接 `GET/POST /api/v1/projects/{id}/document-analysis` 与 AI 上下文 `fileAnalyses[]`；前端在用户点击「生成项目总结 / 重新生成」时先入队并轮询文件分析，完成后自动生成总结。AI 项目总结 prompt 已升 v3。

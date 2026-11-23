@@ -4687,17 +4687,17 @@ body {
   gap: 0.5rem;
 }
 
-.hub-dash-start__pieCardTitle {
+ .hub-dash-start__pieCardTitle {
   margin: 0;
   color: #374151;
-  font-size: 0.88rem;
+  font-size: 1rem;
   font-weight: 650;
 }
 
-.hub-dash-start__pieCardMeta {
+ .hub-dash-start__pieCardMeta {
   flex: 0 0 auto;
   color: #9aa0a6;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -4708,20 +4708,20 @@ body {
   align-items: center;
 }
 
-.hub-dash-start__pieLegendItem {
+ .hub-dash-start__pieLegendItem {
   display: inline-flex;
   align-items: center;
-  gap: 0.28rem;
+  gap: 0.3rem;
   color: #4b5563;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   white-space: nowrap;
   animation: ll-hub-num-in 320ms ease-out both;
 }
 
-.hub-dash-start__pieLegendItem i {
+ .hub-dash-start__pieLegendItem i {
   display: block;
-  width: 0.55rem;
-  height: 0.55rem;
+  width: 0.62rem;
+  height: 0.62rem;
   border-radius: 2px;
 }
 

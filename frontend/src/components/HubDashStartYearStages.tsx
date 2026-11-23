@@ -280,10 +280,10 @@ function StagePie({ row, onPick }: {
   const cx = chartW / 2;
   const cy = chartH / 2;
   const radius = Math.max(34, Math.min(150, chartH * 0.38, chartW * 0.2));
-  const labelFont = Math.max(10, Math.min(13, chartH * 0.043, chartW * 0.02));
+  const labelFont = Math.max(11.5, Math.min(16, chartH * 0.052, chartW * 0.024));
   const labelPad = Math.max(6, Math.min(18, chartW * 0.016));
   const labelMinGap = Math.max(24, labelFont * 2.6);
-  const labelMaxWidth = Math.max(100, Math.min(240, chartW * 0.24));
+  const labelMaxWidth = Math.max(110, Math.min(280, chartW * 0.25));
   const labelYMin = Math.max(14, labelFont + 6);
   const labelYMax = Math.max(labelYMin + 40, chartH - labelYMin);
   const leaderStub = Math.max(7, Math.min(14, radius * 0.13));

@@ -3838,7 +3838,7 @@
             "items": {
               "$ref": "#/components/schemas/DashboardProjectStageBucket"
             },
-            "description": "固定顺序：九阶段 + 异常归档 / 验收归档 / 归档-临时任务"
+            "description": "固定顺序：九阶段 + 暂停 / 归档-移交售后"
           },
           "typeByYear": {
             "type": "array",
@@ -4012,13 +4012,12 @@
           {
             "type": "string",
             "enum": [
-              "archive_exception",
-              "archive_accepted",
-              "archive_temporary"
+              "paused",
+              "archive_handover"
             ]
           }
         ],
-        "description": "项目最新阶段桶：九阶段 key，或 archive_exception / archive_accepted / archive_temporary"
+        "description": "项目最新阶段桶：九阶段 key，或 paused（暂停）/ archive_handover（归档-移交售后）"
       },
       "DashboardProjectStartYearStage": {
         "type": "object",

@@ -29,7 +29,7 @@ function includesYear(years: readonly DashboardYearKey[], year: DashboardYearKey
   return years.some((item) => item === year);
 }
 
-/** 将阶段名称拆成最多两行，避免 12 个横轴分类在英文 / 日文 / 低高度双栏下互相压字。 */
+/** 将阶段名称拆成最多两行，避免 11 个横轴分类在英文 / 日文 / 低高度双栏下互相压字。 */
 function stageLabelLines(label: string, maxChars = 7): readonly string[] {
   const text = label.trim();
   if (text.length <= maxChars) return [text];
@@ -194,7 +194,7 @@ function StageBars({ insights, selectedYears, onPick }: {
 
 /**
  * 最新阶段 × 启动年份：
- * x = 九大阶段 + 异常归档 / 验收归档 / 归档-临时任务，y = 项目数；
+ * x = 九大阶段 + 暂停 / 归档-移交售后，y = 项目数；
  * 年份使用与项目统计图一致的多选方块筛选，悬停柱体显示所选年份的明细；点柱按「当前阶段 × 选中年份」下钻项目列表。
  * 图表按容器实际像素绘制，字号不随屏幕等比缩放，绘图区左右留白对称。
  */

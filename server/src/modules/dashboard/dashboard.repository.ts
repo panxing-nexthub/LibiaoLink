@@ -6,7 +6,7 @@ import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
 import { files, fileLinks } from "../../db/schema/files.js";
 import { users } from "../../db/schema/identity.js";
-import { projectArchives, projects } from "../../db/schema/projects.js";
+import { projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
 import { tasks } from "../../db/schema/tasks.js";
 import type { ProjectScopeFilter } from "../permission/index.js";
@@ -34,8 +34,6 @@ export interface DashboardAnalyticsProjectRow {
   status: string;
   managerIds: string[];
   managerNames: (string | null)[] | null;
-  archiveKind: "accepted" | "unaccepted" | null;
-  hasOpenPostArchiveTask: boolean;
 }
 
 /** 合同签署 / 技术协议定档任务负责人行（用于销售负责人 / 规划负责人聚合）。 */
@@ -100,20 +98,6 @@ const MANAGER_NAMES_SQL = sql<(string | null)[] | null>`(
   left join ${users} u on u.id = m.uid
 )`;
 
-/**
- * 归档后未完成临时任务（兼容尚未上线 0103+ / 多类型列的旧数据库）：
- * 与 db/task-scope 的 hasOpenPostArchiveTask 同口径；dashboard 本地保留副本，避免对测试机旧 dist 产生运行时依赖。
- */
-const HAS_OPEN_POST_ARCHIVE_TASK_SQL = sql<boolean>`(
-  ${projects.status} = 'archived' and exists (
-    select 1 from ${tasks}
-    where ${tasks.projectId} = ${projects.id}
-      and ${tasks.createdAt} > ${projects.archivedAt}
-      and ${tasks.deletedAt} is null and ${tasks.status} <> 'done'
-      and ${tasks.stageKey} is null and ${tasks.nodeId} is null and ${tasks.taskNodeId} is null
-  )
-)`;
-
 /** 旧库没有 additional_project_types 列时按空数组返回；新库有列时正常展开。 */
 const ADDITIONAL_PROJECT_TYPES_SQL = sql<string[]>`coalesce(
   (
@@ -122,13 +106,6 @@ const ADDITIONAL_PROJECT_TYPES_SQL = sql<string[]>`coalesce(
   ),
   array[]::text[]
 )`;
-
-/** 旧库没有 project_archives.archive_kind 列时按已验收归档兜底；新库按实际枚举返回。 */
-const ARCHIVE_KIND_SQL = sql<string | null>`case
-  when ${projects.status} = 'archived'
-    then coalesce(to_jsonb(${projectArchives}) ->> 'archive_kind', 'accepted')
-  else null
-end`;
 
 /** 任务负责人姓名数组：与 owner_ids 同下标；缺失 / 停用用户该位为 null。 */
 const OWNER_NAMES_SQL = sql<(string | null)[] | null>`(
@@ -205,11 +182,11 @@ export class DashboardRepository {
       .orderBy(desc(projects.createdAt), asc(projects.seqNo));
   }
 
-  /** 全部项目维度统计的项目行：编号 / 名称 / 类型 / 最新阶段 / 归档状态 / 项目经理。 */
+  /** 全部项目维度统计的项目行：编号 / 名称 / 类型 / 状态 / 项目经理。 */
   async listAnalyticsProjects(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardAnalyticsProjectRow[]> {
     if (scope.kind === "ids" && scope.ids.length === 0) return [];
     const conditions: SQL[] = [isNull(projects.deletedAt), ...scopeCondition(projects.id, scope)];
-    const rows = await client
+    return client
       .select({
         id: projects.id,
         code: projects.code,
@@ -220,17 +197,10 @@ export class DashboardRepository {
         status: projects.status,
         managerIds: projects.managerIds,
         managerNames: MANAGER_NAMES_SQL,
-        archiveKind: ARCHIVE_KIND_SQL,
-        hasOpenPostArchiveTask: HAS_OPEN_POST_ARCHIVE_TASK_SQL,
       })
       .from(projects)
-      .leftJoin(projectArchives, eq(projectArchives.projectId, projects.id))
       .where(and(...conditions))
       .orderBy(desc(projects.createdAt), asc(projects.seqNo));
-    return rows.map((row) => ({
-      ...row,
-      archiveKind: row.archiveKind === "unaccepted" ? "unaccepted" : row.archiveKind === "accepted" ? "accepted" : null,
-    }));
   }
 
   /** 合同签署 / 技术协议定档任务的负责人；多任务、多负责人原样返回，由纯规则去重。 */

@@ -12860,7 +12860,7 @@ export interface components {
             totalProjects: number;
             /** @description 固定顺序：T-sort / 3D分拣 / 飞箱 */
             projectTypes: string[];
-            /** @description 固定顺序：九阶段 + 异常归档 / 验收归档 / 归档-临时任务 */
+            /** @description 固定顺序：九阶段 + 暂停 / 归档-移交售后 */
             stageBuckets: components["schemas"]["DashboardProjectStageBucket"][];
             /** @description 年份升序，未记录启动时间置末；多类型项目在每个命中类型各计一次 */
             typeByYear: components["schemas"]["DashboardProjectTypeYear"][];
@@ -12901,8 +12901,8 @@ export interface components {
             /** @description 按项目总数降序；待分配行（若有）置末 */
             people: components["schemas"]["DashboardProjectRolePerson"][];
         };
-        /** @description 项目最新阶段桶：九阶段 key，或 archive_exception / archive_accepted / archive_temporary */
-        DashboardProjectStageBucket: components["schemas"]["StageKey"] | ("archive_exception" | "archive_accepted" | "archive_temporary");
+        /** @description 项目最新阶段桶：九阶段 key，或 paused（暂停）/ archive_handover（归档-移交售后） */
+        DashboardProjectStageBucket: components["schemas"]["StageKey"] | ("paused" | "archive_handover");
         DashboardProjectStartYearStage: {
             /** @description 启动年份；null = 未记录启动时间 */
             year: number | null;

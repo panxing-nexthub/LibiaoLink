@@ -1928,7 +1928,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "hub.dash.projects.role.planning": "計画担当",
   "hub.dash.projects.stageLegend": "最新段階の凡例",
   "hub.dash.projects.startYear.title": "開始年と最新段階",
-  "hub.dash.projects.startYear.subtitle": "開始年は「プロジェクト開始」タスクの実際の完了日。右側の円グラフは年を切り替え可能",
+  "hub.dash.projects.startYear.subtitle": "横軸は九段階・一時停止・アーカイブ（アフターサービス移管）。年を複数選択して絞り込み、縦軸はプロジェクト数",
   "hub.dash.projects.startYear.aria": "開始年と最新段階：年別の積み上げ棒グラフ",
   "hub.dash.projects.startYear.pieAria": "開始年と最新段階の円グラフ：{year}",
   "hub.dash.projects.startYear.pickYear": "円グラフの年を選択",

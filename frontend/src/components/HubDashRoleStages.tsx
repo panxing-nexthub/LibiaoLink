@@ -179,7 +179,7 @@ function RoleStageChart({ role, stats, visibleStages, onPick }: {
   );
 }
 
-/** 十二个最新阶段色例：逐项点击显隐，最左侧「全选」一次开关全部阶段。 */
+/** 十一个最新阶段色例：逐项点击显隐，最左侧「全选」一次开关全部阶段。 */
 export function HubDashProjectStageLegend({ visibleStages, onToggleStage, onSelectAll }: {
   readonly visibleStages: readonly DashboardProjectStageBucket[];
   readonly onToggleStage: (stage: DashboardProjectStageBucket) => void;

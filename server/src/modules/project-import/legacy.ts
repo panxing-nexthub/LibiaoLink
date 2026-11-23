@@ -9,7 +9,7 @@ import type { ParsedWorkbook, SheetGrid } from "./xlsx.js";
  * - 日期笔误（完成早于开始 / 开始晚于预计完成）照原值导入 + 提醒；日期解析失败留空 + 提醒；
  * - 任务节点：按标题逐字比对节点库（服务层做），这里只出标题与英文名（源表英文列）；
  * - 变更阶段映射：实施 → install、发货 → assembly、生产阶段 / 投产阶段 → production；x x x 占位 → 标记待补；
- * - 变更关联：变更管理「关联」列按任务描述匹配（提交时回写任务 change_refs，追加序 = 变更表行序）；任务表「变更关联」（日期）与变更时间核对，对不上出提醒；
+ * - 变更关联：变更管理「关联」列按任务名称匹配（提交时回写任务 change_refs，追加序 = 变更表行序）；任务表「变更关联」（日期）与变更时间核对，对不上出提醒；
  * - 图片：按锚点挂行（日报现场图 col E / 问题图 col I 内嵌图随导入；变更后文件等文件名 → 需手动导入清单）；
  * - 干系人（Push 324）：「干系人」表 → 台账模型（公司分类自由写法映射四值 / 填写者 / 提交时间；另附文件在服务层合并）。
  */
@@ -250,7 +250,7 @@ function parseDateStr(raw: unknown, year: number): string | null {
   return null;
 }
 
-/** 任务描述拆分：首行中文标题 + 其后英文名（多行 / 中文尾部接英文两种形态）。 */
+/** 任务名称拆分：首行中文名称 + 其后英文名（多行 / 中文尾部接英文两种形态）。 */
 function splitTitle(desc: string): { title: string; titleEn: string | null } {
   const text = clean(desc);
   const lines = text.split(NEWLINE).map(squashSpaces).filter(Boolean);
@@ -294,6 +294,32 @@ function pickSheet(sheets: SheetGrid[], mustHave: string[]): { sheet: SheetGrid;
     if (sheet.rows.length === 0) continue;
     const index = headerIndex(sheet);
     if (mustHave.every((key) => index.has(key))) return { sheet, index };
+  }
+  return null;
+}
+
+/**
+ * 任务表列名：2026-11-22 起系统导出改为「任务名称」+「任务描述」；
+ * 旧导入表仍是「任务描述」+「项目进展描述」。这里按表头组合判定，
+ * 新表头优先，旧表头继续兼容。
+ */
+function taskSheetColumns(index: Map<string, number>): { titleHeader: string; noteHeader: string | null } | null {
+  if (index.has("任务名称")) {
+    return {
+      titleHeader: "任务名称",
+      noteHeader: index.has("任务描述") ? "任务描述" : index.has("项目进展描述") ? "项目进展描述" : null,
+    };
+  }
+  if (index.has("任务描述")) return { titleHeader: "任务描述", noteHeader: index.has("项目进展描述") ? "项目进展描述" : null };
+  return null;
+}
+
+function pickTaskSheet(sheets: SheetGrid[]): { sheet: SheetGrid; index: Map<string, number>; columns: { titleHeader: string; noteHeader: string | null } } | null {
+  for (const sheet of sheets) {
+    if (sheet.rows.length === 0) continue;
+    const index = headerIndex(sheet);
+    const columns = taskSheetColumns(index);
+    if (columns !== null && index.has("任务状态") && index.has("阶段性里程")) return { sheet, index, columns };
   }
   return null;
 }
@@ -581,12 +607,12 @@ const TYPE_GUESS: [string, string][] = [
 export function convertLegacyWorkbook(workbook: ParsedWorkbook, fileName: string): LegacyParse {
   const sheets = workbook.sheets;
   const sheetNames = sheets.map((sheet) => sheet.name);
-  const taskSheet = pickSheet(sheets, ["任务描述", "任务状态", "阶段性里程"]);
+  const taskSheet = pickTaskSheet(sheets);
   const reportSheet = pickReportSheet(sheets);
   const changeSheet = pickSheet(sheets, ["变更时间", "变更原因"]);
   const issues: LegacyIssueSeed[] = [];
   if (taskSheet === null) {
-    throw new Error("未找到任务 sheet（需含 任务描述 / 任务状态 / 阶段性里程 表头）；现有 sheet：" + sheetNames.join("、"));
+    throw new Error("未找到任务 sheet（需含 任务名称（旧称任务描述）/ 任务状态 / 阶段性里程 表头）；现有 sheet：" + sheetNames.join("、"));
   }
 
   let year: number | null = null;
@@ -612,9 +638,11 @@ export function convertLegacyWorkbook(workbook: ParsedWorkbook, fileName: string
   };
 
   const tasks: LegacyTask[] = [];
-  const { sheet, index } = taskSheet;
+  const { sheet, index, columns } = taskSheet;
+  const titleHeader = columns.titleHeader;
+  const noteHeader = columns.noteHeader;
   for (let row = 1; row < sheet.rows.length; row += 1) {
-    const descRaw = cellAt(sheet, row, index, "任务描述");
+    const descRaw = cellAt(sheet, row, index, titleHeader);
     if (descRaw === "") continue;
     const split = splitTitle(descRaw);
     const title = split.title === "" ? squashSpaces(descRaw) : split.title;
@@ -663,7 +691,7 @@ export function convertLegacyWorkbook(workbook: ParsedWorkbook, fileName: string
     const actualEnd = parseDateStr(cellAt(sheet, row, index, "实际完成日期"), baseYear);
     const daysRaw = cellAt(sheet, row, index, "预计所需天数");
     const headRaw = cellAt(sheet, row, index, "预计所需施工人数");
-    const noteRaw = cellAt(sheet, row, index, "项目进展描述");
+    const noteRaw = noteHeader === null ? "" : cellAt(sheet, row, index, noteHeader);
 
     const statusKey: "pending" | "active" | "done" | null =
       DONE_STATUS.has(statusRaw) ? "done" : statusRaw === "进行中" || statusRaw === "已延期" ? "active" : statusRaw === "待开始" ? "pending" : null;
@@ -933,7 +961,7 @@ export function convertLegacyWorkbook(workbook: ParsedWorkbook, fileName: string
     }
   }
 
-  // 变更关联：①「变更管理」表「关联」列（业务口径 2026-10-14「表格中变更关联的字样没有写」）按任务描述匹配；
+  // 变更关联：①「变更管理」表「关联」列（业务口径 2026-10-14「表格中变更关联的字样没有写」）按任务名称匹配；
   // ② R01（docs/rules/R01-R07-内置规则文案.md）：变更时间 / 变更文件 / 变更后文件 / 变更后文件版本齐备时，
   //    按「变更文件 ∈ 任务输出成果文件（多值）」自动匹配，命中多条全部关联。
   // 两路结果去重后回写任务 change_refs（追加序 = 变更表行序 + 任务表行序）；对不上 / 日期不一致出提醒（照常导入，不阻断）。
@@ -1137,7 +1165,7 @@ export function convertLegacyWorkbook(workbook: ParsedWorkbook, fileName: string
     for (let row = 1; row < sheetRef.rows.length; row += 1) {
       const fileName = cellAt(sheetRef, row, taskIndex, "文件");
       if (fileName === "") continue;
-      const title = splitTitle(cellAt(sheetRef, row, taskIndex, "任务描述")).title;
+      const title = splitTitle(cellAt(sheetRef, row, taskIndex, taskSheet.columns.titleHeader)).title;
       const parsedTaskIndex = taskRowIndexes.get(row + 1) ?? null;
       for (const part of splitNames(fileName)) {
         manualFiles.push({

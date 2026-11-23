@@ -124,12 +124,11 @@ export function taskSummaryOf(aggregate: DashboardTaskAggregate): DashboardTaskS
 /** 全部项目维度统计的固定项目类型顺序（2026-11-21 业务口径）。 */
 export const DASHBOARD_PROJECT_TYPES = ["T-sort", "3D分拣", "飞箱"] as const;
 
-/** 全部项目维度统计的固定最新阶段桶：九阶段 + 三类归档。 */
+/** 全部项目维度统计的固定最新阶段桶：九阶段 + 暂停 / 归档-移交售后。 */
 export const DASHBOARD_PROJECT_STAGE_BUCKETS = [
   ...STAGE_KEYS,
-  "archive_exception",
-  "archive_accepted",
-  "archive_temporary",
+  "paused",
+  "archive_handover",
 ] as const;
 
 /** 三类负责人固定顺序：项目经理 / 销售负责人 / 规划负责人。 */
@@ -149,8 +148,6 @@ export interface DashboardAnalyticsProjectInput {
   status: string;
   managerIds: readonly string[];
   managerNames: readonly (string | null)[] | null;
-  archiveKind: "accepted" | "unaccepted" | null;
-  hasOpenPostArchiveTask: boolean;
 }
 
 export interface DashboardProjectRoleTaskInput {
@@ -217,16 +214,13 @@ export function latestStageByProject(taskBuckets: readonly DashboardTaskBucketRo
   return result;
 }
 
-/** 项目最新阶段桶：归档优先拆成临时任务 / 异常 / 验收归档；未归档取任务派生最新阶段，无动工任务回落 projects.stage_key。 */
+/** 项目最新阶段桶：归档统一为「归档-移交售后」；暂停优先落 paused；其余取任务派生最新阶段，无动工任务回落 projects.stage_key。 */
 export function projectStageBucketOf(
-  project: Pick<DashboardAnalyticsProjectInput, "status" | "stageKey" | "archiveKind" | "hasOpenPostArchiveTask">,
+  project: Pick<DashboardAnalyticsProjectInput, "status" | "stageKey">,
   latestStageKey: string | null = null,
 ): ProjectStageBucket {
-  if (project.status === "archived") {
-    if (project.hasOpenPostArchiveTask) return "archive_temporary";
-    if (project.archiveKind === "unaccepted") return "archive_exception";
-    return "archive_accepted";
-  }
+  if (project.status === "archived") return "archive_handover";
+  if (project.status === "paused") return "paused";
   if (latestStageKey !== null && STAGE_KEY_SET.has(latestStageKey)) return latestStageKey as ProjectStageBucket;
   return STAGE_KEY_SET.has(project.stageKey) ? (project.stageKey as ProjectStageBucket) : "presale";
 }
@@ -273,7 +267,7 @@ function addRoleOwner(map: Map<ProjectRole, Map<string, string | null>>, role: P
  * 全部项目维度聚合（纯函数）：
  * - 项目数量：多类型项目在每个项目类型各计一次；
  * - 负责人：同一项目同一人只计一次，未配置某角色时落「待分配」；
- * - 最新阶段：归档项目按项目卡片同一套三类归档口径；未归档项目取项目空间「最新阶段」（已动工任务中阶段序最靠后者），无动工任务回落 projects.stage_key；
+ * - 最新阶段：归档项目统一为「归档-移交售后」，暂停项目统一为「暂停」；其余项目取项目空间「最新阶段」（已动工任务中阶段序最靠后者），无动工任务回落 projects.stage_key；
  * - 年份：项目启动任务实际完成日期所属年份，未记录归 null 并置末。
  */
 export function buildProjectAnalytics(

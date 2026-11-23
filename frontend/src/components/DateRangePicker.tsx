@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { monthYearText, useLocale, useT } from "../i18n";
+import { useLocale, useT } from "../i18n";
+import { CalendarMonthHeader } from "./CalendarMonthHeader";
 
 export type DateRange = {
   from: string;
@@ -127,10 +128,6 @@ export function DateRangePicker({ value, onChange, hintDate, placeholder, ariaLa
     });
   };
 
-  const shiftMonth = (step: number) => {
-    setView(new Date(view.getFullYear(), view.getMonth() + step, 1));
-  };
-
   return (
     <div className="relative">
       <button
@@ -161,35 +158,12 @@ export function DateRangePicker({ value, onChange, hintDate, placeholder, ariaLa
               className="fixed z-50 w-[264px] rounded-xl border border-zinc-200 bg-white p-3 shadow-[0_16px_40px_rgba(0,0,0,0.18)]"
               style={{ top: position.top, left: position.left }}
             >
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              aria-label={t("picker.prevMonth")}
-              onClick={() => {
-                shiftMonth(-1);
-              }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100"
-            >
-              <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
-                <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            <p className="text-sm font-semibold text-zinc-800">
-              {monthYearText(locale, view.getFullYear(), view.getMonth() + 1)}
-            </p>
-            <button
-              type="button"
-              aria-label={t("picker.nextMonth")}
-              onClick={() => {
-                shiftMonth(1);
-              }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100"
-            >
-              <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
-                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </div>
+          <CalendarMonthHeader
+            view={view}
+            onViewChange={setView}
+            prevLabel={t("picker.prevMonth")}
+            nextLabel={t("picker.nextMonth")}
+          />
 
           <div className="mt-2 grid grid-cols-7 gap-y-1 text-center text-[11px] text-zinc-400">
             {weekdays.map((day) => (

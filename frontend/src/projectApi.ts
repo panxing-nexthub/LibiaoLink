@@ -29,6 +29,8 @@ export type ApiProject = {
   archiveKind: ProjectArchiveKind | null;
   /** 最终项目权限：管理员 / 所管本项目的项目经理 / 规则 edit 为 edit。 */
   accessLevel: "edit" | "view";
+  canManageViewGrants?: boolean;
+  canManageProjectManagers?: boolean;
   /** 旧客户端兼容字段，当前与 accessLevel 同值。 */
   groupAccessLevel: "edit" | "view";
   description: string | null;
@@ -176,13 +178,15 @@ export function createProject(input: ProjectWriteInput): Promise<ApiProject> {
 /** PATCH 可写状态（契约 ProjectUpdateBody：archived 不接受 PATCH —— 归档只能走归档端点；Push 262 编辑弹窗口径）。 */
 export type ProjectStatusPatch = "active" | "paused";
 
-function projectUpdateFields(input: ProjectWriteInput) {
+type ProjectEditInput = Omit<ProjectWriteInput, "managerIds"> & { managerIds?: string[] };
+
+function projectUpdateFields(input: ProjectEditInput) {
   const { remark, ...fields } = input;
   // 备注（Push 280）：undefined = 不发送（不改）；空串 = 发 null 清空（契约 description 可空）。
   return { ...fields, description: remark === "" ? null : remark };
 }
 
-export function updateProject(id: string, input: ProjectWriteInput, version: number, status?: ProjectStatusPatch): Promise<ApiProject> {
+export function updateProject(id: string, input: ProjectEditInput, version: number, status?: ProjectStatusPatch): Promise<ApiProject> {
   return apiSend<ApiProject>("/api/v1/projects/" + encodeURIComponent(id), "PATCH", { ...projectUpdateFields(input), version, status });
 }
 
@@ -204,7 +208,7 @@ export function archiveProject(id: string, version: number, archiveKind: Project
   return apiSend<ProjectArchiveResult>("/api/v1/projects/" + encodeURIComponent(id) + "/archive", "POST", { version, archiveKind, confirm });
 }
 
-export function archiveProjectWithUpdate(id: string, input: ProjectWriteInput, version: number, archiveKind: ProjectArchiveKind): Promise<ProjectArchiveResult> {
+export function archiveProjectWithUpdate(id: string, input: ProjectEditInput, version: number, archiveKind: ProjectArchiveKind): Promise<ProjectArchiveResult> {
   return apiSend<ProjectArchiveResult>("/api/v1/projects/" + encodeURIComponent(id) + "/archive-with-update", "POST", {
     version,
     archiveKind,
@@ -292,6 +296,8 @@ export function toUiProject(view: ApiProject): Project {
     hasOpenPostArchiveTask: view.hasOpenPostArchiveTask,
     archiveKind: view.archiveKind ?? null,
     accessLevel: view.accessLevel,
+    canManageViewGrants: view.canManageViewGrants === true,
+    canManageProjectManagers: view.canManageProjectManagers === true,
     groupAccessLevel: view.groupAccessLevel,
     deletedAt: view.deletedAt === null ? null : formatDateTime(view.deletedAt),
     deletedBy: view.deletedBy,

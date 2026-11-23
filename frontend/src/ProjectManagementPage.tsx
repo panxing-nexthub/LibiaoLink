@@ -384,6 +384,7 @@ const MEMBER_FILTER_TONES = [
 ];
 const PM_TABLE_TAG_CLASS = "inline-block max-w-full truncate whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-medium";
 const PM_GANTT_TAG_CLASS = "inline-block max-w-full truncate whitespace-nowrap rounded-full px-1 py-0 text-[length:var(--pm-gantt-tag-size,9px)] leading-[var(--pm-gantt-tag-leading,16px)] font-normal";
+const PM_GANTT_MEMBER_TAG_CLASS = "inline-block shrink-0 whitespace-nowrap rounded-full px-1 py-0 text-[length:var(--pm-gantt-tag-size,9px)] leading-[var(--pm-gantt-tag-leading,16px)] font-normal";
 
 const memberFilterToneOf = (value: string): string => {
   let hash = 0;
@@ -765,6 +766,7 @@ type MemberCellProps = {
   selectedIds: readonly string[];
   multiple: boolean;
   cellKey: string;
+  compact?: boolean;
   topStatusButton?: SearchListStatusButton;
   onChange: (ids: string[]) => void;
 };
@@ -779,22 +781,30 @@ function MemberCell({
   selectedIds,
   multiple,
   cellKey,
+  compact = false,
   topStatusButton,
   onChange,
 }: MemberCellProps) {
   const { open, setOpen, position, triggerRef, popoverRef } = usePopover(300, topStatusButton === undefined ? 286 : 326);
   const statusActive = topStatusButton?.active ?? false;
+  const tagClass = compact ? PM_GANTT_TAG_CLASS : PM_TABLE_TAG_CLASS;
+  const disabledClassName = compact
+    ? "flex h-full min-h-0 min-w-0 items-center justify-start overflow-hidden py-0 text-left"
+    : "flex min-h-11 min-w-0 items-center justify-start overflow-hidden px-2 py-3 text-left";
+  const triggerClassName = compact
+    ? "flex h-full min-h-0 w-full min-w-0 items-center justify-start gap-0.5 py-0 text-left text-[length:var(--pm-gantt-cell-size,10px)] leading-[var(--pm-gantt-tag-leading,16px)] outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500"
+    : "flex min-h-11 w-full min-w-0 items-center justify-start gap-1 px-2 py-3 text-left text-xs leading-5 outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500";
 
   if (disabled) {
     return (
       <div
         data-project-management-cell={cellKey}
-        className="flex min-h-11 min-w-0 items-center justify-start overflow-hidden px-2 py-3 text-left"
+        className={disabledClassName}
       >
         {statusActive ? (
-          <span className={PM_TABLE_TAG_CLASS + " bg-[#f02b2b] font-semibold text-white"}>{label}</span>
+          <span className={tagClass + " bg-[#f02b2b] font-semibold text-white"}>{label}</span>
         ) : label === "" ? null : (
-          <PmMemberChips names={names} max={6} />
+          <PmMemberChips names={names} compact={compact} max={compact ? names.length : 6} />
         )}
       </div>
     );
@@ -812,16 +822,16 @@ function MemberCell({
         onClick={() => {
           setOpen((previous) => !previous);
         }}
-        className="flex min-h-11 w-full min-w-0 items-center justify-start gap-1 px-2 py-3 text-left text-xs leading-5 outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500"
+        className={triggerClassName}
       >
         {statusActive ? (
-          <span className={PM_TABLE_TAG_CLASS + " bg-[#f02b2b] font-semibold text-white"}>{label}</span>
+          <span className={tagClass + " bg-[#f02b2b] font-semibold text-white"}>{label}</span>
         ) : label === "" ? (
           <span className="min-w-0 truncate text-zinc-300">{placeholder}</span>
         ) : (
-          <PmMemberChips names={names} max={6} />
+          <PmMemberChips names={names} compact={compact} max={compact ? names.length : 6} />
         )}
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-3 w-3 shrink-0 text-zinc-300">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={(compact ? "h-2.5 w-2.5" : "h-3 w-3") + " shrink-0 text-zinc-300"}>
           <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
@@ -877,6 +887,7 @@ type MethodCellProps = {
   ariaLabel: string;
   disabled: boolean;
   cellKey: string;
+  compact?: boolean;
   labelOf: (value: ProjectManagementMethod) => string;
   onChange: (value: ProjectManagementMethod) => void;
 };
@@ -888,16 +899,24 @@ function MethodCell({
   ariaLabel,
   disabled,
   cellKey,
+  compact = false,
   labelOf,
   onChange,
 }: MethodCellProps) {
   const { open, setOpen, position, triggerRef, popoverRef } = usePopover(200, 250);
+  const tagClass = compact ? PM_GANTT_TAG_CLASS : PM_TABLE_TAG_CLASS;
+  const disabledClassName = compact
+    ? "flex h-full min-h-0 items-center justify-start overflow-hidden py-0 text-left text-[length:var(--pm-gantt-cell-size,10px)] leading-[var(--pm-gantt-tag-leading,16px)]"
+    : "flex min-h-11 items-center justify-start px-2 py-3 text-left text-xs leading-5";
+  const triggerClassName = compact
+    ? "flex h-full min-h-0 w-full min-w-0 items-center justify-start gap-0.5 py-0 text-left text-[length:var(--pm-gantt-cell-size,10px)] leading-[var(--pm-gantt-tag-leading,16px)] outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500"
+    : "flex min-h-11 w-full min-w-0 items-center justify-start gap-1 px-2 py-3 text-left text-xs leading-5 outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500";
 
   if (disabled) {
     return (
-      <div data-project-management-cell={cellKey} className="flex min-h-11 items-center justify-start px-2 py-3 text-left text-xs leading-5">
+      <div data-project-management-cell={cellKey} className={disabledClassName}>
         {value === "" ? null : (
-          <span className={PM_TABLE_TAG_CLASS + " " + METHOD_META[value].chipClass}>
+          <span className={tagClass + " " + METHOD_META[value].chipClass}>
             {label}
           </span>
         )}
@@ -917,16 +936,16 @@ function MethodCell({
         onClick={() => {
           setOpen((previous) => !previous);
         }}
-        className="flex min-h-11 w-full min-w-0 items-center justify-start gap-1 px-2 py-3 text-left text-xs leading-5 outline-none transition hover:bg-blue-50/40 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500"
+        className={triggerClassName}
       >
         {value === "" ? (
           <span className="truncate text-zinc-300">{placeholder}</span>
         ) : (
-          <span className={PM_TABLE_TAG_CLASS + " " + METHOD_META[value].chipClass}>
+          <span className={tagClass + " " + METHOD_META[value].chipClass}>
             {label}
           </span>
         )}
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-3 w-3 shrink-0 text-zinc-300">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={(compact ? "h-2.5 w-2.5" : "h-3 w-3") + " shrink-0 text-zinc-300"}>
           <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
@@ -1566,7 +1585,7 @@ type PmGanttGroup = {
 type PmGanttColumn = {
   key: "rowNo" | "code" | "name" | "manager" | "engineer" | "method" | "dates" | "stage" | "location";
   minWidth: number;
-  maxWidth: number;
+  maxWidth?: number;
   labelKey: TextKey | null;
 };
 
@@ -1574,9 +1593,9 @@ const PM_GANTT_COLUMNS: readonly PmGanttColumn[] = [
   { key: "rowNo", minWidth: 24, maxWidth: 24, labelKey: null },
   { key: "code", minWidth: 128, maxWidth: 150, labelKey: "pm.column.code" },
   { key: "name", minWidth: 84, maxWidth: 104, labelKey: "pm.column.name" },
-  { key: "manager", minWidth: 48, maxWidth: 72, labelKey: "pm.column.manager" },
-  { key: "engineer", minWidth: 54, maxWidth: 80, labelKey: "pm.column.engineer" },
-  { key: "method", minWidth: 50, maxWidth: 66, labelKey: "pm.column.method" },
+  { key: "manager", minWidth: 48, labelKey: "pm.column.manager" },
+  { key: "engineer", minWidth: 54, labelKey: "pm.column.engineer" },
+  { key: "method", minWidth: 50, maxWidth: 82, labelKey: "pm.column.method" },
   { key: "dates", minWidth: 72, maxWidth: 84, labelKey: "pm.column.implementationWindow" },
   { key: "stage", minWidth: 30, maxWidth: 70, labelKey: "pm.column.stageShort" },
   { key: "location", minWidth: 30, maxWidth: 56, labelKey: "pm.column.locationShort" },
@@ -1675,12 +1694,7 @@ const pmGanttMembersCellWidth = (names: readonly string[], scale = 1): number =>
   if (names.length === 0) {
     return pmGanttTextCellWidth("—", pmGanttFont(400, pmGanttScaledPx(10, scale)), scale);
   }
-  const visible = names.slice(0, 2);
-  const rest = names.length - visible.length;
-  const chipWidths = visible.map((name) => pmGanttChipTextWidth(name, chipFont, scale));
-  if (rest > 0) {
-    chipWidths.push(pmGanttChipTextWidth("+" + String(rest), chipFont, scale));
-  }
+  const chipWidths = names.map((name) => pmGanttChipTextWidth(name, chipFont, scale));
   return chipWidths.reduce((total, width) => total + width, 0) +
     pmGanttScaledPx(PM_GANTT_CHIP_GAP, scale) * Math.max(0, chipWidths.length - 1) +
     pmGanttScaledPx(PM_GANTT_CELL_PADDING, scale);
@@ -1784,6 +1798,27 @@ const pmGanttResponsiveScale = (viewportWidth: number): number => {
     1,
   );
   return Math.round((1 + (PM_GANTT_UI_MAX_SCALE - 1) * wideProgress) * 20) / 20;
+};
+
+/**
+ * 甘特响应式倍率只使用「页面纵向滚动条出现前后不变」的布局宽度。
+ * 根滚动条按需出现时 clientWidth 会少一截；若直接拿它算倍率，
+ * 会形成「倍率变小 -> 内容变矮 -> 滚动条消失 -> 倍率变大 -> 内容变高」的持续抽搐。
+ * 当前浏览器滚动条宽度可以从 window.innerWidth 与根 clientWidth 的差值还原。
+ */
+const pmGanttStableScaleWidth = (viewportWidth: number): number => {
+  if (
+    viewportWidth <= 0 ||
+    typeof window === "undefined" ||
+    typeof document === "undefined"
+  ) {
+    return viewportWidth;
+  }
+  const pageScrollbarWidth = Math.max(
+    0,
+    window.innerWidth - document.documentElement.clientWidth,
+  );
+  return viewportWidth + pageScrollbarWidth;
 };
 
 const pmGanttVisualMetricsOf = (scale: number) => {
@@ -1974,6 +2009,8 @@ type PmGanttOccupancySegment = {
   endIndex: number;
   count: number;
   itemIndexes: number[];
+  /** 今天及未来的重叠才算冲突；过去重叠保留展示但不标红、不计入冲突。 */
+  conflict: boolean;
 };
 
 type PmGanttAvailableSegment = {
@@ -2012,6 +2049,7 @@ const pmGanttOccupancyOf = (
   items: readonly PmGanttItem[],
   timelineStartIso: string,
   dayCount: number,
+  conflictStartIndex: number,
 ): PmGanttOccupancy => {
   if (dayCount <= 0) {
     return {
@@ -2024,6 +2062,7 @@ const pmGanttOccupancyOf = (
     };
   }
   const rangeStart = pmGanttTimeOf(timelineStartIso);
+  const futureStartIndex = Math.max(0, Math.min(dayCount, conflictStartIndex));
   const blockingRanges: Array<{ itemIndex: number; startIndex: number; endIndex: number }> = [];
   const parallelRanges: Array<{ itemIndex: number; startIndex: number; endIndex: number }> = [];
   items.forEach((item, itemIndex) => {
@@ -2059,17 +2098,36 @@ const pmGanttOccupancyOf = (
       availableSegments.push({ startIndex: cursor, endIndex });
     } else {
       occupiedDays += spanDays;
-      if (count > 1) {
-        conflictDays += spanDays;
+      const itemIndexes = blockingRanges
+        .filter((range) => range.startIndex <= endIndex && range.endIndex >= cursor)
+        .map((range) => range.itemIndex);
+      if (count > 1 && endIndex >= futureStartIndex) {
+        conflictDays += endIndex - Math.max(cursor, futureStartIndex) + 1;
       }
-      busySegments.push({
-        startIndex: cursor,
-        endIndex,
-        count,
-        itemIndexes: blockingRanges
-          .filter((range) => range.startIndex <= endIndex && range.endIndex >= cursor)
-          .map((range) => range.itemIndex),
-      });
+      if (count > 1 && cursor < futureStartIndex && endIndex >= futureStartIndex) {
+        busySegments.push({
+          startIndex: cursor,
+          endIndex: futureStartIndex - 1,
+          count,
+          itemIndexes,
+          conflict: false,
+        });
+        busySegments.push({
+          startIndex: futureStartIndex,
+          endIndex,
+          count,
+          itemIndexes,
+          conflict: true,
+        });
+      } else {
+        busySegments.push({
+          startIndex: cursor,
+          endIndex,
+          count,
+          itemIndexes,
+          conflict: count > 1 && endIndex >= futureStartIndex,
+        });
+      }
     }
     cursor = endIndex + 1;
   }
@@ -2089,6 +2147,7 @@ const pmGanttOccupancyOf = (
         itemIndexes: parallelRanges
           .filter((range) => range.startIndex <= endIndex && range.endIndex >= cursor)
           .map((range) => range.itemIndex),
+        conflict: false,
       });
     }
     cursor = endIndex + 1;
@@ -2224,6 +2283,10 @@ const pmGanttGroupTextTone = (group: PmGanttGroup): string => {
   return "text-zinc-900";
 };
 
+const pmStopPropagation = (event: { stopPropagation: () => void }): void => {
+  event.stopPropagation();
+};
+
 function PmMemberChips({
   names,
   max = 2,
@@ -2238,12 +2301,13 @@ function PmMemberChips({
   }
   const visible = names.slice(0, max);
   const rest = names.length - visible.length;
-  const chipClass = compact ? PM_GANTT_TAG_CLASS : PM_TABLE_TAG_CLASS;
+  const chipClass = compact ? PM_GANTT_MEMBER_TAG_CLASS : PM_TABLE_TAG_CLASS;
   return (
     <span
       className={
-        "flex min-w-0 items-center overflow-hidden " +
-        (compact ? "gap-[var(--pm-gantt-chip-gap,2px)]" : "gap-1")
+        compact
+          ? "flex shrink-0 items-center gap-[var(--pm-gantt-chip-gap,2px)]"
+          : "flex min-w-0 items-center gap-1 overflow-hidden"
       }
     >
       {visible.map((name, index) => (
@@ -2252,9 +2316,7 @@ function PmMemberChips({
           title={name}
           className={
             chipClass +
-            (compact
-              ? " max-w-[var(--pm-gantt-member-max-width,180px)] shrink-0 "
-              : " max-w-[180px] shrink-0 ") +
+            (compact ? " " : " max-w-[180px] shrink-0 ") +
             memberFilterToneOf(name)
           }
         >
@@ -2287,6 +2349,13 @@ function PmGanttProjectCells({
   hiddenColumnsLabel,
   overflowWidth,
   cellPaddingX,
+  editable,
+  managerOptions,
+  engineerOptions,
+  onManagerChange,
+  onEngineerChange,
+  onEngineerHandedOverToggle,
+  onMethodChange,
 }: {
   row: PmRow;
   sequence: number;
@@ -2297,6 +2366,13 @@ function PmGanttProjectCells({
   hiddenColumnsLabel: string;
   overflowWidth: number;
   cellPaddingX: number;
+  editable: boolean;
+  managerOptions: readonly Member[];
+  engineerOptions: readonly Member[];
+  onManagerChange: (row: PmRow, ids: string[]) => void;
+  onEngineerChange: (row: PmRow, ids: string[]) => void;
+  onEngineerHandedOverToggle: (row: PmRow) => void;
+  onMethodChange: (row: PmRow, value: ProjectManagementMethod) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2306,7 +2382,16 @@ function PmGanttProjectCells({
     row.implementationEngineerNames,
     directory,
   );
+  const managerLabel = joinedNames(row.managerIds, row.managerNames, directory);
+  const engineerLabel = joinedNames(
+    row.implementationEngineerIds,
+    row.implementationEngineerNames,
+    directory,
+  );
+  const handedOverLabel = t("pm.engineer.handedOver");
+  const rowTitle = row.name.trim() === "" ? row.code.trim() || t("pm.board.untitled") : row.name;
   const method = row.implementationMethod;
+  const methodLabel = method === "" ? "" : t(METHOD_META[method].labelKey);
   const stage = effectiveStageOf(row);
   const stageName = stage === null ? "" : pmStageNameOf(stage);
   const stageLabel = stageName === "" ? "" : stageText(locale, stageName);
@@ -2338,24 +2423,77 @@ function PmGanttProjectCells({
             </span>
           );
         } else if (column.key === "manager") {
-          content = <PmMemberChips names={managerNames} compact />;
+          content = (
+            <div
+              data-project-management-gantt-editor="manager"
+              className="flex h-full min-h-0 w-full min-w-0 items-center"
+              onClick={editable ? pmStopPropagation : undefined}
+              onKeyDown={editable ? pmStopPropagation : undefined}
+            >
+              <MemberCell
+                compact
+                label={managerLabel}
+                names={managerNames}
+                placeholder={t("pm.manager.placeholder")}
+                ariaLabel={t("pm.column.manager") + " " + rowTitle}
+                disabled={!editable}
+                options={managerOptions}
+                selectedIds={row.managerIds}
+                multiple
+                cellKey={String(sequence) + "-manager"}
+                onChange={(ids) => { onManagerChange(row, ids); }}
+              />
+            </div>
+          );
         } else if (column.key === "engineer") {
-          content = row.implementationHandedOver ? (
-            <span className="rounded bg-[#f02b2b] px-1.5 py-0 text-[length:var(--pm-gantt-tag-size,9px)] font-medium leading-[var(--pm-gantt-tag-leading,16px)] text-white">
-              {t("pm.engineer.handedOver")}
-            </span>
-          ) : (
-            <PmMemberChips names={engineerNames} compact />
+          content = (
+            <div
+              data-project-management-gantt-editor="engineer"
+              className="flex h-full min-h-0 w-full min-w-0 items-center"
+              onClick={editable ? pmStopPropagation : undefined}
+              onKeyDown={editable ? pmStopPropagation : undefined}
+            >
+              <MemberCell
+                compact
+                label={row.implementationHandedOver ? handedOverLabel : engineerLabel}
+                names={engineerNames}
+                placeholder={t("pm.engineer.placeholder")}
+                ariaLabel={t("pm.column.engineer") + " " + rowTitle}
+                disabled={!editable}
+                options={engineerOptions}
+                selectedIds={row.implementationEngineerIds}
+                multiple
+                cellKey={String(sequence) + "-engineer"}
+                topStatusButton={{
+                  label: handedOverLabel,
+                  active: row.implementationHandedOver,
+                  onToggle: () => { onEngineerHandedOverToggle(row); },
+                }}
+                onChange={(ids) => { onEngineerChange(row, ids); }}
+              />
+            </div>
           );
         } else if (column.key === "method") {
-          content =
-            method === "" ? (
-              <span className="text-zinc-400">—</span>
-            ) : (
-              <span className={PM_GANTT_TAG_CLASS + " " + METHOD_META[method].chipClass} title={t(METHOD_META[method].labelKey)}>
-                {t(METHOD_META[method].labelKey)}
-              </span>
-            );
+          content = (
+            <div
+              data-project-management-gantt-editor="method"
+              className="flex h-full min-h-0 w-full min-w-0 items-center"
+              onClick={editable ? pmStopPropagation : undefined}
+              onKeyDown={editable ? pmStopPropagation : undefined}
+            >
+              <MethodCell
+                compact
+                value={method}
+                label={methodLabel}
+                placeholder={t("pm.method.placeholder")}
+                ariaLabel={t("pm.column.method") + " " + rowTitle}
+                disabled={!editable}
+                cellKey={String(sequence) + "-method"}
+                labelOf={(value) => t(METHOD_META[value].labelKey)}
+                onChange={(value) => { onMethodChange(row, value); }}
+              />
+            </div>
+          );
         } else if (column.key === "dates") {
           content =
             dateStartLabel === null && dateEndLabel === null ? (
@@ -2429,10 +2567,24 @@ function PmImplementationGantt({
   rows,
   directory,
   dicts,
+  editable,
+  managerOptions,
+  engineerOptions,
+  onManagerChange,
+  onEngineerChange,
+  onEngineerHandedOverToggle,
+  onMethodChange,
 }: {
   rows: readonly PmRow[];
   directory: readonly DirectoryUser[];
   dicts: Dicts;
+  editable: boolean;
+  managerOptions: readonly Member[];
+  engineerOptions: readonly Member[];
+  onManagerChange: (row: PmRow, ids: string[]) => void;
+  onEngineerChange: (row: PmRow, ids: string[]) => void;
+  onEngineerHandedOverToggle: (row: PmRow) => void;
+  onMethodChange: (row: PmRow, value: ProjectManagementMethod) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2461,7 +2613,9 @@ function PmImplementationGantt({
     [ganttFilteredRows, directory, locale, handedOverLabel, unassignedLabel],
   );
   const [ganttViewportWidth, setGanttViewportWidth] = useState(0);
-  const ganttUiScale = pmGanttResponsiveScale(ganttViewportWidth);
+  const ganttUiScale = pmGanttResponsiveScale(
+    pmGanttStableScaleWidth(ganttViewportWidth),
+  );
   const ganttMetrics = pmGanttVisualMetricsOf(ganttUiScale);
   const ganttCssVariables = {
     "--pm-gantt-cell-size": `${ganttMetrics.cellSize}px`,
@@ -2487,7 +2641,9 @@ function PmImplementationGantt({
     const scaledMinWidth = (column: PmGanttColumn): number =>
       Math.round(column.minWidth * ganttUiScale);
     const scaledMaxWidth = (column: PmGanttColumn): number =>
-      Math.round(column.maxWidth * ganttUiScale);
+      column.maxWidth === undefined
+        ? Number.POSITIVE_INFINITY
+        : Math.round(column.maxWidth * ganttUiScale);
     const widths = new Map<PmGanttColumn["key"], number>(
       PM_GANTT_COLUMNS.map((column) => [column.key, scaledMinWidth(column)]),
     );
@@ -2510,12 +2666,14 @@ function PmImplementationGantt({
         bump("name", pmGanttTextCellWidth(row.name.trim() === "" ? t("pm.board.untitled") : row.name, textFont, ganttUiScale));
         bump(
           "manager",
-          pmGanttMembersCellWidth(memberDisplayNames(row.managerIds, row.managerNames, directory), ganttUiScale),
+          pmGanttMembersCellWidth(memberDisplayNames(row.managerIds, row.managerNames, directory), ganttUiScale) +
+            pmGanttScaledPx(18, ganttUiScale),
         );
         if (row.implementationHandedOver) {
           bump(
             "engineer",
-            pmGanttChipTextWidth(t("pm.engineer.handedOver"), handedOverFont, ganttUiScale),
+            pmGanttChipTextWidth(t("pm.engineer.handedOver"), handedOverFont, ganttUiScale) +
+              pmGanttScaledPx(12, ganttUiScale),
           );
         } else {
           bump(
@@ -2523,16 +2681,17 @@ function PmImplementationGantt({
             pmGanttMembersCellWidth(
               memberDisplayNames(row.implementationEngineerIds, row.implementationEngineerNames, directory),
               ganttUiScale,
-            ),
+            ) + pmGanttScaledPx(18, ganttUiScale),
           );
         }
         const method = row.implementationMethod;
         bump(
           "method",
-          method === ""
+          (method === ""
             ? pmGanttTextCellWidth("—", textFont, ganttUiScale)
             : pmGanttChipTextWidth(t(METHOD_META[method].labelKey), chipFont, ganttUiScale) +
-              pmGanttScaledPx(PM_GANTT_CELL_PADDING, ganttUiScale),
+              pmGanttScaledPx(PM_GANTT_CELL_PADDING, ganttUiScale)) +
+            pmGanttScaledPx(12, ganttUiScale),
         );
         const dateRange = pmGanttDateRangeOf(row);
         bump(
@@ -3345,6 +3504,12 @@ function PmImplementationGantt({
 
   const renderedGroups = useMemo(() => {
     let sequence = 0;
+    const conflictStartIndex =
+      timeline.todayIndex >= 0
+        ? timeline.todayIndex
+        : pmGanttTimeOf(pmGanttTodayIso()) < pmGanttTimeOf(timeline.startIso)
+          ? 0
+          : timeline.days.length;
     return groups.map((group) => {
       let groupStart: string | null = null;
       let groupEnd: string | null = null;
@@ -3356,7 +3521,12 @@ function PmImplementationGantt({
           groupEnd = item.end;
         }
       });
-      const occupancy = pmGanttOccupancyOf(group.items, timeline.startIso, timeline.days.length);
+      const occupancy = pmGanttOccupancyOf(
+        group.items,
+        timeline.startIso,
+        timeline.days.length,
+        conflictStartIndex,
+      );
       return {
         ...group,
         groupStart,
@@ -3372,7 +3542,7 @@ function PmImplementationGantt({
         }),
       };
     });
-  }, [groups, timeline.days.length, timeline.startIso]);
+  }, [groups, timeline.days.length, timeline.startIso, timeline.todayIndex]);
 
   const indexOfIso = (iso: string, fallback: number): number => {
     const parsed = Date.parse(iso + "T00:00:00Z");
@@ -4010,23 +4180,34 @@ function PmImplementationGantt({
                       const segmentTitles = segmentItems.map((item) =>
                         item.row.name.trim() === "" ? item.row.code.trim() || t("pm.board.untitled") : item.row.name.trim(),
                       );
-                      const segmentConflict = isPersonGroup && segment.count > 1;
+                      const segmentConflict = isPersonGroup && segment.conflict;
+                      const segmentHistoricalOverlap =
+                        isPersonGroup && segment.count > 1 && !segment.conflict;
                       const segmentLabel = segmentConflict
                         ? t("pm.gantt.conflictCount", { n: segment.count })
-                        : segmentTitles[0] ?? t("pm.gantt.noDates");
+                        : segmentHistoricalOverlap
+                          ? t("pm.gantt.historicalOverlapCount", { n: segment.count })
+                          : segmentTitles[0] ?? t("pm.gantt.noDates");
                       const segmentTitle = segmentConflict
                         ? t("pm.gantt.conflictHint", {
                             n: segment.count,
                             start: fullDateText(locale, segmentStartIso),
                             end: fullDateText(locale, segmentEndIso),
                           }) + (segmentTitles.length === 0 ? "" : " · " + segmentTitles.join(" / "))
-                        : segmentLabel + " · " + fullDateText(locale, segmentStartIso) + " - " + fullDateText(locale, segmentEndIso);
+                        : segmentHistoricalOverlap
+                          ? t("pm.gantt.historicalOverlapHint", {
+                              n: segment.count,
+                              start: fullDateText(locale, segmentStartIso),
+                              end: fullDateText(locale, segmentEndIso),
+                            }) + (segmentTitles.length === 0 ? "" : " · " + segmentTitles.join(" / "))
+                          : segmentLabel + " · " + fullDateText(locale, segmentStartIso) + " - " + fullDateText(locale, segmentEndIso);
                       return (
                         <button
                           key={group.key + "-busy-" + String(segment.startIndex)}
                           type="button"
                           data-project-management-gantt-group-segment={group.key + "-" + String(segment.startIndex)}
                           data-project-management-gantt-conflict={segmentConflict ? "true" : undefined}
+                          data-project-management-gantt-historical-overlap={segmentHistoricalOverlap ? "true" : undefined}
                           aria-label={t("pm.gantt.jumpToDates") + " · " + segmentTitle}
                           title={segmentTitle}
                           onClick={() => revealGanttEntry(group.key + "-segment-" + String(segment.startIndex), segmentLeft)}
@@ -4039,13 +4220,19 @@ function PmImplementationGantt({
                               "pointer-events-none absolute inset-x-0 bottom-0 h-2 rounded-full " +
                               (segmentConflict
                                 ? "bg-rose-400/85 group-hover:bg-rose-500"
-                                : "bg-sky-400/80 group-hover:bg-sky-500")
+                                : segmentHistoricalOverlap
+                                  ? "bg-amber-400/80 group-hover:bg-amber-500"
+                                  : "bg-sky-400/80 group-hover:bg-sky-500")
                             }
                           />
                           <span
                             className={
                               "relative min-w-0 truncate px-0.5 pt-px text-[length:var(--pm-gantt-bar-size,10px)] font-medium leading-[var(--pm-gantt-group-name-leading,16px)] " +
-                              (segmentConflict ? "text-rose-700" : "text-zinc-600")
+                              (segmentConflict
+                                ? "text-rose-700"
+                                : segmentHistoricalOverlap
+                                  ? "text-amber-800"
+                                  : "text-zinc-600")
                             }
                           >
                             {segmentLabel}
@@ -4127,6 +4314,13 @@ function PmImplementationGantt({
                           hiddenColumnsLabel={hiddenColumnsLabel}
                           overflowWidth={ganttColumnLayout.overflowWidth}
                           cellPaddingX={ganttMetrics.cellPaddingX}
+                          editable={editable}
+                          managerOptions={managerOptions}
+                          engineerOptions={engineerOptions}
+                          onManagerChange={onManagerChange}
+                          onEngineerChange={onEngineerChange}
+                          onEngineerHandedOverToggle={onEngineerHandedOverToggle}
+                          onMethodChange={onMethodChange}
                         />
                       </div>
                       <div
@@ -5195,7 +5389,11 @@ export default function ProjectManagementPage({
                                   triggerClassName="min-h-11 w-full !justify-start px-2 py-3 !text-left text-xs leading-5 text-zinc-600 hover:bg-blue-50/40"
                                   display={stageLabel === "" ? <span className="text-zinc-300">—</span> : <span className={PM_TABLE_TAG_CLASS + " " + pmStageTagClass(stageName)}>{stageLabel}</span>}
                                   onPick={(value) => {
-                                    handleStageOverrideChange(row, value === "" ? null : value);
+                                    // 单选阶段再次点击已勾选项 = 取消人工覆盖，回到「自动识别」。
+                                    handleStageOverrideChange(
+                                      row,
+                                      value !== "" && value !== row.currentStageOverride ? value : null,
+                                    );
                                   }}
                                 />
                               </div>
@@ -5381,7 +5579,18 @@ export default function ProjectManagementPage({
               data-project-management-gantt-panel=""
               className="min-h-[280px]"
             >
-              <PmImplementationGantt rows={rows} directory={directory} dicts={dicts} />
+              <PmImplementationGantt
+                rows={rows}
+                directory={directory}
+                dicts={dicts}
+                editable={loadState === "ready"}
+                managerOptions={managerOptions}
+                engineerOptions={engineerOptions}
+                onManagerChange={handleManagerChange}
+                onEngineerChange={handleEngineerChange}
+                onEngineerHandedOverToggle={handleEngineerHandedOverToggle}
+                onMethodChange={handleMethodChange}
+              />
             </section>
           ) : null}
         </div>

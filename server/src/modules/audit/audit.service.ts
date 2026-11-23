@@ -28,7 +28,10 @@ export interface AuditListQueryInput {
 /** 操作记录查看范围：管理员不传；普通账号至少限本人，项目经理可附有效管理项目。 */
 export interface AuditVisibility {
   actorId: string;
+  scope: "all" | "project_manager" | "self";
   managedProjectIds?: readonly string[];
+  /** 项目管理记录审计仅对系统白名单三位可写账号开放。 */
+  canViewProjectManagement: boolean;
 }
 
 /** 业务留痕入参：业务用例只填业务语义，result / entry / 时间由本服务补全。 */
@@ -145,7 +148,9 @@ export class AuditService implements AuditSink {
       from: query.from === undefined ? undefined : new Date(query.from),
       to: query.to === undefined ? undefined : new Date(query.to),
       viewerActorId: visibility?.actorId,
+      viewerScope: visibility?.scope,
       viewerManagedProjectIds: visibility?.managedProjectIds === undefined ? undefined : [...visibility.managedProjectIds],
+      viewerCanViewProjectManagement: visibility?.canViewProjectManagement,
     };
     const offset = (query.page - 1) * query.limit;
     const { items, total, windowId } = await this.repository.listPage(filter, query.limit, offset, query.beforeId);

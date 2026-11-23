@@ -517,6 +517,23 @@ function createHarness() {
 
 /** 导入表三种 sheet 的表头（与真实导入表同列名；列顺序可乱，按表头定位）。 */
 const TASK_HEADER = [
+  "任务名称",
+  "阶段性里程",
+  "任务状态",
+  "项目进度",
+  "任务负责人",
+  "项目经理",
+  "开始日期",
+  "预计完成日期",
+  "实际完成日期",
+  "预计所需天数",
+  "预计所需施工人数",
+  "任务描述",
+  "输出成果文件",
+  "是否按时交付",
+  "文件",
+];
+const LEGACY_TASK_HEADER = [
   "任务描述",
   "阶段性里程",
   "任务状态",
@@ -680,7 +697,7 @@ function sampleWorkbookWithStakeholders(): Buffer {
   return buildWorkbook([...sampleSheets(), stakeholderSheet()]);
 }
 
-/** 变更关联（Push 319）样例：变更管理「关联」列写任务描述；任务表 R 列「变更关联」写日期（第一行故意对不上）。 */
+/** 变更关联（Push 319）样例：变更管理「关联」列写任务名称；任务表 R 列「变更关联」写日期（第一行故意对不上）。 */
 function linkWorkbook(): Buffer {
   const taskHeader = [...TASK_HEADER, "变更关联"];
   const taskRow = (title: string, titleEn: string, stage: string, changeRef: string): string[] => [
@@ -816,6 +833,40 @@ describe("ProjectImportService.preview（导入表解析预览）", () => {
       ["active", 0.75, null, null],
       ["done", 1, "early_done", "2026-11-01"],
     ]);
+  });
+
+  it("新表头：任务名称落到任务名、任务描述落到说明", async () => {
+    const h = createHarness();
+    h.nodes.library = [];
+    const sheets: SheetInput[] = [{
+      name: "任务",
+      rows: [
+        TASK_HEADER,
+        ["新表头任务\nNew Header Task", "硬件实施", "进行中", "0.5", "贾海洋(haiyang)", "贾海洋(haiyang)", "2026-09-01", "2026-09-10", "", "2", "1", "新表头说明", "", "", ""],
+      ],
+    }];
+    await h.service.preview({
+      bytes: buildWorkbook(sheets), fileName: "[TEST] UK-新表头.xlsx", actorId: ACTOR_ID, locale: "zh",
+    });
+    const tasks = (previewPayload(h).parse as { tasks: Array<{ title: string; titleEn: string | null; note: string | null }> }).tasks;
+    expect(tasks.map((task) => [task.title, task.titleEn, task.note])).toEqual([["新表头任务", "New Header Task", "新表头说明"]]);
+  });
+
+  it("旧表头：任务描述仍按任务名、项目进展描述仍按说明识别", async () => {
+    const h = createHarness();
+    h.nodes.library = [];
+    const sheets: SheetInput[] = [{
+      name: "任务",
+      rows: [
+        LEGACY_TASK_HEADER,
+        ["旧表头任务\nLegacy Header Task", "硬件实施", "进行中", "0.5", "贾海洋(haiyang)", "贾海洋(haiyang)", "2026-09-01", "2026-09-10", "", "2", "1", "旧表头说明", "", "", ""],
+      ],
+    }];
+    await h.service.preview({
+      bytes: buildWorkbook(sheets), fileName: "[TEST] UK-旧表头.xlsx", actorId: ACTOR_ID, locale: "zh",
+    });
+    const tasks = (previewPayload(h).parse as { tasks: Array<{ title: string; titleEn: string | null; note: string | null }> }).tasks;
+    expect(tasks.map((task) => [task.title, task.titleEn, task.note])).toEqual([["旧表头任务", "Legacy Header Task", "旧表头说明"]]);
   });
 
   it("新旧投产阶段在同一节点库中进行匹配并保留冲突任务", async () => {

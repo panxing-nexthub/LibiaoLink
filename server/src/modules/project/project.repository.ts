@@ -224,9 +224,11 @@ export class ProjectRepository {
     return (rows[0] ?? null) as ProjectReferenceRow | null;
   }
 
-  /** 蓝图地图总览：全部未删除项目的最少字段；项目级可见性由服务层另行标注。 */
-  async listMapOverview(client: DbClient = this.database.db): Promise<ProjectMapOverviewRow[]> {
-    const rows = await client
+  /** 蓝图地图项目概况：可按项目可见集裁剪。 */
+  async listMapOverview(scope: ProjectScopeFilter): Promise<ProjectMapOverviewRow[]> {
+    if (scope.kind === "ids" && scope.ids.length === 0) return [];
+    const active = isNull(projects.deletedAt);
+    const rows = await this.database.db
       .select({
         id: projects.id,
         code: projects.code,
@@ -237,7 +239,7 @@ export class ProjectRepository {
         status: projects.status,
       })
       .from(projects)
-      .where(isNull(projects.deletedAt))
+      .where(scope.kind === "ids" ? and(active, inArray(projects.id, scope.ids)) : active)
       .orderBy(asc(projects.seqNo), asc(projects.id));
     return rows as ProjectMapOverviewRow[];
   }

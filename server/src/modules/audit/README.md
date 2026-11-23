@@ -1,3 +1,5 @@
+> 2026-11-23：新增对象类型 `project_management_record`。项目管理准备记录新增 / 修改 / 删除与业务写入同事务写审计，记录字段级前后值；查询面仅对 `PROJECT_MANAGEMENT_ALLOWED_EMAILS` 三位白名单账号返回该类型，其他账号（含管理员）在仓储可见性条件中排除。无 DDL / 迁移。
+
 # audit 模块（平台）
 
 > Push 173 自 admin 拆分 —— 审计写入 / 检索出口（C7）。admin 依赖 identity 守卫、identity 又要写审计，独立模块避免循环依赖。

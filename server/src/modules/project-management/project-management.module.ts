@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AuditModule } from "../audit/index.js";
 import { IdentityModule } from "../identity/index.js";
 import { PermissionModule } from "../permission/index.js";
 import { ProjectManagementAccessGuard } from "./project-management-access.guard.js";
@@ -14,7 +15,7 @@ import { ProjectManagementSnapshotRepository } from "./project-management-snapsh
  * 不建立外键、不写项目空间。
  */
 @Module({
-  imports: [IdentityModule, PermissionModule],
+  imports: [AuditModule, IdentityModule, PermissionModule],
   controllers: [ProjectManagementController],
   providers: [ProjectManagementAccessGuard, ProjectManagementRepository, ProjectManagementSnapshotRepository, ProjectManagementService],
 })

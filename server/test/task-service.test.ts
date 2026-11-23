@@ -309,6 +309,11 @@ class FakePermissionService {
   async canManageGroupAccess(): Promise<boolean> {
     return this.groupAccessAdmin;
   }
+
+  async assertCanManageProjectManagers(actorId: string, project: TaskProjectRow): Promise<void> {
+    if (this.groupAccessAdmin || this.projectManager || project.managerIds.includes(actorId)) return;
+    throw new AppError("FORBIDDEN", "仅本项目的项目经理或系统管理员可以变更项目经理");
+  }
 }
 
 class FakeDatabase {

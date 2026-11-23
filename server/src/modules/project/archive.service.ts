@@ -62,7 +62,7 @@ export class ArchiveService {
     if (view.project.status === "archived") throw new AppError("PROJECT_ARCHIVED", "项目已归档");
     await this.flow.assertProjectEditor(projectId, actorId, "项目归档");
     if (view.project.version !== body.version) throw new AppError("VERSION_CONFLICT", "项目已被他人更新，请刷新后重试");
-    const patch = "changes" in body ? await this.projectUpdates.prepareProjectUpdate(view.project, body.changes) : undefined;
+    const prepared = "changes" in body ? await this.projectUpdates.prepareProjectUpdate(view.project, body.changes) : undefined;
     return this.database.db.transaction(async (tx) => {
       const locked = await this.archive.lockProjectRow(tx, projectId);
       if (locked === null || locked.deletedAt !== null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
@@ -90,7 +90,7 @@ export class ArchiveService {
       }
       const stage = await this.archive.findStage(tx, projectId, locked.stageKey);
       if (stage === null) throw new AppError("INTERNAL", "项目阶段快照缺失，无法归档");
-      const edited = patch === undefined ? locked : await this.projectUpdates.applyProjectUpdate(tx, locked, patch, body.version, actorId);
+      const edited = prepared === undefined ? locked : await this.projectUpdates.applyProjectUpdate(tx, locked, prepared, body.version, actorId);
       const updated = await this.archive.updateProjectArchived(tx, projectId, actorId, edited.version);
       if (updated === null) throw new AppError("VERSION_CONFLICT", "项目已被他人更新，请刷新后重试");
       const at = updated.updatedAt;

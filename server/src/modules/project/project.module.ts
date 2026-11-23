@@ -20,6 +20,8 @@ import { ProjectMemberService } from "./project-member.service.js";
 import { ProjectRepository } from "./project.repository.js";
 import { ProjectQueryService } from "./project-query.service.js";
 import { ProjectService } from "./project.service.js";
+import { ProjectViewGrantController } from "./project-view-grant.controller.js";
+import { ProjectViewGrantService } from "./project-view-grant.service.js";
 
 /**
  * project 模块（领域 · h2 / h3）：项目主数据 CRUD（M2-01）、列表 / facets（M2-04）、成员名册（M2-05）、
@@ -31,11 +33,12 @@ import { ProjectService } from "./project.service.js";
  */
 @Module({
   imports: [IdentityModule, BlueprintModule, NodeModule, PermissionModule, AdminModule, TranslateModule],
-  controllers: [ProjectsController, FlowController, NodesController, ArchiveController],
+  controllers: [ProjectsController, ProjectViewGrantController, FlowController, NodesController, ArchiveController],
   providers: [
     ProjectRepository,
     ProjectQueryService,
     ProjectService,
+    ProjectViewGrantService,
     ProjectMemberRepository,
     ProjectMemberService,
     ProjectGroupRepository,

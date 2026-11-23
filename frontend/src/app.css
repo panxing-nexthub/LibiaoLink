@@ -1921,6 +1921,12 @@ body {
   transform: translateY(-100%);
 }
 
+/* 仪表盘落屏时地图卡整卡在上一格，收掉其底边与投影，避免裁切线上露出一条地图底框。 */
+.hub-deck__strip[data-view="dashboard"] [data-hub-deck-cell="map"] {
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
+
 /* 滑轨里的两屏（静态排布，永不动 transform）：地图在上一格、仪表盘在下一格。 */
 .hub-deck__cell {
   position: absolute;
@@ -2357,6 +2363,30 @@ body {
   width: 3rem;
   color: #9aa0a6;
   font-variant-numeric: tabular-nums;
+}
+
+/* 2026-11-22：单项目仪表盘「数据详情」整行可点，进入项目详情（问题定位高亮 / 任务抽屉）。 */
+.hub-dash-detail__table tbody tr[data-row-link="true"] {
+  cursor: pointer;
+}
+
+.hub-dash-detail__table tbody tr[data-row-link="true"]:hover {
+  background: #f8fafc;
+}
+
+.hub-dash-detail__table tbody tr[data-row-link="true"]:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: -2px;
+}
+
+.hub-dash-detail__rowLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.hub-dash-detail__rowLink:hover {
+  color: #2563eb;
+  text-decoration: none;
 }
 
 .hub-dash-detail__task {
@@ -2890,6 +2920,12 @@ body {
   .hub-dash-issues__bar,
   .hub-dash-delivery__bar,
   .hub-dash-status__arc,
+  .hub-dash-start__pieArc,
+  .hub-dash-start__pieGrid,
+  .hub-dash-start__pieLegendItem,
+  .hub-dash-start__pieLeader,
+  .hub-dash-start__pieLabel,
+  .hub-dash-start__bars,
   .hub-dash__num,
   .hub-dash-issues__num,
   .hub-dash-delivery__count,
@@ -4367,6 +4403,20 @@ body {
   flex: 0 0 auto;
 }
 
+/* 去掉外层卡框后，全部项目标题上移，减少标题与顶部导航之间的空白。 */
+[data-hub-page] [data-hub-main]:has([data-hub-dash-all-projects]) {
+  padding-top: 0.6rem !important;
+}
+
+/* 全部项目首屏只保留两张内部统计卡片，去掉整个仪表盘外层卡框。 */
+[data-hub-deck-cell="dashboard"]:has([data-hub-dash-all-projects]) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .hub-dash-all {
   display: flex;
   flex-direction: column;
@@ -4562,9 +4612,11 @@ body {
 
 .hub-dash-start {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 0.9rem;
   min-width: 0;
+  min-height: 0;
 }
 
 .hub-dash-start__yearFilter {
@@ -4572,7 +4624,160 @@ body {
   display: flex;
   justify-content: center;
   min-width: 0;
+  min-height: 1.95rem;
   padding: 0.1rem 0;
+}
+
+/* 项目当前阶段的「全选 + 柱状图 / 饼状图」并列放左，年份多选保持居中。 */
+.hub-dash-start__leftControls {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.35rem;
+  transform: translateY(-50%);
+}
+
+.hub-dash-start__leftControls > .hub-dash-project-types__selectAll {
+  position: static;
+  transform: none;
+}
+
+.hub-dash-start__chartToggle[data-active="true"] {
+  border-color: rgb(147 197 253 / 0.9);
+  color: #1d4ed8;
+}
+
+/* 项目当前阶段的饼图视图：沿用任务状态饼图的图例 / 扇区 / 引线标签体系，按年份逐张展示。 */
+.hub-dash-start__pieGrid {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.65rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.1rem 0 0.2rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  animation: ll-hub-fade-in 340ms ease-out both;
+}
+
+.hub-dash-start__pieCard {
+  display: flex;
+  flex: 1 1 24rem;
+  flex-direction: column;
+  gap: 0.32rem;
+  min-width: 24rem;
+  min-height: 0;
+  align-self: stretch;
+  padding: 0.55rem 0.65rem 0.35rem;
+  border: 1px solid #edf0f3;
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.hub-dash-start__pieCardHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+ .hub-dash-start__pieCardTitle {
+  margin: 0;
+  color: #374151;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+ .hub-dash-start__pieCardMeta {
+  flex: 0 0 auto;
+  color: #9aa0a6;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-dash-start__pieLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem 0.7rem;
+  align-items: center;
+}
+
+ .hub-dash-start__pieLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #4b5563;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  animation: ll-hub-num-in 320ms ease-out both;
+}
+
+ .hub-dash-start__pieLegendItem i {
+  display: block;
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 2px;
+}
+
+.hub-dash-start__pieChartViewport {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 76rem;
+  min-width: 0;
+  min-height: 0;
+  margin-inline: auto;
+  overflow: hidden;
+}
+
+.hub-dash-start__pieChart {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.hub-dash-start__pieArc {
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  transform-box: view-box;
+  animation: ll-hub-pie-in 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hub-dash-start__pieArc[data-drill="true"] {
+  cursor: pointer;
+}
+
+.hub-dash-start__pieArc[data-drill="true"]:hover {
+  filter: brightness(0.94);
+}
+
+.hub-dash-start__pieLeader {
+  stroke-opacity: 0.45;
+  animation: ll-hub-num-in 320ms ease-out both;
+  animation-delay: 280ms;
+}
+
+.hub-dash-start__pieLabel {
+  font-variant-numeric: tabular-nums;
+  animation: ll-hub-num-in 320ms ease-out both;
+  animation-delay: 300ms;
+}
+
+.hub-dash-combined__panel .hub-dash-start__pieGrid {
+  padding: 0;
+}
+
+.hub-dash-combined__panel .hub-dash-start__pieCard {
+  background: #fff;
 }
 
 .hub-dash-start-stage {
@@ -4632,6 +4837,10 @@ body {
   border: 1px solid #edf0f3;
   border-radius: 10px;
   background: #fcfcfd;
+}
+
+.hub-dash-start__bars {
+  animation: ll-hub-fade-in 340ms ease-out both;
 }
 
 .hub-dash-start-year {
@@ -4915,8 +5124,15 @@ body {
 }
 
 .hub-dash-all__slideCard--stacked {
-  gap: 0.45rem;
-  padding: 0.7rem 0.8rem 0.65rem;
+  width: 100%;
+  min-width: 0;
+  gap: 0.55rem;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .hub-dash-combined {
@@ -4979,6 +5195,11 @@ body {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+}
+
+/* 合并页两图按容器宽度绘制，避免亚像素取整触发无意义的横向滚动条。 */
+.hub-dash-combined__panel .hub-dash-chartViewport {
+  overflow: hidden;
 }
 
 .hub-dash-combined__panel .hub-dash-project-types-wrap {
@@ -5091,8 +5312,24 @@ body {
     padding: 0.2rem 0.35rem 0.3rem;
   }
 
+  .hub-dash-all__slide[data-section="project-stats"] {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
   .hub-dash-all__slideCard {
     padding: 0.7rem 0.55rem 0.55rem;
+  }
+
+  .hub-dash-all__slideCard--stacked {
+    flex: 0 0 auto;
+    min-height: 40rem;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .hub-dash-role-section--slide .hub-dash-role__legend {
@@ -5101,6 +5338,26 @@ body {
 
   .hub-dash-switch[data-all-projects="true"] {
     gap: 0.4rem 0.55rem;
+  }
+}
+
+/* 低高度电脑：两张图必须一屏完整显示；卡片改为撑满可用高度，不再用固定 48rem 把下方图顶出视口。 */
+@media (max-height: 820px) {
+  .hub-dash-all__slide[data-section="project-stats"] {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .hub-dash-all__slideCard--stacked {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
   }
 }
 
@@ -5234,9 +5491,10 @@ body {
 .hub-dash-project-types__leftControls {
   z-index: 1;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.25rem;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.35rem;
 }
 
 .hub-dash-project-types__leftControls > .hub-dash-project-types__selectAll {
@@ -5834,4 +6092,67 @@ body {
   .hub-dash-issue-group-detail__issue {
     padding-left: 0.9rem;
   }
+}
+
+
+/* ===== 仪表盘图表响应式画布（2026-11-22） =====
+   固定 viewBox 会让整张 SVG 随屏幕等比缩放，导致宽屏字变大、小屏字变小，并在比例不一致时
+   产生左右黑边。以下容器用实测像素作画布：字号保持 CSS 像素稳定，柱图坐标按可用宽高重算。 */
+.hub-dash-chartViewport {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.hub-dash-chartCanvas {
+  position: relative;
+  flex: 0 0 auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.hub-dash-chartCanvas > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
+.hub-dash-project-types__viewport {
+  min-height: 0;
+}
+
+.hub-dash-project-types__viewport > .hub-dash-chartCanvas > svg.hub-dash-project-types {
+  min-height: 0;
+  max-height: none;
+}
+
+.hub-dash-start__bars > .hub-dash-chartViewport {
+  flex: 1 1 auto;
+}
+
+.hub-dash-start__bars .hub-dash-start-stage,
+.hub-dash-combined__panel .hub-dash-start-stage {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
+.hub-dash-role__scroll.hub-dash-chartViewport {
+  width: 100%;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.hub-dash-role__scroll.hub-dash-chartViewport .hub-dash-role {
+  min-height: 0;
+  max-height: none;
 }

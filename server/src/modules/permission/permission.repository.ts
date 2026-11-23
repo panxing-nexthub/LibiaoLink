@@ -9,6 +9,7 @@ import type {
   GroupAccessScopePermission,
 } from "@libiaolink/contracts";
 import { DatabaseService } from "../../db/database.service.js";
+import type { DbClient } from "../../db/db-client.js";
 import {
   groupAccessAdmins,
   taskNodeReviewers,
@@ -22,7 +23,7 @@ import {
 } from "../../db/schema/access.js";
 import { users } from "../../db/schema/identity.js";
 import { projectNodes } from "../../db/schema/flow.js";
-import { projectMembers, projects } from "../../db/schema/projects.js";
+import { projectMembers, projects, projectViewGrants } from "../../db/schema/projects.js";
 import { tasks } from "../../db/schema/tasks.js";
 import {
   mergeScopePermissions,
@@ -153,6 +154,30 @@ export class PermissionRepository {
     return [...new Set([...memberIds, ...ownedIds, ...managedRosterIds, ...taskOwnerIds])];
   }
 
+  private effectiveProjectViewGrants() {
+    return this.database.db
+      .select({ userId: projectViewGrants.userId, projectId: projectViewGrants.projectId })
+      .from(projectViewGrants)
+      .innerJoin(projects, and(eq(projects.id, projectViewGrants.projectId), isNull(projects.deletedAt)))
+      .innerJoin(users, and(eq(users.id, projectViewGrants.userId), eq(users.status, "active"), isNull(users.removedAt)));
+  }
+
+  async listEffectiveProjectViewGrants(): Promise<Array<{ userId: string; projectId: string }>> {
+    return this.effectiveProjectViewGrants().orderBy(asc(projectViewGrants.userId), asc(projectViewGrants.projectId));
+  }
+
+  async listProjectViewGrantIds(actorId: string): Promise<string[]> {
+    const rows = await this.effectiveProjectViewGrants().where(eq(projectViewGrants.userId, actorId));
+    return rows.map((row) => row.projectId);
+  }
+
+  async hasProjectViewGrant(actorId: string, projectId: string): Promise<boolean> {
+    const rows = await this.effectiveProjectViewGrants()
+      .where(and(eq(projectViewGrants.projectId, projectId), eq(projectViewGrants.userId, actorId)))
+      .limit(1);
+    return rows.length > 0;
+  }
+
   /** 当前账号是否负责该项目任一未删除任务（单项目记录级解析用）。 */
   async hasTaskOwnership(actorId: string, projectId: string): Promise<boolean> {
     const rows = await this.database.db
@@ -190,8 +215,8 @@ export class PermissionRepository {
   }
 
   /** 名册行（项目内角色）。 */
-  async findMembership(actorId: string, projectId: string): Promise<string | null> {
-    const rows = await this.database.db
+  async findMembership(actorId: string, projectId: string, client: DbClient = this.database.db): Promise<string | null> {
+    const rows = await client
       .select({ roleInProject: projectMembers.roleInProject })
       .from(projectMembers)
       .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, actorId)))

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, count, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, inArray, lte, not, or, sql, type SQL } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { auditLogs, type AuditChangeEntry } from "../../db/schema/admin.js";
@@ -42,8 +42,12 @@ export interface AuditListFilter {
   to?: Date;
   /** 当前查看者：非管理员时至少只能看到本人记录。 */
   viewerActorId?: string;
+  /** 当前查看者的审计范围；all 由服务端显式传入，用于统一收敛项目管理记录。 */
+  viewerScope?: "all" | "project_manager" | "self";
   /** 当前查看者有效管理项目：与本人记录取 OR，允许看到这些项目的全部记录。 */
   viewerManagedProjectIds?: string[];
+  /** 项目管理记录审计仅对白名单三位可写账号开放。 */
+  viewerCanViewProjectManagement?: boolean;
 }
 
 export interface AuditRow {
@@ -168,12 +172,21 @@ function buildAuditWhere(filter: AuditListFilter): SQL | undefined {
   }
   if (filter.from !== undefined) conditions.push(gte(auditLogs.occurredAt, filter.from));
   if (filter.to !== undefined) conditions.push(lte(auditLogs.occurredAt, filter.to));
-  if (filter.viewerActorId !== undefined) {
-    const self = eq(auditLogs.actorId, filter.viewerActorId);
-    const managedIds = filter.viewerManagedProjectIds ?? [];
-    const managed = managedIds.length > 0 ? inArray(auditLogs.projectId, managedIds) : undefined;
-    const visibility = managed === undefined ? self : or(self, managed);
-    if (visibility !== undefined) conditions.push(visibility);
+  if (filter.viewerScope !== undefined) {
+    const projectManagementRecord = eq(auditLogs.objectType, "project_management_record");
+    const canViewProjectManagement = filter.viewerCanViewProjectManagement === true;
+    if (filter.viewerScope === "all") {
+      if (!canViewProjectManagement) conditions.push(not(projectManagementRecord));
+    } else if (filter.viewerActorId !== undefined) {
+      const self = eq(auditLogs.actorId, filter.viewerActorId);
+      const managedIds = filter.viewerManagedProjectIds ?? [];
+      const managed = managedIds.length > 0 ? inArray(auditLogs.projectId, managedIds) : undefined;
+      const visibility = managed === undefined ? self : or(self, managed);
+      const scoped = canViewProjectManagement
+        ? (visibility === undefined ? projectManagementRecord : or(visibility, projectManagementRecord))
+        : (visibility === undefined ? not(projectManagementRecord) : and(visibility, not(projectManagementRecord)));
+      if (scoped !== undefined) conditions.push(scoped);
+    }
   }
   if (conditions.length === 0) return undefined;
   return and(...conditions);

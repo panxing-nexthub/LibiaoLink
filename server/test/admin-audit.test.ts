@@ -527,14 +527,14 @@ describe("AuditService（审计 C7）", () => {
         metadata: {},
       },
     ];
-    const page = await service.list({ page: 1, limit: 50 }, { actorId: UUID_ACTOR });
+    const page = await service.list({ page: 1, limit: 50 }, { actorId: UUID_ACTOR, scope: "self", canViewProjectManagement: false });
     expect(repo.lastFilter).toMatchObject({ viewerActorId: UUID_ACTOR });
     expect(repo.lastFilter?.viewerManagedProjectIds).toBeUndefined();
     expect(page.total).toBe(1);
 
     await service.list(
       { projectId: UUID_PROJECT, page: 1, limit: 50 },
-      { actorId: UUID_ACTOR, managedProjectIds: [UUID_PROJECT] },
+      { actorId: UUID_ACTOR, scope: "project_manager", managedProjectIds: [UUID_PROJECT], canViewProjectManagement: false },
     );
     expect(repo.lastFilter).toMatchObject({
       projectIds: [UUID_PROJECT],
@@ -544,7 +544,9 @@ describe("AuditService（审计 C7）", () => {
 
     await service.list({ projectId: "33333333-3333-4333-8333-333333333333", page: 1, limit: 50 }, {
       actorId: UUID_ACTOR,
+      scope: "project_manager",
       managedProjectIds: [UUID_PROJECT],
+      canViewProjectManagement: false,
     });
     expect(repo.lastFilter?.projectIds).toEqual(["33333333-3333-4333-8333-333333333333"]);
   });

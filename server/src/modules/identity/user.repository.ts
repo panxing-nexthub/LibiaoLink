@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, count, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { users } from "../../db/schema/identity.js";
@@ -163,6 +163,19 @@ export class UserRepository {
       .offset(options.offset);
     const totals = await this.database.db.select({ value: count() }).from(users).where(where);
     return { rows, total: Number(totals[0]?.value ?? 0) };
+  }
+
+  async findActiveDirectoryMatches(keys: readonly string[]): Promise<UserRow[]> {
+    if (keys.length === 0) return [];
+    return this.database.db.select().from(users).where(and(
+      eq(users.status, "active"),
+      isNull(users.removedAt),
+      or(
+        inArray(sql`lower(btrim(${users.displayName}))`, keys),
+        inArray(sql`lower(btrim(${users.username}))`, keys),
+        inArray(sql`lower(btrim(${users.email}))`, keys),
+      ),
+    )).orderBy(asc(users.username));
   }
 
   /** 导出专用用户行读取：保持启用用户与工号升序口径，不重复查询 total。 */

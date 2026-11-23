@@ -15,7 +15,7 @@ import { AppError } from "../../common/errors/app-error.js";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbTransaction } from "../../db/db-client.js";
 import { AuditService, diffRecords } from "../admin/index.js";
-import { PermissionService, ProjectManagerEligibilityService } from "../permission/index.js";
+import { PermissionService, ProjectManagerEligibilityService, projectManagerIdsChanged } from "../permission/index.js";
 import type { ProjectScopeFilter } from "../permission/index.js";
 import { ObjectStorage, toApiError } from "../../storage/index.js";
 import { FlowService } from "./flow.service.js";
@@ -34,6 +34,11 @@ export type ProjectListResult = z.infer<typeof ProjectListResponseSchema>;
 export type ProjectMapOverviewResult = z.infer<typeof ProjectMapOverviewResponseSchema>;
 export type ProjectFacetsResult = z.infer<typeof ProjectFacetsSchema>;
 export type ProjectPurgeResult = z.infer<typeof ProjectPurgeResponseSchema>;
+
+type PreparedProjectUpdate = {
+  patch: ProjectUpdateInput;
+  eligibleManagerIds: ReadonlySet<string> | undefined;
+};
 
 type ProjectCreateBody = z.infer<typeof ProjectCreateBodySchema>;
 type ProjectUpdateBody = z.infer<typeof ProjectUpdateBodySchema>;
@@ -117,9 +122,15 @@ export class ProjectService {
     const filter = buildProjectFilter(query);
     const sorts = parseProjectSort(query.sort);
     const { items, total } = await this.projects.listPage(filter, sorts, query.limit, (query.page - 1) * query.limit, scope);
-    const levels = await this.permission.projectGroupAccessLevelsOf(actorId, items.map((item) => item.project.id));
+    const access = await this.permission.projectAccessSummariesOf(actorId, items.map((item) => item.project.id));
     return {
-      items: items.map((item) => toProjectView(item, levels.get(item.project.id) ?? "view")),
+      items: items.map((item) => {
+        const summary = access.get(item.project.id);
+        return {
+          ...toProjectView(item, summary?.accessLevel ?? "view"),
+          canManageProjectManagers: summary?.canManageProjectManagers === true,
+        };
+      }),
       page: query.page,
       limit: query.limit,
       total,
@@ -127,14 +138,17 @@ export class ProjectService {
   }
 
   /**
-   * 蓝图地图总览：有项目浏览权的账号可读全部未删项目的最少字段；
-   * 每个项目再按详情可见集标注 accessLevel，null 表示只能看概况、不能进入详情。
+   * 蓝图地图总览：沿用已有的全量概况资格，其余可浏览账号只返回可见项目。
    */
   async listProjectMapOverview(scope: ProjectScopeFilter, actorId: string): Promise<ProjectMapOverviewResult> {
-    if (!(await this.permission.canBrowseProjectOverview(actorId))) {
+    const fullOverview = await this.permission.canBrowseProjectOverview(actorId);
+    const overviewScope: ProjectScopeFilter = fullOverview
+      ? { kind: "all" }
+      : { kind: "ids", ids: scope.kind === "ids" ? scope.ids : [] };
+    const rows = await this.projects.listMapOverview(overviewScope);
+    if (!fullOverview && rows.length === 0) {
       throw new AppError("FORBIDDEN", "当前账号没有项目浏览权限");
     }
-    const rows = await this.projects.listMapOverview();
     const levels = await this.permission.projectGroupAccessLevelsOf(actorId, rows.map((row) => row.id));
     const visibleIds = scope.kind === "all" ? null : new Set(scope.ids);
     return {
@@ -270,10 +284,13 @@ export class ProjectService {
     if (current.project.status === "archived") {
       throw new AppError("PROJECT_ARCHIVED", "项目已归档，禁止修改");
     }
-    const patch = await this.prepareProjectUpdate(current.project, body);
-    const updated = await this.database.db.transaction((tx) =>
-      this.applyProjectUpdate(tx, current.project, patch, body.version, actorId),
-    );
+    const prepared = await this.prepareProjectUpdate(current.project, body);
+    const updated = await this.database.db.transaction(async (tx) => {
+      const locked = prepared.patch.managerIds === undefined ? current.project : await this.projects.lockRowById(id, tx);
+      if (locked === null || locked.deletedAt !== null) throw new AppError("NOT_FOUND", "项目不存在或不可见");
+      if (locked.status === "archived") throw new AppError("PROJECT_ARCHIVED", "项目已归档，禁止修改");
+      return this.applyProjectUpdate(tx, locked, prepared, body.version, actorId);
+    });
     const view = await this.projects.findViewById(id);
     const levels = await this.permission.projectGroupAccessLevelsOf(actorId, [id]);
     return toProjectView(
@@ -283,7 +300,7 @@ export class ProjectService {
   }
 
   /** 生成项目字段变更。由提交方在写事务中校验项目版本。 */
-  async prepareProjectUpdate(current: ProjectRow, body: Omit<ProjectUpdateBody, "version">): Promise<ProjectUpdateInput> {
+  async prepareProjectUpdate(current: ProjectRow, body: Omit<ProjectUpdateBody, "version">): Promise<PreparedProjectUpdate> {
     const patch: ProjectUpdateInput = {};
     if (body.code !== undefined) patch.code = body.code;
     if (body.name !== undefined) patch.name = body.name;
@@ -299,27 +316,32 @@ export class ProjectService {
     if (current.sourceBlueprintType === null && patch.projectType !== undefined && patch.projectType !== current.projectType) {
       patch.sourceBlueprintType = current.projectType;
     }
-    if (body.managerIds !== undefined) {
-      const eligibleManagerIds = await this.managerEligibility.eligibleUserIds();
-      const roster = await this.members.listByProject(current.id);
-      const rosterManagerIds = roster
-        .filter((row) => row.member.roleInProject === "project_manager")
-        .map((row) => row.member.userId);
-      await this.managerEligibility.assertAssignable(body.managerIds, {
-        existingUserIds: [...current.managerIds, ...rosterManagerIds],
-        eligibleIds: eligibleManagerIds,
-      });
-      patch.managerIds = body.managerIds;
+    if (body.managerIds !== undefined && projectManagerIdsChanged(current.managerIds, body.managerIds)) {
+      patch.managerIds = body.managerIds.map((id) => id.toLowerCase());
     }
     if (body.stageKey !== undefined) patch.stageKey = body.stageKey;
     if (body.status !== undefined) patch.status = body.status;
     if (body.description !== undefined) patch.description = body.description;
-    return patch;
+    const eligibleManagerIds = patch.managerIds === undefined ? undefined : await this.managerEligibility.eligibleUserIds();
+    return { patch, eligibleManagerIds };
   }
 
   /** 共用项目字段写入，经理快照和审计由同一事务提交。 */
-  async applyProjectUpdate(tx: DbTransaction, current: ProjectRow, patch: ProjectUpdateInput, version: number, actorId: string): Promise<ProjectRow> {
+  async applyProjectUpdate(tx: DbTransaction, current: ProjectRow, prepared: PreparedProjectUpdate, version: number, actorId: string): Promise<ProjectRow> {
+    const { patch, eligibleManagerIds } = prepared;
     const id = current.id;
+    if (patch.managerIds !== undefined) {
+      if (current.version !== version) throw new AppError("VERSION_CONFLICT", "项目已被他人更新，请刷新后重试");
+      await this.permission.assertCanManageProjectManagers(actorId, current, tx);
+      const roster = await this.members.listByProject(id, tx);
+      const rosterManagerIds = roster
+        .filter((row) => row.member.roleInProject === "project_manager")
+        .map((row) => row.member.userId);
+      await this.managerEligibility.assertAssignable(patch.managerIds, {
+        existingUserIds: [...current.managerIds, ...rosterManagerIds],
+        eligibleIds: eligibleManagerIds,
+      });
+    }
     const at = new Date();
     const row = await this.projects.updateWithVersion(id, patch, version, at, tx);
     if (row === null) {

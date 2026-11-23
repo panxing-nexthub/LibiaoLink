@@ -19,6 +19,7 @@ export * from "./modules/permissions.ts";
 export * from "./modules/stakeholders.ts";
 export * from "./modules/reports.ts";
 export * from "./modules/issues.ts";
+export * from "./modules/project-ai.ts";
 export * from "./modules/automation.ts";
 export * from "./modules/outbox.ts";
 export * from "./modules/workspace.ts";

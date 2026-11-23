@@ -12,6 +12,7 @@ import { CategorySwitch } from "./components/CategorySwitch";
 import type { DateRange } from "./components/DateRangePicker";
 import { FilePreviewOverlay } from "./components/FilePreviewOverlay";
 import { ImportProjectPanel } from "./components/ImportProjectPanel";
+import { ProjectAiSummaryModal } from "./components/ProjectAiSummaryModal";
 import { ProjectModal, type ProjectDraft } from "./components/ProjectModal";
 import { SearchInput } from "./components/SearchInput";
 import { Toast, ToastConfirm } from "./components/Toast";
@@ -156,6 +157,8 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
   const cardWatermark = useCardWatermark();
   const filters = route.kind === "list" ? route.filters : EMPTY_LIST_QUERY;
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  /** 打开 AI 项目总结的项目；null = 弹窗关闭。 */
+  const [aiSummaryProject, setAiSummaryProject] = useState<Project | null>(null);
   // 常用筛选（Push 138；Push 169 起按账号存服务端）：组合由父层持有（同账号换设备可见），点一下套用到当前筛选
   // 「哪组正在生效」由条件比较派生，不另存状态；保存 / 删除失败的提示条见 savedFilterError
   const [savedFilterError, setSavedFilterError] = useState<string | null>(null);
@@ -901,6 +904,13 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
                       : undefined
                   }
                   exporting={exportingProjectId === project.id}
+                  onAiSummary={
+                    canExportProject && project.accessLevel === "edit"
+                      ? () => {
+                          setAiSummaryProject(project);
+                        }
+                      : undefined
+                  }
                   onDelete={
                     canDeleteProject && project.accessLevel === "edit"
                       ? () => {
@@ -973,6 +983,12 @@ export default function Home({ me, dicts, directory, managerCandidates, dictTool
           containerRef={deleteFilterConfirmTrapRef}
           anchor={{ name: "data-saved-filter-delete-confirm", value: "" }}
           confirmAnchor={{ name: "data-saved-filter-delete", value: "" }}
+        />
+      )}
+      {aiSummaryProject === null ? null : (
+        <ProjectAiSummaryModal
+          project={{ id: aiSummaryProject.id, code: aiSummaryProject.code, description: aiSummaryProject.description }}
+          onClose={() => { setAiSummaryProject(null); }}
         />
       )}
     </div>

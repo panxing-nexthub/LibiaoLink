@@ -910,6 +910,7 @@ export function HubDashboard({ viewerId, data, state, issues, issuesState, onNee
           />
         ) : cachedDetail.kind === "words" ? (
           <HubDashWordDetail
+            projectId={pickedId}
             rows={detail.kind === "word" ? cachedDetail.data.changes.filter((change) => isChangeWordHit(change.reason, detail.word)) : []}
             members={cachedDetail.data.members}
             tasks={cachedDetail.data.tasks}
@@ -919,6 +920,7 @@ export function HubDashboard({ viewerId, data, state, issues, issuesState, onNee
           />
         ) : cachedDetail.kind === "issues" ? (
           <HubDashIssueDetail
+            projectId={pickedId}
             projectName={pickedName}
             rows={detail.kind === "issue"
               ? cachedDetail.data.issues
@@ -931,6 +933,7 @@ export function HubDashboard({ viewerId, data, state, issues, issuesState, onNee
           />
         ) : (
           <HubDashDetail
+            projectId={pickedId}
             projectName={pickedName}
             manager={data.managerByProject.get(pickedId) ?? ""}
             tasks={cachedDetail.data.tasks.filter((task) =>

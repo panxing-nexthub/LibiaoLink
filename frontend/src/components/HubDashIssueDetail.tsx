@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { DailyReport, Issue, ReportPhoto } from "../data/reports";
 import { recordPreviewView, usePhotoUrl } from "../fileApi";
 import { fieldText, useLocale, useT } from "../i18n";
+import { projectFocusHref } from "../useHashRoute";
 import { ISSUE_CATEGORY_CLASS } from "./ReportIssuePanel";
 import { TableScrollbar } from "./TableScrollbar";
 import { ImageZoomViewer } from "./ImageZoomViewer";
@@ -123,7 +124,8 @@ function CategoryPills({ values }: { readonly values: readonly string[] }) {
   );
 }
 
-export function HubDashIssueDetail({ projectName, rows, onClose }: {
+export function HubDashIssueDetail({ projectId, projectName, rows, onClose }: {
+  readonly projectId: string;
   readonly projectName: string;
   readonly rows: readonly HubDashIssueDetailRow[];
   readonly onClose: () => void;
@@ -216,11 +218,33 @@ export function HubDashIssueDetail({ projectName, rows, onClose }: {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((card, index) => (
-                  <tr key={card.issue.id}>
+                {filtered.map((card, index) => {
+                  /** 行点击 = 跳到该项目「日报及问题」子视图并定位高亮这条问题（与全部项目问题下钻同一深链口径）。 */
+                  const href = projectFocusHref(projectId, { kind: "issueLocate", id: card.issue.id });
+                  const openProject = (): void => {
+                    onClose();
+                    window.location.hash = href;
+                  };
+                  return (
+                  <tr
+                    key={card.issue.id}
+                    data-row-link="true"
+                    tabIndex={0}
+                    aria-label={t("hub.dash.detail.openProject")}
+                    onClick={(event) => {
+                      if ((event.target as HTMLElement).closest("a, button, input, label")) return;
+                      openProject();
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      if ((event.target as HTMLElement).closest("a, button, input, label")) return;
+                      event.preventDefault();
+                      openProject();
+                    }}
+                  >
                     <td className="hub-dash-detail__no">{index + 1}</td>
                     <td>{card.date === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__date">{card.date}</span>}</td>
-                    <td><span className="hub-dash-detail__task" title={card.issue.title}>{card.issue.title}</span></td>
+                    <td><a className="hub-dash-detail__rowLink" href={href} title={card.issue.title} onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onClose(); window.location.hash = href; }}>{card.issue.title}</a></td>
                     <td>{card.doneWork === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__note" title={card.doneWork}>{card.doneWork}</span>}</td>
                     <td>{card.headcount === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__date">{card.headcount}</span>}</td>
                     <td>{card.author === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__chip" title={card.author}>{card.author}</span>}</td>
@@ -230,7 +254,8 @@ export function HubDashIssueDetail({ projectName, rows, onClose }: {
                     <td>{card.solution === "" ? <span className="hub-dash-detail__blank">—</span> : <span className="hub-dash-detail__note" title={card.solution}>{card.solution}</span>}</td>
                     <td><PhotoTiles photos={card.issue.photos} onPreviewOpenChange={(open) => { thumbPreviewOpenRef.current = open; }} /></td>
                   </tr>
-                ))}
+                  );
+                })}
                 {filtered.length === 0 ? (
                   <tr>
                     <td className="hub-dash-detail__empty" colSpan={COLUMNS.length}>{t("hub.dash.issueDetail.empty")}</td>

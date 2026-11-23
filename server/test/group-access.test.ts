@@ -418,6 +418,7 @@ describe("GroupAccessService 部门通讯录", () => {
         updatedAt: new Date("2026-10-26T00:00:00Z"),
       })],
       listAccessProjects: async () => [],
+      listEffectiveProjectViewGrants: async () => [{ userId: PROJECT_C, projectId: PROJECT_A }],
       listAutomaticProjectRoles: async () => [
         { userId: PROJECT_A, projectManagerProjectIds: [PROJECT_B], projectMemberProjectIds: [], taskOwnerProjectIds: [PROJECT_C], taskOwnerTaskCount: 2 },
         { userId: PROJECT_B, projectManagerProjectIds: [], projectMemberProjectIds: [PROJECT_B], taskOwnerProjectIds: [], taskOwnerTaskCount: 0 },
@@ -467,6 +468,7 @@ describe("GroupAccessService 部门通讯录", () => {
     );
     const overview = await service.overview(PROJECT_A);
     expect(overview.taskNodeReviewerUserIds).toEqual([]);
+    expect(overview.projectViewGrants).toEqual([{ userId: PROJECT_C, projectId: PROJECT_A }]);
     expect(overview.automaticRoles).toEqual([
       { userId: PROJECT_A, projectManagerProjectIds: [PROJECT_B], projectMemberProjectIds: [], taskOwnerProjectIds: [PROJECT_C], taskOwnerTaskCount: 2 },
       { userId: PROJECT_B, projectManagerProjectIds: [], projectMemberProjectIds: [PROJECT_B], taskOwnerProjectIds: [], taskOwnerTaskCount: 0 },
@@ -992,6 +994,14 @@ class FakeGroupRepository {
   async hasTaskOwnership(_actorId: string, projectId: string): Promise<boolean> {
     return this.taskOwnerProjectIds.has(projectId);
   }
+  async listProjectViewGrantIds(): Promise<string[]> {
+    return [];
+  }
+
+  async hasProjectViewGrant(): Promise<boolean> {
+    return false;
+  }
+
   async listRelatedProjectIds(actorId: string): Promise<string[]> {
     const ids = new Set<string>();
     for (const [projectId, ref] of this.refs) {

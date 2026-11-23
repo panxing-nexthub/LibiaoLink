@@ -2556,18 +2556,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                       {nodeForm?.mode === "create" && nodeForm.templateId === template.id ? (
                         renderNodeForm(nodeForm, localize(template.name))
                       ) : null}
-                      <div
-                        className={
-                          "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border transition " +
-                          (hovered
-                            ? duplicate
-                              ? "border-amber-300/70 bg-white/45"
-                              : "border-zinc-400 bg-white/70"
-                            : isEditing
-                              ? "border-amber-300/80 bg-amber-50/45"
-                              : "border-white/60 bg-white/25")
-                        }
-                      >
+                      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {nodeCount === 0 ? (
                           <p className="flex min-h-[160px] flex-1 items-center justify-center px-4 text-center text-xs text-zinc-400">
                             {!canManageThisTemplate

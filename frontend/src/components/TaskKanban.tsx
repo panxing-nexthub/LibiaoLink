@@ -222,7 +222,7 @@ type TaskKanbanProps = {
   onFocusClosed?: () => void;
   /** 当前账号是否可对指定任务定档 / 取消定档：吃服务端逐任务能力。 */
   canFinalizeTask?: (task: ProjectTask) => boolean;
-  /** 项目经理是项目级字段：仅项目编辑者可改，修改后同步整个项目。 */
+  /** 仅本项目经理和系统管理员可变更经理字段。 */
   canEditManagers?: boolean;
   /** 卡片拖拽会改负责人 / 状态 / 排序，仅项目编辑者启用。 */
   canDragTasks?: boolean;

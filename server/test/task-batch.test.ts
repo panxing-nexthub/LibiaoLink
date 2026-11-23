@@ -209,6 +209,7 @@ function makeService(
     repo as unknown as TaskRepository,
     gate as unknown as TaskGateRepository,
     {
+      assertCanManageProjectManagers: async () => {},
       assertProjectVisible: async (_actorId: string, projectId: string) => ({
         projectId,
         member: true,

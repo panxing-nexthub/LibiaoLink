@@ -204,7 +204,7 @@ function errorMessageOf(error: unknown, fallback: string): string {
  */
 function projectFieldsChanged(
   project: Project,
-  fields: { code: string; name: string; region: string; projectTypes: string[]; managerIds: string[]; remark: string },
+  fields: { code: string; name: string; region: string; projectTypes: string[]; managerIds?: string[]; remark: string },
 ): boolean {
   if (
     fields.code !== project.code ||
@@ -216,6 +216,7 @@ function projectFieldsChanged(
   ) {
     return true;
   }
+  if (fields.managerIds === undefined) return false;
   if (fields.managerIds.length !== project.managerIds.length) {
     return true;
   }
@@ -700,7 +701,7 @@ export default function App() {
       name: draft.description.trim(),
       region: draft.region,
       projectTypes: draft.projectTypes,
-      managerIds: draft.managerIds,
+      ...(project.canManageProjectManagers === true ? { managerIds: draft.managerIds } : {}),
       remark: draft.note.trim(),
     };
     const version = options?.version ?? project.version;
@@ -860,7 +861,8 @@ export default function App() {
   if (accessDenied || (route.kind === "model-settings" && permissions?.groupAccessAdmin !== true)) {
     return <PageAccessDenied me={state.me} backHref={firstAllowedHref(permissions)} />;
   }
-  if (permissions !== null && blocksWhenLoginOnly(route) && permissions.groupProjectAccess === "denied") {
+  // 项目直链由详情接口实时裁决，刚收到授权时可能还持有较早的权限画像。
+  if (permissions !== null && route.kind !== "project" && blocksWhenLoginOnly(route) && permissions.groupProjectAccess === "denied") {
     return <BusinessAccessState me={state.me} kind={permissions.groupProjectAccess} />;
   }
 
@@ -918,6 +920,7 @@ export default function App() {
         dictTools={dictTools}
         canManageDicts={canManageDicts}
         canArchive={canArchiveProject && editingProject.accessLevel === "edit"}
+        canEditManagers={editingProject.canManageProjectManagers === true}
         managerOptions={memberOptionsWithExisting(
           directoryMemberOptions(managerCandidates),
           editingProject.managerIds,
@@ -1051,7 +1054,7 @@ export default function App() {
           taskHiddenColumns={taskTableHiddenColumns}
           onTaskHiddenColumnsChange={handleSaveTaskHiddenColumns}
           canManageStakeholders={canManageStakeholders}
-          canCreateTemporaryTask={permissions !== null && (permissions.groupAccessAdmin || detail?.managerIds.includes(permissions.userId) === true)}
+          canManageProjectManagers={permissions?.groupAccessAdmin === true || detail?.canManageViewGrants === true}
           onArchiveProject={canArchiveProject && detail?.accessLevel === "edit" ? handleArchiveAfterAcceptance : undefined}
         />
         {editModal}

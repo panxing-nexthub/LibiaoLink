@@ -1011,7 +1011,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 蓝图地图项目概况（有项目浏览权即可读取全部未删除项目的最少字段；accessLevel=null 不可进入详情） */
+        /** 蓝图地图项目概况（全量概况资格沿用原判定；仅凭项目内分享可见时按项目过滤；accessLevel=null 不可进入详情） */
         get: {
             parameters: {
                 query?: never;
@@ -1021,7 +1021,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 全部未删除项目概况 + 当前账号可否进入详情 */
+                /** @description 按地图读取范围返回未删除项目概况及详情访问级别 */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1075,7 +1075,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["Project"];
+                        "application/json": components["schemas"]["ProjectDetail"];
                     };
                 };
                 /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
@@ -1769,6 +1769,244 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{id}/view-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本项目经理列出此入口添加的项目只读授权 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 授权列表 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectViewGrantList"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** 本项目经理按确认的系统用户 ID 批量追加项目只读授权 */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProjectViewGrantAddBody"];
+                };
+            };
+            responses: {
+                /** @description 实际新增数 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectViewGrantAddResult"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{id}/view-grants/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本项目经理预览粘贴名单和启用账号的匹配结果 */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProjectViewGrantPreviewBody"];
+                };
+            };
+            responses: {
+                /** @description 逐项匹配结果 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectViewGrantPreview"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{id}/view-grants/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 本项目经理撤销指定账号从此入口获取的项目只读授权 */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                    /** @description UUID（主键与关联 ID） */
+                    userId: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 授权已撤销或不存在 */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -12041,10 +12279,10 @@ export interface components {
             windowId: number | null;
         };
         /**
-         * @description 审计对象类型：project 项目 / project_member 名册 / task 任务 / node 节点 / stage 阶段 / dict_item 字典条目 / blueprint 蓝图 / calendar_day 日历例外（对象 id = 业务日期） / calendar_settings 顺延配置（对象 id = default） / file 文件（对象 id = fileId；上传会话事件经 metadata.uploadId 定位；仅用户点开具体预览（recordView=true）且实际送达时写 preview 审计，缩略图不写 —— 不为同一 fileId 开第二种对象类型） / change 变更记录（对象 id = changeRequestId，M4-04） / stakeholder 干系人（对象 id = stakeholderId；项目关联 / 解除经 metadata.projectId 记录，j6） / daily_report 日报（对象 id = reportId，M6-01 / M6-02） / issue 问题（对象 id = issueId，M6-02 / M6-03） / task_node 任务节点（对象 id = taskNodeId，M3-05 余：节点库新增 / 编辑 / 删除） / task_node_request 公共任务节点申请（对象 id = 申请 id；导入侧提交不单独留痕，审核通过 / 驳回 / 申请人撤销写审计） / task_template 任务模板（对象 id = templateId，M3-05 余第二段：模板新增 / 编辑 / 软删） / user 系统用户（对象 id = users.id；Push 173：离职回收 / 组织同步的停用 · 启用 · 软删；登录成功记 visit，metadata.operation=login） / wecom_dm_binding 企微绑定验证（对象 id = 机器人标识 + 掩码 open_userid；失败 / 锁定记 deny + denied，不落完整 userid 或绑定码） / automation_rule 自动化规则（对象 id = 规则 id；保存记录字段级 diff，metadata 带 code / beforeVersion / afterVersion，M5-06） / notify_delivery 发送记录（对象 id = 消息归档 id；仅管理员重发写 update + metadata.operation=resend，M5-06） / group_access_rule 部门访问规则（对象 id = 群组键；保存 / 删除写审计，2026-10-23） / group_access_admin 系统管理员（对象 id = users.id；手工授予 / 撤销写审计，2026-10-24） / task_node_reviewer_roster 公共节点审核人名单（对象 id = task_node_reviewer_roster；保存名单写审计，2026-11-14） / task_node_review_notification_settings 公共节点审核企微通知个人设置（对象 id = 审核人 users.id；开关 / 通知方式 / 固定时间变更写审计，2026-11-15） / ai_model_provider 模型服务（对象 id = 服务 id；不记录密钥） / project_management_record 项目管理记录（对象 id = recordId；新增 / 修改 / 删除写审计，只有项目管理白名单三位可写账号可以查看）
+         * @description 审计对象类型：project 项目 / project_member 名册 / project_view_grant 项目只读授权（对象 id = 项目 id） / task 任务 / node 节点 / stage 阶段 / dict_item 字典条目 / blueprint 蓝图 / calendar_day 日历例外（对象 id = 业务日期） / calendar_settings 顺延配置（对象 id = default） / file 文件（对象 id = fileId；上传会话事件经 metadata.uploadId 定位；仅用户点开具体预览（recordView=true）且实际送达时写 preview 审计，缩略图不写 —— 不为同一 fileId 开第二种对象类型） / change 变更记录（对象 id = changeRequestId，M4-04） / stakeholder 干系人（对象 id = stakeholderId；项目关联 / 解除经 metadata.projectId 记录，j6） / daily_report 日报（对象 id = reportId，M6-01 / M6-02） / issue 问题（对象 id = issueId，M6-02 / M6-03） / task_node 任务节点（对象 id = taskNodeId，M3-05 余：节点库新增 / 编辑 / 删除） / task_node_request 公共任务节点申请（对象 id = 申请 id；导入侧提交不单独留痕，审核通过 / 驳回 / 申请人撤销写审计） / task_template 任务模板（对象 id = templateId，M3-05 余第二段：模板新增 / 编辑 / 软删） / user 系统用户（对象 id = users.id；Push 173：离职回收 / 组织同步的停用 · 启用 · 软删；登录成功记 visit，metadata.operation=login） / wecom_dm_binding 企微绑定验证（对象 id = 机器人标识 + 掩码 open_userid；失败 / 锁定记 deny + denied，不落完整 userid 或绑定码） / automation_rule 自动化规则（对象 id = 规则 id；保存记录字段级 diff，metadata 带 code / beforeVersion / afterVersion，M5-06） / notify_delivery 发送记录（对象 id = 消息归档 id；仅管理员重发写 update + metadata.operation=resend，M5-06） / group_access_rule 部门访问规则（对象 id = 群组键；保存 / 删除写审计，2026-10-23） / group_access_admin 系统管理员（对象 id = users.id；手工授予 / 撤销写审计，2026-10-24） / task_node_reviewer_roster 公共节点审核人名单（对象 id = task_node_reviewer_roster；保存名单写审计，2026-11-14） / task_node_review_notification_settings 公共节点审核企微通知个人设置（对象 id = 审核人 users.id；开关 / 通知方式 / 固定时间变更写审计，2026-11-15） / ai_model_provider 模型服务（对象 id = 服务 id；不记录密钥） / project_management_record 项目管理记录（对象 id = recordId；新增 / 修改 / 删除写审计，只有项目管理白名单三位可写账号可以查看）
          * @enum {string}
          */
-        AuditObjectType: "project" | "project_member" | "task" | "node" | "stage" | "dict_item" | "blueprint" | "calendar_day" | "calendar_settings" | "file" | "change" | "stakeholder" | "daily_report" | "issue" | "task_node" | "task_node_request" | "task_template" | "user" | "wecom_dm_binding" | "automation_rule" | "notify_delivery" | "group_access_rule" | "group_access_admin" | "task_node_reviewer_roster" | "task_node_review_notification_settings" | "ai_model_provider" | "project_ai_summary" | "project_management_record";
+        AuditObjectType: "project" | "project_member" | "project_view_grant" | "task" | "node" | "stage" | "dict_item" | "blueprint" | "calendar_day" | "calendar_settings" | "file" | "change" | "stakeholder" | "daily_report" | "issue" | "task_node" | "task_node_request" | "task_template" | "user" | "wecom_dm_binding" | "automation_rule" | "notify_delivery" | "group_access_rule" | "group_access_admin" | "task_node_reviewer_roster" | "task_node_review_notification_settings" | "ai_model_provider" | "project_ai_summary" | "project_management_record";
         /**
          * @description 审计结果：succeeded 成功 / denied 越权尝试（C7-03）/ failed 业务拒绝（门禁等）
          * @enum {string}
@@ -13298,7 +13536,7 @@ export interface components {
          */
         FollowObjectType: "project" | "task";
         /**
-         * @description 当前登录账号对该项目的最终有效访问级别：edit = 可执行项目级写操作 / view = 仅浏览。管理员、所管本项目的项目经理或部门 / 个人规则命中 edit 时为 edit；项目成员、任务负责人关系仅保证浏览，且项目经理身份不外溢到其他项目
+         * @description 当前登录账号对该项目的最终有效访问级别：edit = 可执行项目级写操作 / view = 仅浏览。管理员、所管本项目的项目经理或部门 / 个人规则命中 edit 时为 edit；项目成员、任务负责人及项目只读授权仅保证浏览，且项目经理身份不外溢到其他项目
          * @enum {string}
          */
         GroupAccessAccessLevel: "edit" | "view";
@@ -13424,6 +13662,11 @@ export interface components {
             projects: components["schemas"]["GroupAccessProject"][];
             /** @description 自动项目角色（项目经理 / 项目成员 / 任务负责人）；按用户聚合，项目或任务关系变化后随接口实时更新 */
             automaticRoles: components["schemas"]["GroupAccessAutomaticRole"][];
+            /** @description 当前生效的项目内只读授权，独立于自动角色和部门 / 个人规则 */
+            projectViewGrants: {
+                userId: components["schemas"]["Uuid"];
+                projectId: components["schemas"]["Uuid"];
+            }[];
         };
         /**
          * @description 页面键（旧客户端兼容）：dashboard / projects / templates / workspace / files / audit；群组规则恒放行全部页面
@@ -14357,6 +14600,8 @@ export interface components {
             /** @description 项目经理姓名数组：服务端按 managerIds 解析后随行下发，与 managerIds 同下标一一对应（列表 / 详情 / 创建与编辑返回均含，免前端二次查目录）；人员停用 / 离职后仍返回姓名，取不到时该位为 null（前端显示「—」） */
             managerNames: (string | null)[];
             accessLevel: components["schemas"]["GroupAccessAccessLevel"];
+            /** @description 项目列表与工作台的经理任命能力，仅本项目经理或系统管理员为 true */
+            canManageProjectManagers?: boolean;
             stageKey: components["schemas"]["StageKey"];
             status: components["schemas"]["ProjectStatus"];
             groupAccessLevel: components["schemas"]["GroupAccessAccessLevel"] & unknown;
@@ -14820,6 +15065,11 @@ export interface components {
         /** @description 仅当前项目的项目编辑者（管理员、所管本项目的项目经理或部门 / 个人规则 edit）可新增；条目进入全站 deliverableType 字典，所有账号与项目可见 */
         ProjectDeliverableTypeCreateBody: {
             name: components["schemas"]["DeliverableType"];
+        };
+        /** @description 项目（v0.2 §2.3 projects） */
+        ProjectDetail: components["schemas"]["Project"] & {
+            /** @description 当前账号是本项目经理，可管理本项目的只读授权 */
+            canManageViewGrants: boolean;
         };
         /** @description 首页分类计数；计数与列表同口径（同筛选条件）；五组固定返回，前端按需展示（A6） */
         ProjectFacets: {
@@ -15297,6 +15547,30 @@ export interface components {
             status?: "active" | "paused";
             description?: string | null;
             version: components["schemas"]["Version"];
+        };
+        ProjectViewGrantAddBody: {
+            userIds: components["schemas"]["Uuid"][];
+        };
+        ProjectViewGrantAddResult: {
+            added: number;
+        };
+        ProjectViewGrantList: {
+            items: {
+                user: components["schemas"]["UserSummary"];
+                createdAt: components["schemas"]["DateTime"];
+            }[];
+        };
+        ProjectViewGrantPreview: {
+            items: {
+                text: string;
+                /** @enum {string} */
+                status: "matched" | "confirm" | "unmatched";
+                candidates: components["schemas"]["UserSummary"][];
+            }[];
+        };
+        ProjectViewGrantPreviewBody: {
+            /** @description 企微复制的群成员名单 */
+            text: string;
         };
         /** @description 日报内联问题草稿（一次填报 1~N 条；提交时逐条生成问题记录） */
         ReportIssueDraft: {

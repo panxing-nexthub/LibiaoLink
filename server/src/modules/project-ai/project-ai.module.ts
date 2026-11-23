@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { AdminModule } from "../admin/index.js";
 import { FileModule } from "../file/index.js";
+import { DocumentAnalysisModule } from "../document-analysis/index.js";
 import { IdentityModule } from "../identity/index.js";
 import { ModelConfigModule } from "../model-config/index.js";
 import { PermissionModule } from "../permission/index.js";
@@ -29,6 +30,7 @@ import { ProjectAiSummaryService } from "./project-ai-summary.service.js";
     TaskModule,
     ReportIssueModule,
     FileModule,
+    DocumentAnalysisModule,
   ],
   controllers: [ProjectAiContextController],
   providers: [ProjectAiContextService, ProjectAiSummaryRepository, ProjectAiModelClient, ProjectAiSummaryService],

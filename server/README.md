@@ -761,3 +761,17 @@ server/
 - A01 `GET /api/v1/projects/{id}/reports/missing` 的 `DailyReportRosterEntry` 增必填可空 `reminderSentAt`：按 `A01:<memberId>:<date>` 及 `:aibot` / `:app` 回读发送归档，仅 `last_state = sent` 取最早成功时刻；不写日报主体。
 - 验证：Docker PG18 空库迁移 `0001~0062`（61 件）+ 幂等复跑、`check:db-schema` **57 表 / 592 列 / 187 索引·唯一 / 220 CHECK**、`m5-06-3-replay.mjs` **8/8**（A14 主体 9 / 消息 14 / 去重键 7；A01 三渠道回读）；合并 `main` 后 server typecheck / build、Vitest **83 文件 / 1288 例**、boundaries **271 文件 / 1232 依赖 / 0 违规**。shared typecheck / 生成 / drift / 契约回放 **81/81**；shared build 本机命中既有 `TS2742`，未计通过。证据见 `docs/M5-06-回放证据.md`。
 - 复跑：`cd server && node scripts/m5-06-3-replay.mjs --database-url postgresql://libiaolink_api@127.0.0.1:55432/libiaolink_m5_06_3`；CI database job 在 2B 之后、启动 API 之前执行同一脚本。
+
+
+## 项目文件 AI 分析 worker（2026-11-23）
+
+独立 Python worker 位于 `server/document-analysis-worker/`，避免把 LibreOffice、Poppler、PyMuPDF 装入 API 容器。
+
+- 只读取项目详情「项目文件」视图：任务文件 + 变更文件；仅 PDF / 图片 / Word / Excel；日报现场图和问题图排除。
+- 从对象存储下载当前文件版本，Office 通过 LibreOffice 转 PDF，PDF 用 PyMuPDF 拆页，图片规范化为 PNG。
+- 每页发送图片 + 文本给当前启用模型，输出摘要型 JSON（最多 8 条 keyFacts，不逐行抄录长表）。
+- 结果写入 `project_file_analyses`，按 `(file_version_id, prompt_version)` 缓存；`project_document_analysis_runs` 负责排队与状态。
+- 容器独立运行：entrypoint 读取 Docker Secret 后降权到 uid 10001。需要迁移 `0114_project_document_analyses.sql`。
+- 构建与运行命令见 `server/document-analysis-worker/README.md`。
+
+当前已接 `GET/POST /api/v1/projects/{id}/document-analysis` 与 AI 上下文 `fileAnalyses[]`；前端在用户点击「生成项目总结 / 重新生成」时先入队并轮询文件分析，完成后自动生成总结。AI 项目总结 prompt 已升 v3。

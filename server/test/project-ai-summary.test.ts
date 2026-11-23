@@ -52,6 +52,7 @@ function baseContext(overrides: Partial<ProjectAiContext> = {}): ProjectAiContex
     changes: [],
     reports: [],
     issues: [],
+    fileAnalyses: [],
     generatedAt: "2026-11-22T12:00:00.000Z",
     truncated: false,
     ...overrides,
@@ -192,9 +193,9 @@ describe("ProjectAiSummaryService", () => {
     expect(repository.rows).toHaveLength(0);
   });
 
-  it("尚未生成时 latest 返回 NOT_FOUND", async () => {
+  it("尚未生成时 latest 返回 AI_SUMMARY_NOT_GENERATED", async () => {
     const { service } = buildService();
-    await expect(service.latest(PROJECT_ID, ACTOR_ID)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(service.latest(PROJECT_ID, ACTOR_ID)).rejects.toMatchObject({ code: "AI_SUMMARY_NOT_GENERATED" });
   });
 
   it("指纹忽略 generatedAt，只随业务数据变化", () => {

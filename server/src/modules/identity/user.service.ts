@@ -95,6 +95,12 @@ export class UserService {
     return rows.map((row) => this.toDirectoryItem(row));
   }
 
+  /** 精确匹配无结果时使用：按去掉末尾括号别名后的启用账号显示名匹配。 */
+  async findActiveDirectoryBaseNameMatches(keys: readonly string[]): Promise<UserDirectoryItem[]> {
+    const rows = await this.users.findActiveDirectoryBaseNameMatches(keys);
+    return rows.map((row) => this.toDirectoryItem(row));
+  }
+
   /** 导出专用用户总数：只统计启用用户。 */
   async countForExport(): Promise<number> {
     return this.users.countDirectoryForExport();

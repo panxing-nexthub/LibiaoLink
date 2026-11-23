@@ -178,6 +178,17 @@ export class UserRepository {
     )).orderBy(asc(users.username));
   }
 
+  /** 仅用于精确匹配无结果后的回退：按去掉末尾中英文括号别名后的显示名匹配启用账号。 */
+  async findActiveDirectoryBaseNameMatches(keys: readonly string[]): Promise<UserRow[]> {
+    if (keys.length === 0) return [];
+    const baseDisplayName = sql`lower(btrim(regexp_replace(btrim(${users.displayName}), '[[:space:]]*[（(][^）)]*[）)][[:space:]]*$', '')))`;
+    return this.database.db.select().from(users).where(and(
+      eq(users.status, "active"),
+      isNull(users.removedAt),
+      inArray(baseDisplayName, keys),
+    )).orderBy(asc(users.username));
+  }
+
   /** 导出专用用户行读取：保持启用用户与工号升序口径，不重复查询 total。 */
   async listDirectoryForExport(options: { limit: number; offset: number }): Promise<UserRow[]> {
     return this.database.db

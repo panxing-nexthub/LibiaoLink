@@ -5,7 +5,8 @@ import { MemberSearchList } from "./MemberSelect";
 import { MultiOptionList, OptionList, type SelectOption } from "./SelectMenu";
 import { Toast } from "./Toast";
 import { usePopover } from "./usePopover";
-import { monthYearText, useLocale, useMachineText, useT } from "../i18n";
+import { useLocale, useMachineText, useT } from "../i18n";
+import { CalendarMonthHeader } from "./CalendarMonthHeader";
 
 const WEEKDAYS_ZH = ["一", "二", "三", "四", "五", "六", "日"];
 const WEEKDAYS_EN = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
@@ -414,35 +415,12 @@ function MiniCalendar({ value, onChange, showAuto = false }: { value: string; on
 
   return (
     <div className="p-3">
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          aria-label={t("ie.prevMonth")}
-          onClick={() => {
-            setView(new Date(view.getFullYear(), view.getMonth() - 1, 1));
-          }}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100"
-        >
-          <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
-            <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <p className="text-sm font-semibold text-zinc-800">
-          {monthYearText(locale, view.getFullYear(), view.getMonth() + 1)}
-        </p>
-        <button
-          type="button"
-          aria-label={t("ie.nextMonth")}
-          onClick={() => {
-            setView(new Date(view.getFullYear(), view.getMonth() + 1, 1));
-          }}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100"
-        >
-          <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
-            <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-      </div>
+      <CalendarMonthHeader
+        view={view}
+        onViewChange={setView}
+        prevLabel={t("ie.prevMonth")}
+        nextLabel={t("ie.nextMonth")}
+      />
 
       <div className="mt-2 grid grid-cols-7 gap-y-1 text-center text-[11px] text-zinc-400">
         {(locale === "ja" ? WEEKDAYS_JA : locale === "ko" ? WEEKDAYS_KO : locale === "en" ? WEEKDAYS_EN : WEEKDAYS_ZH).map((day) => (

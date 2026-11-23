@@ -20,18 +20,10 @@ const PLOT_TOP = 18;
 const BAR_MAX_W = 56;
 const BAR_INSET_RATIO = 0.22;
 const MIN_CHART_H = 112;
-const PIE_VIEW_W = 560;
-const PIE_VIEW_H = 330;
-const PIE_CX = PIE_VIEW_W / 2;
-const PIE_CY = 168;
-const PIE_R = 91;
-const PIE_LABEL_FONT = 12;
-const PIE_LABEL_PAD = 8;
-const PIE_LABEL_Y_MIN = 30;
-const PIE_LABEL_Y_MAX = PIE_VIEW_H - 27;
-const PIE_LABEL_MIN_GAP = 38;
-const PIE_LEADER_STUB = 11;
-const PIE_LEADER_END_GAP = 7;
+const PIE_FALLBACK_W = 560;
+const PIE_FALLBACK_H = 330;
+const PIE_MIN_RENDER_W = 240;
+const PIE_MIN_RENDER_H = 140;
 
 type StageChartView = "bar" | "pie";
 
@@ -214,20 +206,20 @@ function pieDirOf(angle: number): { readonly x: number; readonly y: number } {
 }
 
 /** 饼图极坐标点（0 = 12 点，顺时针）。 */
-function piePolarOf(angle: number, radius: number): { readonly x: number; readonly y: number } {
+function piePolarOf(angle: number, radius: number, cx: number, cy: number): { readonly x: number; readonly y: number } {
   const direction = pieDirOf(angle);
-  return { x: PIE_CX + direction.x * radius, y: PIE_CY + direction.y * radius };
+  return { x: cx + direction.x * radius, y: cy + direction.y * radius };
 }
 
 /** 全直角扇形：圆心 → 外弧 → 圆心；扇区间仅靠 1.5px 白色描边分隔，与任务状态饼图同形。 */
-function pieSectorPathOf(startAngle: number, endAngle: number): string {
+function pieSectorPathOf(startAngle: number, endAngle: number, cx: number, cy: number, radius: number): string {
   const outerLarge = endAngle - startAngle > 180 ? 1 : 0;
-  const start = piePolarOf(startAngle, PIE_R);
-  const end = piePolarOf(endAngle, PIE_R);
+  const start = piePolarOf(startAngle, radius, cx, cy);
+  const end = piePolarOf(endAngle, radius, cx, cy);
   return (
-    "M " + PIE_CX.toFixed(2) + " " + PIE_CY.toFixed(2) +
+    "M " + cx.toFixed(2) + " " + cy.toFixed(2) +
     " L " + start.x.toFixed(2) + " " + start.y.toFixed(2) +
-    " A " + PIE_R + " " + PIE_R + " 0 " + outerLarge + " 1 " + end.x.toFixed(2) + " " + end.y.toFixed(2) +
+    " A " + radius + " " + radius + " 0 " + outerLarge + " 1 " + end.x.toFixed(2) + " " + end.y.toFixed(2) +
     " Z"
   );
 }
@@ -243,18 +235,18 @@ function pieTextWidthOf(value: string, fontSize: number): number {
 }
 
 /** 长语种标签按可用宽度折成多行；首个候选完整单行放不下时才拆阶段名，计数 / 占比单独成行。 */
-function pieLabelLayout(label: string, count: number, share: string, maxWidth: number): { lines: readonly string[]; width: number; lineHeight: number } {
+function pieLabelLayout(label: string, count: number, share: string, maxWidth: number, fontSize: number): { lines: readonly string[]; width: number; lineHeight: number } {
   const full = label + ": " + count + " (" + share + ")";
-  const lineHeight = PIE_LABEL_FONT + 2.2;
-  if (pieTextWidthOf(full, PIE_LABEL_FONT) <= maxWidth) {
-    return { lines: [full], width: pieTextWidthOf(full, PIE_LABEL_FONT), lineHeight };
+  const lineHeight = fontSize + 2.2;
+  if (pieTextWidthOf(full, fontSize) <= maxWidth) {
+    return { lines: [full], width: pieTextWidthOf(full, fontSize), lineHeight };
   }
   const lines: string[] = [];
   let remaining = label.trim();
-  while (remaining !== "" && pieTextWidthOf(remaining, PIE_LABEL_FONT) > maxWidth) {
+  while (remaining !== "" && pieTextWidthOf(remaining, fontSize) > maxWidth) {
     let splitAt = 1;
     for (let index = 1; index < remaining.length; index += 1) {
-      if (pieTextWidthOf(remaining.slice(0, index), PIE_LABEL_FONT) <= maxWidth) splitAt = index;
+      if (pieTextWidthOf(remaining.slice(0, index), fontSize) <= maxWidth) splitAt = index;
       else break;
     }
     const bestSpace = remaining.lastIndexOf(" ", splitAt);
@@ -267,12 +259,12 @@ function pieLabelLayout(label: string, count: number, share: string, maxWidth: n
   }
   if (remaining !== "") lines.push(remaining);
   lines.push(count + " (" + share + ")");
-  return { lines, width: Math.max(...lines.map((line) => pieTextWidthOf(line, PIE_LABEL_FONT))), lineHeight };
+  return { lines, width: Math.max(...lines.map((line) => pieTextWidthOf(line, fontSize))), lineHeight };
 }
 
 type StagePieRow = DashboardProjectInsights["startYearStages"][number];
 
-/** 单年份阶段饼图：图例、扇区、两侧引线标签均沿用任务状态饼图的视觉与交互口径。 */
+/** 单年份阶段饼图：按卡片实测宽高重算圆心、半径、字号和引线；宽屏铺满，矮屏收紧，避免裁切。 */
 function StagePie({ row, onPick }: {
   readonly row: StagePieRow;
   readonly onPick?: (bucket: DashboardProjectStageBucket, years: readonly DashboardYearKey[]) => void;
@@ -280,8 +272,22 @@ function StagePie({ row, onPick }: {
   const t = useT();
   const locale = useLocale();
   const [tip, setTip] = useState<DashboardHoverTip | null>(null);
+  const { ref: pieRef, width: availableWidth, height: availableHeight } = useResponsiveChartSize(PIE_FALLBACK_W, PIE_FALLBACK_H);
   const total = row.total;
   if (total <= 0) return <div className="hub-dash-state">{t("hub.dash.projects.empty")}</div>;
+  const chartW = Math.max(PIE_MIN_RENDER_W, availableWidth);
+  const chartH = Math.max(PIE_MIN_RENDER_H, availableHeight);
+  const cx = chartW / 2;
+  const cy = chartH / 2;
+  const radius = Math.max(34, Math.min(150, chartH * 0.38, chartW * 0.2));
+  const labelFont = Math.max(10, Math.min(13, chartH * 0.043, chartW * 0.02));
+  const labelPad = Math.max(6, Math.min(18, chartW * 0.016));
+  const labelMinGap = Math.max(24, labelFont * 2.6);
+  const labelMaxWidth = Math.max(100, Math.min(240, chartW * 0.24));
+  const labelYMin = Math.max(14, labelFont + 6);
+  const labelYMax = Math.max(labelYMin + 40, chartH - labelYMin);
+  const leaderStub = Math.max(7, Math.min(14, radius * 0.13));
+  const leaderEndGap = Math.max(4, labelFont * 0.5);
   const arcs: Array<{
     bucket: DashboardProjectStageBucket;
     label: string;
@@ -313,21 +319,21 @@ function StagePie({ row, onPick }: {
   const year = yearLabel(row.year, t("hub.dash.projects.unknownYear"));
   const labelItems = arcs.map((arc) => {
     const direction = pieDirOf(arc.midAngle);
-    return { arc, right: direction.x >= 0, y: PIE_CY + direction.y * PIE_R * 1.06 };
+    return { arc, right: direction.x >= 0, y: cy + direction.y * radius * 1.06 };
   });
   for (const right of [false, true]) {
     const group = labelItems.filter((item) => item.right === right).sort((left, rightItem) => left.y - rightItem.y);
     for (let index = 1; index < group.length; index += 1) {
-      group[index].y = Math.max(group[index].y, group[index - 1].y + PIE_LABEL_MIN_GAP);
+      group[index].y = Math.max(group[index].y, group[index - 1].y + labelMinGap);
     }
     const last = group[group.length - 1];
-    if (last !== undefined && last.y > PIE_LABEL_Y_MAX) {
-      const shift = last.y - PIE_LABEL_Y_MAX;
+    if (last !== undefined && last.y > labelYMax) {
+      const shift = last.y - labelYMax;
       for (const item of group) item.y -= shift;
     }
     const first = group[0];
-    if (first !== undefined && first.y < PIE_LABEL_Y_MIN) {
-      const shift = PIE_LABEL_Y_MIN - first.y;
+    if (first !== undefined && first.y < labelYMin) {
+      const shift = labelYMin - first.y;
       for (const item of group) item.y += shift;
     }
   }
@@ -345,69 +351,75 @@ function StagePie({ row, onPick }: {
           </span>
         ))}
       </div>
-      <svg
-        className="hub-dash-start__pieChart"
-        viewBox={"0 0 " + PIE_VIEW_W + " " + PIE_VIEW_H}
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-label={t("hub.dash.projects.startYear.pieAria", { year })}
-        onMouseLeave={() => setTip(null)}
-      >
-        {arcs.length === 1 ? (
-          <circle
-            className="hub-dash-start__pieArc"
-            data-drill={onPick === undefined ? undefined : "true"}
-            cx={PIE_CX}
-            cy={PIE_CY}
-            r={PIE_R}
-            fill={arcs[0].color}
-            onMouseEnter={(event) => setTip(tipOf(event, arcs[0]))}
-            onMouseMove={(event) => setTip(tipOf(event, arcs[0]))}
-            onClick={onPick === undefined ? undefined : () => { onPick(arcs[0].bucket, [row.year]); }}
-          />
-        ) : arcs.map((arc) => (
-          <path
-            key={arc.bucket}
-            className="hub-dash-start__pieArc"
-            data-drill={onPick === undefined ? undefined : "true"}
-            d={pieSectorPathOf(arc.startAngle, arc.endAngle)}
-            fill={arc.color}
-            onMouseEnter={(event) => setTip(tipOf(event, arc))}
-            onMouseMove={(event) => setTip(tipOf(event, arc))}
-            onClick={onPick === undefined ? undefined : () => { onPick(arc.bucket, [row.year]); }}
-          />
-        ))}
-        {labelItems.map((item) => {
-          const direction = pieDirOf(item.arc.midAngle);
-          const attach = { x: PIE_CX + direction.x * (PIE_R - 1), y: PIE_CY + direction.y * (PIE_R - 1) };
-          const bend = { x: PIE_CX + direction.x * (PIE_R + PIE_LEADER_STUB), y: PIE_CY + direction.y * (PIE_R + PIE_LEADER_STUB) };
-          const layout = pieLabelLayout(item.arc.label, item.arc.count, item.arc.share, 190);
-          const labelX = item.right ? PIE_VIEW_W - PIE_LABEL_PAD : PIE_LABEL_PAD;
-          const innerX = item.right ? labelX - layout.width - PIE_LEADER_END_GAP : labelX + layout.width + PIE_LEADER_END_GAP;
-          const textY = item.y - ((layout.lines.length - 1) * layout.lineHeight) / 2 + PIE_LABEL_FONT / 3;
-          return (
-            <g key={"label-" + item.arc.bucket}>
-              <polyline
-                className="hub-dash-start__pieLeader"
-                points={attach.x.toFixed(2) + "," + attach.y.toFixed(2) + " " + bend.x.toFixed(2) + "," + bend.y.toFixed(2) + " " + innerX.toFixed(2) + "," + item.y.toFixed(2)}
-                stroke={item.arc.color}
-                strokeWidth={1}
-                fill="none"
-              />
-              <text
-                className="hub-dash-start__pieLabel"
-                textAnchor={item.right ? "end" : "start"}
-                fontSize={PIE_LABEL_FONT}
-                fill={item.arc.color}
-              >
-                {layout.lines.map((line, index) => (
-                  <tspan key={line + ":" + index} x={labelX} y={textY + index * layout.lineHeight}>{line}</tspan>
-                ))}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+      <div ref={pieRef} className="hub-dash-start__pieChartViewport">
+        <svg
+          className="hub-dash-start__pieChart"
+          width={chartW}
+          height={chartH}
+          viewBox={"0 0 " + chartW + " " + chartH}
+          preserveAspectRatio="xMidYMid meet"
+          role="img"
+          aria-label={t("hub.dash.projects.startYear.pieAria", { year })}
+          onMouseLeave={() => setTip(null)}
+        >
+          {arcs.length === 1 ? (
+            <circle
+              className="hub-dash-start__pieArc"
+              data-drill={onPick === undefined ? undefined : "true"}
+              cx={cx}
+              cy={cy}
+              r={radius}
+              style={{ transformOrigin: cx + "px " + cy + "px" }}
+              fill={arcs[0].color}
+              onMouseEnter={(event) => setTip(tipOf(event, arcs[0]))}
+              onMouseMove={(event) => setTip(tipOf(event, arcs[0]))}
+              onClick={onPick === undefined ? undefined : () => { onPick(arcs[0].bucket, [row.year]); }}
+            />
+          ) : arcs.map((arc) => (
+            <path
+              key={arc.bucket}
+              className="hub-dash-start__pieArc"
+              data-drill={onPick === undefined ? undefined : "true"}
+              d={pieSectorPathOf(arc.startAngle, arc.endAngle, cx, cy, radius)}
+              style={{ transformOrigin: cx + "px " + cy + "px" }}
+              fill={arc.color}
+              onMouseEnter={(event) => setTip(tipOf(event, arc))}
+              onMouseMove={(event) => setTip(tipOf(event, arc))}
+              onClick={onPick === undefined ? undefined : () => { onPick(arc.bucket, [row.year]); }}
+            />
+          ))}
+          {labelItems.map((item) => {
+            const direction = pieDirOf(item.arc.midAngle);
+            const attach = { x: cx + direction.x * Math.max(radius - 1, 1), y: cy + direction.y * Math.max(radius - 1, 1) };
+            const bend = { x: cx + direction.x * (radius + leaderStub), y: cy + direction.y * (radius + leaderStub) };
+            const layout = pieLabelLayout(item.arc.label, item.arc.count, item.arc.share, labelMaxWidth, labelFont);
+            const labelX = item.right ? chartW - labelPad : labelPad;
+            const innerX = item.right ? labelX - layout.width - leaderEndGap : labelX + layout.width + leaderEndGap;
+            const textY = item.y - ((layout.lines.length - 1) * layout.lineHeight) / 2 + labelFont / 3;
+            return (
+              <g key={"label-" + item.arc.bucket}>
+                <polyline
+                  className="hub-dash-start__pieLeader"
+                  points={attach.x.toFixed(2) + "," + attach.y.toFixed(2) + " " + bend.x.toFixed(2) + "," + bend.y.toFixed(2) + " " + innerX.toFixed(2) + "," + item.y.toFixed(2)}
+                  stroke={item.arc.color}
+                  strokeWidth={1}
+                  fill="none"
+                />
+                <text
+                  className="hub-dash-start__pieLabel"
+                  textAnchor={item.right ? "end" : "start"}
+                  fontSize={labelFont}
+                  fill={item.arc.color}
+                >
+                  {layout.lines.map((line, index) => (
+                    <tspan key={line + ":" + index} x={labelX} y={textY + index * layout.lineHeight}>{line}</tspan>
+                  ))}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
       <HubDashHoverTip tip={tip} />
     </>
   );

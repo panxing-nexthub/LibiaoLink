@@ -592,10 +592,12 @@ def main() -> None:
         if args.command == "enqueue":
             project_id, code = find_project(conn, args.project)
             run_id = enqueue_run(conn, project_id, code, args.requested_by)
+            conn.commit()
             print(json.dumps({"runId": run_id, "projectId": project_id, "projectCode": code}, ensure_ascii=False, indent=2))
         elif args.command == "run":
             project_id, code = find_project(conn, args.project)
             run_id = enqueue_run(conn, project_id, code, args.requested_by)
+            conn.commit()
             claimed = claim_run(conn, run_id)
             if claimed is None:
                 raise RuntimeError("run is not queued: " + run_id)

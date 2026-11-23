@@ -11,10 +11,12 @@ import {
   type DashboardWordDetail,
 } from "../dashboardApi";
 import { isChangeWordHit } from "../data/changeWords";
-import { DASHBOARD_BINS, DASHBOARD_ISSUE_COLORS, isIssueInCell, isTaskInCell, isTaskInDeliveryBucket, isTaskPendingDelivery, type DashboardDeliveryBucket, type DashboardStatusSlice, type HubDashView } from "../data/dashboardProgress";
+import type { DashboardProjectInsights } from "../data/dashboardProjectInsights";
+import { DASHBOARD_BINS, DASHBOARD_ISSUE_COLORS, HUB_DASH_VIEW_IDS, isIssueInCell, isTaskInCell, isTaskInDeliveryBucket, isTaskPendingDelivery, type DashboardDeliveryBucket, type DashboardStatusSlice, type HubDashView } from "../data/dashboardProgress";
 import type { TaskStatus } from "../data/tasks";
 import { fieldText, statusText, useLocale, useT } from "../i18n";
 import { displayStatusLabel } from "../taskApi";
+import { HubDashAllProjects } from "./HubDashAllProjects";
 import { HubDashDelivery } from "./HubDashDelivery";
 import { HubDashDetail } from "./HubDashDetail";
 import { HubDashDetailLoading } from "./HubDashDetailLoading";
@@ -22,6 +24,7 @@ import { HubDashIssueDetail } from "./HubDashIssueDetail";
 import { HubDashIssues, type DashboardIssueRow } from "./HubDashIssues";
 import { HubDashOverview } from "./HubDashOverview";
 import { HubDashProgress, LEGEND_KEYS } from "./HubDashProgress";
+import { HubDashSlideDeck } from "./HubDashSlideDeck";
 import { HubDashStatus } from "./HubDashStatus";
 import { HubDashWordCloud } from "./HubDashWordCloud";
 import { HubDashWordDetail } from "./HubDashWordDetail";
@@ -206,7 +209,7 @@ const EMPTY_WORDS: DashboardWordDataset["all"] = { words: [], totalChanges: 0 };
  *  用单选框语义（同组 name，选中态 = 当前视图，点已选中的那枚不会取消选择）；白勾 / 脉冲层用 group-has-[:checked]:
  *  —— 参考代码的 peer-checked: 挂在内层元素上、兄弟选择器够不到，照抄不生效。 */
 function DashViewSwitch({ view, checked, label, onSelect }: {
-  readonly view: HubDashView;
+  readonly view: string;
   readonly checked: boolean;
   readonly label: string;
   readonly onSelect: () => void;
@@ -234,7 +237,9 @@ function DashViewSwitch({ view, checked, label, onSelect }: {
     </label>
   );
 }
-export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, words, wordsState, onNeedWords, rememberedDashProject, onDashProjectChange, rememberedDashView, onDashViewChange }: {
+export function HubDashboard({ viewerId, data, state, issues, issuesState, onNeedIssues, insights, insightsState, onNeedProjectInsights, words, wordsState, onNeedWords, rememberedDashProject, onDashProjectChange, rememberedDashView, onDashViewChange }: {
+  /** 当前登录账号 id：仪表盘筛选记忆按账号隔离。 */
+  viewerId: string;
   data: DashboardDataset | null;
   state: HubDashboardState;
   /** 「问题」视图数据（Push 344 · 懒加载：首次切到「问题」时才拉；null = 还没拉）。 */
@@ -243,6 +248,12 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
   issuesState: "idle" | "loading" | "ready" | "failed";
   /** 请求拉「问题」读面（首次切到「问题」视图 / 失败后重试）。 */
   onNeedIssues: () => void;
+  /** 「全部项目」项目维度聚合（启动年份 / 类型 / 三类负责人 / 最新阶段；单项目不使用）。 */
+  insights: DashboardProjectInsights | null;
+  /** 项目维度聚合读面状态：idle / loading / ready / failed。 */
+  insightsState: "idle" | "loading" | "ready" | "failed";
+  /** 请求拉项目维度聚合（全部项目总览懒加载 / 失败后重试）。 */
+  onNeedProjectInsights: () => void;
   /** 「词频图」视图数据（Push 353 · 懒加载：首次切到「词频图」时才拉；null = 还没拉）。 */
   words: DashboardWordDataset | null;
   /** 「词频图」读面状态：idle = 还没拉过 / loading / ready / failed（切走再切回会重试）。 */
@@ -264,6 +275,10 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
   const [pickedId, setPickedId] = useState<string | null>(rememberedDashProject);
   /** 仪表盘页内视图（Push 339 底栏按钮驱动；Push 345 按账号常驻；Push 358 起六枚）：overview = 数据总览（最左）/ progress = 项目进度 / status = 任务状态 / issues = 问题 / delivery = 交付时间 / wordcloud = 词频图。 */
   const [view, setView] = useState<HubDashView>(rememberedDashView);
+  /** 「全部项目」当前滑屏（2026-11-21：项目数量与阶段合并后为 5 屏刚体滑轨；单项目继续用 view 的 6 视图）。 */
+  const [allSlide, setAllSlide] = useState(0);
+  /** 页内滑轨动画锁：600ms 内的连续滚轮事件不再叠加翻页。 */
+  const slideLockUntilRef = useRef(0);
   /** 悬停卡 + 行高亮（同一行的柱段共用：卡里写行名，图上该行铺一条浅灰底）。 */
   const [tip, setTip] = useState<DashTip | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -285,15 +300,24 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
   useEffect(() => {
     setView(rememberedDashView);
   }, [rememberedDashView]);
+  /** 切回「全部项目」时从第一屏开始；单项目继续保留账号记住的视图。 */
+  useEffect(() => {
+    if (pickedId === null) setAllSlide(0);
+  }, [pickedId]);
   /** 「问题 / 词频图」读面懒加载（Push 344 / Push 353；Push 358 起「数据总览」同拉这两份）：切到对应视图时拉；首屏直接落在该视图（常驻视图）也拉。 */
   useEffect(() => {
+    if (pickedId === null) {
+      onNeedIssues();
+      onNeedProjectInsights();
+      return;
+    }
     if (view === "issues" || view === "overview") {
       onNeedIssues();
     }
     if (view === "wordcloud" || view === "overview") {
       onNeedWords();
     }
-  }, [view, onNeedIssues, onNeedWords]);
+  }, [pickedId, view, onNeedIssues, onNeedProjectInsights, onNeedWords]);
   /** 常驻的项目已不存在（被删）：界面回落「全部项目」，并把账号偏好一并清掉（只清一次）。 */
   useEffect(() => {
     if (pickedId !== null && data !== null && !data.byProject.has(pickedId)) {
@@ -487,6 +511,69 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
     setDetail(null);
     void onDashViewChange(next);
   };
+  /** 当前屏：全部项目 = 5 屏业务页；单项目 = 原 6 个视图。 */
+  const activePageIndex = pickedId === null ? allSlide : Math.max(0, HUB_DASH_VIEW_IDS.indexOf(view));
+  const pageCount = pickedId === null ? 5 : HUB_DASH_VIEW_IDS.length;
+
+  /** 内部翻页：单项目写回账号常驻视图；全部项目只移动本页滑轨。 */
+  const goToPage = (next: number): boolean => {
+    if (next < 0 || next >= pageCount) return false;
+    slideLockUntilRef.current = Date.now() + 580;
+    setTip(null);
+    setDetail(null);
+    if (pickedId === null) {
+      setAllSlide(next);
+    } else {
+      switchView(HUB_DASH_VIEW_IDS[next] ?? "progress");
+    }
+    return true;
+  };
+
+  /** 滚轮驱动页内滑轨：首屏继续向上 = 交还顶层去地图；末屏继续向下 = 停在末屏。 */
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (wrap === null) return undefined;
+    const onWheel = (event: WheelEvent): void => {
+      if (document.querySelector("[data-hub-detail-dialog]") !== null) return;
+      if (event.ctrlKey || Math.abs(event.deltaY) < 8) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest("input, textarea, select, [contenteditable='true']") !== null) return;
+      const direction = event.deltaY > 0 ? 1 : -1;
+      const internal = direction > 0 || activePageIndex > 0;
+      if (!internal) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (Date.now() < slideLockUntilRef.current) return;
+      if (direction > 0 && activePageIndex >= pageCount - 1) return;
+      goToPage(activePageIndex + direction);
+    };
+    wrap.addEventListener("wheel", onWheel, { passive: false });
+    return () => wrap.removeEventListener("wheel", onWheel);
+  }, [activePageIndex, goToPage, pageCount]);
+
+  /** 方向键同样只是内部翻屏；首屏向上仍由 Hub.tsx 处理为返回地图。 */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (document.querySelector("[data-hub-detail-dialog]") !== null) return;
+      if (document.querySelector(".hub-deck__strip")?.getAttribute("data-view") !== "dashboard") return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      const down = event.key === "ArrowDown" || event.key === "PageDown";
+      const up = event.key === "ArrowUp" || event.key === "PageUp";
+      if (!down && !up) return;
+      const internal = down || activePageIndex > 0;
+      if (!internal) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (Date.now() < slideLockUntilRef.current) return;
+      if (down && activePageIndex >= pageCount - 1) return;
+      goToPage(activePageIndex + (down ? 1 : -1));
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [activePageIndex, goToPage, pageCount]);
+
   /** 点开只读「数据详情」的七个入口（Push 335 / 339 / 344 / 345 / 346 / 353）：先关浮层卡再开详情 ——
    *  Push 358 起单视图与「数据总览」的五张小图共用同一套（语义与各自原内联实现逐字一致）。 */
   const pickCell = (rowKey: string, bin: number): void => {
@@ -551,7 +638,7 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
   };
   const head = (
     <div className="hub-dash-head">
-      <span className="hub-dash-title">{view === "overview" ? t("hub.dash.overview.title") : view === "progress" ? t("hub.dash.title") : view === "status" ? t("hub.dash.status.title") : view === "issues" ? t("hub.dash.issues.title") : view === "delivery" ? t("hub.dash.delivery.title") : t("hub.dash.wordcloud.title")}</span>
+      <span className="hub-dash-title">{pickedId === null ? t("hub.dash.projects.title") : view === "overview" ? t("hub.dash.overview.title") : view === "progress" ? t("hub.dash.title") : view === "status" ? t("hub.dash.status.title") : view === "issues" ? t("hub.dash.issues.title") : view === "delivery" ? t("hub.dash.delivery.title") : t("hub.dash.wordcloud.title")}</span>
       <span className="hub-dash-sep" aria-hidden="true">
         •
       </span>
@@ -568,121 +655,153 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
       </div>
     </div>
   );
-  if (progress.totalTasks === 0) {
+  if (pickedId !== null && progress.totalTasks === 0) {
     return (
-      <div ref={wrapRef} data-hub-dash-view={view} className="hub-dash-wrap">
+      <div ref={wrapRef} data-hub-dash-view={view} data-hub-dash-all-projects={pickedId === null ? "true" : undefined} className="hub-dash-wrap">
         {head}
         <div className="hub-dash-state">{t("hub.dash.empty")}</div>
       </div>
     );
   }
   return (
-    <div ref={wrapRef} data-hub-dash-view={view} className="hub-dash-wrap">
+    <div ref={wrapRef} data-hub-dash-view={view} data-hub-dash-all-projects={pickedId === null ? "true" : undefined} className="hub-dash-wrap">
       {head}
-      <div className="hub-dash-viewport" data-hub-dash-viewport="">
-      {view === "overview" ? (
-        <HubDashOverview
-          progress={progress}
-          status={statusView}
-          delivery={deliveryView}
-          issues={issuesView}
-          issuesState={issuesState}
-          words={wordsView}
-          wordsState={wordsState}
-          canDrill={canDrill}
-          onProgressTip={showTip}
-          onProgressRowTip={showRowTip}
-          onStatusTip={showStatusTip}
-          onIssueTip={showIssueTip}
-          onIssueRowTip={showIssueRowTip}
-          onDeliveryTip={showDeliveryTip}
-          onDeliveryRateTip={showDeliveryRateTip}
-          onWordTip={showWordTip}
-          onLeave={() => setTip(null)}
-          onPickCell={pickCell}
-          onPickStatus={pickStatus}
-          onPickIssue={pickIssue}
-          onPickDelivery={pickDelivery}
-          onPickDeliveryRate={pickDeliveryRate}
-          onPickDeliveryNote={pickDeliveryNote}
-          onPickWord={pickWord}
-        />
-      ) : view === "progress" ? (
-        <HubDashProgress
-          progress={progress}
-          canDrill={canDrill}
-          onTip={showTip}
-          onRowTip={showRowTip}
-          onLeave={() => setTip(null)}
-          onPick={pickCell}
-        />
-      ) : view === "status" ? (
-        <HubDashStatus
-          status={statusView}
-          canDrill={canDrill}
-          onTip={showStatusTip}
-          onLeave={() => setTip(null)}
-          onPick={pickStatus}
-        />
-      ) : view === "delivery" ? (
-        <HubDashDelivery
-          delivery={deliveryView}
-          canDrill={canDrill}
-          onTip={showDeliveryTip}
-          onRateTip={showDeliveryRateTip}
-          onLeave={() => setTip(null)}
-          onPick={pickDelivery}
-          onRatePick={pickDeliveryRate}
-          onNotePick={pickDeliveryNote}
-        />
-      ) : view === "wordcloud" ? (
-        wordsState === "ready" && wordsView !== null ? (
-          wordsView.words.length === 0 ? (
-            <div className="hub-dash-state">{t("hub.dash.wordcloud.empty")}</div>
-          ) : (
-            <HubDashWordCloud
-              words={wordsView}
-              canDrill={canDrill}
-              onTip={showWordTip}
-              onLeave={() => setTip(null)}
-              onPick={pickWord}
-            />
-          )
-        ) : wordsState === "failed" ? (
-          <div className="hub-dash-state">{t("hub.dash.failed")}</div>
-        ) : (
-          <div className="hub-dash-state">
-            <Loader />
-          </div>
-        )
-      ) : issuesState === "ready" && issuesView !== null ? (
-        issuesView.totalIssues === 0 ? (
-          <div className="hub-dash-state">{t("hub.dash.issues.empty")}</div>
-        ) : (
-          <HubDashIssues
+      <div className="hub-dash-viewport" data-hub-dash-viewport="" data-hub-dash-all-projects={pickedId === null ? "true" : undefined}>
+        {pickedId === null ? (
+          <HubDashAllProjects
+            viewerId={viewerId}
+            activeSlide={allSlide}
             issues={issuesView}
-            canDrill={canDrill}
-            onTip={showIssueTip}
-            onRowTip={showIssueRowTip}
+            issueRecords={issues?.details ?? []}
+            issuesState={issuesState}
+            insights={insights}
+            insightsState={insightsState}
+            onIssueTip={showIssueTip}
+            onIssueRowTip={showIssueRowTip}
             onLeave={() => setTip(null)}
-            onPick={pickIssue}
           />
-        )
-      ) : issuesState === "failed" ? (
-        <div className="hub-dash-state">{t("hub.dash.failed")}</div>
-      ) : (
-        <div className="hub-dash-state">
-          <Loader />
-        </div>
-      )}
+        ) : (
+          <HubDashSlideDeck activeIndex={activePageIndex}>
+            <div className="hub-dash-slide-page" data-hub-dash-page="overview">
+              <HubDashOverview
+                progress={progress}
+                status={statusView}
+                delivery={deliveryView}
+                issues={issuesView}
+                issuesState={issuesState}
+                words={wordsView}
+                wordsState={wordsState}
+                canDrill={canDrill}
+                onProgressTip={showTip}
+                onProgressRowTip={showRowTip}
+                onStatusTip={showStatusTip}
+                onIssueTip={showIssueTip}
+                onIssueRowTip={showIssueRowTip}
+                onDeliveryTip={showDeliveryTip}
+                onDeliveryRateTip={showDeliveryRateTip}
+                onWordTip={showWordTip}
+                onLeave={() => setTip(null)}
+                onPickCell={pickCell}
+                onPickStatus={pickStatus}
+                onPickIssue={pickIssue}
+                onPickDelivery={pickDelivery}
+                onPickDeliveryRate={pickDeliveryRate}
+                onPickDeliveryNote={pickDeliveryNote}
+                onPickWord={pickWord}
+              />
+            </div>
+            <div className="hub-dash-slide-page" data-hub-dash-page="progress">
+              <HubDashProgress
+                progress={progress}
+                canDrill={canDrill}
+                onTip={showTip}
+                onRowTip={showRowTip}
+                onLeave={() => setTip(null)}
+                onPick={pickCell}
+              />
+            </div>
+            <div className="hub-dash-slide-page" data-hub-dash-page="status">
+              <HubDashStatus
+                status={statusView}
+                canDrill={canDrill}
+                onTip={showStatusTip}
+                onLeave={() => setTip(null)}
+                onPick={pickStatus}
+              />
+            </div>
+            <div className="hub-dash-slide-page" data-hub-dash-page="issues">
+              {issuesState === "ready" && issuesView !== null ? (
+                issuesView.totalIssues === 0 ? (
+                  <div className="hub-dash-state">{t("hub.dash.issues.empty")}</div>
+                ) : (
+                  <HubDashIssues
+                    issues={issuesView}
+                    canDrill={canDrill}
+                    onTip={showIssueTip}
+                    onRowTip={showIssueRowTip}
+                    onLeave={() => setTip(null)}
+                    onPick={pickIssue}
+                  />
+                )
+              ) : issuesState === "failed" ? (
+                <div className="hub-dash-state">{t("hub.dash.failed")}</div>
+              ) : (
+                <div className="hub-dash-state"><Loader /></div>
+              )}
+            </div>
+            <div className="hub-dash-slide-page" data-hub-dash-page="delivery">
+              <HubDashDelivery
+                delivery={deliveryView}
+                canDrill={canDrill}
+                onTip={showDeliveryTip}
+                onRateTip={showDeliveryRateTip}
+                onLeave={() => setTip(null)}
+                onPick={pickDelivery}
+                onRatePick={pickDeliveryRate}
+                onNotePick={pickDeliveryNote}
+              />
+            </div>
+            <div className="hub-dash-slide-page" data-hub-dash-page="wordcloud">
+              {wordsState === "ready" && wordsView !== null ? (
+                wordsView.words.length === 0 ? (
+                  <div className="hub-dash-state">{t("hub.dash.wordcloud.empty")}</div>
+                ) : (
+                  <HubDashWordCloud
+                    words={wordsView}
+                    canDrill={canDrill}
+                    onTip={showWordTip}
+                    onLeave={() => setTip(null)}
+                    onPick={pickWord}
+                  />
+                )
+              ) : wordsState === "failed" ? (
+                <div className="hub-dash-state">{t("hub.dash.failed")}</div>
+              ) : (
+                <div className="hub-dash-state"><Loader /></div>
+              )}
+            </div>
+          </HubDashSlideDeck>
+        )}
       </div>
-      <div className="hub-dash-switch">
-        <DashViewSwitch view="overview" checked={view === "overview"} label={t("hub.dash.overview.title")} onSelect={() => switchView("overview")} />
-        <DashViewSwitch view="progress" checked={view === "progress"} label={t("hub.dash.title")} onSelect={() => switchView("progress")} />
-        <DashViewSwitch view="status" checked={view === "status"} label={t("hub.dash.status.title")} onSelect={() => switchView("status")} />
-        <DashViewSwitch view="issues" checked={view === "issues"} label={t("hub.dash.issues.title")} onSelect={() => switchView("issues")} />
-        <DashViewSwitch view="delivery" checked={view === "delivery"} label={t("hub.dash.delivery.title")} onSelect={() => switchView("delivery")} />
-        <DashViewSwitch view="wordcloud" checked={view === "wordcloud"} label={t("hub.dash.wordcloud.title")} onSelect={() => switchView("wordcloud")} />
+      <div className="hub-dash-switch" data-all-projects={pickedId === null ? "true" : undefined}>
+        {pickedId === null ? (
+          <>
+            <DashViewSwitch view="projects-types" checked={allSlide === 0} label={t("hub.dash.projects.nav.types")} onSelect={() => goToPage(0)} />
+            <DashViewSwitch view="projects-issues" checked={allSlide === 1} label={t("hub.dash.projects.nav.issues")} onSelect={() => goToPage(1)} />
+            <DashViewSwitch view="projects-manager" checked={allSlide === 2} label={t("hub.dash.projects.role.manager")} onSelect={() => goToPage(2)} />
+            <DashViewSwitch view="projects-sales" checked={allSlide === 3} label={t("hub.dash.projects.role.sales")} onSelect={() => goToPage(3)} />
+            <DashViewSwitch view="projects-planning" checked={allSlide === 4} label={t("hub.dash.projects.role.planning")} onSelect={() => goToPage(4)} />
+          </>
+        ) : (
+          <>
+            <DashViewSwitch view="overview" checked={view === "overview"} label={t("hub.dash.overview.title")} onSelect={() => switchView("overview")} />
+            <DashViewSwitch view="progress" checked={view === "progress"} label={t("hub.dash.title")} onSelect={() => switchView("progress")} />
+            <DashViewSwitch view="status" checked={view === "status"} label={t("hub.dash.status.title")} onSelect={() => switchView("status")} />
+            <DashViewSwitch view="issues" checked={view === "issues"} label={t("hub.dash.issues.title")} onSelect={() => switchView("issues")} />
+            <DashViewSwitch view="delivery" checked={view === "delivery"} label={t("hub.dash.delivery.title")} onSelect={() => switchView("delivery")} />
+            <DashViewSwitch view="wordcloud" checked={view === "wordcloud"} label={t("hub.dash.wordcloud.title")} onSelect={() => switchView("wordcloud")} />
+          </>
+        )}
       </div>
       {tip !== null ? (
         tip.kind === "bin" ? (
@@ -791,6 +910,7 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
           />
         ) : cachedDetail.kind === "words" ? (
           <HubDashWordDetail
+            projectId={pickedId}
             rows={detail.kind === "word" ? cachedDetail.data.changes.filter((change) => isChangeWordHit(change.reason, detail.word)) : []}
             members={cachedDetail.data.members}
             tasks={cachedDetail.data.tasks}
@@ -800,6 +920,7 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
           />
         ) : cachedDetail.kind === "issues" ? (
           <HubDashIssueDetail
+            projectId={pickedId}
             projectName={pickedName}
             rows={detail.kind === "issue"
               ? cachedDetail.data.issues
@@ -812,6 +933,7 @@ export function HubDashboard({ data, state, issues, issuesState, onNeedIssues, w
           />
         ) : (
           <HubDashDetail
+            projectId={pickedId}
             projectName={pickedName}
             manager={data.managerByProject.get(pickedId) ?? ""}
             tasks={cachedDetail.data.tasks.filter((task) =>

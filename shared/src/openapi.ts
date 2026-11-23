@@ -5,6 +5,7 @@ import { ProjectImportCommitBodySchema, ProjectImportPreviewSchema, ProjectImpor
 import { CadJobSchema, CadJobCreateBodySchema, CadJobCreateResponseSchema, CadNameCodepageSchema } from "./modules/cad.ts";
 import { DateOnlySchema, IdempotencyKeySchema, UuidSchema } from "./common/conventions.ts";
 import { StageKeySchema } from "./common/dicts.ts";
+import { ProjectAiContextSchema, ProjectAiSummaryGenerateBodySchema, ProjectAiSummarySchema } from "./modules/project-ai.ts";
 import { ApiErrorSchema } from "./common/errors.ts";
 import {
   ProjectArchiveBodySchema,
@@ -111,7 +112,7 @@ import {
   IssueUpdateBodySchema,
 } from "./modules/issues.ts";
 import { WorkspaceResponseSchema } from "./modules/workspace.ts";
-import { DashboardChangeWordsResponseSchema, DashboardIssuesResponseSchema, DashboardProgressResponseSchema } from "./modules/dashboard.ts";
+import { DashboardChangeWordsResponseSchema, DashboardIssuesResponseSchema, DashboardProgressResponseSchema, DashboardProjectAnalyticsResponseSchema } from "./modules/dashboard.ts";
 import {
   SavedViewSchema,
   ViewCreateBodySchema,
@@ -1428,6 +1429,45 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     },
   });
 
+  // ---- AI 项目总结读面（只读聚合；不触发模型调用）----
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/projects/{id}/ai-context",
+    tags: ["project-ai"],
+    summary: "AI 项目总结读面：项目 / 阶段 / 任务快照 / 变更 / 日报 / 问题",
+    request: { params: idParams },
+    responses: {
+      200: { description: "项目 AI 上下文", ...json(ProjectAiContextSchema) },
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/projects/{id}/ai-summary",
+    tags: ["project-ai"],
+    summary: "最近一次 AI 项目总结（不调模型；未生成为 404，stale 表示数据已变化）",
+    request: { params: idParams },
+    responses: {
+      200: { description: "AI 项目总结", ...json(ProjectAiSummarySchema) },
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/ai-summary",
+    tags: ["project-ai"],
+    summary: "生成 AI 项目总结（默认复用缓存；force=true 重新生成；需 project.export）",
+    request: { params: idParams, body: json(ProjectAiSummaryGenerateBodySchema) },
+    responses: {
+      200: { description: "AI 项目总结", ...json(ProjectAiSummarySchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+    },
+  });
+
   registry.registerPath({
     method: "post",
     path: "/api/v1/projects/{id}/stages/{key}/advance",
@@ -2302,11 +2342,22 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
 
   registry.registerPath({
     method: "get",
+    path: "/api/v1/dashboard/project-insights",
+    tags: ["dashboard"],
+    summary: "全部项目维度聚合：启动年份 × 项目类型、三类负责人 × 最新阶段、启动年份 × 最新阶段，附项目下钻行",
+    responses: {
+      200: { description: "项目维度聚合（按会话用户项目可见性过滤；只下发统计不下发明细）", ...json(DashboardProjectAnalyticsResponseSchema) },
+      401: commonErrors[401],
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
     path: "/api/v1/dashboard/issues",
     tags: ["dashboard"],
-    summary: "仪表盘问题分布聚合：问题状态 × 归类；一次返回全部与逐项目统计",
+    summary: "仪表盘问题分布聚合与下钻行：一次返回全部 / 逐项目统计及全部可见项目的问题记录",
     responses: {
-      200: { description: "问题分布聚合（按会话用户项目可见性过滤）", ...json(DashboardIssuesResponseSchema) },
+      200: { description: "问题分布与下钻行（按会话用户项目可见性过滤）", ...json(DashboardIssuesResponseSchema) },
       401: commonErrors[401],
     },
   });

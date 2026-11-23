@@ -1,8 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { and, asc, count, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
+import { files, fileLinks } from "../../db/schema/files.js";
 import { users } from "../../db/schema/identity.js";
 import { projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
@@ -21,6 +23,34 @@ export interface DashboardProjectRow {
   managerNames: (string | null)[] | null;
 }
 
+/** 全部项目维度统计的项目行（2026-11-21；只读；供聚合与图表下钻列表使用）。 */
+export interface DashboardAnalyticsProjectRow {
+  id: string;
+  code: string;
+  name: string;
+  projectType: string;
+  additionalProjectTypes: string[];
+  stageKey: string;
+  status: string;
+  managerIds: string[];
+  managerNames: (string | null)[] | null;
+}
+
+/** 合同签署 / 技术协议定档任务负责人行（用于销售负责人 / 规划负责人聚合）。 */
+export interface DashboardProjectRoleTaskRow {
+  projectId: string;
+  title: string;
+  titleEn: string | null;
+  ownerIds: string[];
+  ownerNames: (string | null)[] | null;
+}
+
+/** 项目启动任务实际完成日期（多条取最晚，用于启动年份）。 */
+export interface DashboardProjectStartupRow {
+  projectId: string;
+  startupCompletedAt: string | null;
+}
+
 export interface DashboardTaskBucketRow {
   projectId: string;
   stageKey: string | null;
@@ -36,16 +66,52 @@ export interface DashboardIssueRow {
   categories: string[];
 }
 
+/** 问题图表下钻行（全部可见项目）。 */
+export interface DashboardIssueDetailRow {
+  id: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  title: string;
+  state: string;
+  categories: string[];
+  reporterName: string | null;
+  ownerName: string | null;
+  raisedAt: string;
+  solution: string | null;
+  photos: Array<{ fileId: string; name: string }>;
+}
+
 export interface DashboardChangeRow {
   projectId: string;
   reason: string;
 }
+
+/** 问题下钻的提出人 / 责任人显示名。 */
+const DASHBOARD_ISSUE_REPORTER = alias(users, "dashboard_issue_reporter");
+const DASHBOARD_ISSUE_OWNER = alias(users, "dashboard_issue_owner");
 
 /** 项目经理姓名数组：与 manager_ids 同下标；缺失 / 停用用户该位为 null。 */
 const MANAGER_NAMES_SQL = sql<(string | null)[] | null>`(
   select array_agg(u.display_name order by m.ord)
   from unnest(${projects.managerIds}) with ordinality as m(uid, ord)
   left join ${users} u on u.id = m.uid
+)`;
+
+/** 旧库没有 additional_project_types 列时按空数组返回；新库有列时正常展开。 */
+const ADDITIONAL_PROJECT_TYPES_SQL = sql<string[]>`coalesce(
+  (
+    select array_agg(value order by ordinality)
+    from jsonb_array_elements_text(to_jsonb(${projects}) -> 'additional_project_types') with ordinality as item(value, ordinality)
+  ),
+  array[]::text[]
+)`;
+
+/** 任务负责人姓名数组：与 owner_ids 同下标；缺失 / 停用用户该位为 null。 */
+const OWNER_NAMES_SQL = sql<(string | null)[] | null>`(
+  select array_agg(u.display_name order by o.ord)
+  from unnest(${tasks.ownerIds}) with ordinality as o(uid, ord)
+  left join ${users} u on u.id = o.uid
 )`;
 
 /**
@@ -116,6 +182,75 @@ export class DashboardRepository {
       .orderBy(desc(projects.createdAt), asc(projects.seqNo));
   }
 
+  /** 全部项目维度统计的项目行：编号 / 名称 / 类型 / 状态 / 项目经理。 */
+  async listAnalyticsProjects(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardAnalyticsProjectRow[]> {
+    if (scope.kind === "ids" && scope.ids.length === 0) return [];
+    const conditions: SQL[] = [isNull(projects.deletedAt), ...scopeCondition(projects.id, scope)];
+    return client
+      .select({
+        id: projects.id,
+        code: projects.code,
+        name: projects.name,
+        projectType: projects.projectType,
+        additionalProjectTypes: ADDITIONAL_PROJECT_TYPES_SQL,
+        stageKey: projects.stageKey,
+        status: projects.status,
+        managerIds: projects.managerIds,
+        managerNames: MANAGER_NAMES_SQL,
+      })
+      .from(projects)
+      .where(and(...conditions))
+      .orderBy(desc(projects.createdAt), asc(projects.seqNo));
+  }
+
+  /** 合同签署 / 技术协议定档任务的负责人；多任务、多负责人原样返回，由纯规则去重。 */
+  async listProjectRoleTasks(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardProjectRoleTaskRow[]> {
+    if (scope.kind === "ids" && scope.ids.length === 0) return [];
+    const conditions: SQL[] = [
+      isNull(tasks.deletedAt),
+      isNull(projects.deletedAt),
+      sql`(
+        btrim(${tasks.title}) in ('合同签署', '技术协议定档')
+        or lower(btrim(coalesce(${tasks.titleEn}, ''))) in ('contract signing', 'technical agreement finalization')
+      )`,
+      ...scopeCondition(tasks.projectId, scope),
+    ];
+    return client
+      .select({
+        projectId: tasks.projectId,
+        title: tasks.title,
+        titleEn: tasks.titleEn,
+        ownerIds: tasks.ownerIds,
+        ownerNames: OWNER_NAMES_SQL,
+      })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(and(...conditions));
+  }
+
+  /** 每个项目的启动时间 =「项目启动 / Project Startup」任务实际完成日期最晚值。 */
+  async listProjectStartupDates(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardProjectStartupRow[]> {
+    if (scope.kind === "ids" && scope.ids.length === 0) return [];
+    const conditions: SQL[] = [
+      isNull(tasks.deletedAt),
+      isNull(projects.deletedAt),
+      sql`(
+        btrim(${tasks.title}) = '项目启动'
+        or lower(btrim(coalesce(${tasks.titleEn}, ''))) = 'project startup'
+      )`,
+      ...scopeCondition(tasks.projectId, scope),
+    ];
+    return client
+      .select({
+        projectId: tasks.projectId,
+        startupCompletedAt: sql<string | null>`max(${tasks.actualEnd})`,
+      })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(and(...conditions))
+      .groupBy(tasks.projectId);
+  }
+
   /** 任务桶：项目 × 阶段 × 进度档 × 展示态 × 交付桶一次 GROUP BY，任务只取未软删行。 */
   async listTaskBuckets(scope: ProjectScopeFilter, today: string, client: DbClient = this.database.db): Promise<DashboardTaskBucketRow[]> {
     if (scope.kind === "ids" && scope.ids.length === 0) return [];
@@ -157,6 +292,46 @@ export class DashboardRepository {
       .from(issues)
       .innerJoin(projects, eq(projects.id, issues.projectId))
       .where(and(...conditions));
+  }
+
+  /** 问题图表下钻：按当前可见项目范围返回只读问题行，不在聚合结果里夹带图片签名。 */
+  async listIssueDetails(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardIssueDetailRow[]> {
+    if (scope.kind === "ids" && scope.ids.length === 0) return [];
+    const conditions: SQL[] = [isNull(projects.deletedAt), ...scopeCondition(issues.projectId, scope)];
+    const rows = await client
+      .select({
+        id: issues.id,
+        projectId: issues.projectId,
+        projectCode: projects.code,
+        projectName: projects.name,
+        title: issues.title,
+        state: issues.state,
+        categories: issues.categories,
+        reporterName: DASHBOARD_ISSUE_REPORTER.displayName,
+        ownerName: DASHBOARD_ISSUE_OWNER.displayName,
+        raisedAt: issues.raisedAt,
+        solution: issues.solution,
+      })
+      .from(issues)
+      .innerJoin(projects, eq(projects.id, issues.projectId))
+      .leftJoin(DASHBOARD_ISSUE_REPORTER, eq(DASHBOARD_ISSUE_REPORTER.id, issues.reporterId))
+      .leftJoin(DASHBOARD_ISSUE_OWNER, eq(DASHBOARD_ISSUE_OWNER.id, issues.ownerId))
+      .where(and(...conditions))
+      .orderBy(desc(issues.raisedAt), desc(issues.createdAt), asc(issues.id));
+    if (rows.length === 0) return [];
+    const photoRows = await client
+      .select({ objectId: fileLinks.objectId, fileId: fileLinks.fileId, name: files.name })
+      .from(fileLinks)
+      .leftJoin(files, eq(files.id, fileLinks.fileId))
+      .where(and(eq(fileLinks.objectType, "issue"), inArray(fileLinks.objectId, rows.map((row) => row.id))))
+      .orderBy(fileLinks.createdAt, fileLinks.id);
+    const photosByIssue = new Map<string, Array<{ fileId: string; name: string }>>();
+    for (const photo of photoRows) {
+      const bucket = photosByIssue.get(photo.objectId) ?? [];
+      bucket.push({ fileId: photo.fileId, name: photo.name ?? "" });
+      photosByIssue.set(photo.objectId, bucket);
+    }
+    return rows.map((row) => ({ ...row, photos: photosByIssue.get(row.id) ?? [] }));
   }
 
   /** 变更原因原文（只下发给词频计算；不返回变更明细）。 */

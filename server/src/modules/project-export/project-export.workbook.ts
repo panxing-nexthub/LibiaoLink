@@ -158,14 +158,14 @@ export interface ProjectExportWorkbookFileResult {
 }
 
 const TASK_HEADERS = [
-  "任务描述",
+  "任务名称",
   "项目经理",
   "任务负责人",
   "任务状态",
   "项目进度",
   "是否按时交付",
   "输出成果文件",
-  "项目进展描述",
+  "任务描述",
   "开始日期",
   "预计完成日期",
   "预计所需施工人数",

@@ -3,16 +3,19 @@ import type {
   DashboardChangeWordsResponse,
   DashboardIssuesResponse,
   DashboardProgressResponse,
+  DashboardProjectAnalyticsResponse,
   DashboardTaskSummary,
 } from "@libiaolink/contracts";
 import { PermissionService } from "../permission/index.js";
 import { DashboardRepository, type DashboardChangeRow, type DashboardIssueRow } from "./dashboard.repository.js";
 import {
   addTaskBucket,
+  buildProjectAnalytics,
   buildChangeWords,
   buildIssues,
   emptyChangeWords,
   emptyIssues,
+  emptyProjectAnalytics,
   emptyTaskAggregate,
   shanghaiToday,
   taskSummaryOf,
@@ -21,8 +24,9 @@ import {
 /**
  * 仪表盘聚合用例（B4 / M7-02）：
  * - progress：首屏一次返回全部 / 逐项目任务聚合；
- * - issues / change-words：各自懒加载，只返回统计，不下发明细；
- * - 明细下钻由前端按选中项目复用现有项目读面，不在聚合响应里夹带大列表；
+ * - project-insights：全部项目聚合，同时返回项目下钻行供图表弹窗使用；
+ * - issues：懒加载聚合，并返回只读问题下钻行供全部项目问题图使用；
+ * - change-words：懒加载，只返回统计，明细仍按选中项目复用项目读面；
  * - 记录级可见性统一走 PermissionService.projectScope，空可见集直接返回空结果。
  */
 @Injectable()
@@ -58,13 +62,29 @@ export class DashboardService {
     };
   }
 
+  /** 全部项目维度聚合：启动年份 × 项目类型、三类负责人 × 最新阶段、启动年份 × 最新阶段（任务派生，与项目空间同口径），附项目下钻行。 */
+  async projectInsights(actorId: string): Promise<DashboardProjectAnalyticsResponse> {
+    const scope = await this.permission.projectScope(actorId);
+    const projects = await this.repository.listAnalyticsProjects(scope);
+    if (projects.length === 0) return emptyProjectAnalytics();
+    const [roleTasks, startups, taskBuckets] = await Promise.all([
+      this.repository.listProjectRoleTasks(scope),
+      this.repository.listProjectStartupDates(scope),
+      this.repository.listTaskBuckets(scope, shanghaiToday(new Date())),
+    ]);
+    return buildProjectAnalytics(projects, roleTasks, startups, taskBuckets);
+  }
+
   async issues(actorId: string): Promise<DashboardIssuesResponse> {
     const scope = await this.permission.projectScope(actorId);
     const projects = await this.repository.listProjects(scope);
     if (projects.length === 0) {
-      return { all: emptyIssues(), byProject: [] };
+      return { all: emptyIssues(), byProject: [], details: [] };
     }
-    const rows = await this.repository.listIssueRows(scope);
+    const [rows, details] = await Promise.all([
+      this.repository.listIssueRows(scope),
+      this.repository.listIssueDetails(scope),
+    ]);
     const grouped = groupByProject(rows);
     return {
       all: buildIssues(rows),
@@ -74,6 +94,20 @@ export class DashboardService {
         const summary = buildIssues(projectRows);
         return summary.totalIssues === 0 ? [] : [{ projectId: project.id, issues: summary }];
       }),
+      details: details.map((row) => ({
+        id: row.id,
+        projectId: row.projectId,
+        projectCode: row.projectCode,
+        projectName: row.projectName,
+        title: row.title,
+        state: row.state as DashboardIssuesResponse["details"][number]["state"],
+        categories: row.categories as DashboardIssuesResponse["details"][number]["categories"],
+        reporterName: row.reporterName,
+        ownerName: row.ownerName,
+        raisedAt: row.raisedAt,
+        solution: row.solution,
+        photos: row.photos,
+      })),
     };
   }
 

@@ -645,6 +645,19 @@ body {
   background-color: var(--row-tint-hover, var(--row-tint, transparent));
 }
 
+/* 仪表盘问题深链定位：滚动到目标问题后常驻浅黄底 + 左侧金线，直到地址里的 issueLocate 变化。 */
+[data-issue-row][data-issue-located="true"] {
+  box-shadow: inset 0 0 0 2px #f5c518;
+}
+
+[data-issue-row][data-issue-located="true"] > td {
+  background-color: #fff8dc !important;
+}
+
+[data-issue-row][data-issue-located="true"] > td:first-child {
+  box-shadow: inset 3px 0 0 #eab308;
+}
+
 
 .project-card.tint-vivid [data-card-status] {
   outline: 1px solid white;
@@ -1908,6 +1921,12 @@ body {
   transform: translateY(-100%);
 }
 
+/* 仪表盘落屏时地图卡整卡在上一格，收掉其底边与投影，避免裁切线上露出一条地图底框。 */
+.hub-deck__strip[data-view="dashboard"] [data-hub-deck-cell="map"] {
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
+
 /* 滑轨里的两屏（静态排布，永不动 transform）：地图在上一格、仪表盘在下一格。 */
 .hub-deck__cell {
   position: absolute;
@@ -2346,6 +2365,30 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* 2026-11-22：单项目仪表盘「数据详情」整行可点，进入项目详情（问题定位高亮 / 任务抽屉）。 */
+.hub-dash-detail__table tbody tr[data-row-link="true"] {
+  cursor: pointer;
+}
+
+.hub-dash-detail__table tbody tr[data-row-link="true"]:hover {
+  background: #f8fafc;
+}
+
+.hub-dash-detail__table tbody tr[data-row-link="true"]:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: -2px;
+}
+
+.hub-dash-detail__rowLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.hub-dash-detail__rowLink:hover {
+  color: #2563eb;
+  text-decoration: none;
+}
+
 .hub-dash-detail__task {
   display: inline-block;
   max-width: 24rem;
@@ -2552,6 +2595,28 @@ body {
 /* 「问题」分组柱状图（Push 344 · 业务口径 2026-10-16「现在做这个问题 效果和上面做的一样」）：
    x = 问题状态、图例 = 问题归类；柱色 / 柱顶数字走组件里的 DASHBOARD_ISSUE_COLORS（内联 fill），
    这里只做网格线 / 0 轴 / 刻度字 / 悬停高亮条 / 点击光标。 */
+.hub-dash-issues-wrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+}
+
+.hub-dash-issues-wrap > .hub-dash-issues {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.hub-dash-issues-wrap > .hub-dash-issues__selectAllButton {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  transform: none;
+}
+
 .hub-dash-issues {
   display: block;
   flex: 1 1 auto;
@@ -2583,6 +2648,50 @@ body {
 
 .hub-dash-issues__legendText {
   fill: #6b7280;
+  transition: fill 150ms ease;
+}
+
+.hub-dash-issues__legendItem {
+  cursor: pointer;
+  outline: none;
+}
+
+.hub-dash-issues__legendItem[data-active="false"] .hub-dash-issues__legendText {
+  fill: #a1a1aa;
+}
+
+.hub-dash-issues__legendItem:hover .hub-dash-issues__legendText {
+  fill: #374151;
+}
+
+.hub-dash-issues__legendItem:focus-visible .hub-dash-issues__swatch {
+  stroke: #93c5fd;
+  stroke-width: 2;
+}
+
+.hub-dash-issues__selectAll {
+  cursor: pointer;
+  outline: none;
+}
+
+.hub-dash-issues__selectAllBg {
+  fill: #f8fbff;
+  stroke: #dbeafe;
+  transition: fill 150ms ease, stroke 150ms ease;
+}
+
+.hub-dash-issues__selectAllText {
+  fill: #1e3a8a;
+}
+
+.hub-dash-issues__selectAll:hover .hub-dash-issues__selectAllBg,
+.hub-dash-issues__selectAll[data-active="true"] .hub-dash-issues__selectAllBg {
+  fill: #eff6ff;
+}
+
+.hub-dash-issues__selectAll:focus-visible .hub-dash-issues__selectAllBg {
+  stroke: #93c5fd;
+  stroke-width: 2;
 }
 
 .hub-dash-issues__state {
@@ -2794,11 +2903,29 @@ body {
   }
 }
 
+@keyframes ll-hub-line-draw {
+  from {
+    opacity: 0.28;
+    stroke-dashoffset: 1;
+  }
+
+  to {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hub-dash__seg,
   .hub-dash-issues__bar,
   .hub-dash-delivery__bar,
   .hub-dash-status__arc,
+  .hub-dash-start__pieArc,
+  .hub-dash-start__pieGrid,
+  .hub-dash-start__pieLegendItem,
+  .hub-dash-start__pieLeader,
+  .hub-dash-start__pieLabel,
+  .hub-dash-start__bars,
   .hub-dash__num,
   .hub-dash-issues__num,
   .hub-dash-delivery__count,
@@ -4258,4 +4385,1774 @@ body {
 
 [data-project-management-grid-editor] [contenteditable]:focus[data-project-management-code] {
   white-space: nowrap !important;
+}
+
+
+/* ===== 仪表盘「全部项目」长页（2026-11-21） =====
+   全部项目不再挤进一屏：视口内纵向滚动，每个统计类型一张通栏卡片；
+   单项目视图仍沿用原六视图与底部切换，不受本段影响。 */
+[data-hub-dash-all-projects] .hub-dash-viewport {
+  display: block;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+[data-hub-dash-all-projects] .hub-dash-head {
+  flex: 0 0 auto;
+}
+
+/* 去掉外层卡框后，全部项目标题上移，减少标题与顶部导航之间的空白。 */
+[data-hub-page] [data-hub-main]:has([data-hub-dash-all-projects]) {
+  padding-top: 0.6rem !important;
+}
+
+/* 全部项目首屏只保留两张内部统计卡片，去掉整个仪表盘外层卡框。 */
+[data-hub-deck-cell="dashboard"]:has([data-hub-dash-all-projects]) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.hub-dash-all {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  min-width: 0;
+  padding: 0.15rem 3.33% 1.5rem;
+}
+
+.hub-dash-all__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-width: 0;
+  min-height: max(30rem, calc(100dvh - 12rem));
+  padding: 1.1rem 1.25rem 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px -38px rgb(15 23 42 / 0.38);
+}
+
+.hub-dash-all__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.85rem;
+}
+
+.hub-dash-all__heading h3 {
+  margin: 0;
+  color: #1f2329;
+  font-size: 1.08rem;
+  font-weight: 700;
+}
+
+.hub-dash-all__heading p {
+  margin: 0;
+  color: #8a9099;
+  font-size: 0.78rem;
+}
+
+.hub-dash-all__chart {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.hub-dash-all__chart > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.hub-dash-all__chart--issues {
+  min-height: 26rem;
+}
+
+.hub-dash-all__chart--issues > svg {
+  height: 100%;
+  min-height: 26rem;
+}
+
+.hub-dash-project-types {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 20rem;
+}
+
+.hub-dash-role-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.hub-dash-role__legendBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  align-items: center;
+  min-width: 0;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.hub-dash-role__legend,
+.hub-dash-start__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem 0.95rem;
+  align-items: center;
+}
+
+.hub-dash-role__legend {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.hub-dash-role__legendBar > .hub-dash-role__selectAll {
+  position: static;
+  flex: 0 0 auto;
+  transform: none;
+}
+
+.hub-dash-role__legendItem,
+.hub-dash-start__legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  color: #4b5563;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.hub-dash-role__legendItem {
+  padding: 0.16rem 0.12rem;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.hub-dash-role__legendItem:hover {
+  color: #1f2937;
+}
+
+.hub-dash-role__legendItem[data-active="false"] {
+  color: #a1a1aa;
+}
+
+.hub-dash-role__legendItem:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.hub-dash-role__legendItem i,
+.hub-dash-start__legendItem i {
+  display: block;
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 2px;
+  transition: background 150ms ease;
+}
+
+.hub-dash-role-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.hub-dash-role-card {
+  min-width: 0;
+  padding: 0.7rem 0.85rem 0.35rem;
+  border: 1px solid #edf0f3;
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.hub-dash-role-card__title {
+  margin: 0 0 0.15rem;
+  color: #374151;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.hub-dash-role__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.hub-dash-role {
+  display: block;
+  height: auto;
+}
+
+.hub-dash-role__segment,
+.hub-dash-start-year__segment {
+  transition: filter 150ms ease;
+}
+
+.hub-dash-role__segment:hover,
+.hub-dash-start-year__year:hover .hub-dash-start-year__segment,
+.hub-dash-start-stage__bar:hover {
+  filter: brightness(0.93);
+}
+
+.hub-dash-start {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-width: 0;
+  min-height: 0;
+}
+
+.hub-dash-start__yearFilter {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+  min-height: 1.95rem;
+  padding: 0.1rem 0;
+}
+
+/* 项目当前阶段的「全选 + 柱状图 / 饼状图」并列放左，年份多选保持居中。 */
+.hub-dash-start__leftControls {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.35rem;
+  transform: translateY(-50%);
+}
+
+.hub-dash-start__leftControls > .hub-dash-project-types__selectAll {
+  position: static;
+  transform: none;
+}
+
+.hub-dash-start__chartToggle[data-active="true"] {
+  border-color: rgb(147 197 253 / 0.9);
+  color: #1d4ed8;
+}
+
+/* 项目当前阶段的饼图视图：沿用任务状态饼图的图例 / 扇区 / 引线标签体系，按年份逐张展示。 */
+.hub-dash-start__pieGrid {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.65rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.1rem 0 0.2rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  animation: ll-hub-fade-in 340ms ease-out both;
+}
+
+.hub-dash-start__pieCard {
+  display: flex;
+  flex: 1 1 24rem;
+  flex-direction: column;
+  gap: 0.32rem;
+  min-width: 24rem;
+  min-height: 0;
+  align-self: stretch;
+  padding: 0.55rem 0.65rem 0.35rem;
+  border: 1px solid #edf0f3;
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.hub-dash-start__pieCardHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+ .hub-dash-start__pieCardTitle {
+  margin: 0;
+  color: #374151;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+ .hub-dash-start__pieCardMeta {
+  flex: 0 0 auto;
+  color: #9aa0a6;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-dash-start__pieLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem 0.7rem;
+  align-items: center;
+}
+
+ .hub-dash-start__pieLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #4b5563;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  animation: ll-hub-num-in 320ms ease-out both;
+}
+
+ .hub-dash-start__pieLegendItem i {
+  display: block;
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 2px;
+}
+
+.hub-dash-start__pieChartViewport {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 76rem;
+  min-width: 0;
+  min-height: 0;
+  margin-inline: auto;
+  overflow: hidden;
+}
+
+.hub-dash-start__pieChart {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.hub-dash-start__pieArc {
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  transform-box: view-box;
+  animation: ll-hub-pie-in 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hub-dash-start__pieArc[data-drill="true"] {
+  cursor: pointer;
+}
+
+.hub-dash-start__pieArc[data-drill="true"]:hover {
+  filter: brightness(0.94);
+}
+
+.hub-dash-start__pieLeader {
+  stroke-opacity: 0.45;
+  animation: ll-hub-num-in 320ms ease-out both;
+  animation-delay: 280ms;
+}
+
+.hub-dash-start__pieLabel {
+  font-variant-numeric: tabular-nums;
+  animation: ll-hub-num-in 320ms ease-out both;
+  animation-delay: 300ms;
+}
+
+.hub-dash-combined__panel .hub-dash-start__pieGrid {
+  padding: 0;
+}
+
+.hub-dash-combined__panel .hub-dash-start__pieCard {
+  background: #fff;
+}
+
+.hub-dash-start-stage {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 20rem;
+}
+
+.hub-dash-start__toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.hub-dash-start__years {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.hub-dash-start__years button {
+  padding: 0.25rem 0.72rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #f8f9fb;
+  color: #4b5563;
+  font-size: 0.76rem;
+  font-weight: 550;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.hub-dash-start__years button:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.hub-dash-start__years button[data-active="true"] {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.hub-dash-start__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(20rem, 0.8fr);
+  gap: 0.9rem;
+  align-items: stretch;
+}
+
+.hub-dash-start__bars,
+.hub-dash-start__pie {
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #edf0f3;
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.hub-dash-start__bars {
+  animation: ll-hub-fade-in 340ms ease-out both;
+}
+
+.hub-dash-start-year {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.hub-dash-start-year__year {
+  cursor: pointer;
+  outline: none;
+}
+
+.hub-dash-start-year__year:focus-visible rect:first-of-type {
+  stroke: #93c5fd;
+  stroke-width: 2;
+}
+
+.hub-dash-start-pie {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  height: 100%;
+}
+
+.hub-dash-start-pie > svg {
+  display: block;
+  flex: 0 1 18rem;
+  width: min(100%, 18rem);
+  height: auto;
+  min-width: 12rem;
+}
+
+.hub-dash-start-pie__list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.28rem;
+  min-width: 0;
+  max-height: 22rem;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.hub-dash-start-pie__row {
+  display: grid;
+  grid-template-columns: 0.58rem minmax(0, 1fr) auto auto;
+  gap: 0.36rem;
+  align-items: center;
+  color: #4b5563;
+  font-size: 0.72rem;
+}
+
+.hub-dash-start-pie__row i {
+  display: block;
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 2px;
+}
+
+.hub-dash-start-pie__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-dash-start-pie__count,
+.hub-dash-start-pie__share {
+  color: #374151;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-dash-start-pie__share {
+  min-width: 2.2rem;
+  color: #9aa0a6;
+  text-align: right;
+}
+
+.hub-dash-project-types__bar,
+.hub-dash-role__segment,
+.hub-dash-start-year__segment,
+.hub-dash-start-stage__bar {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: ll-hub-bar-in 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hub-dash-project-types__line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: ll-hub-line-draw 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hub-dash-project-types[data-expanded="true"] {
+  animation: ll-hub-fade-in 420ms ease-out both;
+}
+
+.hub-dash-project-types__point {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ll-hub-pie-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hub-dash-project-types__pointHit {
+  cursor: pointer;
+}
+
+.hub-dash-project-types__num,
+.hub-dash-start-stage__num {
+  animation: ll-hub-num-in 320ms ease-out both;
+}
+
+.hub-dash-start-pie__segment {
+  transform-box: view-box;
+  transform-origin: 160px 160px;
+  animation: ll-hub-pie-in 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (max-width: 1023.98px) {
+  [data-hub-dash-all-projects] .hub-dash-viewport {
+    overflow-y: auto !important;
+  }
+
+  .hub-dash-all {
+    gap: 0.8rem;
+    padding: 0.25rem 0.25rem 1.25rem;
+  }
+
+  .hub-dash-all__section {
+    min-height: auto;
+    padding: 0.85rem;
+  }
+
+  .hub-dash-all__heading h3 {
+    font-size: 1rem;
+  }
+
+  .hub-dash-all__heading p {
+    font-size: 0.74rem;
+  }
+
+  .hub-dash-start__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hub-dash-start-pie {
+    min-height: 18rem;
+  }
+}
+
+@media (max-width: 639.98px) {
+  .hub-dash-all__section {
+    padding: 0.7rem 0.55rem;
+  }
+
+  .hub-dash-all__chart--issues,
+  .hub-dash-all__chart--issues > svg {
+    min-height: 21rem;
+  }
+
+  .hub-dash-role__legendBar {
+    gap: 0.35rem 0.55rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .hub-dash-role__legend,
+  .hub-dash-start__legend {
+    gap: 0.35rem 0.65rem;
+  }
+
+  .hub-dash-role__legendItem,
+  .hub-dash-start__legendItem {
+    font-size: 0.68rem;
+  }
+
+  .hub-dash-role-card {
+    padding: 0.6rem 0.55rem 0.25rem;
+  }
+
+  .hub-dash-start-pie {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hub-dash-start-pie > svg {
+    align-self: center;
+    flex-basis: auto;
+    max-height: 15rem;
+  }
+
+  .hub-dash-start-pie__list {
+    width: 100%;
+    max-height: 16rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-dash-project-types__bar,
+  .hub-dash-project-types__line,
+  .hub-dash-project-types__point,
+  .hub-dash-role__segment,
+  .hub-dash-start-year__segment,
+  .hub-dash-start-stage__bar,
+  .hub-dash-project-types__num,
+  .hub-dash-start-stage__num,
+  .hub-dash-start-pie__segment {
+    animation: none;
+  }
+}
+
+
+/* ===== 仪表盘页内刚体滑轨（2026-11-21 第二轮：`全部项目` 6 屏与单项目 6 视图统一滑动） ===== */
+[data-hub-dash-viewport] {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+[data-hub-dash-all-projects] .hub-dash-viewport {
+  overflow: hidden !important;
+}
+
+.hub-dash-slide-deck {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overflow: clip;
+}
+
+.hub-dash-slide-track {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.hub-dash-slide-page {
+  display: flex;
+  flex: 0 0 100%;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overflow: clip;
+}
+
+.hub-dash-all__slide {
+  display: flex;
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0.25rem 3.33% 0.35rem;
+  overflow: hidden;
+  overflow: clip;
+}
+
+.hub-dash-all__slideCard {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.9rem 1.05rem 0.8rem;
+  overflow: hidden;
+  overflow: clip;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px -38px rgb(15 23 42 / 0.38);
+}
+
+.hub-dash-all__slideCard--stacked {
+  width: 100%;
+  min-width: 0;
+  gap: 0.55rem;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.hub-dash-combined {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-rows: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 0.55rem;
+  min-width: 0;
+  min-height: 0;
+  transition: grid-template-rows 420ms cubic-bezier(0.22, 1, 0.36, 1), gap 420ms ease;
+}
+
+.hub-dash-combined[data-line-expanded="true"] {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 0fr);
+  gap: 0;
+}
+
+.hub-dash-combined__panel {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.5rem 0.65rem 0.4rem;
+  overflow: hidden;
+  border: 1px solid #edf0f3;
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.hub-dash-combined__panel[data-panel="project-stage"] {
+  transition: opacity 260ms ease, transform 360ms cubic-bezier(0.22, 1, 0.36, 1), padding 360ms ease, border-width 360ms ease;
+}
+
+.hub-dash-combined[data-line-expanded="true"] .hub-dash-combined__panel[data-panel="project-stage"] {
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
+  opacity: 0;
+  transform: translateY(28px);
+  pointer-events: none;
+}
+
+.hub-dash-combined__panel > .hub-dash-all__heading {
+  flex: 0 0 auto;
+}
+
+.hub-dash-combined__panel .hub-dash-all__heading h3 {
+  font-size: 0.98rem;
+}
+
+.hub-dash-combined__chart {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.hub-dash-combined__chart > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 合并页两图按容器宽度绘制，避免亚像素取整触发无意义的横向滚动条。 */
+.hub-dash-combined__panel .hub-dash-chartViewport {
+  overflow: hidden;
+}
+
+.hub-dash-combined__panel .hub-dash-project-types-wrap {
+  gap: 0.35rem;
+}
+
+.hub-dash-combined__panel .hub-dash-start {
+  gap: 0.35rem;
+}
+
+.hub-dash-combined__panel .hub-dash-start__yearFilter {
+  padding: 0;
+}
+
+.hub-dash-combined__panel .hub-dash-start__bars {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+}
+
+.hub-dash-combined__panel .hub-dash-start-stage {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.hub-dash-all__chart {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.hub-dash-all__chart > svg {
+  max-height: 100%;
+}
+
+.hub-dash-all__chart--issues {
+  min-height: 0;
+}
+
+.hub-dash-all__chart--issues > svg {
+  height: 100%;
+  min-height: 0;
+}
+
+.hub-dash-all__roleBody,
+.hub-dash-all__startBody {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.hub-dash-role-section--slide {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0.4rem;
+}
+
+.hub-dash-role-section--slide .hub-dash-role__legendBar {
+  flex: 0 0 auto;
+}
+
+.hub-dash-role-section--slide .hub-dash-role__scroll {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-height: 0;
+}
+
+.hub-dash-role-section--slide .hub-dash-role {
+  max-height: 100%;
+}
+
+.hub-dash-start {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.hub-dash-start__grid {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.hub-dash-start__bars,
+.hub-dash-start__pie {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.hub-dash-start-year {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+}
+
+.hub-dash-switch[data-all-projects="true"] {
+  gap: 0.5rem 1.35rem;
+  padding-top: 0.3rem;
+  padding-bottom: 0.45rem;
+}
+
+@media (max-width: 1023.98px) {
+  .hub-dash-all__slide {
+    padding: 0.2rem 0.35rem 0.3rem;
+  }
+
+  .hub-dash-all__slide[data-section="project-stats"] {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .hub-dash-all__slideCard {
+    padding: 0.7rem 0.55rem 0.55rem;
+  }
+
+  .hub-dash-all__slideCard--stacked {
+    flex: 0 0 auto;
+    min-height: 40rem;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .hub-dash-role-section--slide .hub-dash-role__legend {
+    gap: 0.28rem 0.6rem;
+  }
+
+  .hub-dash-switch[data-all-projects="true"] {
+    gap: 0.4rem 0.55rem;
+  }
+}
+
+/* 低高度电脑：两张图必须一屏完整显示；卡片改为撑满可用高度，不再用固定 48rem 把下方图顶出视口。 */
+@media (max-height: 820px) {
+  .hub-dash-all__slide[data-section="project-stats"] {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .hub-dash-all__slideCard--stacked {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-dash-slide-track {
+    transition: none;
+  }
+}
+
+
+/* 新仪表盘图表悬停卡片：与既有 .hub-dash-tip 同族，挂到 body 避免被滑轨 overflow 裁切。 */
+.hub-dash-hoverCard {
+  position: fixed;
+  z-index: 90;
+  min-width: 10rem;
+  padding: 0.58rem 0.72rem 0.62rem;
+  border-radius: 0.62rem;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08), 0 16px 36px -18px rgb(15 23 42 / 0.42);
+  pointer-events: none;
+}
+
+.hub-dash-hoverCard__title {
+  color: #111827;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.hub-dash-hoverCard__subtitle {
+  margin-top: 0.22rem;
+  color: #4b5563;
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.hub-dash-hoverCard__row {
+  display: grid;
+  grid-template-columns: 0.55rem minmax(0, 1fr) auto;
+  gap: 0.42rem;
+  align-items: center;
+  margin-top: 0.34rem;
+  color: #6b7280;
+  font-size: 0.74rem;
+}
+
+.hub-dash-hoverCard__row i,
+.hub-dash-hoverCard__spacer {
+  display: block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 2px;
+}
+
+.hub-dash-hoverCard__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-dash-hoverCard__value {
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.hub-dash-project-types__band,
+.hub-dash-role__band,
+.hub-dash-start-year__band {
+  transition: fill 140ms ease;
+}
+
+.hub-dash-project-types__band:hover,
+.hub-dash-role__band:hover,
+.hub-dash-start-year__band:hover {
+  fill: #f7f9fc;
+}
+
+.hub-dash-project-types__bar,
+.hub-dash-role__segment,
+.hub-dash-start-year__segment,
+.hub-dash-start-pie__segment {
+  transition: filter 140ms ease;
+}
+
+.hub-dash-project-types__bar:hover,
+.hub-dash-role__segment:hover,
+.hub-dash-start-year__segment:hover,
+.hub-dash-start-pie__segment:hover {
+  filter: brightness(0.93);
+}
+
+.hub-dash-start-pie__row {
+  border-radius: 5px;
+  transition: background 140ms ease;
+}
+
+.hub-dash-start-pie__row:hover {
+  background: #f4f6f8;
+}
+
+
+/* 项目数量图筛选控件（2026-11-21：年份 / 类型点击显隐，液态玻璃全选）。 */
+.hub-dash-project-types-wrap {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 0;
+}
+
+.hub-dash-project-types__controls {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.hub-dash-project-types__filterGrid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.35rem 0.55rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.hub-dash-project-types__leftControls {
+  z-index: 1;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.35rem;
+}
+
+.hub-dash-project-types__leftControls > .hub-dash-project-types__selectAll {
+  position: static;
+  transform: none;
+}
+
+.hub-dash-project-types__rightFilters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.hub-dash-project-types__rightFilters > .hub-dash-project-types__yearNavigator {
+  min-height: 29px;
+}
+
+.hub-dash-project-types__yearNavigator {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.hub-dash-project-types__yearChips {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.hub-dash-project-types__selectAll {
+  flex: 0 0 auto;
+  border: 1px solid rgb(255 255 255 / 0.72);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.7), rgb(219 234 254 / 0.42));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.92), 0 8px 20px -14px rgb(37 99 235 / 0.65);
+  -webkit-backdrop-filter: blur(12px) saturate(1.45);
+  backdrop-filter: blur(12px) saturate(1.45);
+  color: #1e3a8a;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+
+.hub-dash-project-types__selectAll {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 1;
+  padding: 0.28rem 0.72rem;
+  font-size: 0.75rem;
+  transform: translateY(-50%);
+}
+
+.hub-dash-project-types__selectAll[data-active="true"] {
+  border-color: rgb(147 197 253 / 0.9);
+  background: linear-gradient(135deg, rgb(239 246 255 / 0.9), rgb(191 219 254 / 0.5));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.96), 0 10px 24px -14px rgb(37 99 235 / 0.8);
+}
+
+.hub-dash-project-types__arrow {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.42rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: #2f4f8f;
+  cursor: pointer;
+  transition: color 150ms ease, transform 150ms ease, opacity 150ms ease;
+}
+
+.hub-dash-project-types__arrowIcon {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+}
+
+.hub-dash-project-types__selectAll:hover {
+  border-color: rgb(191 219 254 / 0.95);
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.86), rgb(219 234 254 / 0.62));
+  color: #1d4ed8;
+}
+
+.hub-dash-project-types__arrow:hover:not(:disabled) {
+  background: transparent;
+  color: #1d4ed8;
+  transform: scale(1.06);
+}
+
+.hub-dash-project-types__arrow:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.hub-dash-project-types__yearChip,
+.hub-dash-project-types__typeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  border: 0;
+  background: transparent;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 150ms ease, opacity 150ms ease;
+}
+
+.hub-dash-project-types__yearChip {
+  padding: 0.2rem 0.28rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.hub-dash-project-types__yearChip i,
+.hub-dash-project-types__typeChip i {
+  display: block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 3px;
+  background: #c9ced6;
+  transition: background 150ms ease, box-shadow 150ms ease;
+}
+
+.hub-dash-project-types__yearChip[data-active="true"] {
+  border: 0;
+  background: transparent;
+  color: #374151;
+}
+
+.hub-dash-project-types__yearChip[data-active="true"] i {
+  background: #2f7ef2;
+  box-shadow: none;
+}
+
+.hub-dash-project-types__yearChip[data-active="false"],
+.hub-dash-project-types__typeChip[data-active="false"] {
+  color: #a1a1aa;
+}
+
+.hub-dash-project-types__typeLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem 1.9rem;
+}
+
+.hub-dash-project-types__typeChip {
+  padding: 0.16rem 0.12rem;
+}
+
+.hub-dash-project-types__typeChip:hover {
+  color: #1f2937;
+}
+
+.hub-dash-project-types__typeChip[data-active="false"] i {
+  box-shadow: none;
+}
+
+.hub-dash-project-types-wrap > .hub-dash-project-types {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.hub-dash-project-types__hoverTotal {
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+@media (max-width: 639.98px) {
+  .hub-dash-project-types__selectAll {
+    position: static;
+    transform: none;
+  }
+
+  .hub-dash-project-types__yearNavigator {
+    flex: 1 0 100%;
+  }
+
+  .hub-dash-project-types__yearChip,
+  .hub-dash-project-types__typeChip {
+    font-size: 0.7rem;
+  }
+
+  .hub-dash-project-types__typeLine {
+    gap: 0.4rem 0.9rem;
+  }
+}
+
+
+
+/* 2026-11-21 全部项目图表下钻：矩形可点光标与只读列表 / 折叠问题弹窗。 */
+.hub-dash-project-types__bar[data-drill="true"],
+.hub-dash-project-types__pointHit[data-drill="true"],
+.hub-dash-start-stage__bar[data-drill="true"],
+.hub-dash-role__band[data-drill="true"],
+.hub-dash-role__segment[data-drill="true"] {
+  cursor: pointer;
+}
+
+.hub-dash-project-list-detail {
+  width: min(84rem, 100%);
+}
+
+.hub-dash-project-list-detail__context {
+  color: #9aa0a6;
+}
+
+.hub-dash-project-list-detail__count {
+  flex: 0 0 auto;
+  color: #6b7280;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-dash-project-list-detail__scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(64vh, 36rem);
+  overflow: auto;
+  padding: 0.65rem;
+}
+
+.hub-dash-project-list-detail__grid {
+  --hub-project-list-columns: minmax(9rem, 0.85fr) minmax(7rem, 0.55fr) minmax(14rem, 1.5fr) minmax(9rem, 0.8fr) minmax(8.5rem, 0.65fr);
+  min-width: 54rem;
+}
+
+.hub-dash-project-list-detail__grid[data-show-stage="true"] {
+  --hub-project-list-columns: minmax(9rem, 0.85fr) minmax(7rem, 0.55fr) minmax(13rem, 1.35fr) minmax(8.5rem, 0.75fr) minmax(8.5rem, 0.7fr) minmax(8.5rem, 0.65fr);
+  min-width: 64rem;
+}
+
+.hub-dash-project-list-detail__headRow,
+.hub-dash-project-list-detail__row {
+  display: grid;
+  grid-template-columns: var(--hub-project-list-columns);
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.hub-dash-project-list-detail__headRow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.55rem;
+  background: #f5f6f8;
+  color: #7c848d;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.hub-dash-project-list-detail__row {
+  position: relative;
+  min-height: 3.4rem;
+  margin-top: 0.45rem;
+  padding: 0.65rem 2.35rem 0.65rem 0.8rem;
+  border: 1px solid #e7eaee;
+  border-radius: 0.65rem;
+  background: #ffffff;
+  color: #30363d;
+  font-size: 0.82rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.hub-dash-project-list-detail__row:hover {
+  border-color: #cfd9e6;
+  background: #fbfdff;
+  box-shadow: 0 8px 22px -20px rgb(15 23 42 / 0.45);
+}
+
+.hub-dash-project-list-detail__row:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.hub-dash-project-list-detail__row::after {
+  content: "›";
+  position: absolute;
+  top: 50%;
+  right: 0.85rem;
+  color: #9aa6b5;
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1;
+  transform: translateY(-50%);
+  transition: color 140ms ease, transform 140ms ease;
+}
+
+.hub-dash-project-list-detail__row:hover::after {
+  color: #3b82f6;
+  transform: translate(2px, -50%);
+}
+
+.hub-dash-project-list-detail__cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-dash-project-list-detail__name {
+  color: #111827;
+  font-weight: 650;
+}
+
+.hub-dash-project-list-detail__types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  overflow: visible;
+  white-space: normal;
+}
+
+.hub-dash-project-list-detail__types i {
+  padding: 0.16rem 0.45rem;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #475569;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.hub-dash-project-list-detail__types i[data-type="T-sort"] {
+  background: #eaf4ff;
+  color: #2563a8;
+}
+
+.hub-dash-project-list-detail__types i[data-type="3D分拣"] {
+  background: #fff7dd;
+  color: #9a6a00;
+}
+
+.hub-dash-project-list-detail__types i[data-type="飞箱"] {
+  background: #eaf8ea;
+  color: #2e7d32;
+}
+
+.hub-dash-project-list-detail__empty {
+  padding: 2.5rem 1rem;
+  color: #9aa0a6;
+  font-size: 0.84rem;
+  text-align: center;
+}
+
+.hub-dash-issue-group-detail {
+  width: min(72rem, 100%);
+}
+
+.hub-dash-issue-group-detail__scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(64vh, 36rem);
+  overflow: auto;
+  padding: 0.65rem;
+}
+
+.hub-dash-issue-group-detail__group {
+  overflow: hidden;
+  border: 1px solid #e5e8ec;
+  border-radius: 0.7rem;
+  background: #ffffff;
+}
+
+.hub-dash-issue-group-detail__group + .hub-dash-issue-group-detail__group {
+  margin-top: 0.55rem;
+}
+
+.hub-dash-issue-group-detail__groupHead {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.8rem 0.9rem;
+  border: 0;
+  background: #ffffff;
+  color: #1f2937;
+  cursor: pointer;
+  text-align: left;
+}
+
+.hub-dash-issue-group-detail__groupHead:hover {
+  background: #f8fafc;
+}
+
+.hub-dash-issue-group-detail__groupHead:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: -2px;
+}
+
+.hub-dash-issue-group-detail__chevron {
+  flex: 0 0 auto;
+  color: #7b8491;
+  transition: transform 160ms ease;
+}
+
+.hub-dash-issue-group-detail__group[data-expanded="true"] .hub-dash-issue-group-detail__chevron {
+  transform: rotate(90deg);
+}
+
+.hub-dash-issue-group-detail__projectName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.hub-dash-issue-group-detail__groupCount {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-dash-issue-group-detail__issues {
+  border-top: 1px solid #edf0f3;
+  background: #fbfcfd;
+}
+
+.hub-dash-issue-group-detail__issue {
+  padding: 0.8rem 1rem 0.85rem 2.2rem;
+  border-top: 1px solid #edf0f3;
+}
+
+.hub-dash-issue-group-detail__issueLink {
+  display: block;
+  border-radius: 0.45rem;
+  color: inherit;
+  outline: none;
+  text-decoration: none;
+}
+
+.hub-dash-issue-group-detail__issueLink:hover h4 {
+  color: #1d4ed8;
+}
+
+.hub-dash-issue-group-detail__issueLink:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 3px;
+}
+
+.hub-dash-issue-group-detail__openHint {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #9aa6b5;
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1;
+  transition: color 140ms ease, transform 140ms ease;
+}
+
+.hub-dash-issue-group-detail__issueLink:hover .hub-dash-issue-group-detail__openHint {
+  color: #3b82f6;
+  transform: translateX(2px);
+}
+
+.hub-dash-issue-group-detail__photos {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed #e5e8ec;
+  color: #6b7280;
+  font-size: 0.74rem;
+}
+
+.hub-dash-issue-group-detail__photos > b {
+  flex: 0 0 auto;
+  padding-top: 0.3rem;
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.hub-dash-issue-group-detail__issue:first-child {
+  border-top: 0;
+}
+
+.hub-dash-issue-group-detail__issueTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.hub-dash-issue-group-detail__issueTop h4 {
+  min-width: 0;
+  margin: 0;
+  color: #1f2937;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.hub-dash-issue-group-detail__state {
+  flex: 0 0 auto;
+  padding: 0.16rem 0.48rem;
+  border-radius: 999px;
+  font-size: 0.69rem;
+  font-weight: 650;
+}
+
+.hub-dash-issue-group-detail__state[data-state="open"] {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.hub-dash-issue-group-detail__state[data-state="in_progress"] {
+  background: #fff7dd;
+  color: #a16207;
+}
+
+.hub-dash-issue-group-detail__state[data-state="done"] {
+  background: #e9f9ef;
+  color: #15803d;
+}
+
+.hub-dash-issue-group-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.45rem;
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+.hub-dash-issue-group-detail__categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+.hub-dash-issue-group-detail__categories span {
+  padding: 0.14rem 0.42rem;
+  border-radius: 0.25rem;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.hub-dash-issue-group-detail__solution {
+  margin: 0.55rem 0 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.4rem;
+  background: #f5f7fa;
+  color: #4b5563;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.hub-dash-issue-group-detail__solution b {
+  color: #374151;
+  font-weight: 600;
+}
+
+@media (max-width: 767.98px) {
+  .hub-dash-project-list-detail__scroll,
+  .hub-dash-issue-group-detail__scroll {
+    max-height: 68vh;
+    padding: 0.45rem;
+  }
+
+  .hub-dash-issue-group-detail__issue {
+    padding-left: 0.9rem;
+  }
+}
+
+
+/* ===== 仪表盘图表响应式画布（2026-11-22） =====
+   固定 viewBox 会让整张 SVG 随屏幕等比缩放，导致宽屏字变大、小屏字变小，并在比例不一致时
+   产生左右黑边。以下容器用实测像素作画布：字号保持 CSS 像素稳定，柱图坐标按可用宽高重算。 */
+.hub-dash-chartViewport {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.hub-dash-chartCanvas {
+  position: relative;
+  flex: 0 0 auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.hub-dash-chartCanvas > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
+.hub-dash-project-types__viewport {
+  min-height: 0;
+}
+
+.hub-dash-project-types__viewport > .hub-dash-chartCanvas > svg.hub-dash-project-types {
+  min-height: 0;
+  max-height: none;
+}
+
+.hub-dash-start__bars > .hub-dash-chartViewport {
+  flex: 1 1 auto;
+}
+
+.hub-dash-start__bars .hub-dash-start-stage,
+.hub-dash-combined__panel .hub-dash-start-stage {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
+.hub-dash-role__scroll.hub-dash-chartViewport {
+  width: 100%;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.hub-dash-role__scroll.hub-dash-chartViewport .hub-dash-role {
+  min-height: 0;
+  max-height: none;
 }

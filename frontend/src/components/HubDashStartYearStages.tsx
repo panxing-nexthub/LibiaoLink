@@ -280,14 +280,10 @@ function StagePie({ row, onPick }: {
   const cx = chartW / 2;
   const cy = chartH / 2;
   const radius = Math.max(34, Math.min(150, chartH * 0.38, chartW * 0.2));
-  const labelFont = Math.max(11.5, Math.min(16, chartH * 0.052, chartW * 0.024));
   const labelPad = Math.max(6, Math.min(18, chartW * 0.016));
-  const labelMinGap = Math.max(24, labelFont * 2.6);
-  const labelMaxWidth = Math.max(110, Math.min(280, chartW * 0.25));
-  const labelYMin = Math.max(14, labelFont + 6);
-  const labelYMax = Math.max(labelYMin + 40, chartH - labelYMin);
   const leaderStub = Math.max(7, Math.min(14, radius * 0.13));
-  const leaderEndGap = Math.max(4, labelFont * 0.5);
+  const sideSpace = Math.max(58, cx - radius - 16);
+  const labelMaxWidth = Math.max(66, Math.min(280, chartW * 0.25, sideSpace));
   const arcs: Array<{
     bucket: DashboardProjectStageBucket;
     label: string;
@@ -317,26 +313,56 @@ function StagePie({ row, onPick }: {
     cursor = endAngle;
   }
   const year = yearLabel(row.year, t("hub.dash.projects.unknownYear"));
-  const labelItems = arcs.map((arc) => {
-    const direction = pieDirOf(arc.midAngle);
-    return { arc, right: direction.x >= 0, y: cy + direction.y * radius * 1.06 };
-  });
-  for (const right of [false, true]) {
-    const group = labelItems.filter((item) => item.right === right).sort((left, rightItem) => left.y - rightItem.y);
-    for (let index = 1; index < group.length; index += 1) {
-      group[index].y = Math.max(group[index].y, group[index - 1].y + labelMinGap);
+  type PieArc = (typeof arcs)[number];
+  type PieLabelItem = { arc: PieArc; right: boolean; y: number; layout: ReturnType<typeof pieLabelLayout> };
+  const baseFont = Math.max(10, Math.min(16, chartH * 0.052, chartW * 0.024));
+  const minFont = Math.max(8, baseFont * 0.55);
+  let labelFont = baseFont;
+  let labelItems: PieLabelItem[] = [];
+  for (let fontSize = baseFont; fontSize >= minFont - 0.001; fontSize -= 0.5) {
+    const drafts: PieLabelItem[] = arcs.map((arc) => {
+      const direction = pieDirOf(arc.midAngle);
+      return {
+        arc,
+        right: direction.x >= 0,
+        y: cy + direction.y * radius * 1.06,
+        layout: pieLabelLayout(arc.label, arc.count, arc.share, labelMaxWidth, fontSize),
+      };
+    });
+    let fits = true;
+    for (const right of [false, true]) {
+      const group = drafts.filter((item) => item.right === right).sort((left, rightItem) => left.y - rightItem.y);
+      let cursor = 4;
+      for (const item of group) {
+        const blockHeight = item.layout.lines.length * item.layout.lineHeight;
+        const top = Math.max(item.y - blockHeight / 2, cursor);
+        item.y = top + blockHeight / 2;
+        cursor = top + blockHeight + 3;
+      }
+      const last = group[group.length - 1];
+      if (last !== undefined) {
+        const blockHeight = last.layout.lines.length * last.layout.lineHeight;
+        const overflow = last.y + blockHeight / 2 - (chartH - 4);
+        if (overflow > 0) {
+          for (const item of group) item.y -= overflow;
+        }
+      }
+      const first = group[0];
+      if (first !== undefined) {
+        const blockHeight = first.layout.lines.length * first.layout.lineHeight;
+        if (first.y - blockHeight / 2 < 4) fits = false;
+      }
+      if (last !== undefined) {
+        const blockHeight = last.layout.lines.length * last.layout.lineHeight;
+        if (last.y + blockHeight / 2 > chartH - 4) fits = false;
+      }
     }
-    const last = group[group.length - 1];
-    if (last !== undefined && last.y > labelYMax) {
-      const shift = last.y - labelYMax;
-      for (const item of group) item.y -= shift;
-    }
-    const first = group[0];
-    if (first !== undefined && first.y < labelYMin) {
-      const shift = labelYMin - first.y;
-      for (const item of group) item.y += shift;
-    }
+    labelItems = drafts;
+    labelFont = fontSize;
+    if (fits) break;
   }
+  const leaderEndGap = Math.max(4, labelFont * 0.5);
+  const legendFontSize = arcs.length > 8 ? "0.68rem" : arcs.length > 6 ? "0.72rem" : "0.8rem";
   const tipOf = (event: { readonly clientX: number; readonly clientY: number }, arc: (typeof arcs)[number]): DashboardHoverTip =>
     hoverTipAt(event, arc.label, [
       { label: t("hub.dash.projects.projectCount"), value: arc.count, color: arc.color },
@@ -346,7 +372,7 @@ function StagePie({ row, onPick }: {
     <>
       <div className="hub-dash-start__pieLegend" role="group" aria-label={t("hub.dash.projects.stageLegend")}>
         {arcs.map((arc) => (
-          <span key={arc.bucket} className="hub-dash-start__pieLegendItem">
+          <span key={arc.bucket} className="hub-dash-start__pieLegendItem" style={{ fontSize: legendFontSize }}>
             <i style={{ background: arc.color }} />{arc.label}
           </span>
         ))}
@@ -392,7 +418,7 @@ function StagePie({ row, onPick }: {
             const direction = pieDirOf(item.arc.midAngle);
             const attach = { x: cx + direction.x * Math.max(radius - 1, 1), y: cy + direction.y * Math.max(radius - 1, 1) };
             const bend = { x: cx + direction.x * (radius + leaderStub), y: cy + direction.y * (radius + leaderStub) };
-            const layout = pieLabelLayout(item.arc.label, item.arc.count, item.arc.share, labelMaxWidth, labelFont);
+            const layout = item.layout;
             const labelX = item.right ? chartW - labelPad : labelPad;
             const innerX = item.right ? labelX - layout.width - leaderEndGap : labelX + layout.width + leaderEndGap;
             const textY = item.y - ((layout.lines.length - 1) * layout.lineHeight) / 2 + labelFont / 3;

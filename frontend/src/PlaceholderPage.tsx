@@ -2443,14 +2443,9 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                                 type="button"
                                 data-template-save={template.id}
                                 onClick={() => saveTemplate(template.id, true)}
-                                disabled={savedOk || savingTemplateId !== null}
+                                disabled={savingTemplateId !== null}
                                 title={t("tpl.save.title")}
-                                className={
-                                  "shrink-0 rounded-md px-2 py-0.5 text-xs font-medium transition disabled:cursor-not-allowed " +
-                                  (savedOk
-                                    ? "border border-white/70 bg-white/50 text-zinc-400"
-                                    : "bg-zinc-900 text-white hover:bg-zinc-800 disabled:bg-zinc-400")
-                                }
+                                className="shrink-0 rounded-md bg-zinc-900 px-2 py-0.5 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
                               >
                                 {savingTemplateId === template.id ? t("common.saving") : t("common.save")}
                               </button>

@@ -162,6 +162,8 @@ const CLICK_FIRST_LEFT_CARD = "(function(){var s=" + LEFT_SECTION + ";if(s===nul
 const LEFT_NODE_SCROLL_STATS = "(function(){var s=" + LEFT_SECTION + ";if(s===null){return null;}var sc=s.querySelector(" + q("[data-template-node-scroll]") + ");if(sc===null){return null;}var r=s.getBoundingClientRect();var cs=getComputedStyle(sc);var before=sc.scrollTop;sc.scrollTop=120;var moved=sc.scrollTop>0;sc.scrollTop=before;return {panelTop:r.top,panelBottom:r.bottom,panelHeight:r.height,viewportHeight:window.innerHeight,clientHeight:sc.clientHeight,scrollHeight:sc.scrollHeight,overflowY:cs.overflowY,canScroll:moved};})()";
 /** 某块模板面板的节点滚动区：同上。 */
 const PANEL_SCROLL_STATS = (name) => "(function(){var panel=" + PANEL(name) + ";if(panel===null){return null;}var sc=panel.querySelector(" + q("[data-template-panel-scroll]") + ");if(sc===null){return null;}var r=panel.getBoundingClientRect();var cs=getComputedStyle(sc);var before=sc.scrollTop;sc.scrollTop=120;var moved=sc.scrollTop>0;sc.scrollTop=before;return {panelTop:r.top,panelBottom:r.bottom,panelHeight:r.height,viewportHeight:window.innerHeight,clientHeight:sc.clientHeight,scrollHeight:sc.scrollHeight,overflowY:cs.overflowY,canScroll:moved};})()";
+/** 面板的保存按钮是否可点（空白模板也应可点）。 */
+const PANEL_SAVE_ENABLED = (name) => "(function(){var s=" + PANEL(name) + ";if(s===null){return null;}var b=s.querySelector(" + q("[data-template-save]") + ");return b===null?null:!b.disabled;})()";
 /** 点某块面板里的「保存」按钮（按钮无 aria-label，按文案点）。 */
 const CLICK_PANEL_SAVE = (name) => "(function(){var s=" + PANEL(name) + ";if(s===null){return false;}var bs=s.querySelectorAll(" + q("button") + ");for(var i=0;i<bs.length;i++){if((bs[i].textContent||" + q("") + ").trim()===" + q("保存") + "){bs[i].click();return true;}}return false;})()";
 /** 按 aria-label 填输入框（React 受控输入：用原生 setter + input 事件）。 */
@@ -298,6 +300,7 @@ try {
   const namesAfterCreate = await ev(PANEL_NAMES);
   check("新面板插到最前（默认名「未命名模板」）", namesAfterCreate !== null && namesAfterCreate[0] === "未命名模板" && namesAfterCreate.length === baselineTotal + 1, flat(namesAfterCreate === null ? "" : namesAfterCreate.join(" / ")));
   check("新建模板自动进入编辑中（唯一编辑项）", (await ev(PANEL_STATUS("未命名模板"))) === "editing" && (await ev(EDITING_PANELS)).length === 1, String(await ev(PANEL_STATUS("未命名模板"))) + " / " + flat(await ev(EDITING_PANELS)));
+  check("空白模板的「保存」按钮可点", (await ev(PANEL_SAVE_ENABLED("未命名模板"))) === true, String(await ev(PANEL_SAVE_ENABLED("未命名模板"))));
   const created = afterCreate.json === null ? undefined : afterCreate.json.items.filter((item) => item.name === "未命名模板")[0];
   templateId = created === undefined ? "" : created.id;
   check("服务端那份是新模板（version 0 / nodes 空）", created !== undefined && created.version === 0 && created.nodes.length === 0, created === undefined ? "未找到" : JSON.stringify({ id: created.id, version: created.version, nodes: created.nodes.length }));

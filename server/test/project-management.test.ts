@@ -133,11 +133,20 @@ function makeRow(overrides: Partial<ProjectManagementRecordRow> = {}): ProjectMa
   };
 }
 
+class FakeAuditService {
+  records: unknown[] = [];
+
+  async record(_client: unknown, input: unknown): Promise<void> {
+    this.records.push(input);
+  }
+}
+
 function makeService(): {
   service: ProjectManagementService;
   repository: FakeProjectManagementRepository;
   managers: FakeManagerEligibility;
   snapshots: FakeProjectSnapshotRepository;
+  audits: FakeAuditService;
 } {
   const repository = new FakeProjectManagementRepository();
   const managers = new FakeManagerEligibility();
@@ -148,8 +157,16 @@ function makeService(): {
     { userId: ENGINEER_2_ID, username: "engineer2", displayName: "工程师丁", status: "active", removedAt: null },
     { userId: DISABLED_ID, username: "disabled", displayName: "停用丙", status: "disabled", removedAt: null },
   ];
-  const service = new ProjectManagementService(repository as never, managers as never, snapshots as never);
-  return { service, repository, managers, snapshots };
+  const audits = new FakeAuditService();
+  const database = { db: { transaction: async <T>(run: (tx: unknown) => Promise<T>): Promise<T> => run({}) } };
+  const service = new ProjectManagementService(
+    database as never,
+    repository as never,
+    managers as never,
+    snapshots as never,
+    audits as never,
+  );
+  return { service, repository, managers, snapshots, audits };
 }
 
 describe("项目管理阶段契约（2026-11-20）", () => {
@@ -366,6 +383,46 @@ describe("项目管理独立记录服务（2026-11-17）", () => {
     });
     expect(snapshots.calls).toContainEqual(["PM-001"]);
     expect(snapshots.calls).toContainEqual(["PM-404"]);
+  });
+
+  it("新增 / 修改 / 删除写项目管理审计，修改包含字段级变化", async () => {
+    const { service, audits } = makeService();
+    await service.create(
+      {
+        code: "PM-AUDIT",
+        name: "审计项目",
+        managerIds: [MANAGER_ID],
+        implementationMethod: "onsite_guidance",
+      },
+      MANAGER_ID,
+    );
+    await service.update(
+      RECORD_ID,
+      {
+        managerIds: [ENGINEER_ID],
+        implementationMethod: "installation_delivery",
+        version: 0,
+      },
+      MANAGER_ID,
+    );
+    await service.remove(RECORD_ID, 1, MANAGER_ID);
+
+    const records = audits.records as Array<{
+      action: string;
+      objectType: string;
+      objectId: string;
+      projectCode: string | null;
+      changes: Array<{ field: string; from: unknown; to: unknown }> | null;
+    }>;
+    expect(records.map((record) => record.action)).toEqual(["create", "update", "delete"]);
+    expect(records.every((record) => record.objectType === "project_management_record")).toBe(true);
+    expect(records[0]?.projectCode).toBe("PM-AUDIT");
+    expect(records[1]?.changes).toEqual(
+      expect.arrayContaining([
+        { field: "managerIds", from: ["经理甲"], to: ["工程师乙"] },
+        { field: "implementationMethod", from: "onsite_guidance", to: "installation_delivery" },
+      ]),
+    );
   });
 });
 

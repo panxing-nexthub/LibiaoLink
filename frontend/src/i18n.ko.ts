@@ -33,6 +33,8 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "pm.gantt.collapseAll": "모두 접기",
   "pm.gantt.conflictCount": "{n}건 중복",
   "pm.gantt.conflictHint": "{n}개 프로젝트가 {start}부터 {end}까지 중복",
+  "pm.gantt.historicalOverlapCount": "과거 {n}건 중복",
+  "pm.gantt.historicalOverlapHint": "{n}개 프로젝트가 {start}부터 {end}까지 중복됨(과거 이력, 현재 충돌에 포함되지 않음)",
   "pm.gantt.parallelHint": "{n}개 원격 프로젝트는 {start}부터 {end}까지 병행 가능",
   "pm.gantt.noDates": "일정 미정",
   "pm.gantt.empty": "표시할 프로젝트가 없습니다",

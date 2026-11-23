@@ -30,6 +30,7 @@ export const AUDIT_CHANGE_LINE_LIMIT = 12;
 /** 人（名字解析）字段：值为 users.id / users.id[]。 */
 const PERSON_FIELDS = new Set([
   "managerIds",
+  "implementationEngineerIds",
   "ownerIds",
   "ownerId",
   "userId",
@@ -66,6 +67,16 @@ const FIELD_LABELS: Record<string, string> = {
   issueCategories: "问题归类",
   kind: "类型",
   managerIds: "项目经理",
+  implementationEngineerIds: "实施工程师",
+  implementationHandedOver: "实施工程师状态",
+  implementationMethod: "实施方式",
+  currentStageOverride: "项目当前阶段",
+  startupCompletedAtOverride: "启动时间",
+  arrivalDateOverride: "到货日期",
+  plannedStartDateOverride: "计划实施开始",
+  plannedEndDateOverride: "计划实施完成",
+  implementationDaysOverride: "实施天数",
+  riskReminder: "风险提醒",
   name: "名称",
   nodes: "任务节点",
   note: "备注",
@@ -107,6 +118,22 @@ const FIELD_LABELS: Record<string, string> = {
 /** 按对象类型的字段特例（同名字段在不同对象上叫法不同）。 */
 const OBJECT_FIELD_LABELS: Record<string, Record<string, string>> = {
   project: { code: "项目编号", name: "项目名称", description: "备注", stageKey: "项目阶段" },
+  project_management_record: {
+    code: "项目编号",
+    name: "项目名称",
+    managerIds: "项目经理",
+    implementationEngineerIds: "实施工程师",
+    implementationHandedOver: "实施工程师状态",
+    implementationMethod: "实施方式",
+    riskReminder: "风险提醒",
+    region: "项目地点",
+    currentStageOverride: "项目当前阶段",
+    startupCompletedAtOverride: "启动时间",
+    arrivalDateOverride: "到货日期",
+    plannedStartDateOverride: "计划实施开始",
+    plannedEndDateOverride: "计划实施完成",
+    implementationDaysOverride: "实施天数",
+  },
   project_member: { userId: "成员", roleInProject: "项目角色" },
   task: { title: "任务名称", stageKey: "所属阶段", ownerIds: "任务负责人" },
   task_node: { title: "节点名称", stageKey: "所属阶段", seq: "节点序号" },
@@ -129,6 +156,9 @@ const STAGE_LABELS: Record<string, string> = {
   trial: "试运行",
   production: "投产阶段",
   acceptance: "验收",
+  not_started: "立项未启动",
+  archived: "已归档",
+  terminated: "终止",
 };
 
 /** 状态（文件生命周期 / 任务 / 项目 / 归档）。 */
@@ -171,6 +201,14 @@ const VALUE_LABELS: Record<string, Record<string, string>> = {
   roleInProject: { project_member: "项目成员" },
   companyType: { customer: "客户" },
   kind: { onsite: "现场", issue: "问题", change: "变更" },
+  implementationMethod: {
+    onsite_installation_guidance: "On-site 安装指导",
+    remote_installation_guidance: "Remote 安装指导",
+    installation_delivery: "安装交付",
+    remote_guidance: "远程-指导",
+    onsite_guidance: "现场-指导",
+  },
+  currentStageOverride: STAGE_LABELS,
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -280,6 +318,9 @@ export function auditObjectText(item: AuditLogItem, ctx: AuditFormatContext): st
     if (code !== undefined && code !== null) {
       return label + " · " + code;
     }
+  }
+  if (item.objectType === "project_management_record" && item.projectCode !== null) {
+    return label + " · " + item.projectCode;
   }
   return label;
 }

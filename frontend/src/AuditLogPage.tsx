@@ -1,4 +1,4 @@
-import { useMyPermissions } from "./permissions";
+import { canUseProjectManagement, useMyPermissions } from "./permissions";
 import { useEffect, useRef, useState } from "react";
 import { useLiveRefresh } from "./useLiveRefresh";
 import { keepLiveOrder } from "./liveSync";
@@ -188,7 +188,10 @@ export function AuditLogPage({ me, query, onChangeQuery, directory }: {
     value: action,
     label: auditLabelOf(AUDIT_ACTION_LABELS, action),
   }));
-  const objectTypeOptions = AUDIT_OBJECT_TYPES.map((type) => ({ value: type, label: auditLabelOf(AUDIT_OBJECT_TYPE_LABELS, type) }));
+  const canSeeProjectManagementAudit = canUseProjectManagement(me.user.email);
+  const objectTypeOptions = AUDIT_OBJECT_TYPES
+    .filter((type) => type !== "project_management_record" || canSeeProjectManagementAudit)
+    .map((type) => ({ value: type, label: auditLabelOf(AUDIT_OBJECT_TYPE_LABELS, type) }));
   const resultOptions = AUDIT_RESULTS.map((result) => ({ value: result, label: auditLabelOf(AUDIT_RESULT_LABELS, result) }));
   const projectOptions = projects.map((project) => ({ value: project.id, label: project.code + " · " + project.name }));
   const projectCodeById = new Map(projects.map((project) => [project.id, project.code] as const));

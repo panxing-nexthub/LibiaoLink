@@ -33,6 +33,8 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "pm.gantt.collapseAll": "すべて折りたたむ",
   "pm.gantt.conflictCount": "{n} 件重複",
   "pm.gantt.conflictHint": "{n} 件のプロジェクトが {start} から {end} まで重複",
+  "pm.gantt.historicalOverlapCount": "過去 {n} 件重複",
+  "pm.gantt.historicalOverlapHint": "{n} 件のプロジェクトが {start} から {end} まで重複（過去・現在の競合には含めません）",
   "pm.gantt.parallelHint": "{n} 件の遠隔プロジェクトは {start} から {end} まで並行可能",
   "pm.gantt.noDates": "未日程",
   "pm.gantt.empty": "表示できるプロジェクトはありません",

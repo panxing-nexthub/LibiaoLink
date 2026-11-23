@@ -962,6 +962,8 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "picker.aria": "日付範囲を選択",
   "picker.prevMonth": "前月",
   "picker.nextMonth": "翌月",
+  "picker.year": "年を選択",
+  "picker.month": "月を選択",
   "picker.clear": "クリア",
   "picker.ok": "OK",
   "region.selectAria": "プロジェクトの地域を選択",

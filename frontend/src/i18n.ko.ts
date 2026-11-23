@@ -962,6 +962,8 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "picker.aria": "날짜 범위 선택",
   "picker.prevMonth": "이전 달",
   "picker.nextMonth": "다음 달",
+  "picker.year": "연도 선택",
+  "picker.month": "월 선택",
   "picker.clear": "지우기",
   "picker.ok": "확인",
   "region.selectAria": "프로젝트 지역 선택",

@@ -58,7 +58,7 @@ npx vitest run test/project-ai-context.test.ts
 | 方法 | 路径 | 权限 | 行为 |
 |---|---|---|---|
 | GET | `/api/v1/projects/{id}/ai-context` | 登录 + 项目可见 | 只读聚合，不调模型 |
-| GET | `/api/v1/projects/{id}/ai-summary` | 登录 + 项目可见 | 读最近一次结果（不调模型）；未生成 404；`stale=true` 表示数据已变化 |
+| GET | `/api/v1/projects/{id}/ai-summary` | 登录 + 项目可见 | 读最近一次结果（不调模型）；未生成返回 404 `AI_SUMMARY_NOT_GENERATED`，属于正常空态，不写越权审计；`stale=true` 表示数据已变化 |
 | POST | `/api/v1/projects/{id}/ai-summary` | 额外要求 `project.export` | 生成；默认复用缓存，`force=true` 强制重生成 |
 | GET | `/api/v1/projects/{id}/document-analysis` | 登录 + 项目可见 | 最近 run + 当前文件版本成功摘要 |
 | POST | `/api/v1/projects/{id}/document-analysis` | 额外要求 `project.export` | 只排队，由独立 document-analysis worker 消费，不在 HTTP 内转换或调模型 |

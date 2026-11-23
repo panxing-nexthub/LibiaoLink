@@ -1447,11 +1447,11 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "get",
     path: "/api/v1/projects/{id}/ai-summary",
     tags: ["project-ai"],
-    summary: "最近一次 AI 项目总结（不调模型；未生成为 404，stale 表示数据已变化）",
+    summary: "最近一次 AI 项目总结（不调模型；未生成为 404 AI_SUMMARY_NOT_GENERATED，stale 表示数据已变化）",
     request: { params: idParams },
     responses: {
       200: { description: "AI 项目总结", ...json(ProjectAiSummarySchema) },
-      404: commonErrors[404],
+      404: errorResponse("尚未生成（AI_SUMMARY_NOT_GENERATED，正常空态）或项目不可见（NOT_FOUND）"),
     },
   });
 

@@ -17,6 +17,7 @@
   - h7 已接线写路径：项目创建 / 修改 / 归档（project）、名册增删（project_member）、任务创建 / 修改 / 进度（task）、节点新增 / 删除 / 完成与阶段推进 / 回退（node / stage）；门禁拒绝在 catch 内补写 `result=failed`。**Push 173 补口**：蓝图保存草稿 / 导入 / 发布（blueprint）+ 身份侧系统动作 —— 离职回收三动作、组织同步停用 / 启用 / 缺失策略（user · `entry=system`）。
   - 实现位置（Push 173）：`AuditService` / `AuditRepository` 迁至 `src/modules/audit/` —— admin 依赖 identity 守卫、identity 又要写审计，独立模块断环；`admin/index.ts` re-export 兼容，既有调用方零改动。
 - 越权留痕（C7-03）：全局异常过滤器（`common/errors/api-error.filter.ts`）在 403 与项目域 404 时经 `AUDIT_SINK` 令牌调用 `recordDenied()`（异步、失败只告警、不影响响应），落 `action=deny` + `result=denied`；路径 → 对象解析在 `common/audit/audit-path.ts`（纯函数，单测直测）。告警推送（企微）随 M5 通知模块。
+- 例外：`AI_SUMMARY_NOT_GENERATED` 是“项目可见但尚未生成总结”的正常空态，`shouldRecordDenied` 明确不记越权；真正的项目不可见仍由访问守卫返回 `NOT_FOUND` 并留痕。
 - 审计检索（C7-04 服务端）：GET /api/v1/audit-logs，所有登录账号可读；管理员全量，普通账号仅本人记录，项目经理另可见当前有效范围内本人担任项目经理的项目记录；按 objectType + objectId（按对象）、actorId（按人）、action / result / projectId / 时间区间筛选，occurredAt 降序（同毫秒按 id 降序）；`result=denied` 即越权尝试筛法。页面与导出随 u12（px 线）。
 - 权限：`dict.manage` 继续按功能权限位判定；`audit.view` 保留为契约兼容键，但操作记录接口不再依赖它，改由登录身份 + 服务端 `auditScope` 收敛。种子 `role-permissions.mjs` 的历史授权不变。
 

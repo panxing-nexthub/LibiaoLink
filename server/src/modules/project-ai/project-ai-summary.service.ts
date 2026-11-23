@@ -45,7 +45,7 @@ export class ProjectAiSummaryService {
     const context = await this.contexts.build(projectId, actorId);
     const sourceHash = hashProjectAiContext(context);
     const row = await this.repository.findLatest(projectId, PROJECT_AI_PROMPT_VERSION);
-    if (row === null) throw new AppError("NOT_FOUND", "尚未生成 AI 项目总结");
+    if (row === null) throw new AppError("AI_SUMMARY_NOT_GENERATED", "尚未生成 AI 项目总结");
     return this.toView(row, sourceHash);
   }
 

@@ -4485,6 +4485,7 @@
           "FORBIDDEN",
           "CSRF_FAILED",
           "NOT_FOUND",
+          "AI_SUMMARY_NOT_GENERATED",
           "VERSION_CONFLICT",
           "PROJECT_CODE_EXISTS",
           "PROJECT_ARCHIVED",
@@ -24273,7 +24274,7 @@
         "tags": [
           "project-ai"
         ],
-        "summary": "最近一次 AI 项目总结（不调模型；未生成为 404，stale 表示数据已变化）",
+        "summary": "最近一次 AI 项目总结（不调模型；未生成为 404 AI_SUMMARY_NOT_GENERATED，stale 表示数据已变化）",
         "parameters": [
           {
             "schema": {
@@ -24297,7 +24298,7 @@
             }
           },
           "404": {
-            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "description": "尚未生成（AI_SUMMARY_NOT_GENERATED，正常空态）或项目不可见（NOT_FOUND）",
             "content": {
               "application/json": {
                 "schema": {

@@ -199,6 +199,7 @@ describe("objectRefOfUrl / shouldRecordDenied（越权留痕 C7-03）", () => {
     expect(shouldRecordDenied("POST", "/api/v1/projects/" + UUID_PROJECT + "/visit", "CSRF_FAILED")).toBe(false);
     expect(shouldRecordDenied("GET", "/api/v1/projects/" + UUID_PROJECT, "NOT_FOUND")).toBe(true);
     expect(shouldRecordDenied("GET", "/api/v1/users", "NOT_FOUND")).toBe(false);
+    expect(shouldRecordDenied("GET", "/api/v1/projects/" + UUID_PROJECT + "/ai-summary", "AI_SUMMARY_NOT_GENERATED")).toBe(false);
     expect(shouldRecordDenied("POST", "/api/v1/dicts/region/items", "NOT_FOUND")).toBe(true);
     expect(shouldRecordDenied("GET", "/api/v1/users", "VALIDATION_FAILED")).toBe(false);
   });

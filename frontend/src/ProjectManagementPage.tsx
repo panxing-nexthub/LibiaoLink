@@ -1800,6 +1800,27 @@ const pmGanttResponsiveScale = (viewportWidth: number): number => {
   return Math.round((1 + (PM_GANTT_UI_MAX_SCALE - 1) * wideProgress) * 20) / 20;
 };
 
+/**
+ * 甘特响应式倍率只使用「页面纵向滚动条出现前后不变」的布局宽度。
+ * 根滚动条按需出现时 clientWidth 会少一截；若直接拿它算倍率，
+ * 会形成「倍率变小 -> 内容变矮 -> 滚动条消失 -> 倍率变大 -> 内容变高」的持续抽搐。
+ * 当前浏览器滚动条宽度可以从 window.innerWidth 与根 clientWidth 的差值还原。
+ */
+const pmGanttStableScaleWidth = (viewportWidth: number): number => {
+  if (
+    viewportWidth <= 0 ||
+    typeof window === "undefined" ||
+    typeof document === "undefined"
+  ) {
+    return viewportWidth;
+  }
+  const pageScrollbarWidth = Math.max(
+    0,
+    window.innerWidth - document.documentElement.clientWidth,
+  );
+  return viewportWidth + pageScrollbarWidth;
+};
+
 const pmGanttVisualMetricsOf = (scale: number) => {
   const px = (value: number): number => pmGanttScaledPx(value, scale);
   const cellSize = px(10);
@@ -2568,7 +2589,9 @@ function PmImplementationGantt({
     [ganttFilteredRows, directory, locale, handedOverLabel, unassignedLabel],
   );
   const [ganttViewportWidth, setGanttViewportWidth] = useState(0);
-  const ganttUiScale = pmGanttResponsiveScale(ganttViewportWidth);
+  const ganttUiScale = pmGanttResponsiveScale(
+    pmGanttStableScaleWidth(ganttViewportWidth),
+  );
   const ganttMetrics = pmGanttVisualMetricsOf(ganttUiScale);
   const ganttCssVariables = {
     "--pm-gantt-cell-size": `${ganttMetrics.cellSize}px`,

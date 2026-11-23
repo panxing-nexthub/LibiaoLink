@@ -40,7 +40,7 @@ import { DatabaseService } from "../../db/database.service.js";
 import { appendOutbox } from "../../db/outbox.js";
 import { hasUnfinishedTemporaryTask, isTemporaryTask } from "../../db/task-scope.js";
 import { AuditService, diffRecords } from "../admin/index.js";
-import { PermissionService, ProjectManagerEligibilityService, taskCapabilitiesOf, type ProjectAccessContext } from "../permission/index.js";
+import { PermissionService, ProjectManagerEligibilityService, projectManagerIdsChanged, taskCapabilitiesOf, type ProjectAccessContext } from "../permission/index.js";
 import { TaskNodeRepository, TemplateService } from "../template/index.js";
 import { clampSortIndex } from "./task.order.js";
 import { parseTaskListFilter, parseTaskSort, type TaskListQueryInput } from "./task.query.js";
@@ -265,12 +265,8 @@ export class TaskService {
       throw new AppError("VALIDATION_FAILED", "只有临时任务可在创建时同步到项目群");
     }
     const syncToGroup = body.syncToGroup === true;
-    const currentProject = await this.loadProjectForWrite(projectId, temporary);
-    const temporaryCreatorIsAdmin = temporary && await this.permission.canManageGroupAccess(actorId);
-    if (temporary && !temporaryCreatorIsAdmin && !currentProject.managerIds.includes(actorId)) {
-      throw new AppError("FORBIDDEN", "仅系统管理员或当前项目的项目经理可创建临时任务");
-    }
-    const selectedManagers = body.managerIds;
+    await this.loadProjectForWrite(projectId, temporary);
+    const selectedManagers = body.managerIds?.map((id) => id.toLowerCase());
     if (temporary) {
       if (selectedManagers === undefined || selectedManagers.length === 0) {
         throw new AppError("VALIDATION_FAILED", "请选择至少一位项目经理");
@@ -319,9 +315,7 @@ export class TaskService {
       // 指定位次时先锁任务分组，与单条重排保持相同的加锁顺序。
       if (body.sortIndex !== undefined) await this.repository.listGroupOrder(projectId, stageKey, tx, true);
       const project = await this.loadProjectForWrite(projectId, temporary, tx);
-      if (temporary && !temporaryCreatorIsAdmin && !project.managerIds.includes(actorId)) {
-        throw new AppError("FORBIDDEN", "仅系统管理员或当前项目的项目经理可创建临时任务");
-      }
+      if (temporary) await this.permission.assertCanManageProjectManagers(actorId, project, tx);
       if (syncToGroup) {
         const group = await this.repository.findGroupBinding(projectId, tx);
         if (group === null) {
@@ -873,20 +867,22 @@ export class TaskService {
     }
     const temporary = isTemporaryTask(before);
     const project = await this.loadProjectForWrite(projectId, batchId === null && temporary && before.status !== "done", tx);
+    const currentManagerIds = temporary ? before.managerIds : project.managerIds;
+    const nextManagers = request.managerIds !== undefined && projectManagerIdsChanged(currentManagerIds, request.managerIds)
+      ? request.managerIds.map((id) => id.toLowerCase())
+      : undefined;
     if (projectAccess !== null) {
       const capabilities = this.assertTaskWriteAllowed(actorId, projectAccess, before, allowTaskOwner);
       const ownersChanged =
         request.ownerIds !== undefined && request.ownerIds.join("\u0000") !== before.ownerIds.join("\u0000");
-      const managersTouched = request.managerIds !== undefined;
       const sortChanged = request.sortIndex !== undefined && request.sortIndex !== before.sortIndex;
-      if (capabilities.source === "task_owner" && (ownersChanged || managersTouched || sortChanged)) {
+      if (capabilities.source === "task_owner" && (ownersChanged || nextManagers !== undefined || sortChanged)) {
         throw new AppError("FORBIDDEN", "任务负责人不能修改负责人、项目经理或任务排序");
       }
-      if (request.managerIds !== undefined) {
-        await this.managerEligibility.assertAssignable(request.managerIds, {
-          existingUserIds: temporary ? before.managerIds : project.managerIds,
-        });
-      }
+    }
+    if (nextManagers !== undefined) {
+      await this.permission.assertCanManageProjectManagers(actorId, project, tx);
+      await this.managerEligibility.assertAssignable(nextManagers, { existingUserIds: currentManagerIds });
     }
     this.assertTaskMutable(before);
     if (request.expectedVersion !== null && before.version !== request.expectedVersion) {
@@ -920,7 +916,7 @@ export class TaskService {
       title: request.title !== undefined ? request.title : before.title,
       titleEn: request.titleEn !== undefined ? request.titleEn : before.titleEn,
       ownerIds: request.ownerIds !== undefined ? request.ownerIds : before.ownerIds,
-      managerIds: request.managerIds !== undefined ? request.managerIds : before.managerIds,
+      managerIds: nextManagers ?? before.managerIds,
       status: linked === null ? before.status : linked.status,
       statusOverride: linked === null ? before.statusOverride : linked.statusOverride,
       progress: String(linked === null ? current.progress : linked.progress),
@@ -969,21 +965,18 @@ export class TaskService {
       changes: changes.length > 0 ? changes : null,
       metadata: batchId === null ? undefined : { entry: "batch", batchId },
     });
-    const nextManagers = request.managerIds;
     if (!temporary && nextManagers !== undefined) {
       await this.repository.replaceProjectManagersExceptTask(projectId, taskId, nextManagers, at, tx);
-      if (nextManagers.join("\u0000") !== project.managerIds.join("\u0000")) {
-        await this.audit.record(tx, {
-          actorId,
-          action: "update",
-          objectType: "project",
-          objectId: projectId,
-          projectId,
-          summary: "修改项目级项目经理（任务表入口）",
-          changes: [{ field: "managerIds", from: project.managerIds, to: nextManagers }],
-          metadata: { entry: "task_managers", scope: "project" },
-        });
-      }
+      await this.audit.record(tx, {
+        actorId,
+        action: "update",
+        objectType: "project",
+        objectId: projectId,
+        projectId,
+        summary: "修改项目级项目经理（任务表入口）",
+        changes: [{ field: "managerIds", from: project.managerIds, to: nextManagers }],
+        metadata: { entry: "task_managers", scope: "project" },
+      });
     }
     return updated;
   }

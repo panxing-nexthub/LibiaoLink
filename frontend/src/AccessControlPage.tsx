@@ -268,12 +268,14 @@ function buildPreviewRows(
   const ownLevel = manualLevelOf(effective.manual, "own");
   const selectedLevel = manualLevelOf(effective.manual, "selected");
   const selectedIds = new Set(effective.manual.projectIds);
-  const ids = effective.visibleProjectIds.slice(0, 12);
+  const viewGrants = new Set(effective.projectViewGrantIds);
+  const ids = [...new Set([...viewGrants, ...effective.visibleProjectIds])].slice(0, Math.max(12, viewGrants.size));
   return ids.map((projectId) => {
     const sources: string[] = [];
     if (manager.has(projectId)) sources.push(t("access.sourceAutoManager"));
     if (member.has(projectId)) sources.push(t("access.sourceAutoMember"));
     if (taskOwner.has(projectId)) sources.push(t("access.sourceAutoTask"));
+    if (viewGrants.has(projectId)) sources.push(t("access.sourceProjectViewGrant"));
     let manualLevel: "edit" | "view" | null = null;
     if (allLevel !== null) manualLevel = allLevel;
     if (ownLevel !== null && (manager.has(projectId) || member.has(projectId))) manualLevel = manualLevel === "edit" ? manualLevel : ownLevel;
@@ -404,6 +406,15 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
   const allGroups = data?.groups ?? [];
   const groupsByKey = useMemo(() => new Map(allGroups.map((group) => [group.groupKey, group] as const)), [allGroups]);
   const rolesById = useMemo(() => data === null ? new Map() : automaticRolesById(data), [data]);
+  const viewGrantsByUser = useMemo(() => {
+    const byUser = new Map<string, string[]>();
+    for (const { userId, projectId } of data?.projectViewGrants ?? []) {
+      const ids = byUser.get(userId) ?? [];
+      ids.push(projectId);
+      byUser.set(userId, ids);
+    }
+    return byUser;
+  }, [data]);
   const projectsById = useMemo(() => data === null ? new Map() : projectById(data.projects), [data]);
   const adminByUserId = useMemo(() => new Map((data?.admins ?? []).map((admin) => [admin.userId, admin] as const)), [data]);
 
@@ -462,7 +473,7 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
   const personalAutomatic = personalMember === null ? null : automaticRoleOf(rolesById, personalMember.userId);
   const personalEffective = personalMember === null || personalAutomatic === null || data === null
     ? null
-    : effectiveMemberPermission(data, personalMember.userId, personalAutomatic, personalAdmin !== null);
+    : effectiveMemberPermission(data, personalMember.userId, personalAutomatic, personalAdmin !== null, viewGrantsByUser.get(personalMember.userId) ?? []);
   const personalPreview = personalEffective === null ? [] : buildPreviewRows(personalEffective, projectsById, t);
   const personalManual = personalEffective?.manual ?? null;
   const personalGroups = personalMember === null || data === null ? [] : data.groups.filter((group) => group.members.some((member) => member.userId === personalMember.userId));
@@ -872,7 +883,7 @@ export function AccessControlPage({ me }: { me: MeResponse }) {
                           <div className="divide-y divide-zinc-100">
                             {(showAllMembers ? selectedMembers : selectedMembers.slice(0, 8)).map((member) => {
                               const automatic = automaticRoleOf(rolesById, member.userId);
-                              const effective = effectiveMemberPermission(data, member.userId, automatic, adminByUserId.has(member.userId));
+                              const effective = effectiveMemberPermission(data, member.userId, automatic, adminByUserId.has(member.userId), viewGrantsByUser.get(member.userId) ?? []);
                               const personal = memberRuleOf(selectedGroup, member.userId);
                               return (
                                 <div key={member.userId} className="px-4 py-3 transition hover:bg-zinc-50/70 xl:grid xl:grid-cols-[minmax(150px,1.2fr)_minmax(190px,1.35fr)_minmax(140px,1fr)_96px_104px] xl:items-center xl:gap-3">

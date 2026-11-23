@@ -31,8 +31,9 @@ export const ProjectSchema = z
       description: "项目经理姓名数组：服务端按 managerIds 解析后随行下发，与 managerIds 同下标一一对应（列表 / 详情 / 创建与编辑返回均含，免前端二次查目录）；人员停用 / 离职后仍返回姓名，取不到时该位为 null（前端显示「—」）",
     }),
     accessLevel: GroupAccessAccessLevelSchema.openapi({
-      description: "当前登录账号对该项目的最终有效访问级别：edit = 可执行项目级写操作 / view = 仅浏览。管理员、所管本项目的项目经理或部门 / 个人规则命中 edit 时为 edit；项目成员、任务负责人关系仅保证浏览，且项目经理身份不外溢到其他项目",
+      description: "当前登录账号对该项目的最终有效访问级别：edit = 可执行项目级写操作 / view = 仅浏览。管理员、所管本项目的项目经理或部门 / 个人规则命中 edit 时为 edit；项目成员、任务负责人及项目只读授权仅保证浏览，且项目经理身份不外溢到其他项目",
     }),
+    canManageProjectManagers: z.boolean().optional().describe("项目列表与工作台的经理任命能力，仅本项目经理或系统管理员为 true"),
     stageKey: StageKeySchema,
     status: ProjectStatusSchema,
     groupAccessLevel: GroupAccessAccessLevelSchema.openapi({ description: "旧客户端兼容字段：当前与 accessLevel 同值下发；项目级写入口统一以 accessLevel 为准" }),
@@ -56,6 +57,36 @@ export const ProjectSchema = z
     }),
   })
   .openapi("Project", { description: "项目（v0.2 §2.3 projects）" });
+
+export const ProjectDetailSchema = ProjectSchema.extend({
+  canManageViewGrants: z.boolean().describe("当前账号是本项目经理，可管理本项目的只读授权"),
+}).openapi("ProjectDetail");
+
+export const PROJECT_VIEW_GRANT_BATCH_LIMIT = 300;
+
+export const ProjectViewGrantPreviewBodySchema = z.object({
+  text: z.string().trim().min(1).max(20000).describe("企微复制的群成员名单"),
+}).openapi("ProjectViewGrantPreviewBody");
+
+export const ProjectViewGrantPreviewSchema = z.object({
+  items: z.array(z.object({
+    text: z.string(),
+    status: z.enum(["matched", "confirm", "unmatched"]),
+    candidates: z.array(UserSummarySchema),
+  })),
+}).openapi("ProjectViewGrantPreview");
+
+export const ProjectViewGrantAddBodySchema = z.object({
+  userIds: z.array(UuidSchema).min(1).max(PROJECT_VIEW_GRANT_BATCH_LIMIT),
+}).openapi("ProjectViewGrantAddBody");
+
+export const ProjectViewGrantAddResultSchema = z.object({
+  added: z.number().int().nonnegative(),
+}).openapi("ProjectViewGrantAddResult");
+
+export const ProjectViewGrantListSchema = z.object({
+  items: z.array(z.object({ user: UserSummarySchema, createdAt: DateTimeSchema })),
+}).openapi("ProjectViewGrantList");
 
 /**
  * 项目经理候选：有效项目部成员 ∪ 有效系统管理员。

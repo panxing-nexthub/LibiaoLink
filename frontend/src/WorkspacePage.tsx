@@ -409,7 +409,7 @@ function TaskTable({ projectId, project, items, tierTint, members, managerMember
                     onSetStatus={handlers === undefined ? undefined : (status) => { handlers.onSetStatus(projectId, task.id, status); }}
                     onSetActualEnd={handlers === undefined ? undefined : (iso) => { handlers.onSetActualEnd(projectId, task.id, iso); }}
                     onChangeManagers={handlers === undefined ? undefined : (taskId, managerIds) => { handlers.onChangeManagers(projectId, taskId, managerIds); }}
-                    canEditManagers={project?.accessLevel === "edit"}
+                    canEditManagers={project?.canManageProjectManagers === true}
                     onPatch={handlers === undefined ? undefined : (patch) => { handlers.onPatch(projectId, task.id, patch); }}
                     onUploadFiles={handlers === undefined ? undefined : (taskId, files, onProgress, finalize) => handlers.onUploadFiles(projectId, taskId, files, onProgress, finalize)}
                     onDeleteFile={handlers?.onDeleteFile}
@@ -663,7 +663,7 @@ function MyTasksView({ data, tierTint, openIds, onToggleProject, members, manage
   const allTasks = [...data.myTasks.overdue, ...data.myTasks.today, ...data.myTasks.upcoming, ...data.myTasks.unscheduled];
   const taskById = new Map(allTasks.map((task) => [task.id, task]));
   const projectById = new Map(data.projects.map((project) => [project.id, project]));
-  /** 项目编辑者：只用于项目级入口（新增成果类型 / 项目经理 / 成员）；任务写入口由逐任务 capabilities 收敛。 */
+  /** 普通项目级写入口继续由 edit 裁决，经理任命使用项目随行能力。 */
   const canEditProject = (projectId: string): boolean => projectById.get(projectId)?.accessLevel === "edit";
   /** 自定义成果类型是项目级写操作：项目编辑者可新增；服务端仍作最终裁决。 */
   const deliverableTypeCreatorFor = (projectId: string): ((name: string) => Promise<string | null>) | undefined => {
@@ -922,7 +922,6 @@ function MyTasksView({ data, tierTint, openIds, onToggleProject, members, manage
   };
 
   const drawerProject = drawerTask === null ? undefined : projectById.get(drawerTask.projectId);
-  const drawerProjectEditable = drawerProject?.accessLevel === "edit";
   const drawerCanFinalize = drawerTask !== null && taskCapabilitiesOf(drawerTask.task).canFinalize && hasOutputDeliverables(drawerTask.task);
 
   return (
@@ -958,7 +957,7 @@ function MyTasksView({ data, tierTint, openIds, onToggleProject, members, manage
       <TaskDrawer
         task={drawerTask?.task ?? null}
         canFinalize={drawerCanFinalize}
-        canEditManagers={drawerProjectEditable}
+        canEditManagers={drawerProject?.canManageProjectManagers === true}
         members={members}
         managerMembers={managerMembers}
         onSubmit={handleDrawerSubmit}

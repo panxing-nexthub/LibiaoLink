@@ -14,7 +14,7 @@ import { DatabaseService } from "../src/db/database.service.js";
 import { FlowService } from "../src/modules/project/flow.service.js";
 import type { AuditService } from "../src/modules/admin/index.js";
 import type { ObjectStorage } from "../src/storage/index.js";
-import type { PermissionService, ProjectManagerEligibilityService } from "../src/modules/permission/index.js";
+import type { PermissionService, ProjectManagerEligibilityService, ProjectScopeFilter } from "../src/modules/permission/index.js";
 
 const AT = new Date("2026-09-20T06:00:00.000Z");
 const DAY_MS = 86_400_000;
@@ -124,9 +124,9 @@ class FakeProjectRepository {
     return this.visible(id);
   }
 
-  async listMapOverview(): Promise<ProjectMapOverviewRow[]> {
+  async listMapOverview(scope: ProjectScopeFilter): Promise<ProjectMapOverviewRow[]> {
     return this.rows
-      .filter((view) => view.project.deletedAt === null)
+      .filter((view) => view.project.deletedAt === null && (scope.kind === "all" || scope.ids.includes(view.project.id)))
       .map((view) => ({
         id: view.project.id,
         code: view.project.code,
@@ -291,11 +291,22 @@ class FakePermissionService {
     return this.overviewAllowed;
   }
 
+  async assertCanManageProjectManagers(actorId: string, project: ProjectRow): Promise<void> {
+    if (!this.adminIds.includes(actorId) && !project.managerIds.includes(actorId)) {
+      throw new AppError("FORBIDDEN", "仅经理或管理员可变更项目经理");
+    }
+  }
+
   async projectGroupAccessLevelsOf(
     _actorId: string,
     projectIds: readonly string[],
   ): Promise<Map<string, "edit" | "view">> {
     return new Map(projectIds.map((projectId) => [projectId, this.levels.get(projectId) ?? "edit"]));
+  }
+
+  async projectAccessSummariesOf(actorId: string, projectIds: readonly string[]) {
+    const levels = await this.projectGroupAccessLevelsOf(actorId, projectIds);
+    return new Map([...levels].map(([projectId, accessLevel]) => [projectId, { accessLevel, canManageProjectManagers: false }]));
   }
 }
 
@@ -675,7 +686,10 @@ describe("ProjectService（M2-01 项目 CRUD + 项目回收站）", () => {
     ]);
 
     permission.overviewAllowed = false;
-    await expectAppErrorAsync(() => service.listProjectMapOverview({ kind: "all" }, UUID_A), "FORBIDDEN");
+    const shared = await service.listProjectMapOverview({ kind: "ids", ids: [UUID_B] }, UUID_A);
+    expect(shared.total).toBe(1);
+    expect(shared.items.map((item) => [item.id, item.accessLevel])).toEqual([[UUID_B, "view"]]);
+    await expectAppErrorAsync(() => service.listProjectMapOverview({ kind: "ids", ids: [] }, UUID_A), "FORBIDDEN");
   });
 
   it("列表：普通栏排除回收站；项目回收站只返回已软删项目", async () => {

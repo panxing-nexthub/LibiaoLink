@@ -11,6 +11,8 @@ export function changedResources(method: string, url: string): LiveResource[] {
   if (!["POST", "PATCH", "PUT", "DELETE"].includes(method)) return [];
   const path = url.split("?")[0] ?? "";
   if (/^\/api\/v1\/projects(?:\/|$)/.test(path)) {
+    if (path.endsWith("/view-grants/preview")) return [];
+    if (/\/view-grants(?:\/|$)/.test(path)) return ["permissions", "projects", "tasks", "audit"];
     if (/\/(?:exports|can-complete|can-advance)(?:\/|$)/.test(path)) return [];
     if (/\/deliverable-types(?:\/|$)/.test(path)) return ["dicts", "projects", "tasks"];
     if (/\/reports(?:\/|$)/.test(path)) return ["reports", "issues", "tasks", "projects"];

@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { DeliverableTypeSchema, PRIORITY_VALUES } from "@libiaolink/contracts";
 import type { WorkspaceIssueItem, WorkspaceProject, WorkspaceResponse, WorkspaceTaskItem } from "@libiaolink/contracts";
-import { PermissionService, taskCapabilitiesOf } from "../permission/index.js";
+import { PermissionService, taskCapabilitiesOf, type ProjectAccessSummary } from "../permission/index.js";
 import { deriveDisplayStatus, deriveOnTime, shanghaiToday, type TaskDerivationInput } from "../task/index.js";
 import { WorkspaceRepository, type WorkspaceIssueRow, type WorkspaceProjectRow, type WorkspaceTaskRow } from "./workspace.repository.js";
 import { emptyTaskGroups, taskGroupOf } from "./workspace.rules.js";
@@ -30,15 +30,15 @@ export class WorkspaceService {
       this.repository.listMyIssues(actorId, scope),
     ]);
     const projectIds = uniqueProjectIds(taskRows, issueRows);
-    const accessLevels = await this.permission.projectGroupAccessLevelsOf(actorId, projectIds);
+    const projectAccess = await this.permission.projectAccessSummariesOf(actorId, projectIds);
     const myTasks = emptyTaskGroups<WorkspaceTaskItem>();
     for (const row of taskRows) {
-      const accessLevel = accessLevels.get(row.projectId) ?? "view";
+      const accessLevel = projectAccess.get(row.projectId)?.accessLevel ?? "view";
       myTasks[taskGroupOf(row.plannedEnd, today)].push(
         toTaskItem(row, today, taskCapabilitiesOf(actorId, { accessLevel }, row.ownerIds)),
       );
     }
-    const projects = await this.loadProjects(taskRows, issueRows, accessLevels);
+    const projects = await this.loadProjects(projectIds, projectAccess);
     return {
       today,
       myTasks,
@@ -52,18 +52,16 @@ export class WorkspaceService {
 
   /** 聚合涉及的项目卡：按任务组顺序 → 问题栏顺序的首次出现去重；取不到的 id 跳过（项目已被软删）。 */
   private async loadProjects(
-    taskRows: readonly WorkspaceTaskRow[],
-    issueRows: readonly WorkspaceIssueRow[],
-    accessLevels: ReadonlyMap<string, "edit" | "view">,
+    projectIds: string[],
+    projectAccess: ReadonlyMap<string, ProjectAccessSummary>,
   ): Promise<WorkspaceProject[]> {
-    const projectIds = uniqueProjectIds(taskRows, issueRows);
     const rows = await this.repository.listProjects(projectIds);
     const byId = new Map(rows.map((row) => [row.id, row]));
     const projects: WorkspaceProject[] = [];
     for (const projectId of projectIds) {
       const row = byId.get(projectId);
       if (row !== undefined) {
-        projects.push(toProjectItem(row, accessLevels.get(row.id) ?? "view"));
+        projects.push(toProjectItem(row, projectAccess.get(row.id)));
       }
     }
     return projects;
@@ -163,8 +161,9 @@ function toIssueItem(row: WorkspaceIssueRow): WorkspaceIssueItem {
 /** 行 → 契约项目卡（ProjectSchema + managerNames；时间戳转 ISO8601；权限按当前登录人裁决）。 */
 function toProjectItem(
   row: WorkspaceProjectRow,
-  accessLevel: WorkspaceProject["accessLevel"],
+  access: ProjectAccessSummary | undefined,
 ): WorkspaceProject {
+  const accessLevel = access?.accessLevel ?? "view";
   return {
     id: row.id,
     code: row.code,
@@ -180,6 +179,7 @@ function toProjectItem(
     status: row.status as WorkspaceProject["status"],
     accessLevel,
     groupAccessLevel: accessLevel,
+    canManageProjectManagers: access?.canManageProjectManagers === true,
     description: row.description,
     version: row.version,
     createdAt: row.createdAt.toISOString(),

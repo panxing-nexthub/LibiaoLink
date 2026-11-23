@@ -26,8 +26,8 @@ export class ProjectMemberRepository {
   constructor(private readonly database: DatabaseService) {}
 
   /** 名册列表：项目经理在前（project_manager < project_member），同角色按工号升序（稳定序）。 */
-  async listByProject(projectId: string): Promise<ProjectMemberViewRow[]> {
-    return this.database.db
+  async listByProject(projectId: string, client: DbClient = this.database.db): Promise<ProjectMemberViewRow[]> {
+    return client
       .select(memberColumns)
       .from(projectMembers)
       .innerJoin(users, eq(users.id, projectMembers.userId))
@@ -35,8 +35,8 @@ export class ProjectMemberRepository {
       .orderBy(asc(projectMembers.roleInProject), asc(users.username));
   }
 
-  async findByProjectAndUser(projectId: string, userId: string): Promise<ProjectMemberViewRow | null> {
-    const rows = await this.database.db
+  async findByProjectAndUser(projectId: string, userId: string, client: DbClient = this.database.db): Promise<ProjectMemberViewRow | null> {
+    const rows = await client
       .select(memberColumns)
       .from(projectMembers)
       .innerJoin(users, eq(users.id, projectMembers.userId))

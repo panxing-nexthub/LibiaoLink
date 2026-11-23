@@ -1,6 +1,6 @@
 /** permission 模块唯一公开出口（跨模块只允许 import 本文件；ADR-011 / g6）。 */
 export { PermissionModule } from "./permission.module.js";
-export { PermissionService } from "./permission.service.js";
+export { PermissionService, type ProjectAccessSummary } from "./permission.service.js";
 export { PermissionController } from "./permission.controller.js";
 export { ProjectAccessGuard, ProjectAccess, AllowDeletedProjectAccess, RequirePermission, ProjectScope, CurrentProjectAccess } from "./project-access.guard.js";
 export { GroupAccessGuard, GroupAccessAdminGuard, RequireAccessPage } from "./group-access.guard.js";
@@ -15,6 +15,7 @@ export {
   canManageTaskFinalization,
   canSeeField,
   isProjectEditor,
+  projectManagerIdsChanged,
   taskCapabilitiesOf,
   exitsConsistent,
   hiddenFields,

@@ -349,6 +349,7 @@ class FakePermissionRepository {
   ownedIds: string[] = [];
   managedRosterIds: string[] = [];
   taskOwnerProjectIds: string[] = [];
+  viewGrantIds: string[] = [];
   refs = new Map<string, { managerIds: string[]; deletedAt: Date | null }>();
   memberships = new Map<string, string>();
   groupKeys: string[] = [];
@@ -375,6 +376,14 @@ class FakePermissionRepository {
 
   async listRelatedProjectIds(): Promise<string[]> {
     return [...new Set([...this.memberIds, ...this.ownedIds, ...this.managedRosterIds, ...this.taskOwnerProjectIds])];
+  }
+
+  async listProjectViewGrantIds(): Promise<string[]> {
+    return this.viewGrantIds;
+  }
+
+  async hasProjectViewGrant(_actorId: string, projectId: string): Promise<boolean> {
+    return this.viewGrantIds.includes(projectId);
   }
 
   async hasTaskOwnership(_actorId: string, projectId: string): Promise<boolean> {
@@ -690,6 +699,29 @@ describe("Pro 逐人权限：所管项目经理可编辑、成员只读、本人
     expect(access).toMatchObject({ projectManager: true, groupAccessLevel: null, accessLevel: "edit" });
     await service.assertCan(ACTOR_ID, "project.update", access);
     await service.assertCan(ACTOR_ID, "project.export", access);
+  });
+
+  it("项目只读授权追加可见性并实时撤销，不改变另一个项目的编辑权", async () => {
+    const repository = new FakePermissionRepository();
+    repository.refs.set(PROJECT_ID, { managerIds: [ACTOR_ID], deletedAt: null });
+    repository.refs.set(OTHER_PROJECT, { managerIds: [MANAGER_ID], deletedAt: null });
+    repository.ownedIds = [PROJECT_ID];
+    repository.viewGrantIds = [OTHER_PROJECT];
+    const { service } = makeService([fullCapabilityAuthorization(ACTOR_ID)], repository, config);
+
+    expect(await service.projectScope(ACTOR_ID)).toEqual({ kind: "ids", ids: [PROJECT_ID, OTHER_PROJECT] });
+    expect(await service.projectAccessSummariesOf(ACTOR_ID, [PROJECT_ID, OTHER_PROJECT])).toEqual(new Map([
+      [PROJECT_ID, { accessLevel: "edit", canManageProjectManagers: true }],
+      [OTHER_PROJECT, { accessLevel: "view", canManageProjectManagers: false }],
+    ]));
+    const shared = await service.assertProjectVisible(ACTOR_ID, OTHER_PROJECT);
+    expect(shared).toMatchObject({ projectManager: false, member: false, accessLevel: "view" });
+    await expectAppError(() => service.assertCan(ACTOR_ID, "project.update", shared), "FORBIDDEN");
+    await service.assertCan(ACTOR_ID, "project.update", await service.assertProjectVisible(ACTOR_ID, PROJECT_ID));
+
+    repository.viewGrantIds = [];
+    expect(await service.resolveProjectAccess(ACTOR_ID, OTHER_PROJECT)).toBeNull();
+    expect(await service.projectScope(ACTOR_ID)).toEqual({ kind: "ids", ids: [PROJECT_ID] });
   });
 
   it("项目经理编辑权只限所管项目：非所管项目仍按规则只读", async () => {

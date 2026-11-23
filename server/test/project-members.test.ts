@@ -11,7 +11,7 @@ import { ProjectMemberService, toProjectMemberView } from "../src/modules/projec
 import type { ProjectRepository, ProjectViewRow } from "../src/modules/project/project.repository.js";
 import type { DatabaseService } from "../src/db/database.service.js";
 import type { AuditService } from "../src/modules/admin/index.js";
-import type { ProjectManagerEligibilityService } from "../src/modules/permission/index.js";
+import type { PermissionService, ProjectManagerEligibilityService } from "../src/modules/permission/index.js";
 
 const AT = new Date("2026-09-20T06:00:00.000Z");
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
@@ -96,6 +96,10 @@ class FakeProjectRepository {
     return this.project !== null && this.project.project.id === id ? this.project : null;
   }
 
+  async lockRowById(id: string): Promise<ProjectViewRow["project"] | null> {
+    return (await this.findViewById(id))?.project ?? null;
+  }
+
   async touch(id: string, at: Date): Promise<void> {
     this.touched.push({ id, at });
   }
@@ -103,6 +107,10 @@ class FakeProjectRepository {
 
 class FakeProjectManagerEligibilityService {
   eligible = new Set<string>([UUID_MANAGER, UUID_MEMBER]);
+
+  async eligibleUserIds(): Promise<Set<string>> {
+    return this.eligible;
+  }
 
   async assertAssignable(
     managerIds: readonly string[],
@@ -187,6 +195,11 @@ function makeService(options: { status?: string; members?: ProjectMemberViewRow[
     managerEligibility as unknown as ProjectManagerEligibilityService,
     new FakeUserService() as unknown as UserService,
     new FakeAuditService() as unknown as AuditService,
+    {
+      async assertCanManageProjectManagers(actorId: string) {
+        if (actorId !== UUID_MANAGER) throw new AppError("FORBIDDEN", "仅经理可变更项目经理");
+      },
+    } as unknown as PermissionService,
   );
   return { service, members, projects, managerEligibility };
 }
@@ -239,6 +252,21 @@ describe("ProjectMemberService（M2-05 名册）", () => {
     expect(updated.roleInProject).toBe("project_manager");
     expect(updated.joinedAt).toBe("2026-09-20T06:00:00.000Z");
     expect(members.rows).toHaveLength(1);
+  });
+
+  it("项目普通编辑者可维护普通成员，但不能任命、降级或移除名册经理", async () => {
+    const { service, members } = makeService({
+      members: [memberRow({ userId: UUID_MANAGER, roleInProject: "project_manager" })],
+    });
+    await service.addMember(PROJECT_ID, { userId: UUID_MEMBER }, UUID_MEMBER);
+    await expectAppErrorAsync(
+      () => service.addMember(PROJECT_ID, { userId: UUID_MEMBER, roleInProject: "project_manager" }, UUID_MEMBER),
+      "FORBIDDEN",
+    );
+    await expectAppErrorAsync(() => service.addMember(PROJECT_ID, { userId: UUID_MANAGER }, UUID_MEMBER), "FORBIDDEN");
+    await expectAppErrorAsync(() => service.removeMember(PROJECT_ID, UUID_MANAGER, UUID_MEMBER), "FORBIDDEN");
+    await service.removeMember(PROJECT_ID, UUID_MEMBER, UUID_MEMBER);
+    expect(members.rows.map((row) => [row.member.userId, row.member.roleInProject])).toEqual([[UUID_MANAGER, "project_manager"]]);
   });
 
   it("新增 / 升级为项目经理：非候选 400，不写名册、不 touch", async () => {

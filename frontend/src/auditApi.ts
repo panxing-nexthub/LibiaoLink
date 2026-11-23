@@ -15,7 +15,7 @@ export const AUDIT_ACTIONS = ["create", "update", "delete", "progress", "complet
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 /** 审计对象类型（与契约 AUDIT_OBJECT_TYPES 同口径）。 */
-export const AUDIT_OBJECT_TYPES = ["project", "project_member", "task", "node", "stage", "dict_item", "blueprint", "calendar_day", "calendar_settings", "file", "change", "stakeholder", "daily_report", "issue", "task_node", "task_template", "user", "wecom_dm_binding", "automation_rule", "notify_delivery", "group_access_rule", "group_access_admin", "task_node_reviewer_roster", "ai_model_provider", "project_ai_summary"];
+export const AUDIT_OBJECT_TYPES = ["project", "project_member", "project_view_grant", "task", "node", "stage", "dict_item", "blueprint", "calendar_day", "calendar_settings", "file", "change", "stakeholder", "daily_report", "issue", "task_node", "task_template", "user", "wecom_dm_binding", "automation_rule", "notify_delivery", "group_access_rule", "group_access_admin", "task_node_reviewer_roster", "ai_model_provider", "project_ai_summary"];
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
 
 /** 审计结果：成功 / 越权拒绝（C7-03）/ 失败（门禁拒绝等）。 */
@@ -40,6 +40,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
 export const AUDIT_OBJECT_TYPE_LABELS: Record<string, string> = {
   project: "项目",
   project_member: "项目名册",
+  project_view_grant: "项目只读授权",
   task: "任务",
   node: "节点",
   stage: "阶段",

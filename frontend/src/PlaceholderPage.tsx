@@ -67,6 +67,33 @@ function nodeNameKey(text: string): string {
   return text.trim().replace(/ {2,}/g, " ");
 }
 
+/**
+ * 官方产品名（业务口径 2026-10-13 / 2026-11-24 复核）：节点名里出现这些产品词时固定用官方英文名，
+ * 不交给机翻自由发挥；项目类型码 / 字典码仍保持原值（T-sort / 3D分拣 / 飞箱）。
+ */
+const PRODUCT_NAME_TERMS: ReadonlyArray<{ readonly zh: string; readonly en: string }> = [
+  { zh: "T-sort", en: "T-Sort" },
+  { zh: "T-Sort", en: "T-Sort" },
+  { zh: "T型分拣", en: "T-Sort" },
+  { zh: "T型分选", en: "T-Sort" },
+  { zh: "3D分拣", en: "3D Sorting" },
+  { zh: "3D分选", en: "3D Sorting" },
+  { zh: "飞箱", en: "AirRob" },
+];
+
+/** 机翻 / 库内旧英文里的产品名统一回官方写法（AirRobot / Air Robot / Flying Box → AirRob）。 */
+function normalizeProductTermEnglish(text: string): string {
+  return text
+    .replace(/AirRobot/gi, "AirRob")
+    .replace(/Air Robot/gi, "AirRob")
+    .replace(/Flying Box/gi, "AirRob")
+    .replace(/T-Sort/gi, "T-Sort")
+    .replace(/T Sort/gi, "T-Sort")
+    .replace(/TSort/gi, "T-Sort")
+    .replace(/3D Sorting/gi, "3D Sorting")
+    .replace(/3D Sorter/gi, "3D Sorting");
+}
+
 /** 中文节点名按节点库词条切段（长词优先）；没有任何词条命中返回 null。 */
 function splitNodeTitleByDictionary(
   title: string,
@@ -138,7 +165,7 @@ async function translateNodeTitle(
         if (raw === "") continue;
         pieces.push(/[一-鿿]/.test(raw) ? translations.get(raw) ?? raw : raw);
       }
-      const composed = pieces.join(" ").trim();
+      const composed = normalizeProductTermEnglish(pieces.join(" ").trim());
       if (composed !== "") {
         return { text: composed, usedDictionary: true };
       }
@@ -146,7 +173,7 @@ async function translateNodeTitle(
   }
   const whole = await translateZhTo([title], "en");
   const translated = whole.get(title);
-  return translated === undefined ? null : { text: translated, usedDictionary: false };
+  return translated === undefined ? null : { text: normalizeProductTermEnglish(translated), usedDictionary: false };
 }
 
 /** 全阶段节点库字典：首次打开节点表单时补拉一次，供专业名词匹配使用（失败阶段静默跳过）。 */
@@ -477,11 +504,16 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
    */
   const nodeEnglishDictionary = useMemo(() => {
     const dictionary = new Map<string, string>();
+    for (const term of PRODUCT_NAME_TERMS) {
+      dictionary.set(nodeNameKey(term.zh), term.en);
+    }
+    const containsProductTerm = (key: string): boolean =>
+      PRODUCT_NAME_TERMS.some((term) => key.includes(nodeNameKey(term.zh)));
     const add = (nodes: readonly TaskNodeItem[]): void => {
       for (const node of nodes) {
         const key = nodeNameKey(node.title);
-        const english = node.titleEn.trim();
-        if (key !== "" && english !== "" && !dictionary.has(key)) {
+        const english = normalizeProductTermEnglish(node.titleEn.trim());
+        if (key !== "" && english !== "" && !dictionary.has(key) && !containsProductTerm(key)) {
           dictionary.set(key, english);
         }
       }

@@ -1604,7 +1604,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "tpl.node.nameEnAutoHint": "중국어 이름에서 자동 번역됩니다. 직접 수정할 수 있습니다",
   "tpl.node.nameEnManualHint": "영어 이름이 이미 입력되어 자동 번역으로 덮어쓰지 않습니다",
   "tpl.node.nameEnTranslating": "자동 번역 중…",
-  "tpl.node.nameEnDictHint": "노드 라이브러리 용어를 반영해 자동 입력했습니다. 직접 수정할 수 있습니다",
+  "tpl.node.nameEnDictHint": "전문 용어 사전을 반영해 자동 입력했습니다. 직접 수정할 수 있습니다",
   "tpl.new": "+ 새 템플릿",
   "tpl.new.busy": "생성 중…",
   "tpl.new.title": "새 템플릿: 개인용 또는 공용 템플릿을 선택합니다",

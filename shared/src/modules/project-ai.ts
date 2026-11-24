@@ -20,6 +20,23 @@ import { ProjectFileAiSummarySchema } from "./document-analysis.ts";
  * - 日报 / 问题只取文字字段与附图数量；项目文件摘要只取项目文件视图中 PDF / 图片 / Word / Excel 的成功分析结果，日报 / 问题图片不进入。
  * - 所有字段为空时保持 null / 空数组，由下游总结明确写「暂无数据」，不得编造。
  */
+export const ProjectAiPeriodSchema = z
+  .object({
+    planFrom: DateOnlySchema.nullable(),
+    planTo: DateOnlySchema.nullable(),
+    actualFrom: DateOnlySchema.nullable(),
+    actualTo: DateOnlySchema.nullable(),
+    actualOngoing: z.boolean(),
+  })
+  .openapi("ProjectAiPeriod", { description: "项目周期：计划区间 + 实际区间；实际未完成时 actualOngoing=true" });
+
+export const ProjectAiMemberSchema = z
+  .object({
+    name: z.string(),
+    role: z.enum(["manager", "task_owner"]),
+  })
+  .openapi("ProjectAiMember", { description: "项目组成员 = 项目经理 ∪ 任务负责人（不使用项目成员名册）" });
+
 export const ProjectAiProjectSchema = z
   .object({
     id: UuidSchema,
@@ -33,6 +50,13 @@ export const ProjectAiProjectSchema = z
       description:
         "项目启动时间：任务名 = 「项目启动」或 titleEn = 「Project Startup」的任务最早 plannedStart（用户确认口径 = 实际开始）；找不到为 null，不回落 projects.createdAt",
     }),
+    /** P3 扩展（可选；后端未上线时前端按缺失处理）。 */
+    customer: z.string().nullable().optional().openapi({ description: "客户（项目主数据；与技术协议客户分开）" }),
+    description: z.string().nullable().optional().openapi({ description: "项目备注（背景描述补充来源）" }),
+    partyA: z.string().nullable().optional().openapi({ description: "甲方（技术协议抽取；null = 未识别）" }),
+    projectAddress: z.string().nullable().optional().openapi({ description: "项目地址（技术协议抽取；null = 未识别）" }),
+    period: ProjectAiPeriodSchema.nullable().optional(),
+    members: z.array(ProjectAiMemberSchema).optional(),
   })
   .openapi("ProjectAiProject");
 
@@ -136,8 +160,85 @@ export const ProjectAiIssueSchema = z
     sourceReportId: UuidSchema.nullable(),
     taskId: UuidSchema.nullable(),
     photoCount: z.number().int().min(0).openapi({ description: "问题附图数量（不识别图片内容）" }),
+    photos: z
+      .array(z.object({ fileId: UuidSchema, name: z.string().nullable() }))
+      .optional()
+      .openapi({ description: "问题附图引用（P3 扩展；只用于总结表内缩略图，不识别图片内容）" }),
   })
   .openapi("ProjectAiIssue");
+
+/* ------------------------------------------------------------------ *
+ * P1 技术协议定向抽取 / P2 设备清单 / P3 上下文扩展
+ * ------------------------------------------------------------------ */
+
+export const ProjectAiExtractionStatusSchema = z
+  .enum(["found", "not_found", "conflict", "failed"])
+  .openapi("ProjectAiExtractionStatus");
+
+export const ProjectAiExtractedFieldSchema = z
+  .object({
+    status: ProjectAiExtractionStatusSchema,
+    value: z.string().nullable(),
+    evidence: z.string().nullable(),
+    sourcePage: z.number().int().positive().nullable(),
+    confidence: z.number().min(0).max(1),
+  })
+  .openapi("ProjectAiExtractedField");
+
+export const ProjectAiAgreementImageSchema = z
+  .object({
+    pageNo: z.number().int().positive().nullable(),
+    url: z.string().nullable(),
+    caption: z.string().nullable(),
+  })
+  .openapi("ProjectAiAgreementImage");
+
+export const ProjectAiAgreementSchema = z
+  .object({
+    fileName: z.string(),
+    fileVersionId: UuidSchema,
+    partyA: ProjectAiExtractedFieldSchema,
+    customer: ProjectAiExtractedFieldSchema,
+    projectAddress: ProjectAiExtractedFieldSchema,
+    background: ProjectAiExtractedFieldSchema,
+    layout: ProjectAiAgreementImageSchema,
+    threeD: ProjectAiAgreementImageSchema,
+    extractedAt: DateTimeSchema,
+  })
+  .openapi("ProjectAiAgreement", { description: "最新版技术协议定向抽取结果；字段不是 found 时前端显示「未识别」" });
+
+export const ProjectAiEquipmentQuantitySchema = z
+  .object({ value: z.number(), unit: z.string() })
+  .openapi("ProjectAiEquipmentQuantity");
+
+export const ProjectAiEquipmentCategorySchema = z
+  .object({
+    name: z.string(),
+    itemCount: z.number().int().min(0),
+    quantities: z.array(ProjectAiEquipmentQuantitySchema),
+    representativeItems: z.array(z.string()),
+  })
+  .openapi("ProjectAiEquipmentCategory");
+
+export const ProjectAiEquipmentSchema = z
+  .object({
+    sourceFileName: z.string().nullable(),
+    categories: z.array(ProjectAiEquipmentCategorySchema),
+  })
+  .openapi("ProjectAiEquipment", { description: "设备清单 Excel 按「分类名称」聚合结果" });
+
+export const ProjectAiPhotoRefSchema = z
+  .object({
+    fileId: UuidSchema,
+    name: z.string(),
+    date: DateOnlySchema,
+    authorName: z.string().nullable(),
+  })
+  .openapi("ProjectAiPhotoRef", { description: "总结用现场附图引用（日报现场图，按日期分层抽样）" });
+
+export const ProjectAiIssueCategoryStatSchema = z
+  .object({ category: z.string(), count: z.number().int().min(0) })
+  .openapi("ProjectAiIssueCategoryStat", { description: "问题归类统计（全部问题，多分类各计一次）" });
 
 /**
  * 采集器预先算好的项目统计。模型**只能引用、不能重算**（提示词硬约束）：
@@ -176,6 +277,14 @@ export const ProjectAiContextSchema = z
     changes: z.array(ProjectAiChangeSchema),
     reports: z.array(ProjectAiReportSchema),
     issues: z.array(ProjectAiIssueSchema),
+    /** P1：技术协议定向抽取（null = 没有可用的技术协议分析）。 */
+    agreement: ProjectAiAgreementSchema.nullable().optional(),
+    /** P2：设备清单分类聚合（null = 没有可用的设备清单）。 */
+    equipment: ProjectAiEquipmentSchema.nullable().optional(),
+    /** P3：现场附图（按有图日报日期分层抽样，最多 12 张）。 */
+    reportPhotos: z.array(ProjectAiPhotoRefSchema).optional(),
+    /** P3：问题归类统计（全部问题，按数量降序）。 */
+    issueCategoryStats: z.array(ProjectAiIssueCategoryStatSchema).optional(),
     fileAnalyses: z.array(ProjectFileAiSummarySchema).default([]).openapi({ description: "项目文件 AI 分析摘要（仅当前文件版本的成功分析；日报 / 问题图片不进入）" }),
     generatedAt: DateTimeSchema,
     truncated: z.boolean().openapi({ description: "true = 任务 / 日报 / 问题 / 变更任一集合超出读取上限被截断" }),
@@ -192,6 +301,17 @@ export type ProjectAiTask = z.infer<typeof ProjectAiTaskSchema>;
 export type ProjectAiChange = z.infer<typeof ProjectAiChangeSchema>;
 export type ProjectAiReport = z.infer<typeof ProjectAiReportSchema>;
 export type ProjectAiIssue = z.infer<typeof ProjectAiIssueSchema>;
+export type ProjectAiExtractionStatus = z.infer<typeof ProjectAiExtractionStatusSchema>;
+export type ProjectAiExtractedField = z.infer<typeof ProjectAiExtractedFieldSchema>;
+export type ProjectAiAgreementImage = z.infer<typeof ProjectAiAgreementImageSchema>;
+export type ProjectAiAgreement = z.infer<typeof ProjectAiAgreementSchema>;
+export type ProjectAiEquipmentQuantity = z.infer<typeof ProjectAiEquipmentQuantitySchema>;
+export type ProjectAiEquipmentCategory = z.infer<typeof ProjectAiEquipmentCategorySchema>;
+export type ProjectAiEquipment = z.infer<typeof ProjectAiEquipmentSchema>;
+export type ProjectAiPeriod = z.infer<typeof ProjectAiPeriodSchema>;
+export type ProjectAiMember = z.infer<typeof ProjectAiMemberSchema>;
+export type ProjectAiPhotoRef = z.infer<typeof ProjectAiPhotoRefSchema>;
+export type ProjectAiIssueCategoryStat = z.infer<typeof ProjectAiIssueCategoryStatSchema>;
 
 /* ------------------------------------------------------------------ *
  * AI 项目总结生成（POST /projects/{id}/ai-summary）· REPORT_SCHEMA v2
@@ -240,6 +360,79 @@ export const ProjectAiRangeSchema = z
 export const ProjectAiSummaryReportSchema = z
   .object({
     title: z.string().min(1).max(200),
+    /** P4 文档字段（可选；由采集器在模型结果之后确定性补齐，模型不生成）。 */
+    basicInfo: z
+      .object({
+        projectCode: z.string(),
+        projectName: z.string(),
+        periodText: z.string(),
+        partyA: z.string(),
+        customer: z.string(),
+        address: z.string(),
+        members: z.string(),
+        sources: z.array(z.string()),
+      })
+      .optional(),
+    equipmentLayout: z
+      .object({
+        cadImage: z.object({ fileId: z.string().nullable(), url: z.string().nullable(), caption: z.string() }),
+        threeDImage: z.object({ fileId: z.string().nullable(), url: z.string().nullable(), caption: z.string() }),
+      })
+      .optional(),
+    background: z.object({ text: z.string() }).optional(),
+    equipmentList: z
+      .object({
+        rows: z.array(
+          z.object({
+            category: z.string(),
+            itemCount: z.number().int().min(0),
+            quantityText: z.string(),
+            representative: z.string(),
+          }),
+        ),
+      })
+      .optional(),
+    progressDetail: z
+      .object({
+        text: z.string(),
+        table: z.array(
+          z.object({
+            stage: z.string(),
+            status: z.string(),
+            planText: z.string(),
+            actualText: z.string(),
+            done: z.number().int().min(0),
+            total: z.number().int().min(0),
+            percent: z.number().int().min(0).max(100).nullable(),
+          }),
+        ),
+        percent: z.number().int().min(0).max(100).nullable(),
+      })
+      .optional(),
+    sitePhotos: z.array(z.object({ fileId: UuidSchema, caption: z.string() })).optional(),
+    issueTable: z
+      .object({
+        rows: z.array(
+          z.object({
+            index: z.number().int().min(1),
+            title: z.string(),
+            categories: z.array(z.string()),
+            state: z.string(),
+            owner: z.string(),
+            raisedAt: z.string(),
+            solution: z.string(),
+            closedAt: z.string(),
+            photos: z.array(z.object({ fileId: UuidSchema, name: z.string().nullable() })),
+          }),
+        ),
+        summary: z.string(),
+        categoryStats: z.array(z.object({ category: z.string(), count: z.number().int().min(0) })),
+      })
+      .optional(),
+    personalSummary: z.string().optional(),
+    sourceAppendix: z
+      .array(z.object({ fileName: z.string(), docType: z.string(), version: z.string(), date: z.string() }))
+      .optional(),
     summary: z.object({
       text: z.string().min(1).max(2000).openapi({ description: "250～400 字项目摘要" }),
       claims: z.array(ProjectAiClaimSchema).max(20).default([]),

@@ -1529,6 +1529,52 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     },
   });
 
+  const agreementImageParams = z.object({ id: UuidSchema, kind: z.enum(["layout", "three_d"]) });
+  const agreementImageContent = {
+    "image/png": { schema: { type: "string" as const, format: "binary" } },
+    "image/jpeg": { schema: { type: "string" as const, format: "binary" } },
+    "image/webp": { schema: { type: "string" as const, format: "binary" } },
+  };
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/projects/{id}/ai-agreement-images/{kind}",
+    tags: ["project-ai"],
+    summary: "技术协议抽取 / 人工替换的布局图或三维图（受项目可见性保护；no-store）",
+    request: { params: agreementImageParams },
+    responses: {
+      200: { description: "布局图 / 三维图图片", content: agreementImageContent },
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/ai-agreement-images/{kind}",
+    tags: ["project-ai"],
+    summary: "人工替换布局图 / 三维图（multipart 字段 file；PNG / JPEG / WebP，≤ 10 MB；需 project.export）",
+    request: {
+      params: agreementImageParams,
+      body: {
+        content: {
+          "multipart/form-data": {
+            schema: {
+              type: "object" as const,
+              required: ["file"],
+              properties: { file: { type: "string" as const, format: "binary" } },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      200: { description: "替换成功", ...json(z.object({ ok: z.boolean() })) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+    },
+  });
+
   registry.registerPath({
     method: "get",
     path: "/api/v1/projects/{id}/document-analysis",

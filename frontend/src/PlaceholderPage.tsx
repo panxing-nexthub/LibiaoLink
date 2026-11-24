@@ -1407,8 +1407,10 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         type="text"
         value={formTitleEn}
         onChange={(event) => {
-          setFormTitleEn(event.target.value);
-          setFormTitleEnManual(true);
+          const value = event.target.value;
+          setFormTitleEn(value);
+          // 英文名清空后恢复自动翻译：允许「先输入英文 → 删除 → 再输入中文」的正常流程。
+          setFormTitleEnManual(value.trim() !== "");
           setFormTitleEnTranslating(false);
         }}
         placeholder={t("tpl.node.nameEnPlaceholder")}

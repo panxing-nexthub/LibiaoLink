@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ApiError } from "./api";
 import { AppHeader } from "./components/AppHeader";
@@ -23,6 +23,7 @@ import {
   createProjectManagementRecord,
   deleteProjectManagementRecord,
   fetchProjectManagementRecords,
+  moveProjectManagementRecord,
   updateProjectManagementRecord,
   type ProjectManagementMethod,
   type ProjectManagementRecord,
@@ -217,6 +218,7 @@ type PmOverrideFields = {
 type PmRow = PmSnapshotFields & PmOverrideFields & {
   clientId: string;
   recordId: string | null;
+  insertedDraft: boolean;
   version: number | null;
   code: string;
   name: string;
@@ -234,6 +236,11 @@ type PmRow = PmSnapshotFields & PmOverrideFields & {
   saveMessage: string | null;
 };
 
+type PmRowEdge = "before" | "after";
+type PmDropTarget = { clientId: string; edge: PmRowEdge | "fill" };
+type PmRowMenuPoint = { x: number; y: number };
+type PmRowContextMenu = { clientId: string; point: PmRowMenuPoint | null };
+
 let localRowSequence = 0;
 const nextLocalRowId = (): string => {
   localRowSequence += 1;
@@ -243,6 +250,7 @@ const nextLocalRowId = (): string => {
 const createEmptyRow = (clientId: string = nextLocalRowId()): PmRow => ({
   clientId,
   recordId: null,
+  insertedDraft: false,
   version: null,
   code: "",
   name: "",
@@ -403,6 +411,7 @@ const memberFilterToneOf = (value: string): string => {
 const rowFromRecord = (record: ProjectManagementRecord): PmRow => ({
   clientId: "pm-record-" + record.id,
   recordId: record.id,
+  insertedDraft: false,
   version: record.version,
   code: record.code,
   name: record.name,
@@ -438,23 +447,43 @@ const isEmptyRow = (row: PmRow): boolean =>
   row.plannedEndDateOverride === null &&
   row.implementationDaysOverride === null;
 
+const isSavedDataRow = (row: PmRow): boolean => row.recordId !== null && !isEmptyRow(row);
+const isEmptyDraftRow = (row: PmRow): boolean => row.recordId === null && isEmptyRow(row);
+
+
+const nextSavedRowId = (rows: readonly PmRow[], clientId: string): string | undefined => {
+  const index = rows.findIndex((row) => row.clientId === clientId);
+  return index === -1 ? undefined : rows.slice(index + 1).find(isSavedDataRow)?.recordId ?? undefined;
+};
+
+const moveRowInList = (rows: PmRow[], sourceId: string, target: PmDropTarget): PmRow[] => {
+  if (sourceId === target.clientId) return rows;
+  const source = rows.find((row) => row.clientId === sourceId && isSavedDataRow(row));
+  if (source === undefined) return rows;
+  const remaining = rows.filter((row) => row.clientId !== sourceId);
+  const targetIndex = remaining.findIndex((row) => row.clientId === target.clientId);
+  const targetRow = remaining[targetIndex];
+  if (targetRow === undefined) return rows;
+  const fillDraft = target.edge === "fill" && isEmptyDraftRow(targetRow);
+  remaining.splice(targetIndex + (target.edge === "after" ? 1 : 0), fillDraft ? 1 : 0, source);
+  return remaining;
+};
+
+const trailingEmptyStart = (rows: readonly PmRow[]): number => {
+  let index = rows.length;
+  while (index > 0 && isEmptyRow(rows[index - 1]) && !rows[index - 1].insertedDraft) index -= 1;
+  return index;
+};
+
 const keepTrailingEmptyRows = (rows: PmRow[]): PmRow[] => {
-  let firstTrailingEmpty = rows.length;
-  while (firstTrailingEmpty > 0 && isEmptyRow(rows[firstTrailingEmpty - 1])) {
-    firstTrailingEmpty -= 1;
-  }
-
-  if (firstTrailingEmpty === 0) {
-    const kept = rows.slice(0, MIN_TABLE_ROWS);
-    return [...kept, ...Array.from({ length: MIN_TABLE_ROWS - kept.length }, () => createEmptyRow())];
-  }
-
-  const dataRows = rows.slice(0, firstTrailingEmpty);
-  const trailingRows = rows.slice(firstTrailingEmpty, firstTrailingEmpty + MIN_TRAILING_EMPTY_ROWS);
+  const firstTrailingEmpty = trailingEmptyStart(rows);
+  const keptRows = rows.slice(0, firstTrailingEmpty);
+  const trailingCount = keptRows.some((row) => !isEmptyRow(row)) ? MIN_TRAILING_EMPTY_ROWS : MIN_TABLE_ROWS;
+  const trailingRows = rows.slice(firstTrailingEmpty, firstTrailingEmpty + trailingCount);
   return [
-    ...dataRows,
+    ...keptRows,
     ...trailingRows,
-    ...Array.from({ length: MIN_TRAILING_EMPTY_ROWS - trailingRows.length }, () => createEmptyRow()),
+    ...Array.from({ length: trailingCount - trailingRows.length }, () => createEmptyRow()),
   ];
 };
 
@@ -892,6 +921,139 @@ function MemberCell({
                   setOpen(false);
                 }}
               />
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+const PM_ROW_MENU_WIDTH = 250;
+const PM_ROW_MENU_HEIGHT = 244;
+
+type PmRowActionsProps = {
+  buttonId: string;
+  rowNumber: number;
+  contextMenu: PmRowContextMenu | null;
+  onContextMenuOpened: () => void;
+  canDrag: boolean;
+  orderRestricted: boolean;
+  onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
+  onDragEnd: () => void;
+  onCopy?: () => void;
+  onPaste?: () => void;
+  onInsert?: (edge: PmRowEdge) => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onDeleteBlank?: () => void;
+};
+
+function PmRowActions({
+  buttonId, rowNumber, contextMenu, onContextMenuOpened, canDrag, orderRestricted, onDragStart, onDragEnd,
+  onCopy, onPaste, onInsert, onMoveUp, onMoveDown, onDeleteBlank,
+}: PmRowActionsProps) {
+  const t = useT();
+  const { open, setOpen, position, triggerRef, popoverRef } = usePopover(PM_ROW_MENU_WIDTH, PM_ROW_MENU_HEIGHT);
+  const [contextPoint, setContextPoint] = useState<PmRowMenuPoint | null>(null);
+  const menuWidth = contextPoint === null ? PM_ROW_MENU_WIDTH : Math.min(PM_ROW_MENU_WIDTH, Math.max(0, window.innerWidth - 16));
+  const panelPosition = contextPoint === null ? position : {
+    top: Math.max(8, Math.min(contextPoint.y, window.innerHeight - PM_ROW_MENU_HEIGHT - 8)),
+    left: Math.max(8, Math.min(contextPoint.x, window.innerWidth - menuWidth - 8)),
+    width: menuWidth,
+  };
+  const panelReady = open && panelPosition !== null;
+  const label = t("pm.row.actions", { n: rowNumber });
+  const actions: Array<[TextKey, (() => void) | undefined]> = [
+    ["pm.row.copy", onCopy],
+    ["pm.row.paste", onPaste],
+    ["pm.row.insertBefore", onInsert === undefined ? undefined : () => onInsert("before")],
+    ["pm.row.insertAfter", onInsert === undefined ? undefined : () => onInsert("after")],
+    ["pm.row.moveUp", onMoveUp],
+    ["pm.row.moveDown", onMoveDown],
+  ];
+  if (onDeleteBlank !== undefined) actions.push(["pm.row.deleteBlank", onDeleteBlank]);
+
+  useEffect(() => {
+    if (contextMenu === null) return;
+    const matches = contextMenu.clientId === buttonId;
+    setContextPoint(matches ? contextMenu.point : null);
+    setOpen(matches);
+    if (matches) onContextMenuOpened();
+  }, [buttonId, contextMenu, onContextMenuOpened, setOpen]);
+
+  useEffect(() => {
+    if (panelReady) popoverRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus({ preventScroll: true });
+  }, [panelReady, popoverRef]);
+
+  const close = (): void => {
+    setOpen(false);
+    triggerRef.current?.focus({ preventScroll: true });
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={label}
+        aria-expanded={open}
+        aria-controls={panelReady ? buttonId + "-options" : undefined}
+        title={canDrag ? t("pm.row.dragHint") : t("pm.row.menuHint")}
+        draggable={canDrag}
+        data-project-management-row-actions=""
+        onDragStart={(event) => {
+          setOpen(false);
+          onDragStart(event);
+        }}
+        onDragEnd={onDragEnd}
+        onClick={() => {
+          setContextPoint(null);
+          setOpen((current) => !current);
+        }}
+        onKeyDown={(event) => {
+          if ((!event.ctrlKey && !event.metaKey) || event.altKey || event.repeat) return;
+          const key = event.key.toLowerCase();
+          const action = key === "c" ? onCopy : key === "v" ? onPaste : undefined;
+          if (action === undefined) return;
+          event.preventDefault();
+          action();
+        }}
+        className={
+          "mr-2 flex h-6 min-w-6 items-center justify-center rounded px-0.5 font-medium outline-none hover:bg-sky-50 hover:text-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 " +
+          (canDrag ? "cursor-grab active:cursor-grabbing" : "")
+        }
+      >
+        {rowNumber}
+      </button>
+      {panelReady
+        ? createPortal(
+            <div
+              id={buttonId + "-options"}
+              ref={popoverRef}
+              role="group"
+              aria-label={label}
+              className="fixed z-50 max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-lg border border-zinc-200 bg-white p-1 shadow-lg"
+              style={{ top: panelPosition.top, left: panelPosition.left, width: panelPosition.width }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") close();
+              }}
+            >
+              {actions.map(([key, action]) => (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={action === undefined}
+                  className="flex min-h-8 w-full items-center rounded px-2 py-1 text-left text-sm text-zinc-800 outline-none hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 disabled:text-zinc-400 disabled:hover:bg-transparent"
+                  onClick={() => {
+                    close();
+                    action?.();
+                  }}
+                >
+                  {t(key)}
+                </button>
+              ))}
+              {orderRestricted ? <p className="px-2 py-1 text-xs text-zinc-500">{t("pm.row.orderRestricted")}</p> : null}
             </div>,
             document.body,
           )
@@ -4558,6 +4720,10 @@ export default function ProjectManagementPage({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PmRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [copiedInput, setCopiedInput] = useState<ProjectManagementWriteInput | null>(null);
+  const [rowContextMenu, setRowContextMenu] = useState<PmRowContextMenu | null>(null);
+  const [movingRow, setMovingRow] = useState(false);
+  const [dropTarget, setDropTarget] = useState<PmDropTarget | null>(null);
   const [textFilters, setTextFilters] = useState<Partial<Record<PmTextColumnKey, string>>>({});
   const [multiFilters, setMultiFilters] = useState<Partial<Record<PmMultiColumnKey, string[]>>>({});
   const [methodFilter, setMethodFilter] = useState<ProjectManagementMethod | "">("");
@@ -4581,7 +4747,10 @@ export default function ProjectManagementPage({
     return () => query.removeEventListener("change", update);
   }, []);
 
+  const consumeRowContextMenu = useCallback((): void => setRowContextMenu(null), []);
+
   const selectViewTab = (key: PmViewTabKey): void => {
+    setRowContextMenu(null);
     setActiveViewTab(key);
     focusProjectManagementViewTab("pm-view-tab-" + key);
   };
@@ -4589,9 +4758,20 @@ export default function ProjectManagementPage({
   const rowsRef = useRef<PmRow[]>(rows);
   const aliveRef = useRef(true);
   const saveQueues = useRef<Map<string, Promise<void>>>(new Map());
+  const orderQueue = useRef<Promise<void>>(Promise.resolve());
+  const dragSourceId = useRef<string | null>(null);
   const tableHeaderScrollRef = useRef<HTMLDivElement>(null);
   const tableBodyScrollRef = useRef<HTMLDivElement | null>(null);
+  const rowToFocus = useRef<{ clientId: string; target: "code" | "row-actions" } | null>(null);
   const saveTimers = useRef<Map<string, number>>(new Map());
+
+  useLayoutEffect(() => {
+    const focus = rowToFocus.current;
+    if (focus === null) return;
+    rowToFocus.current = null;
+    const rowElement = tableBodyScrollRef.current?.querySelector('[data-project-management-row="' + focus.clientId + '"]');
+    rowElement?.querySelector<HTMLElement>("[data-project-management-" + focus.target + "]")?.focus();
+  }, [rows]);
 
   const managerOptions = useMemo(() => directoryMemberOptions(managerCandidates), [managerCandidates]);
   const stageOptions = useMemo<SelectOption[]>(
@@ -4790,17 +4970,7 @@ export default function ProjectManagementPage({
     const managerSelections = multiFilters.manager ?? [];
     const engineerSelections = multiFilters.engineer ?? [];
     const locationSelections = multiFilters.location ?? [];
-    const filtering =
-      codeQuery !== "" ||
-      nameQuery !== "" ||
-      stageQuery !== "" ||
-      managerSelections.length > 0 ||
-      engineerSelections.length > 0 ||
-      locationSelections.length > 0 ||
-      methodFilter !== "" ||
-      dateSort !== null;
-
-    if (!filtering) {
+    if (!hasActiveFilters) {
       return rows;
     }
 
@@ -4858,8 +5028,14 @@ export default function ProjectManagementPage({
       }
       return leftValue < rightValue ? -direction : direction;
     });
-  }, [rows, textFilters, multiFilters, methodFilter, dateSort, locale]);
+  }, [rows, textFilters, multiFilters, methodFilter, dateSort, locale, hasActiveFilters]);
 
+
+  const enqueueOrderChange = (operation: () => Promise<void>): Promise<void> => {
+    const next = orderQueue.current.then(operation);
+    orderQueue.current = next.catch(() => undefined);
+    return next;
+  };
 
   const saveRowNow = async (clientId: string): Promise<void> => {
     const row = rowsRef.current.find((current) => current.clientId === clientId);
@@ -4917,7 +5093,7 @@ export default function ProjectManagementPage({
     try {
       const saved = editingExisting
         ? await updateProjectManagementRecord(row.recordId ?? "", input, row.version ?? 0)
-        : await createProjectManagementRecord(input);
+        : await createProjectManagementRecord(input, nextSavedRowId(rowsRef.current, clientId));
       if (!aliveRef.current) {
         return;
       }
@@ -4928,6 +5104,7 @@ export default function ProjectManagementPage({
       const stillCurrent = current.revision === revisionAtStart;
       patchRow(clientId, {
         recordId: saved.id,
+        insertedDraft: false,
         version: saved.version,
         ...(stillCurrent
           ? {
@@ -4963,7 +5140,12 @@ export default function ProjectManagementPage({
     const previous = saveQueues.current.get(clientId) ?? Promise.resolve();
     const next = previous
       .catch(() => undefined)
-      .then(() => saveRowNow(clientId))
+      .then(() => {
+        const row = rowsRef.current.find((candidate) => candidate.clientId === clientId);
+        return row?.recordId === null && !isEmptyRow(row)
+          ? enqueueOrderChange(() => saveRowNow(clientId))
+          : saveRowNow(clientId);
+      })
       .catch(() => undefined);
     saveQueues.current.set(clientId, next);
     void next.finally(() => {
@@ -5080,8 +5262,25 @@ export default function ProjectManagementPage({
   const clearDraftRow = (clientId: string): void => {
     cancelScheduledSave(clientId);
     patchRows(
-      rowsRef.current.map((row) => (row.clientId === clientId ? { ...createEmptyRow(clientId), saveState: "idle" } : row)),
+      rowsRef.current.map((row) => (row.clientId === clientId
+        ? { ...createEmptyRow(clientId), insertedDraft: row.insertedDraft }
+        : row)),
     );
+  };
+
+  const removeBlankRow = (clientId: string): void => {
+    const pendingSave = saveQueues.current.get(clientId) ?? Promise.resolve();
+    void pendingSave.then(() => enqueueOrderChange(async () => {
+      if (!aliveRef.current) return;
+      const next = rowsRef.current.slice();
+      const index = next.findIndex((row) => row.clientId === clientId && isEmptyDraftRow(row));
+      if (index === -1 || index >= trailingEmptyStart(next)) return;
+      cancelScheduledSave(clientId);
+      next.splice(index, 1);
+      const neighbour = next[index] ?? next[index - 1];
+      if (neighbour !== undefined) rowToFocus.current = { clientId: neighbour.clientId, target: "row-actions" };
+      patchRows(next);
+    }));
   };
 
   const requestDelete = (row: PmRow): void => {
@@ -5117,6 +5316,115 @@ export default function ProjectManagementPage({
         setDeleting(false);
       }
     }
+  };
+
+  const canChangeRowOrder = loadState === "ready" && !hasActiveFilters && !movingRow;
+  const savedRowNeighbours = useMemo(() => {
+    const saved = rows.filter(isSavedDataRow);
+    return new Map(saved.map((row, index) => [
+      row.clientId,
+      { previous: saved[index - 1], following: saved[index + 1] },
+    ]));
+  }, [rows]);
+
+  const copyRow = (clientId: string): void => {
+    const row = rowsRef.current.find((candidate) => candidate.clientId === clientId);
+    if (row === undefined || isEmptyRow(row)) return;
+    const input = inputOf(row);
+    setCopiedInput({
+      ...input,
+      managerIds: input.managerIds.slice(),
+      implementationEngineerIds: input.implementationEngineerIds.slice(),
+    });
+    showNotice("ok", t("pm.row.copied"));
+  };
+
+  const pasteRow = (targetId: string): void => {
+    if (copiedInput === null) return;
+    const next = rowsRef.current.slice();
+    const targetIndex = next.findIndex((row) => row.clientId === targetId);
+    if (targetIndex === -1) return;
+    const target = next[targetIndex]!;
+    const reuseDraft = isEmptyDraftRow(target) && !saveQueues.current.has(targetId);
+    const draft = reuseDraft ? target : createEmptyRow();
+    const filled: PmRow = {
+      ...draft,
+      ...copiedInput,
+      managerNames: namesOf(copiedInput.managerIds, [], directory),
+      implementationEngineerNames: namesOf(copiedInput.implementationEngineerIds, [], directory),
+      implementationMethod: copiedInput.implementationMethod ?? "",
+      riskReminder: copiedInput.riskReminder ?? "",
+      revision: draft.revision + 1,
+      saveState: "dirty",
+      saveMessage: null,
+    };
+    const position = reuseDraft ? targetIndex : hasActiveFilters ? trailingEmptyStart(next) : targetIndex + 1;
+    next.splice(position, reuseDraft ? 1 : 0, filled);
+    patchRows(next);
+    persistRow(filled.clientId);
+  };
+
+  const insertEmptyRow = (targetId: string, edge: PmRowEdge): void => {
+    if (!canChangeRowOrder) return;
+    const next = rowsRef.current.slice();
+    const index = next.findIndex((row) => row.clientId === targetId && !isEmptyRow(row));
+    if (index === -1) return;
+    const draft = { ...createEmptyRow(), insertedDraft: true };
+    next.splice(index + (edge === "after" ? 1 : 0), 0, draft);
+    rowToFocus.current = { clientId: draft.clientId, target: "code" };
+    patchRows(next);
+  };
+
+  const moveRow = (sourceId: string, target: PmDropTarget): void => {
+    if (!canChangeRowOrder || sourceId === target.clientId) return;
+    const move = (rows: PmRow[]): PmRow[] => {
+      const destination = target.edge === "fill" && saveQueues.current.has(target.clientId)
+        ? { ...target, edge: "before" as const }
+        : target;
+      return moveRowInList(rows, sourceId, destination);
+    };
+    setMovingRow(true);
+    void enqueueOrderChange(async () => {
+      if (!aliveRef.current) return;
+      const rows = rowsRef.current;
+      const next = move(rows);
+      const recordId = rows.find((row) => row.clientId === sourceId)?.recordId;
+      if (next === rows || recordId == null) return;
+      const beforeId = nextSavedRowId(next, sourceId);
+      if (beforeId !== nextSavedRowId(rows, sourceId)) {
+        await moveProjectManagementRecord(recordId, beforeId ?? null);
+      }
+      if (aliveRef.current) patchRows(move(rowsRef.current));
+    })
+      .catch((error: unknown) => {
+        if (aliveRef.current) showNotice("error", errorTextOf(error, t("pm.row.moveFailed")));
+      })
+      .finally(() => {
+        if (aliveRef.current) setMovingRow(false);
+      });
+  };
+
+  const firstTrailingEmpty = trailingEmptyStart(rows);
+
+  const dragTargetFor = (event: DragEvent<HTMLDivElement>, row: PmRow, index: number): PmDropTarget | null => {
+    if (!canChangeRowOrder || dragSourceId.current === null || dragSourceId.current === row.clientId) {
+      return null;
+    }
+    if (isEmptyDraftRow(row) && !saveQueues.current.has(row.clientId)) {
+      const slot = index < firstTrailingEmpty
+        ? row
+        : rows.slice(firstTrailingEmpty).find((draft) => isEmptyDraftRow(draft) && !saveQueues.current.has(draft.clientId));
+      return slot === undefined ? null : { clientId: slot.clientId, edge: "fill" };
+    }
+    if (!isSavedDataRow(row)) return null;
+    const rect = event.currentTarget.querySelector("[data-project-management-save-state]")?.getBoundingClientRect();
+    if (rect === undefined) return null;
+    return { clientId: row.clientId, edge: event.clientY < rect.top + rect.height / 2 ? "before" : "after" };
+  };
+
+  const endRowDrag = (): void => {
+    dragSourceId.current = null;
+    setDropTarget(null);
   };
 
   const tableColumnWidths = new Map<PmColumnKey, number>();
@@ -5332,7 +5640,29 @@ export default function ProjectManagementPage({
                   {displayRows.map((row, rowIndex) => {
                     const newRow = row.recordId === null;
                     const rowEditable = loadState === "ready";
+                    const empty = isEmptyRow(row);
+                    const canDrag = canChangeRowOrder && isSavedDataRow(row);
+                    const { previous: previousSaved, following: followingSaved } = canDrag
+                      ? savedRowNeighbours.get(row.clientId) ?? {}
+                      : {};
+                    const dropEdge = dropTarget?.clientId === row.clientId ? dropTarget.edge : null;
+                    const dropFeedback = dropEdge === null ? null : (
+                      <span
+                        aria-hidden="true"
+                        className={
+                          "pointer-events-none absolute inset-x-0 z-10 " +
+                          (dropEdge === "fill" ? "inset-y-0 bg-sky-200/50" :
+                            dropEdge === "before" ? "top-0 h-0.5 bg-sky-600" : "bottom-0 h-0.5 bg-sky-600")
+                        }
+                      />
+                    );
                     const rowName = row.name.trim() === "" ? row.code : row.name;
+                    const removableBlank = newRow && empty && rowIndex < firstTrailingEmpty;
+                    const deleteLabel = newRow
+                      ? removableBlank
+                        ? t("pm.row.deleteBlankAria", { n: rowIndex + 1 })
+                        : empty ? null : t("pm.clear.aria", { n: rowIndex + 1 })
+                      : t("pm.delete.aria", { name: rowName || String(rowIndex + 1) });
                     const projectHref = row.projectId ? PROJECT_BASE_HASH + encodeURIComponent(row.projectId) : null;
                     const rowStatus =
                       row.saveState === "saving"
@@ -5343,7 +5673,48 @@ export default function ProjectManagementPage({
                             ? t("pm.status.unsaved")
                             : "";
                     return (
-                      <div key={row.clientId} role="row" data-project-management-row={row.clientId} className="group contents">
+                      <div
+                        key={row.clientId}
+                        role="row"
+                        data-project-management-row={row.clientId}
+                        className="group contents"
+                        onContextMenu={(event) => {
+                          if (!rowEditable || (event.shiftKey && event.button === 2) ||
+                              !(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+                          event.preventDefault();
+                          setRowContextMenu({
+                            clientId: row.clientId,
+                            point: event.clientX === 0 && event.clientY === 0
+                              ? null
+                              : { x: event.clientX, y: event.clientY },
+                          });
+                        }}
+                        onDragOver={(event) => {
+                          const target = dragTargetFor(event, row, rowIndex);
+                          if (target === null) {
+                            setDropTarget(null);
+                            return;
+                          }
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                          setDropTarget((current) =>
+                            current?.clientId === target.clientId && current.edge === target.edge ? current : target,
+                          );
+                        }}
+                        onDragLeave={(event) => {
+                          if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) {
+                            setDropTarget(null);
+                          }
+                        }}
+                        onDrop={(event) => {
+                          const target = dragTargetFor(event, row, rowIndex);
+                          const sourceId = dragSourceId.current;
+                          if (target === null || sourceId === null) return;
+                          event.preventDefault();
+                          endRowDrag();
+                          moveRow(sourceId, target);
+                        }}
+                      >
                         <div
                           role="cell"
                           aria-label={t("pm.column.rowNo") + " " + String(rowIndex + 1)}
@@ -5353,7 +5724,33 @@ export default function ProjectManagementPage({
                             (rowIndex < displayRows.length - 1 ? "border-b" : "")
                           }
                         >
-                          <span>{rowIndex + 1}</span>
+                          {rowEditable ? (
+                            <PmRowActions
+                              buttonId={row.clientId}
+                              rowNumber={rowIndex + 1}
+                              contextMenu={rowContextMenu}
+                              onContextMenuOpened={consumeRowContextMenu}
+                              canDrag={canDrag}
+                              orderRestricted={hasActiveFilters}
+                              onDragStart={(event) => {
+                                if (!canDrag) {
+                                  event.preventDefault();
+                                  return;
+                                }
+                                dragSourceId.current = row.clientId;
+                                event.dataTransfer.effectAllowed = "move";
+                                event.dataTransfer.setData("application/x-libiaolink-pm-row", row.clientId);
+                              }}
+                              onDragEnd={endRowDrag}
+                              onCopy={empty ? undefined : () => copyRow(row.clientId)}
+                              onPaste={copiedInput === null ? undefined : () => pasteRow(row.clientId)}
+                              onInsert={canChangeRowOrder && !empty ? (edge) => insertEmptyRow(row.clientId, edge) : undefined}
+                              onMoveUp={previousSaved === undefined ? undefined : () => moveRow(row.clientId, { clientId: previousSaved.clientId, edge: "before" })}
+                              onMoveDown={followingSaved === undefined ? undefined : () => moveRow(row.clientId, { clientId: followingSaved.clientId, edge: "after" })}
+                              onDeleteBlank={removableBlank ? () => removeBlankRow(row.clientId) : undefined}
+                            />
+                          ) : <span>{rowIndex + 1}</span>}
+                          {dropFeedback}
                           {rowStatus === "" ? null : (
                             <span
                               aria-label={rowStatus}
@@ -5368,17 +5765,18 @@ export default function ProjectManagementPage({
                               }
                             />
                           )}
-                          {loadState === "ready" ? (
+                          {rowEditable && deleteLabel !== null ? (
                             <button
                               type="button"
-                              aria-label={newRow ? t("pm.clear.aria", { n: rowIndex + 1 }) : t("pm.delete.aria", { name: rowName || String(rowIndex + 1) })}
-                              title={newRow ? t("pm.clear.aria", { n: rowIndex + 1 }) : t("pm.delete.aria", { name: rowName || String(rowIndex + 1) })}
+                              aria-label={deleteLabel}
+                              title={deleteLabel}
                               data-project-management-delete=""
                               onMouseDown={(event) => {
                                 event.preventDefault();
                               }}
                               onClick={() => {
-                                requestDelete(row);
+                                if (removableBlank) removeBlankRow(row.clientId);
+                                else requestDelete(row);
                               }}
                               className="absolute right-0.5 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded text-zinc-300 opacity-0 outline-none transition hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-rose-300 group-hover:opacity-100"
                             >
@@ -5652,6 +6050,7 @@ export default function ProjectManagementPage({
                               }
                             >
                               {content}
+                              {dropFeedback}
                             </div>
                           );
                         })}

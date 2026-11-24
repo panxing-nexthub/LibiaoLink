@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
-import type { DbClient } from "../../db/db-client.js";
+import type { DbClient, DbTransaction } from "../../db/db-client.js";
 import { users } from "../../db/schema/identity.js";
 import {
   projectManagementRecords,
@@ -79,12 +79,26 @@ export interface ProjectManagementUserSnapshot {
 export class ProjectManagementRepository {
   constructor(private readonly database: DatabaseService) {}
 
-  async list(): Promise<ProjectManagementRecordRow[]> {
-    const rows = await this.database.db
+  async list(client: DbClient = this.database.db): Promise<ProjectManagementRecordRow[]> {
+    const rows = await client
       .select()
       .from(projectManagementRecords)
-      .orderBy(asc(projectManagementRecords.createdAt), asc(projectManagementRecords.id));
+      .orderBy(asc(projectManagementRecords.sortOrder), asc(projectManagementRecords.createdAt), asc(projectManagementRecords.id));
     return rows.filter((row) => !isBlankProjectManagementFields(row));
+  }
+
+  async lockOrder(client: DbTransaction): Promise<void> {
+    // Serialize ordering against other placements and against ordinary inserts, updates and deletes.
+    await client.execute(sql`lock table ${projectManagementRecords} in share row exclusive mode`);
+  }
+
+  async writeOrder(ids: readonly string[], client: DbTransaction): Promise<void> {
+    await client.execute(sql`
+      update ${projectManagementRecords} as record
+      set sort_order = placement.position
+      from unnest(${sql.param(ids)}::uuid[]) with ordinality as placement(id, position)
+      where record.id = placement.id and record.sort_order is distinct from placement.position
+    `);
   }
 
   async findById(id: string): Promise<ProjectManagementRecordRow | null> {

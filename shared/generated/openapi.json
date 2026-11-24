@@ -13610,6 +13610,16 @@
       "ProjectManagementRecordCreateBody": {
         "type": "object",
         "properties": {
+          "beforeId": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "description": "插入到此记录前；省略时追加到末尾"
+              }
+            ]
+          },
           "code": {
             "type": "string",
             "maxLength": 50
@@ -13751,7 +13761,40 @@
         "required": [
           "items"
         ],
-        "description": "项目管理记录清单（按创建时间正序，无分页；表格逐格保存后即回显）"
+        "description": "项目管理记录清单（默认按已保存的行顺序，未调整的记录按创建时间追加；无分页）"
+      },
+      "ProjectManagementRecordMoveBody": {
+        "type": "object",
+        "properties": {
+          "beforeId": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "移动到此记录前；null 表示移动到末尾"
+              }
+            ]
+          }
+        },
+        "required": [
+          "beforeId"
+        ]
+      },
+      "ProjectManagementRecordMoveResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        },
+        "required": [
+          "id"
+        ]
       },
       "ProjectManagementRecordUpdateBody": {
         "type": "object",
@@ -19527,7 +19570,7 @@
         "tags": [
           "project-management"
         ],
-        "summary": "项目管理记录清单：独立准备记录，按创建时间正序；不读取项目空间数据",
+        "summary": "项目管理记录清单：独立准备记录，按默认行顺序",
         "responses": {
           "200": {
             "description": "记录清单（无分页）",
@@ -19588,6 +19631,16 @@
           },
           "401": {
             "description": "未认证（AUTH_REQUIRED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
             "content": {
               "application/json": {
                 "schema": {
@@ -19748,6 +19801,76 @@
           },
           "409": {
             "description": "冲突（VERSION_CONFLICT / 状态不允许当前操作）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/project-management-records/{id}/order": {
+      "patch": {
+        "tags": [
+          "project-management"
+        ],
+        "summary": "调整项目管理记录的默认行顺序",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectManagementRecordMoveBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已移动记录的 id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectManagementRecordMoveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证（AUTH_REQUIRED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
             "content": {
               "application/json": {
                 "schema": {

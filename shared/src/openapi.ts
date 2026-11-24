@@ -43,6 +43,8 @@ import {
   ProjectManagementRecordCreateBodySchema,
   ProjectManagementRecordDeleteResponseSchema,
   ProjectManagementRecordListSchema,
+  ProjectManagementRecordMoveBodySchema,
+  ProjectManagementRecordMoveResponseSchema,
   ProjectManagementRecordSchema,
   ProjectManagementRecordUpdateBodySchema,
 } from "./modules/project-management.ts";
@@ -339,7 +341,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "get",
     path: "/api/v1/project-management-records",
     tags: ["project-management"],
-    summary: "项目管理记录清单：独立准备记录，按创建时间正序；不读取项目空间数据",
+    summary: "项目管理记录清单：独立准备记录，按默认行顺序",
     responses: {
       200: { description: "记录清单（无分页）", ...json(ProjectManagementRecordListSchema) },
       401: commonErrors[401],
@@ -356,6 +358,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
       201: { description: "新建的记录", ...json(ProjectManagementRecordSchema) },
       400: commonErrors[400],
       401: commonErrors[401],
+      404: commonErrors[404],
     },
   });
 
@@ -371,6 +374,20 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
       401: commonErrors[401],
       404: commonErrors[404],
       409: commonErrors[409],
+    },
+  });
+
+  registry.registerPath({
+    method: "patch",
+    path: "/api/v1/project-management-records/{id}/order",
+    tags: ["project-management"],
+    summary: "调整项目管理记录的默认行顺序",
+    request: { params: idParams, body: json(ProjectManagementRecordMoveBodySchema) },
+    responses: {
+      200: { description: "已移动记录的 id", ...json(ProjectManagementRecordMoveResponseSchema) },
+      400: commonErrors[400],
+      401: commonErrors[401],
+      404: commonErrors[404],
     },
   });
 

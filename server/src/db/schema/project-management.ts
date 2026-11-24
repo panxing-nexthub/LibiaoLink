@@ -34,6 +34,7 @@ export const projectManagementRecords = pgTable(
     plannedStartDate: date("planned_start_date"),
     plannedEndDate: date("planned_end_date"),
     implementationDays: integer("implementation_days"),
+    sortOrder: integer("sort_order"),
     version: integer("version").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

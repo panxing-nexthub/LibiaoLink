@@ -371,7 +371,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 项目管理记录清单：独立准备记录，按创建时间正序；不读取项目空间数据 */
+        /** 项目管理记录清单：独立准备记录，按默认行顺序 */
         get: {
             parameters: {
                 query?: never;
@@ -436,6 +436,15 @@ export interface paths {
                 };
                 /** @description 未认证（AUTH_REQUIRED） */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -581,6 +590,76 @@ export interface paths {
                 };
                 /** @description 冲突（VERSION_CONFLICT / 状态不允许当前操作） */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/api/v1/project-management-records/{id}/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 调整项目管理记录的默认行顺序 */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProjectManagementRecordMoveBody"];
+                };
+            };
+            responses: {
+                /** @description 已移动记录的 id */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectManagementRecordMoveResponse"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 未认证（AUTH_REQUIRED） */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -15779,6 +15858,7 @@ export interface components {
         };
         /** @description 新建记录：字段按需传入，支持第一笔输入即创建；全空请求返回 400，不生成空白行；项目经理 / 实施工程师由服务端校验账号资格；implementationHandedOver = true 时服务端强制清空实施工程师 */
         ProjectManagementRecordCreateBody: {
+            beforeId?: components["schemas"]["Uuid"] & unknown;
             code?: string;
             name?: string;
             managerIds?: components["schemas"]["Uuid"][];
@@ -15806,9 +15886,15 @@ export interface components {
             /** @enum {boolean} */
             deleted: true;
         };
-        /** @description 项目管理记录清单（按创建时间正序，无分页；表格逐格保存后即回显） */
+        /** @description 项目管理记录清单（默认按已保存的行顺序，未调整的记录按创建时间追加；无分页） */
         ProjectManagementRecordList: {
             items: components["schemas"]["ProjectManagementRecord"][];
+        };
+        ProjectManagementRecordMoveBody: {
+            beforeId: components["schemas"]["Uuid"] & (string | null);
+        };
+        ProjectManagementRecordMoveResponse: {
+            id: components["schemas"]["Uuid"];
         };
         /** @description 局部更新（必须带上 version）；全空结果返回 400，请改用 DELETE；项目经理 / 实施工程师变更时由服务端校验账号资格；已移交优先清空工程师，工程师非空则自动取消已移交 */
         ProjectManagementRecordUpdateBody: {

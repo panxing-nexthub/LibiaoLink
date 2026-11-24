@@ -885,10 +885,10 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
    * - 上一份没有未保存改动（或本来就同一份）= 直接切换；
    * - 上一份有未保存改动 = 拦下并提示先保存 / 放弃，绝不静默丢掉草稿。
    */
-  function beginTemplateEditing(templateId: string): void {
+  function beginTemplateEditing(templateId: string): boolean {
     const target = templates.find((template) => template.id === templateId);
     if (target === undefined || !canManageTemplate(target.createdBy)) {
-      return;
+      return false;
     }
     if (editingTemplateId !== null && editingTemplateId !== templateId) {
       const active = findTemplateAnywhere(editingTemplateId);
@@ -897,7 +897,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
           kind: "info",
           text: t("tpl.edit.onlyOne", { name: localize(active.name) }),
         });
-        return;
+        return false;
       }
     }
     setNodeForm((current) =>
@@ -908,6 +908,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     resetDrag();
     setTemplateNotice(null);
     setEditingTemplateId(templateId);
+    return true;
   }
 
   /** 列头状态下拉：选「编辑中」进入编辑；选「已保存」= 有改动先保存再退出，无改动直接退出。 */
@@ -2681,17 +2682,14 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                                 type="button"
                                 data-template-add-node={template.id}
                                 onClick={() => {
-                                  if (isEditing) {
-                                    openCreateForm(template.id);
+                                  if (!isEditing && !beginTemplateEditing(template.id)) {
+                                    return;
                                   }
+                                  openCreateForm(template.id);
                                 }}
-                                disabled={!isEditing || savingTemplateId !== null}
+                                disabled={savingTemplateId !== null}
                                 aria-expanded={nodeForm?.mode === "create" && nodeForm.templateId === template.id}
-                                title={
-                                  isEditing
-                                    ? t("tpl.nodes.addToTemplateTitle", { name: localize(template.name) })
-                                    : t("tpl.edit.addFirst")
-                                }
+                                title={t("tpl.nodes.addToTemplateTitle", { name: localize(template.name) })}
                                 className="shrink-0 whitespace-nowrap rounded-md border border-white/70 bg-white/60 px-2 py-0.5 text-xs font-medium text-zinc-700 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:border-zinc-200/70 disabled:bg-white/35 disabled:text-zinc-400"
                               >
                                 {t("tpl.nodes.add")}

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import {
   DOC_TYPES,
+  DateOnlySchema,
   DeliverableTypeSchema,
   PRIORITY_VALUES,
   STAGE_KEYS,
@@ -40,6 +41,7 @@ import { DatabaseService } from "../../db/database.service.js";
 import { appendOutbox } from "../../db/outbox.js";
 import { hasUnfinishedTemporaryTask, isTemporaryTask } from "../../db/task-scope.js";
 import { AuditService, diffRecords } from "../admin/index.js";
+import { addDays } from "../calendar/index.js";
 import { PermissionService, ProjectManagerEligibilityService, projectManagerIdsChanged, taskCapabilitiesOf, type ProjectAccessContext } from "../permission/index.js";
 import { TaskNodeRepository, TemplateService } from "../template/index.js";
 import { clampSortIndex } from "./task.order.js";
@@ -105,7 +107,7 @@ type TaskLockedFieldsAdjustBody = z.infer<typeof TaskLockedFieldsAdjustBodySchem
  */
 type TaskWriteRequest = Pick<
   TaskUpdateBody,
-  "title" | "titleEn" | "ownerIds" | "managerIds" | "status" | "plannedStart" | "plannedEnd" | "estimatedDays" | "headcount" | "priority" | "deliverableTypes" | "note" | "sortIndex"
+  "title" | "titleEn" | "ownerIds" | "managerIds" | "status" | "plannedStart" | "plannedEnd" | "estimatedDays" | "headcount" | "priority" | "deliverableTypes" | "note" | "sortIndex" | "shiftFollowing"
 > & { expectedVersion: number | null };
 
 const EMPTY_FILE_SUMMARY: TaskFileSummaryCounts = { total: 0, draft: 0, final: 0 };
@@ -343,6 +345,7 @@ export class TaskService {
       if (sortIndex < groupSize) {
         await this.repository.shiftGroupIndexes(projectId, stageKey, sortIndex, null, 1, tx);
       }
+      assertEndOnOrAfterStart(title, body.plannedStart ?? null, body.plannedEnd ?? null, "预计完成日期");
       const created = await this.repository.insert(
         {
           projectId,
@@ -563,6 +566,7 @@ export class TaskService {
           status: body.status,
           plannedStart: body.plannedStart,
           plannedEnd: body.plannedEnd,
+          shiftFollowing: body.shiftFollowing,
           estimatedDays: body.estimatedDays,
           headcount: body.headcount,
           priority: body.priority,
@@ -854,14 +858,20 @@ export class TaskService {
     projectAccess: ProjectAccessContext | null = null,
     allowTaskOwner = false,
   ): Promise<TaskRow> {
-    if (request.sortIndex !== undefined) {
+    let stageTasks: TaskRow[] = [];
+    if (request.sortIndex !== undefined || request.shiftFollowing === true) {
       const brief = await this.repository.findTaskBrief(taskId, tx);
       if (brief === null || brief.projectId !== projectId) {
         throw new AppError("NOT_FOUND", "任务不存在或不属于该项目");
       }
-      await this.repository.listGroupOrder(projectId, brief.stageKey, tx, true);
+      if (request.shiftFollowing === true && brief.stageKey !== null) {
+        stageTasks = await this.repository.lockStageTasks(tx, projectId, brief.stageKey);
+      } else if (request.sortIndex !== undefined) {
+        await this.repository.listGroupOrder(projectId, brief.stageKey, tx, true);
+      }
     }
-    const before = await this.repository.lockTask(tx, taskId);
+    const anchorIndex = stageTasks.findIndex((task) => task.id === taskId);
+    const before = stageTasks[anchorIndex] ?? await this.repository.lockTask(tx, taskId);
     if (before === null || before.projectId !== projectId) {
       throw new AppError("NOT_FOUND", "任务不存在或不属于该项目");
     }
@@ -873,6 +883,9 @@ export class TaskService {
       : undefined;
     if (projectAccess !== null) {
       const capabilities = this.assertTaskWriteAllowed(actorId, projectAccess, before, allowTaskOwner);
+      if (request.shiftFollowing === true && capabilities.source !== "project_edit") {
+        throw new AppError("FORBIDDEN", "仅项目编辑者可顺延阶段后续任务");
+      }
       const ownersChanged =
         request.ownerIds !== undefined && request.ownerIds.join("\u0000") !== before.ownerIds.join("\u0000");
       const sortChanged = request.sortIndex !== undefined && request.sortIndex !== before.sortIndex;
@@ -908,6 +921,31 @@ export class TaskService {
       statusOverride: before.statusOverride,
     };
     const linked = request.status === undefined ? null : applyStatusWrite(current, request.status, today);
+    if (request.shiftFollowing === true && before.stageKey === null) {
+      throw new AppError("VALIDATION_FAILED", "只有归入阶段的任务可顺延后续任务");
+    }
+    const plannedStart = request.plannedStart === undefined ? before.plannedStart : request.plannedStart;
+    const plannedEnd = request.plannedEnd === undefined ? before.plannedEnd : request.plannedEnd;
+    const actualEnd = linked === null ? before.actualEnd : linked.actualEnd;
+    if (plannedStart !== before.plannedStart || plannedEnd !== before.plannedEnd) {
+      assertEndOnOrAfterStart(before.title, plannedStart, plannedEnd, "预计完成日期");
+    }
+    if (actualEnd !== before.actualEnd) {
+      assertActualEnd(before.title, plannedStart, actualEnd, today);
+    } else if (plannedStart !== before.plannedStart) {
+      assertEndOnOrAfterStart(before.title, plannedStart, actualEnd, "实际完成日期");
+    }
+    const shiftDays = request.shiftFollowing === true ? scheduleShiftDays(before, plannedStart, plannedEnd) : 0;
+    const shiftedTasks = shiftDays === 0 ? [] : stageTasks.slice(anchorIndex + 1)
+      .filter((task) => task.plannedStart !== null || task.plannedEnd !== null)
+      .map((task) => {
+        const start = shiftedPlanDate(task.title, task.plannedStart, shiftDays);
+        const end = shiftedPlanDate(task.title, task.plannedEnd, shiftDays);
+        assertEndOnOrAfterStart(task.title, start, end, "预计完成日期");
+        assertEndOnOrAfterStart(task.title, start, task.actualEnd, "实际完成日期");
+        this.assertTaskMutable(task);
+        return { task, dates: { plannedStart: start, plannedEnd: end } };
+      });
     const completionWarnings =
       linked !== null && linked.status === "done" && before.status !== "done"
         ? await this.assertCompletionGate(tx, before, at, actorId)
@@ -921,9 +959,9 @@ export class TaskService {
       statusOverride: linked === null ? before.statusOverride : linked.statusOverride,
       progress: String(linked === null ? current.progress : linked.progress),
       sortIndex,
-      plannedStart: request.plannedStart !== undefined ? request.plannedStart : before.plannedStart,
-      plannedEnd: request.plannedEnd !== undefined ? request.plannedEnd : before.plannedEnd,
-      actualEnd: linked === null ? before.actualEnd : linked.actualEnd,
+      plannedStart,
+      plannedEnd,
+      actualEnd,
       estimatedDays: request.estimatedDays !== undefined ? request.estimatedDays : before.estimatedDays,
       headcount: request.headcount !== undefined ? request.headcount : before.headcount,
       priority: request.priority !== undefined ? request.priority : before.priority,
@@ -931,7 +969,40 @@ export class TaskService {
       deliverableTypes: request.deliverableTypes !== undefined ? normalizeDocTypes(request.deliverableTypes) : before.deliverableTypes,
       note: request.note !== undefined ? request.note : before.note,
     };
-    const updated = await this.repository.updateWithVersion(taskId, request.expectedVersion ?? before.version, patch, at, tx);
+    const updated = await this.persistTaskUpdate(tx, before, patch, actorId, at, batchId);
+    for (const { task, dates } of shiftedTasks) {
+      await this.persistTaskUpdate(tx, task, dates, actorId, at, null);
+    }
+    if (completionWarnings !== null) {
+      await this.appendCompletionOutbox(tx, { projectId, task: updated, warnings: completionWarnings, actorId, at });
+    }
+    await this.repository.touchProject(projectId, at, tx);
+    if (!temporary && nextManagers !== undefined) {
+      await this.repository.replaceProjectManagersExceptTask(projectId, taskId, nextManagers, at, tx);
+      await this.audit.record(tx, {
+        actorId,
+        action: "update",
+        objectType: "project",
+        objectId: projectId,
+        projectId,
+        summary: "修改项目级项目经理（任务表入口）",
+        changes: [{ field: "managerIds", from: project.managerIds, to: nextManagers }],
+        metadata: { entry: "task_managers", scope: "project" },
+      });
+    }
+    return updated;
+  }
+
+  private async persistTaskUpdate(
+    tx: DbClient,
+    before: TaskRow,
+    patch: TaskUpdatePatch,
+    actorId: string,
+    at: Date,
+    batchId: string | null,
+  ): Promise<TaskRow> {
+    const { id: taskId, projectId } = before;
+    const updated = await this.repository.updateWithVersion(taskId, before.version, patch, at, tx);
     if (updated === null) {
       throw new AppError("VERSION_CONFLICT", "任务已被他人更新，请刷新后重试");
     }
@@ -950,10 +1021,6 @@ export class TaskService {
         at: at.toISOString(),
       },
     });
-    if (completionWarnings !== null) {
-      await this.appendCompletionOutbox(tx, { projectId, task: updated, warnings: completionWarnings, actorId, at });
-    }
-    await this.repository.touchProject(projectId, at, tx);
     const changes = diffRecords(taskAuditSnapshot(before), taskAuditSnapshot(updated));
     await this.audit.record(tx, {
       actorId,
@@ -965,19 +1032,6 @@ export class TaskService {
       changes: changes.length > 0 ? changes : null,
       metadata: batchId === null ? undefined : { entry: "batch", batchId },
     });
-    if (!temporary && nextManagers !== undefined) {
-      await this.repository.replaceProjectManagersExceptTask(projectId, taskId, nextManagers, at, tx);
-      await this.audit.record(tx, {
-        actorId,
-        action: "update",
-        objectType: "project",
-        objectId: projectId,
-        projectId,
-        summary: "修改项目级项目经理（任务表入口）",
-        changes: [{ field: "managerIds", from: project.managerIds, to: nextManagers }],
-        metadata: { entry: "task_managers", scope: "project" },
-      });
-    }
     return updated;
   }
 
@@ -1005,6 +1059,7 @@ export class TaskService {
         throw new AppError("VERSION_CONFLICT", "任务已被他人更新，请刷新后重试");
       }
       const linked = applyProgressWrite(body.progress, body.actualEnd ?? null, today);
+      assertActualEnd(before.title, before.plannedStart, linked.actualEnd, today);
       const completionWarnings =
         linked.status === "done" && before.status !== "done"
           ? await this.assertCompletionGate(tx, before, at, actorId)
@@ -1105,7 +1160,6 @@ export class TaskService {
         if (before.version !== body.version) {
           throw new AppError("VERSION_CONFLICT", "任务已被他人更新，请刷新后重试");
         }
-        const warnings = await this.assertCompletionGate(tx, before, at, actorId);
         const linked = applyStatusWrite(
           {
             status: before.status,
@@ -1116,6 +1170,8 @@ export class TaskService {
           "done",
           today,
         );
+        assertActualEnd(before.title, before.plannedStart, linked.actualEnd, today);
+        const warnings = await this.assertCompletionGate(tx, before, at, actorId);
         const patch: TaskUpdatePatch = {
           status: linked.status,
           statusOverride: linked.statusOverride,
@@ -1509,6 +1565,36 @@ export class TaskService {
     if (await this.permission.canManageGroupAccess(actorId)) return;
     throw new AppError("FORBIDDEN", "仅管理员可" + action + "（系统功能书 A1-13）");
   }
+}
+
+function assertEndOnOrAfterStart(title: string, start: string | null, end: string | null, label: string): void {
+  if (start !== null && end !== null && end < start) {
+    throw new AppError("VALIDATION_FAILED", "任务「" + title + "」的" + label + "（" + end + "）早于开始日期（" + start + "）");
+  }
+}
+
+function assertActualEnd(title: string, start: string | null, actualEnd: string | null, today: string): void {
+  if (actualEnd !== null && actualEnd > today) {
+    throw new AppError("VALIDATION_FAILED", "任务「" + title + "」的实际完成日期不能晚于今天（" + today + "）");
+  }
+  assertEndOnOrAfterStart(title, start, actualEnd, "实际完成日期");
+}
+
+function scheduleShiftDays(before: TaskRow, start: string | null, end: string | null): number {
+  // 单字段改期跟随该字段，两端都变化时以预计完成日期为准。
+  if (before.plannedEnd !== null && end !== null && end !== before.plannedEnd) {
+    return (Date.parse(end) - Date.parse(before.plannedEnd)) / 86_400_000;
+  }
+  return before.plannedStart === null || start === null ? 0 : (Date.parse(start) - Date.parse(before.plannedStart)) / 86_400_000;
+}
+
+function shiftedPlanDate(title: string, date: string | null, days: number): string | null {
+  if (date === null) return null;
+  const shifted = addDays(date, days);
+  if (!DateOnlySchema.safeParse(shifted).success) {
+    throw new AppError("VALIDATION_FAILED", "任务「" + title + "」的顺延日期超出有效范围");
+  }
+  return shifted;
 }
 
 function isOpenTemporaryTask(task: TaskRow): boolean {

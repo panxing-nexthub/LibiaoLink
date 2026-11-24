@@ -3,7 +3,7 @@ import { mediumCardBorderOf, mediumCardTintOf, vividCardBorderOf, vividCardTintO
 import { PROJECT_STAGES } from "../data/projects";
 import { memberOptionsWithExisting, type Member } from "../data/members";
 import type { TaskFileRef } from "../fileApi";
-import { TEMP_TASK_STAGE, addedNodeIdsOf, addedNodeKeysOf, daysBetweenInclusive, lateDeliveryLabel, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskPriority, type TaskStatus } from "../data/tasks";
+import { TEMP_TASK_STAGE, addedNodeIdsOf, addedNodeKeysOf, dateOnlyText, daysBetweenInclusive, lateDeliveryLabel, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskPriority, type TaskStatus } from "../data/tasks";
 import { stageNameOf, type ApiProjectSummary, type TaskUpdateInput } from "../taskApi";
 import { fieldText, isLocalizedLocale, mdText, priorityText, stageText, statusText, useLocale, useLocalizedText, useT } from "../i18n";
 import { InlineDateCell, InlineMemberMultiCell, InlineNumberCell, InlineOptionCell, InlineTextCell } from "./InlineEdit";
@@ -256,7 +256,9 @@ function statusOptionsOf(statusOf: (value: string) => string): SelectOption[] {
 }
 
 /** 行内编辑能改的任务字段（项目经理是项目级字段，修改会同步整个项目）。 */
-export type TaskPatch = Partial<Pick<ProjectTask, "title" | "titleEn" | "ownerIds" | "managerIds" | "startDate" | "dueDate" | "days" | "headcount" | "priority" | "deliverableTypes" | "note">>;
+export type TaskPatch = Partial<Pick<ProjectTask, "title" | "titleEn" | "ownerIds" | "managerIds" | "startDate" | "dueDate" | "days" | "headcount" | "priority" | "deliverableTypes" | "note">> & {
+  shiftFollowing?: boolean;
+};
 /**
  * 行内编辑 / 抽屉编辑共用的「patch → PATCH body」映射（Push 279 从项目页 handlePatchTask 抽出 · version 由调用方带）：
  * 空串 = 清空（契约 nullable）这类字段口径只维护这一处 —— 项目页任务表与工作台「我的任务」的行内编辑同源。
@@ -280,6 +282,9 @@ export function taskPatchBody(version: number, patch: TaskPatch): TaskUpdateInpu
   }
   if (patch.dueDate !== undefined) {
     body.plannedEnd = patch.dueDate === "" ? null : patch.dueDate;
+  }
+  if (patch.shiftFollowing === true) {
+    body.shiftFollowing = true;
   }
   if (patch.days !== undefined) {
     body.estimatedDays = patch.days;
@@ -422,7 +427,7 @@ function Chevron({ collapsed }: { collapsed: boolean }) {
  *  （onSetStatus）/ 紧急重要度与成果文件与进展描述（onPatch）/ 「文件」列下拉（onUploadFiles + onDeleteFile）/
  *  三段日期与人数（onPatch）；天数不单开编辑（随日期联动写回，与项目页同口径）。点行 = onSelect（开抽屉）；**onSelect 不传 = 整行不可点**（不出「点击查看任务详情」提示、不出 pointer 光标、不占键盘 Tab 焦点；行内各列仍按回调照常只读 / 可编辑 —— 甘特图「画不出时间轴」的兜底列表这样用，Push 294）。
  *  subtitle 缺省 = 英文名小行（项目页口径）；工作台传「阶段 / 临时任务 · 英文名」保持自己那张表的副行。 */
-export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelete, canFinalize = false, members, managerMembers = members, customDeliverableTypes = [], onCreateDeliverableType, onSetStatus, onSetActualEnd, onChangeManagers, canEditManagers, onPatch, onUploadFiles, onDeleteFile, files, tierTint, subtitle }: { task: ProjectTask; columns: ColumnDef[]; selected: boolean; onSelect?: () => void; onProgress?: (progress: number) => void; onDelete?: () => void; canFinalize?: boolean; members: readonly Member[]; managerMembers?: readonly Member[]; customDeliverableTypes?: readonly string[]; onCreateDeliverableType?: (name: string) => Promise<string | null>; onSetStatus?: (status: TaskStatus) => void; onSetActualEnd?: (iso: string) => void; onChangeManagers?: (taskId: string, managerIds: string[]) => void; canEditManagers?: boolean; onPatch?: (patch: TaskPatch) => void; onUploadFiles?: (taskId: string, files: File[], onProgress?: (done: number, total: number) => void, finalize?: boolean) => Promise<void>; onDeleteFile?: (fileId: string) => Promise<void>; files?: readonly TaskFileRef[]; tierTint?: TintedTier | false; subtitle?: string }) {
+export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelete, canFinalize = false, members, managerMembers = members, customDeliverableTypes = [], onCreateDeliverableType, onSetStatus, onSetActualEnd, onChangeManagers, canEditManagers, allowScheduleShift = false, onPatch, onUploadFiles, onDeleteFile, files, tierTint, subtitle }: { task: ProjectTask; columns: ColumnDef[]; selected: boolean; onSelect?: () => void; onProgress?: (progress: number) => void; onDelete?: () => void; canFinalize?: boolean; members: readonly Member[]; managerMembers?: readonly Member[]; customDeliverableTypes?: readonly string[]; onCreateDeliverableType?: (name: string) => Promise<string | null>; onSetStatus?: (status: TaskStatus) => void; onSetActualEnd?: (iso: string) => void; onChangeManagers?: (taskId: string, managerIds: string[]) => void; canEditManagers?: boolean; allowScheduleShift?: boolean; onPatch?: (patch: TaskPatch) => void; onUploadFiles?: (taskId: string, files: File[], onProgress?: (done: number, total: number) => void, finalize?: boolean) => Promise<void>; onDeleteFile?: (fileId: string) => Promise<void>; files?: readonly TaskFileRef[]; tierTint?: TintedTier | false; subtitle?: string }) {
   const locale = useLocale();
   const t = useT();
   /** 手打内容机翻显示（业务口径 2026-10-13「因为页面有些内容是手打的 我建议是提前后台机翻」）：
@@ -481,14 +486,18 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
   const startIso = task.startDate;
   const dueIso = task.dueDate;
   const doneIso = task.doneDate;
+  const actualToday = dateOnlyText(new Date().toISOString());
+  const latestStart = dueIso === "" || (doneIso !== "" && doneIso < dueIso) ? doneIso : dueIso;
+  const canShiftFollowing = allowScheduleShift && task.stageKey !== null && capabilities.source === "project_edit";
   const startText = mdText(locale, startIso);
   const dueText = mdText(locale, dueIso);
   const doneText = mdText(locale, doneIso);
   /** 行内改任一日期时，把两个显示日期与联动天数一起写回（含首尾）。 */
-  const patchRange = (nextStartIso: string, nextDueIso: string) => {
+  const patchRange = (nextStartIso: string, nextDueIso: string, shiftFollowing?: boolean) => {
     onPatch?.({
       startDate: nextStartIso,
       dueDate: nextDueIso,
+      shiftFollowing,
       days: nextStartIso !== "" && nextDueIso !== "" ? daysBetweenInclusive(nextStartIso, nextDueIso) : 0,
     });
   };
@@ -750,13 +759,15 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
       ) : (
         <InlineDateCell
           valueIso={startIso}
+          maxDate={latestStart}
+          allowScheduleShift={canShiftFollowing}
           ariaLabel={t("board.edit.aria", { field: fieldText(locale, "开始日期") })}
           disabled={editLocked}
           disabledHint={editLockedHint}
           triggerClassName="tabular-nums text-zinc-600"
           display={startText === "" ? <span className="text-zinc-300">—</span> : startText}
-          onChange={(iso) => {
-            patchRange(iso, dueIso);
+          onChange={(iso, shiftFollowing) => {
+            patchRange(iso, dueIso, shiftFollowing);
           }}
         />
       ),
@@ -772,13 +783,15 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
       ) : (
         <InlineDateCell
           valueIso={dueIso}
+          minDate={startIso}
+          allowScheduleShift={canShiftFollowing}
           ariaLabel={t("board.edit.aria", { field: fieldText(locale, "预计完成日期") })}
           disabled={editLocked}
           disabledHint={editLockedHint}
           triggerClassName="tabular-nums text-zinc-600"
           display={dueText === "" ? <span className="text-zinc-300">—</span> : dueText}
-          onChange={(iso) => {
-            patchRange(startIso, iso);
+          onChange={(iso, shiftFollowing) => {
+            patchRange(startIso, iso, shiftFollowing);
           }}
         />
       ),
@@ -815,6 +828,9 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
         ) : (
           <InlineDateCell
             valueIso={doneIso}
+            minDate={startIso}
+            maxDate={actualToday}
+            todayIso={actualToday}
             ariaLabel={t("board.edit.aria", { field: fieldText(locale, "实际完成日期") })}
             disabled={completionLocked}
             disabledHint={completionLockedHint}
@@ -1277,6 +1293,7 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
                         onSetStatus={onSetStatus === undefined ? undefined : (status) => onSetStatus(task.id, status)}
                         onSetActualEnd={onSetActualEnd === undefined ? undefined : (iso) => onSetActualEnd(task.id, iso)}
                         onChangeManagers={onChangeManagers}
+                        allowScheduleShift
                         onPatch={onPatchTask === undefined ? undefined : (patch) => onPatchTask(task.id, patch)}
                         onUploadFiles={onUploadFiles}
                         onDeleteFile={onDeleteFile}
@@ -1343,6 +1360,7 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
         managerMembers={managerMembers}
         customDeliverableTypes={customDeliverableTypes}
         onCreateDeliverableType={onCreateDeliverableType}
+        allowScheduleShift
         onSubmit={onSubmitTaskEdit}
         onRename={onRenameTask}
         onProgress={onSetProgress}

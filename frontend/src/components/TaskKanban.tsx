@@ -1222,6 +1222,7 @@ export function TaskKanban({ mode, tasks, focusTaskId = null, onFocusClosed, can
       )}
       <TaskDrawer
         task={drawerTask}
+        allowScheduleShift
         canFinalize={drawerTask !== null && canFinalizeTask?.(drawerTask) === true}
         canEditManagers={canEditManagers}
         members={members}

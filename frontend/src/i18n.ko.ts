@@ -1129,6 +1129,8 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "drawer.dates.placeholder": "시작일과 납기일 선택",
   "drawer.dates.aria": "시작일과 납기일 선택",
   "drawer.dates.caption": "일수는 날짜에서 계산됩니다(양 끝 포함)",
+  "task.schedule.shiftFollowing": "같은 단계의 후속 작업 일정도 이동",
+  "task.schedule.startAfterActual": "시작일은 실제 완료일과 같거나 그 이전이어야 합니다.",
   "drawer.headcount.placeholder": "설정 안 됨",
   "drawer.headcount.aria": "필요 인원",
   "drawer.headcount.unit": "명",

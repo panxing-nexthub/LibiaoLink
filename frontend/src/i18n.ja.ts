@@ -1129,6 +1129,8 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "drawer.dates.placeholder": "開始日と納期を選択",
   "drawer.dates.aria": "開始日と納期を選択",
   "drawer.dates.caption": "日数は日付から算出されます（両端を含む）",
+  "task.schedule.shiftFollowing": "同じフェーズの後続タスクの日程も変更",
+  "task.schedule.startAfterActual": "開始日は実際の完了日以前にしてください。",
   "drawer.headcount.placeholder": "未設定",
   "drawer.headcount.aria": "必要人数",
   "drawer.headcount.unit": "人",

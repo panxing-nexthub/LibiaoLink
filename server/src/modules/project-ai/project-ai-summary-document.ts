@@ -52,15 +52,26 @@ export function buildSummaryDocument(
     .map((member) => (member.role === "manager" ? member.name + "（项目经理）" : member.name))
     .join("、");
 
-  const progressRows = context.stages.map((stage) => ({
-    stage: stage.name,
-    status: stage.status,
-    planText: rangeText(stage.plannedStart, stage.plannedEnd),
-    actualText: rangeText(stage.actualStart, stage.actualEnd),
-    done: stage.taskDoneCount,
-    total: stage.taskTotalCount,
-    percent: stage.taskTotalCount > 0 ? Math.round((stage.taskDoneCount / stage.taskTotalCount) * 100) : null,
-  }));
+  const progressRows = context.stages.map((stage) => {
+    // 阶段表状态按任务完成度派生：全部完成 = 已完成，部分完成 = 进行中，尚无完成 = 沿用阶段原状态。
+    const status =
+      stage.taskTotalCount > 0
+        ? stage.taskDoneCount >= stage.taskTotalCount
+          ? "done"
+          : stage.taskDoneCount > 0
+            ? "active"
+            : "pending"
+        : stage.status;
+    return {
+      stage: stage.name,
+      status,
+      planText: rangeText(stage.plannedStart, stage.plannedEnd),
+      actualText: rangeText(stage.actualStart, stage.actualEnd),
+      done: stage.taskDoneCount,
+      total: stage.taskTotalCount,
+      percent: stage.taskTotalCount > 0 ? Math.round((stage.taskDoneCount / stage.taskTotalCount) * 100) : null,
+    };
+  });
 
   const document: Partial<ProjectAiSummaryReport> = {
     basicInfo: {

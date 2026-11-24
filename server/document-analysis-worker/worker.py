@@ -48,10 +48,10 @@ CONVERSION_TIMEOUT_SECONDS = 90
 MAX_FILE_MB_DEFAULT = 200
 IMAGE_DPI = 120
 MAX_IMAGE_SIDE = 1600
-EXTRACTION_VERSION = "project-agreement-extraction-v3"
+EXTRACTION_VERSION = "project-agreement-extraction-v4"
 AGREEMENT_DOC_TYPE = "技术协议"
 LAYOUT_WORDS = ("布局", "平面布置", "平面图", "车间布局", "布局规划", "cad")
-THREE_D_WORDS = ("三维", "3d", "效果图", "渲染图", "鸟瞰")
+THREE_D_WORDS = ("三维图", "三维效果", "三维模型", "3d图", "3d效果", "3d模型", "效果图", "渲染图", "鸟瞰")
 BACKGROUND_WORDS = ("项目背景", "背景需求", "需求概述", "建设目标", "项目概述", "项目需求", "场地信息")
 
 WORD_EXT = {"doc", "docx"}
@@ -255,21 +255,40 @@ def prompt_for_page(page_no: int, printed_label: str | None, display_name: str, 
         "\"key\":\"字段名\",\"value\":\"值\",\"unit\":\"单位或null\",\"evidence\":\"原文短句\",\"confidence\":0.0}],"
         "\"risks\":[\"风险\"],\"decisions\":[\"决策\"],\"warnings\":[\"需人工确认\"],\"missing\":[\"缺失信息\"]}\n\n"
         "硬约束：\n"
-        "1. 最多 8 条 keyFacts，tables 不得输出；不要逐行抄写任务清单、进度表、规则表或长表格。\n"
+        "1. 最多 5 条 keyFacts；tables 不得输出；禁止逐行抄写任务清单、进度表、规则表或长表格。\n"
         "2. 长表页面只总结总体进度、关键规则、异常、延期和关键结论。\n"
         "3. 只使用页面图片和文本中出现的事实，不推断。\n"
         "4. 小字不确定时写入 warnings，不要猜。\n"
-        "5. 所有数组必须存在，无内容返回 []。\n\n"
+        "5. 所有数组必须存在，无内容返回 []。\n"
+        "6. 硬长度：summary ≤ 600 字；risks / decisions / warnings / missing 各 ≤ 3 条；整份 JSON ≤ 1200 个汉字。\n\n"
         f"文件：{display_name}；类型：{kind}；PDF 第 {page_no} 页；印刷页码：{printed_label or '未识别'}。\n\n"
         "页面文本：\n" + page_text[:10000]
     )
 
 
-def call_model(model: dict[str, Any], prompt: str, image_png: bytes) -> tuple[dict[str, Any], dict[str, Any]]:
+def prompt_for_page_compact(page_no: int, printed_label: str | None, display_name: str, kind: str, page_text: str) -> str:
+    return (
+        "你是项目文件提炼器。只输出一个 JSON 对象，不要解释、Markdown 或代码围栏。\n\n"
+        "结构：{\"documentType\":\"文件类型\",\"purpose\":\"文件用途\",\"summary\":\"本页摘要\","
+        "\"keyFacts\":[{\"category\":\"basic_info|business|performance|scope|responsibility|site|network|power|team|schedule|safety|delivery|other\","
+        "\"key\":\"字段名\",\"value\":\"值\",\"unit\":null,\"evidence\":\"原文短句\",\"confidence\":0.0}],"
+        "\"risks\":[],\"decisions\":[],\"warnings\":[],\"missing\":[]}\n\n"
+        "硬约束：summary ≤ 200 字；keyFacts ≤ 3 条；risks / decisions / warnings / missing 各 ≤ 2 条；"
+        "不要逐行抄写表格；只使用页面中出现的事实。\n\n"
+        f"文件：{display_name}；类型：{kind}；PDF 第 {page_no} 页；印刷页码：{printed_label or '未识别'}。\n\n"
+        "页面文本：\n" + page_text[:6000]
+    )
+
+
+JSON_OBJECT_MODE = "unknown"
+
+
+def call_model(model: dict[str, Any], prompt: str, image_png: bytes, max_tokens: int | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    global JSON_OBJECT_MODE
     payload = {
         "model": model["model_id"],
         "temperature": 0,
-        "max_tokens": int(os.environ.get("DOCUMENT_ANALYSIS_MAX_TOKENS", "6000")),
+        "max_tokens": int(max_tokens if max_tokens is not None else os.environ.get("DOCUMENT_ANALYSIS_MAX_TOKENS", "10000")),
         "stream": False,
         "messages": [{
             "role": "user",
@@ -279,6 +298,9 @@ def call_model(model: dict[str, Any], prompt: str, image_png: bytes) -> tuple[di
             ],
         }],
     }
+    use_json = JSON_OBJECT_MODE != "unsupported"
+    if use_json:
+        payload["response_format"] = {"type": "json_object"}
     started = time.time()
     response = requests.post(
         model["base_url"] + "/chat/completions",
@@ -286,12 +308,32 @@ def call_model(model: dict[str, Any], prompt: str, image_png: bytes) -> tuple[di
         json=payload,
         timeout=MODEL_TIMEOUT_SECONDS,
     )
+    if use_json and response.status_code in (400, 422):
+        JSON_OBJECT_MODE = "unsupported"
+        logger.warning("document analysis: model gateway rejected response_format, falling back to text JSON")
+        payload.pop("response_format", None)
+        response = requests.post(
+            model["base_url"] + "/chat/completions",
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + model["api_key"]},
+            json=payload,
+            timeout=MODEL_TIMEOUT_SECONDS,
+        )
     if response.status_code != 200:
         raise RuntimeError("model HTTP " + str(response.status_code) + ": " + response.text[:500])
+    if use_json and JSON_OBJECT_MODE == "unknown":
+        JSON_OBJECT_MODE = "supported"
     data = response.json()
     choice = (data.get("choices") or [{}])[0]
     content = (choice.get("message") or {}).get("content") or ""
     finish_reason = choice.get("finish_reason")
+    usage = data.get("usage") or {}
+    logger.info(
+        "page model finish=%s promptTokens=%s completionTokens=%s chars=%s",
+        finish_reason,
+        usage.get("prompt_tokens"),
+        usage.get("completion_tokens"),
+        len(content),
+    )
     if finish_reason == "length":
         raise RuntimeError("model output truncated (finish_reason=length)")
     parsed = PageSummary.model_validate(parse_json_content(content))
@@ -300,6 +342,7 @@ def call_model(model: dict[str, Any], prompt: str, image_png: bytes) -> tuple[di
         "finishReason": finish_reason,
         "elapsedMs": int((time.time() - started) * 1000),
         "promptVersion": PROMPT_VERSION,
+        "completionTokens": usage.get("completion_tokens"),
     }
     return parsed.model_dump(), meta
 
@@ -562,9 +605,57 @@ def analyze_file(conn: psycopg.Connection, model: dict[str, Any], s3, project_id
     try:
         pages, total_pages = render_document_pages(source_bytes, name, kind, temp_dir)
         page_records: list[dict[str, Any]] = []
+        agreement_compact = is_technical_agreement(row)
         for page in pages:
-            prompt = prompt_for_page(page["pdfPage"], page["printedPageLabel"], name, kind, page["text"])
-            extraction, meta = call_model(model, prompt, page["imagePath"].read_bytes())
+            prompt = (
+                prompt_for_page_compact(page["pdfPage"], page["printedPageLabel"], name, kind, page["text"])
+                if agreement_compact
+                else prompt_for_page(page["pdfPage"], page["printedPageLabel"], name, kind, page["text"])
+            )
+            image_bytes = page["imagePath"].read_bytes()
+            try:
+                extraction, meta = call_model(model, prompt, image_bytes)
+            except Exception as error:  # noqa: BLE001 - 单页失败不能拖垮整份文件
+                logger.warning(
+                    "page analysis failed, retry compact project=%s file=%s page=%s: %s",
+                    project_id,
+                    name,
+                    page["pdfPage"],
+                    str(error)[:300],
+                )
+                try:
+                    compact_prompt = prompt_for_page_compact(
+                        page["pdfPage"],
+                        page["printedPageLabel"],
+                        name,
+                        kind,
+                        page["text"],
+                    )
+                    extraction, meta = call_model(model, compact_prompt, image_bytes, max_tokens=2000)
+                except Exception as retry_error:  # noqa: BLE001
+                    logger.warning(
+                        "page analysis skipped project=%s file=%s page=%s: %s",
+                        project_id,
+                        name,
+                        page["pdfPage"],
+                        str(retry_error)[:300],
+                    )
+                    extraction = {
+                        "documentType": kind,
+                        "purpose": "",
+                        "summary": "",
+                        "keyFacts": [],
+                        "risks": [],
+                        "decisions": [],
+                        "warnings": ["本页分析失败：" + str(retry_error)[:200]],
+                        "missing": [],
+                    }
+                    meta = {
+                        "model": model["model_id"],
+                        "finishReason": "failed",
+                        "elapsedMs": 0,
+                        "promptVersion": PROMPT_VERSION,
+                    }
             page_records.append({
                 "page": {
                     "pdfPage": page["pdfPage"],

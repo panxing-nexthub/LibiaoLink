@@ -300,7 +300,7 @@ describe("ProjectAiContextService", () => {
     expect(stage.plannedStart).toBe("2026-01-02");
     expect(stage.plannedEnd).toBe("2026-01-25");
     expect(stage.actualEnd).toBe("2026-01-28");
-    expect(stage.actualStart).toBeNull();
+    expect(stage.actualStart).toBe("2026-01-02");
     expect(stage.datesFallback).toBe(true);
     expect(stage.taskDoneCount).toBe(2);
     expect(stage.taskTotalCount).toBe(3);

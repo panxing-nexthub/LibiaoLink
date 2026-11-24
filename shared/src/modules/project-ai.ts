@@ -14,8 +14,9 @@ import { ProjectFileAiSummarySchema } from "./document-analysis.ts";
  *
  * 口径（2026-11-22 定稿）：
  * - 项目不取客户、创建时间、成员名册；启动时间 = 任务名为「项目启动 / Project Startup」的最早 plannedStart（实际口径）。
- * - 阶段不取节点明细与节点计数；阶段日期为空时用该阶段任务日期兜底（plannedStart=min、plannedEnd=max、actualEnd=max；
- *   actualStart 无可靠来源，保持 null），datesFallback=true 表示至少一项来自任务兜底。
+ * - 阶段不取节点明细与节点计数；阶段日期为空时用该阶段任务日期兜底（plannedStart=min、plannedEnd=max、
+ *   actualStart=min plannedStart、actualEnd=max），datesFallback=true 表示至少一项来自任务兜底。
+ *   实际开始按用户确认口径取该阶段任务「开始日期」（plannedStart）最早值。
  * - 任务只给当前快照，不取 task_events 变更历史与变更原因；任务描述（note）只作自然语言补充。
  * - 日报 / 问题只取文字字段与附图数量；项目文件摘要只取项目文件视图中 PDF / 图片 / Word / Excel 的成功分析结果，日报 / 问题图片不进入。
  * - 所有字段为空时保持 null / 空数组，由下游总结明确写「暂无数据」，不得编造。
@@ -68,7 +69,7 @@ export const ProjectAiStageSchema = z
     status: StageStatusSchema,
     plannedStart: DateOnlySchema.nullable(),
     plannedEnd: DateOnlySchema.nullable(),
-    actualStart: DateOnlySchema.nullable(),
+    actualStart: DateOnlySchema.nullable().openapi({ description: "实际开始：阶段表原值；为空时用该阶段任务最早 plannedStart（任务「开始日期」）兜底（用户确认口径 2026-11-24）" }),
     actualEnd: DateOnlySchema.nullable(),
     taskDoneCount: z.number().int().min(0).openapi({ description: "本阶段 status=done 的任务数（不含「未分组」任务）" }),
     taskTotalCount: z.number().int().min(0).openapi({ description: "本阶段任务总数（不含「未分组」任务）" }),

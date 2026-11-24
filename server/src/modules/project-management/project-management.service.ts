@@ -29,7 +29,7 @@ const DEFAULT_REGION = "未分类";
 /**
  * 项目管理接口：独立准备记录，不调用 ProjectService / ProjectRepository，
  * 也不写 projects / project_members / 工作台。读取时按 code 只读关联项目空间，
- * 派生当前阶段与实施日期；项目经理资格校验复用现有名单，实施工程师校验启用账号目录。
+ * 派生当前阶段与实施日期。项目经理、实施工程师使用同一资格名单。
  */
 @Injectable()
 export class ProjectManagementService {
@@ -57,7 +57,7 @@ export class ProjectManagementService {
     if (managerIds.length > 0) {
       await this.managerEligibility.assertAssignable(managerIds);
     }
-    await this.assertEngineersActive(implementationEngineerIds);
+    await this.assertEngineersAssignable(implementationEngineerIds);
 
     const values = {
       code: normalizeText(body.code ?? ""),
@@ -136,7 +136,7 @@ export class ProjectManagementService {
           : body.implementationHandedOver ?? current.implementationHandedOver;
     if (body.implementationEngineerIds !== undefined || body.implementationHandedOver !== undefined) {
       if (!sameIds(current.implementationEngineerIds, nextEngineerIds)) {
-        await this.assertEngineersActive(nextEngineerIds);
+        await this.assertEngineersAssignable(nextEngineerIds, current.implementationEngineerIds);
       }
       patch.implementationEngineerIds = nextEngineerIds;
       patch.implementationHandedOver = nextHandedOver;
@@ -226,16 +226,17 @@ export class ProjectManagementService {
     throw new AppError("VERSION_CONFLICT", "记录已被其他账号更新，请刷新后重试");
   }
 
-  private async assertEngineersActive(ids: readonly string[]): Promise<void> {
-    if (ids.length === 0) return;
-    const active = await this.records.listActiveUsersByIds(ids);
-    const activeIds = new Set(active.map((user) => user.userId));
-    const invalid = ids.filter((userId) => !activeIds.has(userId));
+  private async assertEngineersAssignable(ids: readonly string[], existingIds: readonly string[] = []): Promise<void> {
+    const addedIds = ids.filter((userId) => !existingIds.includes(userId));
+    if (addedIds.length === 0) return;
+    const eligibleIds = await this.managerEligibility.eligibleUserIds();
+    const invalid = addedIds.filter((userId) => !eligibleIds.has(userId));
     if (invalid.length === 0) return;
-    throw new AppError("VALIDATION_FAILED", "实施工程师只能选择启用账号；不符合条件：" + invalid.join("、"), [
+    const message = "实施工程师只能选择有效项目部成员或系统管理员";
+    throw new AppError("VALIDATION_FAILED", message, [
       {
-        code: "IMPLEMENTATION_ENGINEER_INACTIVE",
-        message: "实施工程师只能选择启用账号",
+        code: "IMPLEMENTATION_ENGINEER_INELIGIBLE",
+        message,
         path: "implementationEngineerIds",
         meta: { userIds: invalid },
       },

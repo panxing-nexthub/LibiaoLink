@@ -22,6 +22,7 @@ const MANAGER_ID = "22222222-2222-4222-8222-222222222222";
 const ENGINEER_ID = "33333333-3333-4333-8333-333333333333";
 const ENGINEER_2_ID = "55555555-5555-4555-8555-555555555555";
 const DISABLED_ID = "44444444-4444-4444-8444-444444444444";
+const OUTSIDE_ID = "66666666-6666-4666-8666-666666666666";
 
 class FakeProjectManagementRepository {
   rows: ProjectManagementRecordRow[] = [];
@@ -71,9 +72,6 @@ class FakeProjectManagementRepository {
     return this.users.filter((user) => ids.includes(user.userId));
   }
 
-  async listActiveUsersByIds(ids: readonly string[]): Promise<ProjectManagementUserSnapshot[]> {
-    return this.users.filter((user) => ids.includes(user.userId) && user.status === "active" && user.removedAt === null);
-  }
 }
 
 class FakeProjectSnapshotRepository {
@@ -95,6 +93,10 @@ class FakeProjectSnapshotRepository {
 
 class FakeManagerEligibility {
   calls: string[][] = [];
+
+  async eligibleUserIds(): Promise<Set<string>> {
+    return new Set([MANAGER_ID, ENGINEER_ID, ENGINEER_2_ID]);
+  }
 
   async assertAssignable(ids: readonly string[]): Promise<void> {
     this.calls.push([...ids]);
@@ -156,6 +158,7 @@ function makeService(): {
     { userId: ENGINEER_ID, username: "engineer", displayName: "工程师乙", status: "active", removedAt: null },
     { userId: ENGINEER_2_ID, username: "engineer2", displayName: "工程师丁", status: "active", removedAt: null },
     { userId: DISABLED_ID, username: "disabled", displayName: "停用丙", status: "disabled", removedAt: null },
+    { userId: OUTSIDE_ID, username: "outside", displayName: "其他部门成员", status: "active", removedAt: null },
   ];
   const audits = new FakeAuditService();
   const database = { db: { transaction: async <T>(run: (tx: unknown) => Promise<T>): Promise<T> => run({}) } };
@@ -238,6 +241,26 @@ describe("项目管理独立记录服务（2026-11-17）", () => {
     await expect(
       service.create({ implementationEngineerIds: [DISABLED_ID] }),
     ).rejects.toMatchObject<Partial<AppError>>({ code: "VALIDATION_FAILED" });
+  });
+
+  it("实施工程师可保留或移除存量名单外人员，但不能新选或重新加入", async () => {
+    const { service, repository } = makeService();
+    const ineligible = {
+      code: "VALIDATION_FAILED",
+      details: [{ code: "IMPLEMENTATION_ENGINEER_INELIGIBLE", path: "implementationEngineerIds" }],
+    };
+    await expect(service.create({ implementationEngineerIds: [OUTSIDE_ID] })).rejects.toMatchObject(ineligible);
+    expect(repository.insertCalls).toHaveLength(0);
+
+    repository.rows = [makeRow({ implementationEngineerIds: [OUTSIDE_ID], version: 0 })];
+    const added = await service.update(RECORD_ID, { implementationEngineerIds: [OUTSIDE_ID, ENGINEER_ID], version: 0 });
+    expect(added.implementationEngineerIds).toEqual([OUTSIDE_ID, ENGINEER_ID]);
+    const removed = await service.update(RECORD_ID, { implementationEngineerIds: [ENGINEER_ID], version: 1 });
+    expect(removed.implementationEngineerIds).toEqual([ENGINEER_ID]);
+    await expect(
+      service.update(RECORD_ID, { implementationEngineerIds: [ENGINEER_ID, OUTSIDE_ID], version: 2 }),
+    ).rejects.toMatchObject(ineligible);
+    expect(repository.rows[0]?.implementationEngineerIds).toEqual([ENGINEER_ID]);
   });
 
   it("更新使用 version 乐观锁，并返回最新姓名", async () => {

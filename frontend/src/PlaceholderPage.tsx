@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { subscribeLiveHints, keepLiveOrder } from "./liveSync";
 import { useLiveRefresh } from "./useLiveRefresh";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
@@ -39,6 +39,7 @@ import { formatDateTime } from "./projectApi";
 import { stageNameOf } from "./taskApi";
 import { replaceTemplateSection, templateSectionFromParam, templateSectionSlug, type PlaceholderPage as PlaceholderPageKey } from "./useHashRoute";
 import { isLocalizedLocale, stageText, prefetchLocalizedText, useLocale, useLocalizedTranslator, useT } from "./i18n";
+import { cachedZhTo, translateZhTo } from "./translateApi";
 import { lockBodyScroll } from "./scrollLock";
 import { markTaskNodeNotificationsSeen, refreshTaskNodePending, taskNodeNotificationKeys, useTaskNodePendingBadge } from "./taskNodePending";
 import type { MeResponse } from "./types";
@@ -60,6 +61,138 @@ function templateTabClass(active: boolean): string {
 
 /** 左列节点池的兜底空数组（取不到该板块那份时用，避免每次渲染都新建一个）。 */
 const EMPTY_NODE_LIST: readonly TaskNodeItem[] = [];
+
+/** 节点名比对键：去首尾空白 + 合并连续空格（字典查找与同名判重共用）。 */
+function nodeNameKey(text: string): string {
+  return text.trim().replace(/ {2,}/g, " ");
+}
+
+/**
+ * 官方产品名（业务口径 2026-10-13 / 2026-11-24 复核）：节点名里出现这些产品词时固定用官方英文名，
+ * 不交给机翻自由发挥；项目类型码 / 字典码仍保持原值（T-sort / 3D分拣 / 飞箱）。
+ */
+const PRODUCT_NAME_TERMS: ReadonlyArray<{ readonly zh: string; readonly en: string }> = [
+  { zh: "T-sort", en: "T-Sort" },
+  { zh: "T-Sort", en: "T-Sort" },
+  { zh: "T型分拣", en: "T-Sort" },
+  { zh: "T型分选", en: "T-Sort" },
+  { zh: "3D分拣", en: "3D Sorting" },
+  { zh: "3D分选", en: "3D Sorting" },
+  { zh: "飞箱", en: "AirRob" },
+];
+
+/** 机翻 / 库内旧英文里的产品名统一回官方写法（AirRobot / Air Robot / Flying Box → AirRob）。 */
+function normalizeProductTermEnglish(text: string): string {
+  return text
+    .replace(/AirRobot(?![A-Za-z])/gi, "AirRob")
+    .replace(/Air Robot(?![A-Za-z])/gi, "AirRob")
+    .replace(/AirRob(?![A-Za-z])/gi, "AirRob")
+    .replace(/Flying Box(?![A-Za-z])/gi, "AirRob")
+    .replace(/T-Sort(?![A-Za-z])/gi, "T-Sort")
+    .replace(/T Sort(?![A-Za-z])/gi, "T-Sort")
+    .replace(/TSort(?![A-Za-z])/gi, "T-Sort")
+    .replace(/3D Sorting(?![A-Za-z])/gi, "3D Sorting")
+    .replace(/3D Sorter(?![A-Za-z])/gi, "3D Sorting");
+}
+
+/** 中文节点名按节点库词条切段（长词优先）；没有任何词条命中返回 null。 */
+function splitNodeTitleByDictionary(
+  title: string,
+  terms: readonly string[],
+): Array<{ text: string; dictionary: boolean }> | null {
+  const parts: Array<{ text: string; dictionary: boolean }> = [];
+  let cursor = 0;
+  let matched = false;
+  while (cursor < title.length) {
+    const hit = terms.find((term) => title.startsWith(term, cursor));
+    if (hit !== undefined) {
+      parts.push({ text: hit, dictionary: true });
+      cursor += hit.length;
+      matched = true;
+      continue;
+    }
+    let end = cursor + 1;
+    while (end < title.length && !terms.some((term) => title.startsWith(term, end))) {
+      end += 1;
+    }
+    parts.push({ text: title.slice(cursor, end), dictionary: false });
+    cursor = end;
+  }
+  return matched ? parts : null;
+}
+
+/** 节点名是否命中节点库词条（缓存命中时也要让字典优先，不能直接吃旧的整句机翻）。 */
+function nodeTitleHitsDictionary(title: string, dictionary: ReadonlyMap<string, string>): boolean {
+  for (const term of dictionary.keys()) {
+    if (term.length >= 2 && title.includes(term)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 节点名自动翻译（优先结合节点库字典）：
+ * ① 整名命中节点库 → 直接采用库内英文；
+ * ② 命中部分词条 → 词条取库内英文、剩余片段走机翻后拼接（长词优先；英文把名词短语中心词放前）；
+ * ③ 无词条命中 / 片段翻译失败 → 回落整句机翻（服务端仍会做专业术语保护）。
+ * 翻译失败返回 null，调用方保持英文输入框现状。
+ */
+async function translateNodeTitle(
+  title: string,
+  dictionary: ReadonlyMap<string, string>,
+): Promise<string | null> {
+  const direct = dictionary.get(nodeNameKey(title));
+  if (direct !== undefined) {
+    return direct;
+  }
+  const terms = Array.from(dictionary.keys()).filter((term) => term.length >= 2).sort((a, b) => b.length - a.length);
+  const parts = splitNodeTitleByDictionary(title, terms);
+  if (parts !== null) {
+    const freeTexts = Array.from(
+      new Set(parts.filter((part) => !part.dictionary && /[一-鿿]/.test(part.text)).map((part) => part.text.trim())),
+    );
+    const translations = freeTexts.length === 0 ? new Map<string, string>() : await translateZhTo(freeTexts, "en");
+    if (freeTexts.every((text) => translations.has(text))) {
+      const pieces: string[] = [];
+      for (const part of parts) {
+        if (!part.dictionary) continue;
+        const english = dictionary.get(part.text);
+        if (english !== undefined) pieces.push(english);
+      }
+      for (const part of parts) {
+        if (part.dictionary) continue;
+        const raw = part.text.trim();
+        if (raw === "") continue;
+        pieces.push(/[一-鿿]/.test(raw) ? translations.get(raw) ?? raw : raw);
+      }
+      const composed = normalizeProductTermEnglish(pieces.join(" ").trim());
+      if (composed !== "") {
+        return composed;
+      }
+    }
+  }
+  const whole = await translateZhTo([title], "en");
+  const translated = whole.get(title);
+  return translated === undefined ? null : normalizeProductTermEnglish(translated);
+}
+
+/** 全阶段节点库字典：首次打开节点表单时补拉一次，供专业名词匹配使用（失败阶段静默跳过）。 */
+let allStageNodeDictionaryPromise: Promise<readonly TaskNodeItem[]> | null = null;
+function loadAllStageNodeDictionary(): Promise<readonly TaskNodeItem[]> {
+  if (allStageNodeDictionaryPromise === null) {
+    allStageNodeDictionaryPromise = Promise.all(
+      TEMPLATE_STAGE_SECTIONS.map(async (stage) => {
+        try {
+          return await fetchStageNodes(stage);
+        } catch {
+          return EMPTY_NODE_LIST;
+        }
+      }),
+    ).then((lists) => lists.flat());
+  }
+  return allStageNodeDictionaryPromise;
+}
 
 /** 每日通知时间下拉：小时 / 分钟都用系统自绘 SelectMenu，不再使用浏览器原生 time 选择器。 */
 const REVIEW_NOTIFY_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => {
@@ -363,6 +496,37 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   /** 公共节点库取数版本号：左侧新增 / 删除成功后 +1；模板内新增私有节点不触发这里。 */
   const [nodesVersion, setNodesVersion] = useState(0);
   const activeNodes = nodesByStage[activeSection] ?? EMPTY_NODE_LIST;
+  /** 全阶段节点库（打开节点表单后补拉一次）：专业名词字典不只看当前板块。 */
+  const [dictionaryNodes, setDictionaryNodes] = useState<readonly TaskNodeItem[]>(EMPTY_NODE_LIST);
+  /**
+   * 新建 / 编辑节点的「专业名词字典」：全阶段节点库 + 已加载模板私有节点，中文名 → 英文名。
+   * 自动翻译优先采用这里的既有译法（精确同名直接取；长词命中则保留库内英文再拼剩余片段），
+   * 避免同一个专业名词在不同节点里被机翻成不同叫法。
+   */
+  const nodeEnglishDictionary = useMemo(() => {
+    const dictionary = new Map<string, string>();
+    for (const term of PRODUCT_NAME_TERMS) {
+      dictionary.set(nodeNameKey(term.zh), term.en);
+    }
+    const containsProductTerm = (key: string): boolean =>
+      PRODUCT_NAME_TERMS.some((term) => key.includes(nodeNameKey(term.zh)));
+    const add = (nodes: readonly TaskNodeItem[]): void => {
+      for (const node of nodes) {
+        const key = nodeNameKey(node.title);
+        const english = normalizeProductTermEnglish(node.titleEn.trim());
+        if (key !== "" && english !== "" && !dictionary.has(key) && !containsProductTerm(key)) {
+          dictionary.set(key, english);
+        }
+      }
+    };
+    add(activeNodes);
+    add(dictionaryNodes);
+    for (const list of Object.values(nodesByStage)) add(list);
+    for (const list of Object.values(templatesByStage)) {
+      for (const template of list) add(template.nodes);
+    }
+    return dictionary;
+  }, [activeNodes, dictionaryNodes, nodesByStage, templatesByStage]);
 
   /**
    * 「入库审核」独立板块是否正在展示（远端 b66ffd88 新增的板块）：审核工作台挂在这个板块内容上方。
@@ -721,10 +885,10 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
    * - 上一份没有未保存改动（或本来就同一份）= 直接切换；
    * - 上一份有未保存改动 = 拦下并提示先保存 / 放弃，绝不静默丢掉草稿。
    */
-  function beginTemplateEditing(templateId: string): void {
+  function beginTemplateEditing(templateId: string): boolean {
     const target = templates.find((template) => template.id === templateId);
     if (target === undefined || !canManageTemplate(target.createdBy)) {
-      return;
+      return false;
     }
     if (editingTemplateId !== null && editingTemplateId !== templateId) {
       const active = findTemplateAnywhere(editingTemplateId);
@@ -733,7 +897,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
           kind: "info",
           text: t("tpl.edit.onlyOne", { name: localize(active.name) }),
         });
-        return;
+        return false;
       }
     }
     setNodeForm((current) =>
@@ -744,6 +908,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     resetDrag();
     setTemplateNotice(null);
     setEditingTemplateId(templateId);
+    return true;
   }
 
   /** 列头状态下拉：选「编辑中」进入编辑；选「已保存」= 有改动先保存再退出，无改动直接退出。 */
@@ -971,8 +1136,30 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   const [nodeForm, setNodeForm] = useState<
     { mode: "create"; templateId: string | null } | { mode: "edit"; node: TaskNodeItem } | null
   >(null);
+  /** 打开节点表单时补拉全阶段节点库（模块级只拉一次），让专业名词字典覆盖所有板块。 */
+  useEffect(() => {
+    if (page !== "templates" || nodeForm === null) {
+      return;
+    }
+    let alive = true;
+    void loadAllStageNodeDictionary().then((nodes) => {
+      if (alive) {
+        setDictionaryNodes(nodes);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [page, nodeForm]);
   const [formTitle, setFormTitle] = useState("");
   const [formTitleEn, setFormTitleEn] = useState("");
+  /** 英文名是否已被用户手动改过：一旦改过就停止自动翻译（仍可继续编辑 / 清空）。 */
+  const [formTitleEnManual, setFormTitleEnManual] = useState(false);
+  /** 自动翻译进行中：输入框下方显示状态，避免用户以为英文名没反应。 */
+  const [formTitleEnTranslating, setFormTitleEnTranslating] = useState(false);
+  /** 自动翻译请求序号：中文继续输入时，旧的翻译结果回来就直接丢弃。 */
+  const nodeTitleTranslateSeq = useRef(0);
+  /** 当前英文名是否来自节点库字典（提示文案与纯机翻区分）。 */
   const [formError, setFormError] = useState<string | null>(null);
   const [formBusy, setFormBusy] = useState(false);
   /** 待确认删除的节点（同款红胶囊的第一下：第二下在顶部确认 Toast 上）+ 写入失败的提示文案。 */
@@ -1027,6 +1214,64 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     }
   }, [nodeForm]);
 
+  /**
+   * 新增 / 编辑节点的中英文同步（业务口径 2026-11-24「新建节点输入中文英文同步自动翻译 可编辑」）：
+   * 中文名停顿约 450ms 后自动填充英文名；专业名词优先取节点库既有中英对照（精确同名 / 长词命中），
+   * 未命中的部分再走 POST /api/v1/translate 机翻（服务端仍会做术语保护）。
+   * 用户一旦手动改英文名就停止覆盖（可自由修改 / 清空）；翻译失败静默保留输入，不阻断保存。
+   */
+  useEffect(() => {
+    const seq = nodeTitleTranslateSeq.current + 1;
+    nodeTitleTranslateSeq.current = seq;
+    if (nodeForm === null) {
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    const title = nodeNameKey(formTitle);
+    if (title === "") {
+      if (!formTitleEnManual) {
+        setFormTitleEn("");
+      }
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    if (formTitleEnManual) {
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    if (!/[一-鿿]/.test(title)) {
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    const dictionaryEnglish = nodeEnglishDictionary.get(title);
+    if (dictionaryEnglish !== undefined) {
+      setFormTitleEn(dictionaryEnglish);
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    const cached = cachedZhTo(title, "en");
+    if (cached !== null && !nodeTitleHitsDictionary(title, nodeEnglishDictionary)) {
+      setFormTitleEn(cached);
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    setFormTitleEnTranslating(true);
+    const timer = window.setTimeout(() => {
+      void translateNodeTitle(title, nodeEnglishDictionary).then((translated) => {
+        if (nodeTitleTranslateSeq.current !== seq) {
+          return;
+        }
+        if (translated !== null) {
+          setFormTitleEn(translated);
+        }
+        setFormTitleEnTranslating(false);
+      });
+    }, 450);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [formTitle, formTitleEnManual, nodeForm, nodeEnglishDictionary]);
+
   /** 写节点库失败的统一文案（ApiError 带业务码；其它异常给兜底话术，不把原始堆栈抛给用户）。 */
   const nodeErrorMessage = (error: unknown, fallback: string): string =>
     error instanceof ApiError ? nodeWriteMessage(error) : fallback;
@@ -1044,6 +1289,9 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     }
     setFormTitle("");
     setFormTitleEn("");
+    setFormTitleEnManual(false);
+    setFormTitleEnTranslating(false);
+    nodeTitleTranslateSeq.current += 1;
     setNodeForm({ mode: "create", templateId });
   };
 
@@ -1057,13 +1305,19 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     }
     setFormTitle(node.title);
     setFormTitleEn(node.titleEn);
+    setFormTitleEnManual(node.titleEn.trim() !== "");
+    setFormTitleEnTranslating(false);
+    nodeTitleTranslateSeq.current += 1;
     setNodeForm({ mode: "edit", node });
   };
 
   /** 收起表单（取消按钮 / 保存成功后）。 */
   const closeNodeForm = (): void => {
+    nodeTitleTranslateSeq.current += 1;
     setNodeForm(null);
     setFormError(null);
+    setFormTitleEnManual(false);
+    setFormTitleEnTranslating(false);
   };
 
   /**
@@ -1095,9 +1349,12 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         } else {
           await updateStageNode(form.node.id, { title, titleEn: formTitleEn.trim(), version: form.node.version });
         }
+        nodeTitleTranslateSeq.current += 1;
         setNodeForm(null);
         setFormTitle("");
         setFormTitleEn("");
+        setFormTitleEnManual(false);
+        setFormTitleEnTranslating(false);
         if (form.mode === "edit" || (form.mode === "create" && form.templateId === null)) {
           setNodesVersion((version) => version + 1);
           // 节点名变了：模板面板里的节点摘要跟着刷新（本地没有未保存改动时才会被覆盖）
@@ -1149,12 +1406,26 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       <input
         type="text"
         value={formTitleEn}
-        onChange={(event) => { setFormTitleEn(event.target.value); }}
+        onChange={(event) => {
+          const value = event.target.value;
+          setFormTitleEn(value);
+          // 英文名清空后恢复自动翻译：允许「先输入英文 → 删除 → 再输入中文」的正常流程。
+          setFormTitleEnManual(value.trim() !== "");
+          setFormTitleEnTranslating(false);
+        }}
         placeholder={t("tpl.node.nameEnPlaceholder")}
         aria-label={t("tpl.node.nameEnAria")}
+        aria-describedby="node-form-title-en-hint"
         maxLength={200}
-        className="mb-2 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 outline-none transition placeholder:text-zinc-400 focus:border-zinc-300"
+        className="w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 outline-none transition placeholder:text-zinc-400 focus:border-zinc-300"
       />
+      <p id="node-form-title-en-hint" className="mb-2 mt-1 text-[11px] leading-4 text-zinc-400" aria-live="polite">
+        {formTitleEnTranslating
+          ? t("tpl.node.nameEnTranslating")
+          : formTitleEnManual
+            ? t("tpl.node.nameEnManualHint")
+            : t("tpl.node.nameEnAutoHint")}
+      </p>
       {formError === null ? null : <p className="mb-2 text-xs text-rose-600">{formError}</p>}
       <div className="flex items-center justify-end gap-2">
         <button
@@ -2413,17 +2684,14 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                                 type="button"
                                 data-template-add-node={template.id}
                                 onClick={() => {
-                                  if (isEditing) {
-                                    openCreateForm(template.id);
+                                  if (!isEditing && !beginTemplateEditing(template.id)) {
+                                    return;
                                   }
+                                  openCreateForm(template.id);
                                 }}
-                                disabled={!isEditing || savingTemplateId !== null}
+                                disabled={savingTemplateId !== null}
                                 aria-expanded={nodeForm?.mode === "create" && nodeForm.templateId === template.id}
-                                title={
-                                  isEditing
-                                    ? t("tpl.nodes.addToTemplateTitle", { name: localize(template.name) })
-                                    : t("tpl.edit.addFirst")
-                                }
+                                title={t("tpl.nodes.addToTemplateTitle", { name: localize(template.name) })}
                                 className="shrink-0 whitespace-nowrap rounded-md border border-white/70 bg-white/60 px-2 py-0.5 text-xs font-medium text-zinc-700 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:border-zinc-200/70 disabled:bg-white/35 disabled:text-zinc-400"
                               >
                                 {t("tpl.nodes.add")}

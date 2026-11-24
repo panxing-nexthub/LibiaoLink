@@ -637,12 +637,12 @@ def select_project_files(conn: psycopg.Connection, project_id: str) -> list[dict
             f.task_id is not null
             or cf.file_id is not null
             or f.doc_type = '技术协议'
-            or f.name like '%技术协议%'
-            or f.name like '%技术规格书%'
+            or f.name like %s
+            or f.name like %s
           )
         order by f.updated_at desc, f.name
         """,
-        (project_id, project_id),
+        (project_id, project_id, "%技术协议%", "%技术规格书%"),
     ).fetchall()
     return list(rows)
 

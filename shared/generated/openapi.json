@@ -11273,14 +11273,6 @@
               "progress"
             ]
           },
-          "timeline": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProjectAiTimelineItem"
-            },
-            "maxItems": 8,
-            "default": []
-          },
           "issues": {
             "type": "object",
             "properties": {
@@ -11320,147 +11312,13 @@
               "inProgress",
               "open"
             ]
-          },
-          "resultsAndRisks": {
-            "type": "object",
-            "properties": {
-              "text": {
-                "type": "string",
-                "maxLength": 1500
-              },
-              "claims": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/ProjectAiClaim"
-                },
-                "maxItems": 20,
-                "default": []
-              },
-              "risks": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/ProjectAiClaim"
-                },
-                "maxItems": 20,
-                "default": []
-              }
-            },
-            "required": [
-              "text"
-            ]
-          },
-          "handoff": {
-            "type": "object",
-            "properties": {
-              "existing": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "text": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 600
-                    },
-                    "owner": {
-                      "type": "string",
-                      "maxLength": 100
-                    },
-                    "nextStep": {
-                      "type": "string",
-                      "maxLength": 300
-                    },
-                    "type": {
-                      "$ref": "#/components/schemas/ProjectAiClaimType"
-                    },
-                    "sources": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/ProjectAiSource"
-                      },
-                      "minItems": 1,
-                      "maxItems": 10
-                    }
-                  },
-                  "required": [
-                    "text",
-                    "owner",
-                    "nextStep",
-                    "type",
-                    "sources"
-                  ]
-                },
-                "maxItems": 20,
-                "default": []
-              },
-              "suggestions": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "text": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 600
-                    },
-                    "reason": {
-                      "type": "string",
-                      "maxLength": 600
-                    },
-                    "nextStep": {
-                      "type": "string",
-                      "maxLength": 300
-                    },
-                    "acceptance": {
-                      "type": "string",
-                      "maxLength": 300
-                    },
-                    "type": {
-                      "$ref": "#/components/schemas/ProjectAiClaimType"
-                    },
-                    "needsHumanConfirmation": {
-                      "type": "boolean"
-                    },
-                    "sources": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/ProjectAiSource"
-                      },
-                      "minItems": 1,
-                      "maxItems": 10
-                    }
-                  },
-                  "required": [
-                    "text",
-                    "reason",
-                    "nextStep",
-                    "acceptance",
-                    "type",
-                    "needsHumanConfirmation",
-                    "sources"
-                  ]
-                },
-                "maxItems": 20,
-                "default": []
-              }
-            }
-          },
-          "notes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProjectAiClaim"
-            },
-            "maxItems": 20,
-            "default": []
           }
         },
         "required": [
           "title",
           "summary",
           "overview",
-          "issues",
-          "resultsAndRisks",
-          "handoff"
+          "issues"
         ],
         "description": "结构化正式报告（REPORT_SCHEMA v2）"
       },
@@ -11685,44 +11543,6 @@
           "changeId",
           "reason",
           "appliedAt"
-        ]
-      },
-      "ProjectAiTimelineItem": {
-        "type": "object",
-        "properties": {
-          "date": {
-            "type": "string",
-            "maxLength": 20,
-            "description": "业务日期 YYYY-MM-DD；仅记录已有日期"
-          },
-          "title": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 600
-          },
-          "type": {
-            "$ref": "#/components/schemas/ProjectAiClaimType"
-          },
-          "sources": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProjectAiSource"
-            },
-            "minItems": 1,
-            "maxItems": 10
-          }
-        },
-        "required": [
-          "date",
-          "title",
-          "text",
-          "type",
-          "sources"
         ]
       },
       "ProjectArchiveBody": {

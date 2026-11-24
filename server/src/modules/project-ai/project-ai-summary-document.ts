@@ -38,7 +38,7 @@ function stageStatusText(status: string): string {
 /**
  * P4：把采集器数据确定性补齐为文档字段。
  *
- * 模型只负责 summary / timeline / issues.summary / resultsAndRisks / handoff / notes；
+ * 模型只负责 summary.text 与 issues.summary；
  * 基本信息、设备布局、背景、设备清单、进度表、现场图片、问题全量表、来源清单全部由这里写入，
  * 避免模型改数、编造图片或表格。
  */

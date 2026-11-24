@@ -15269,8 +15269,6 @@ export interface components {
                 planRange?: components["schemas"]["ProjectAiRange"];
                 reportRange?: components["schemas"]["ProjectAiRange"];
             };
-            /** @default [] */
-            timeline: components["schemas"]["ProjectAiTimelineItem"][];
             issues: {
                 total: number;
                 done: number;
@@ -15281,35 +15279,6 @@ export interface components {
                 /** @default [] */
                 currentItems: components["schemas"]["ProjectAiIssueItem"][];
             };
-            resultsAndRisks: {
-                text: string;
-                /** @default [] */
-                claims: components["schemas"]["ProjectAiClaim"][];
-                /** @default [] */
-                risks: components["schemas"]["ProjectAiClaim"][];
-            };
-            handoff: {
-                /** @default [] */
-                existing: {
-                    text: string;
-                    owner: string;
-                    nextStep: string;
-                    type: components["schemas"]["ProjectAiClaimType"];
-                    sources: components["schemas"]["ProjectAiSource"][];
-                }[];
-                /** @default [] */
-                suggestions: {
-                    text: string;
-                    reason: string;
-                    nextStep: string;
-                    acceptance: string;
-                    type: components["schemas"]["ProjectAiClaimType"];
-                    needsHumanConfirmation: boolean;
-                    sources: components["schemas"]["ProjectAiSource"][];
-                }[];
-            };
-            /** @default [] */
-            notes: components["schemas"]["ProjectAiClaim"][];
         };
         ProjectAiTask: {
             taskId: components["schemas"]["Uuid"];
@@ -15341,14 +15310,6 @@ export interface components {
             changeId: components["schemas"]["Uuid"];
             reason: string | null;
             appliedAt: components["schemas"]["DateTime"];
-        };
-        ProjectAiTimelineItem: {
-            /** @description 业务日期 YYYY-MM-DD；仅记录已有日期 */
-            date: string;
-            title: string;
-            text: string;
-            type: components["schemas"]["ProjectAiClaimType"];
-            sources: components["schemas"]["ProjectAiSource"][];
         };
         ProjectArchiveBody: {
             version: components["schemas"]["Version"] & unknown;

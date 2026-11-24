@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "../i18n";
 import { lockBodyScroll } from "../scrollLock";
@@ -12,11 +12,10 @@ import {
   fetchProjectDocumentAnalysis,
   generateProjectAiSummary,
   uploadProjectAiAgreementImage,
-  type ProjectAiClaim,
+  deleteProjectAiAgreementImage,
   type ProjectAiContext,
   type ProjectAiSummary,
   type ProjectAiSummaryIssue,
-  type ProjectAiSummaryReport,
   type ProjectAiSummaryReportEntry,
 } from "../projectAiApi";
 import { buildProjectSummaryView, type SummaryView } from "../projectSummaryView";
@@ -29,243 +28,6 @@ type ProjectAiSummaryModalProps = {
   project: { id: string; code: string; description: string };
   onClose: () => void;
 };
-
-/** 事实 / 推断 / 建议的视觉区分：推断与建议不能被读成既定事实。 */
-function ClaimBadge({ type }: { type: ProjectAiClaim["type"] }) {
-  const t = useT();
-  const style = type === "fact"
-    ? "bg-zinc-100 text-zinc-600"
-    : type === "inference"
-      ? "bg-amber-50 text-amber-700 ring-1 ring-amber-100"
-      : "bg-sky-50 text-sky-700 ring-1 ring-sky-100";
-  const label = type === "fact" ? t("ai.claim.fact") : type === "inference" ? t("ai.claim.inference") : t("ai.claim.suggestion");
-  return <span className={"shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium " + style}>{label}</span>;
-}
-
-function SourceChips({ sources }: { sources: readonly string[] }) {
-  const t = useT();
-  const unique = Array.from(new Set(sources.filter((source) => source.trim() !== "")));
-  if (unique.length === 0) return null;
-  return (
-    <span className="mt-1 flex flex-wrap items-center gap-1">
-      <span className="text-[10px] text-zinc-400">{t("ai.sources")}</span>
-      {unique.map((source) => (
-        <span key={source} className="rounded bg-zinc-50 px-1.5 py-0.5 text-[10px] text-zinc-500 ring-1 ring-zinc-100">{source}</span>
-      ))}
-    </span>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="border-t border-zinc-100 pt-4">
-      <h3 className="text-[13px] font-semibold tracking-wide text-zinc-800">{title}</h3>
-      <div className="mt-2.5">{children}</div>
-    </section>
-  );
-}
-
-function rangeText(range: { from: string | null; to: string | null }, empty: string): string {
-  if (range.from === null && range.to === null) return empty;
-  return (range.from ?? empty) + " ~ " + (range.to ?? empty);
-}
-
-function overviewValue(value: string | null | undefined, empty: string): string {
-  return value === null || value === undefined || value.trim() === "" ? empty : value;
-}
-
-function mergeSources(claims: readonly ProjectAiClaim[]): string[] {
-  return Array.from(new Set(claims.flatMap((claim) => claim.sources)));
-}
-
-function ReportBody({ report }: { report: ProjectAiSummaryReport }) {
-  const t = useT();
-  const empty = t("ai.noData");
-  const progress = report.overview.progress;
-  const summarySources = mergeSources(report.summary.claims);
-  const resultSources = mergeSources(report.resultsAndRisks.claims.concat(report.resultsAndRisks.risks));
-  return (
-    <>
-      <h2 className="text-xl font-semibold tracking-tight text-zinc-900">{report.title}</h2>
-
-      <div className="mt-2 rounded-xl bg-zinc-50/80 p-3.5 text-[13px] leading-6 text-zinc-700">
-        <p className="whitespace-pre-wrap">{report.summary.text}</p>
-        {summarySources.length === 0 ? null : <SourceChips sources={summarySources} />}
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-xl border border-zinc-100 p-3">
-          <p className="text-[11px] text-zinc-400">{t("ai.status")}</p>
-          <p className="mt-1 text-sm font-medium text-zinc-800">{overviewValue(report.overview.status, empty)}</p>
-        </div>
-        <div className="rounded-xl border border-zinc-100 p-3">
-          <p className="text-[11px] text-zinc-400">{t("ai.startedAt")}</p>
-          <p className="mt-1 text-sm font-medium text-zinc-800">{overviewValue(report.overview.startedAt, empty)}</p>
-        </div>
-        <div className="rounded-xl border border-zinc-100 p-3">
-          <p className="text-[11px] text-zinc-400">{t("ai.managers")}</p>
-          <p className="mt-1 truncate text-sm font-medium text-zinc-800" title={report.overview.managers.join("、")}>
-            {report.overview.managers.length === 0 ? empty : report.overview.managers.join("、")}
-          </p>
-        </div>
-        <div className="rounded-xl border border-zinc-100 p-3">
-          <p className="text-[11px] text-zinc-400">{t("ai.projectCode")}</p>
-          <p className="mt-1 font-mono text-sm font-medium text-zinc-800">{overviewValue(report.overview.projectCode, empty)}</p>
-        </div>
-      </div>
-
-      <div className="mt-3 rounded-xl border border-zinc-100 p-3.5">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-[11px] text-zinc-400">{t("ai.progress")}</span>
-          <span data-ai-progress="true" className="text-sm font-semibold text-zinc-800">
-            {progress.done} / {progress.total}
-            {progress.percent === null ? "" : " · " + String(progress.percent) + "%"}
-          </span>
-          <span className="ml-auto text-[11px] text-zinc-500">{t("ai.latestStage")}：{overviewValue(progress.latestStage, empty)}</span>
-          <span className="text-[11px] text-zinc-500">{t("ai.slowestStage")}：{overviewValue(progress.slowestStage, empty)}</span>
-        </div>
-        {progress.percent === null ? null : (
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100">
-            <div className="h-full rounded-full bg-[#FF8F6B]" style={{ width: String(Math.max(0, Math.min(100, progress.percent))) + "%" }} />
-          </div>
-        )}
-        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-zinc-500">
-          <span>{t("ai.planRange")}：{rangeText(report.overview.planRange, empty)}</span>
-          <span>{t("ai.reportRange")}：{rangeText(report.overview.reportRange, empty)}</span>
-        </div>
-      </div>
-
-      <Section title={t("ai.timeline")}>
-        {report.timeline.length === 0 ? (
-          <p className="text-xs text-zinc-400">{empty}</p>
-        ) : (
-          <ol className="relative ml-1 border-l border-zinc-200">
-            {report.timeline.map((item, index) => (
-              <li key={String(index) + item.date} className="relative pb-4 pl-4 last:pb-0">
-                <span className="absolute -left-[3.5px] top-1.5 h-1.5 w-1.5 rounded-full bg-[#FF8F6B]" />
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[11px] text-zinc-400">{item.date}</span>
-                  <span className="text-[13px] font-medium text-zinc-800">{item.title}</span>
-                  <ClaimBadge type={item.type} />
-                </div>
-                <p className="mt-1 text-[13px] leading-6 text-zinc-600">{item.text}</p>
-                <SourceChips sources={item.sources} />
-              </li>
-            ))}
-          </ol>
-        )}
-      </Section>
-
-      <Section title={t("ai.issues")}>
-        <div className="flex flex-wrap gap-2">
-          {[
-            { label: t("ai.issues.total"), value: report.issues.total },
-            { label: t("ai.issues.done"), value: report.issues.done },
-            { label: t("ai.issues.inProgress"), value: report.issues.inProgress },
-            { label: t("ai.issues.open"), value: report.issues.open },
-          ].map((entry) => (
-            <span key={entry.label} className="rounded-lg bg-zinc-50 px-2.5 py-1 text-[11px] text-zinc-500 ring-1 ring-zinc-100">
-              {entry.label} <span className="ml-1 font-semibold text-zinc-800">{entry.value}</span>
-            </span>
-          ))}
-        </div>
-        {report.issues.summary.trim() === "" ? null : <p className="mt-2 text-[13px] leading-6 text-zinc-600">{report.issues.summary}</p>}
-        {report.issues.currentItems.length === 0 ? (
-          <p className="mt-2 text-xs text-zinc-400">{t("ai.issues.none")}</p>
-        ) : (
-          <ul className="mt-2.5 space-y-2.5">
-            {report.issues.currentItems.map((item, index) => (
-              <li key={String(index)} className="rounded-xl border border-zinc-100 p-3">
-                <div className="flex items-start gap-2">
-                  <ClaimBadge type={item.type} />
-                  <p className="min-w-0 flex-1 text-[13px] leading-6 text-zinc-700">{item.text}</p>
-                </div>
-                <dl className="mt-2 grid gap-1 text-[11px] text-zinc-500 sm:grid-cols-3">
-                  <div><dt className="inline text-zinc-400">{t("ai.issues.owner")}：</dt><dd className="inline">{item.owner}</dd></div>
-                  <div><dt className="inline text-zinc-400">{t("ai.issues.handling")}：</dt><dd className="inline">{item.handling}</dd></div>
-                  <div><dt className="inline text-zinc-400">{t("ai.issues.nextStep")}：</dt><dd className="inline">{item.nextStep}</dd></div>
-                </dl>
-                <SourceChips sources={item.sources} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section title={t("ai.results")}>
-        <p className="text-[13px] leading-6 text-zinc-600">{report.resultsAndRisks.text}</p>
-        {report.resultsAndRisks.risks.length === 0 ? null : (
-          <ul className="mt-2.5 space-y-2">
-            {report.resultsAndRisks.risks.map((risk, index) => (
-              <li key={String(index)} className="rounded-xl bg-amber-50/60 p-3 ring-1 ring-amber-100">
-                <div className="flex items-start gap-2">
-                  <ClaimBadge type={risk.type} />
-                  <p className="min-w-0 flex-1 text-[13px] leading-6 text-amber-900">{risk.text}</p>
-                </div>
-                <SourceChips sources={risk.sources} />
-              </li>
-            ))}
-          </ul>
-        )}
-        {resultSources.length === 0 ? null : <SourceChips sources={resultSources} />}
-      </Section>
-
-      <Section title={t("ai.handoff")}>
-        {report.handoff.existing.length === 0 ? (
-          <p className="text-xs text-zinc-400">{t("ai.handoff.empty")}</p>
-        ) : (
-          <ul className="space-y-2">
-            {report.handoff.existing.map((item, index) => (
-              <li key={String(index)} className="rounded-xl border border-zinc-100 p-3">
-                <div className="flex items-start gap-2">
-                  <ClaimBadge type={item.type} />
-                  <p className="min-w-0 flex-1 text-[13px] leading-6 text-zinc-700">{item.text}</p>
-                </div>
-                <p className="mt-1 text-[11px] text-zinc-500">{t("ai.handoff.owner")}：{item.owner} · {t("ai.issues.nextStep")}：{item.nextStep}</p>
-                <SourceChips sources={item.sources} />
-              </li>
-            ))}
-          </ul>
-        )}
-        {report.handoff.suggestions.length === 0 ? null : (
-          <>
-            <p className="mt-4 text-[11px] font-medium text-zinc-500">{t("ai.handoff.suggestions")}</p>
-            <ul className="mt-1.5 space-y-2">
-              {report.handoff.suggestions.map((item, index) => (
-                <li key={String(index)} className="rounded-xl border border-sky-100 bg-sky-50/40 p-3">
-                  <div className="flex items-start gap-2">
-                    <ClaimBadge type={item.type} />
-                    <p className="min-w-0 flex-1 text-[13px] leading-6 text-zinc-700">{item.text}</p>
-                    {item.needsHumanConfirmation ? (
-                      <span className="shrink-0 rounded bg-white px-1.5 py-0.5 text-[10px] text-sky-700 ring-1 ring-sky-200">{t("ai.handoff.needsHuman")}</span>
-                    ) : null}
-                  </div>
-                  <p className="mt-1 text-[11px] leading-5 text-zinc-500">{t("ai.handoff.reason")}：{item.reason}</p>
-                  <p className="text-[11px] leading-5 text-zinc-500">{t("ai.issues.nextStep")}：{item.nextStep}</p>
-                  <p className="text-[11px] leading-5 text-zinc-500">{t("ai.handoff.acceptance")}：{item.acceptance}</p>
-                  <SourceChips sources={item.sources} />
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </Section>
-
-      {report.notes.length === 0 ? null : (
-        <Section title={t("ai.notes")}>
-          <ul className="space-y-1.5">
-            {report.notes.map((note, index) => (
-              <li key={String(index)} className="text-xs leading-5 text-zinc-500">
-                <ClaimBadge type={note.type} /> <span className="ml-1.5">{note.text}</span>
-                <SourceChips sources={note.sources} />
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
-    </>
-  );
-}
 
 export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModalProps) {
   const t = useT();
@@ -373,9 +135,16 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
     }
   };
 
-  const replaceAgreementImage = async (kind: "layout" | "three_d", file: File) => {
-    await uploadProjectAiAgreementImage(project.id, kind, file);
+  const replaceAgreementImage = async (kind: "layout" | "three_d", files: File[]) => {
+    for (const file of files) {
+      await uploadProjectAiAgreementImage(project.id, kind, file);
+    }
     // 重新拉取上下文：人工图 URL 带版本参数，刷新后立即可见。
+    setReloadTick((tick) => tick + 1);
+  };
+
+  const removeAgreementImage = async (kind: "layout" | "three_d", imageId: string) => {
+    await deleteProjectAiAgreementImage(project.id, kind, imageId);
     setReloadTick((tick) => tick + 1);
   };
 
@@ -531,14 +300,9 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
                   view={documentView}
                   onPreviewOpenChange={(open) => { previewOpenRef.current = open; }}
                   onReplaceImage={extras.context?.agreement == null ? undefined : replaceAgreementImage}
+                  onRemoveImage={extras.context?.agreement == null ? undefined : removeAgreementImage}
                 />
               )}
-              <details data-ai-extra="true" className="mt-5 rounded-xl border border-zinc-100 bg-zinc-50/40 px-3 py-2">
-                <summary className="cursor-pointer select-none text-[12px] font-medium text-zinc-500">{t("ai.doc.extra")}</summary>
-                <div className="mt-3">
-                  <ReportBody report={summary.report} />
-                </div>
-              </details>
               <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-zinc-100 pt-3 text-[11px] text-zinc-400">
                 <span>{t("ai.generatedAt", { time: formatDateTime(summary.generatedAt) })}</span>
                 {summary.generatedByName === null ? null : <span>{t("ai.generatedBy", { name: summary.generatedByName })}</span>}

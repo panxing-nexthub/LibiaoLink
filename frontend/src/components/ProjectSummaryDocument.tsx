@@ -9,8 +9,10 @@ import { useFocusTrap } from "./useFocusTrap";
 type ProjectSummaryDocumentProps = {
   view: SummaryView;
   onPreviewOpenChange?: (open: boolean) => void;
-  /** 人工替换布局图 / 三维图（P1）；不传则不显示替换入口。 */
-  onReplaceImage?: (kind: "layout" | "three_d", file: File) => Promise<void>;
+  /** 人工上传布局图 / 三维图（支持一次多选）；不传则不显示上传入口。 */
+  onReplaceImage?: (kind: "layout" | "three_d", files: File[]) => Promise<void>;
+  /** 移除一张人工图片；不传则不显示移除入口。 */
+  onRemoveImage?: (kind: "layout" | "three_d", imageId: string) => Promise<void>;
 };
 
 function DocSection({ title, children }: { title: string; children: ReactNode }) {
@@ -166,41 +168,59 @@ function LayoutPreview({ url, name, onClose }: { url: string; name: string; onCl
   );
 }
 
-function LayoutSlot({ label, kind, photo, onPreviewOpenChange, onReplace }: {
+function LayoutSlot({ label, kind, photos, onPreviewOpenChange, onReplace, onRemove }: {
   label: string;
   kind: "layout" | "three_d";
-  photo: SummaryPhoto | null;
+  photos: readonly SummaryPhoto[];
   onPreviewOpenChange?: (open: boolean) => void;
-  onReplace?: (kind: "layout" | "three_d", file: File) => Promise<void>;
+  onReplace?: (kind: "layout" | "three_d", files: File[]) => Promise<void>;
+  onRemove?: (kind: "layout" | "three_d", imageId: string) => Promise<void>;
 }) {
   const t = useT();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [preview, setPreview] = useState<SummaryPhoto | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
   const closePreview = () => {
-    setPreviewOpen(false);
+    setPreview(null);
     onPreviewOpenChange?.(false);
   };
   const pick = () => inputRef.current?.click();
   const onFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (file === undefined || onReplace === undefined) return;
+    if (files.length === 0 || onReplace === undefined) return;
     setBusy(true);
     setFailed(false);
     try {
-      await onReplace(kind, file);
+      await onReplace(kind, files);
     } catch {
       setFailed(true);
     } finally {
       setBusy(false);
     }
   };
+  const remove = async (photo: SummaryPhoto) => {
+    if (onRemove === undefined || photo.id === null || photo.id === undefined) return;
+    setRemoving(photo.id);
+    setFailed(false);
+    try {
+      await onRemove(kind, photo.id);
+    } catch {
+      setFailed(true);
+    } finally {
+      setRemoving(null);
+    }
+  };
+  const countText = t("ai.doc.imageCount", { n: String(photos.length) });
   return (
     <div className="rounded-xl border border-zinc-100 p-3">
       <div className="flex items-center gap-2">
-        <p className="text-[11px] font-medium text-zinc-500">{label}</p>
+        <p className="text-[11px] font-medium text-zinc-500">
+          {label}
+          {photos.length > 1 ? " · " + countText : ""}
+        </p>
         {onReplace === undefined ? null : (
           <>
             <button
@@ -214,6 +234,7 @@ function LayoutSlot({ label, kind, photo, onPreviewOpenChange, onReplace }: {
             <input
               ref={inputRef}
               type="file"
+              multiple
               accept="image/png,image/jpeg,image/webp"
               className="hidden"
               onChange={(event) => { void onFile(event); }}
@@ -223,39 +244,58 @@ function LayoutSlot({ label, kind, photo, onPreviewOpenChange, onReplace }: {
       </div>
       {failed ? <p className="mt-1 text-[10px] text-rose-500">{t("ai.doc.replaceFailed")}</p> : null}
       <div className="mt-2">
-        {photo === null || (photo.fileId === null && photo.url === null) ? (
+        {photos.length === 0 ? (
           <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-zinc-200 bg-zinc-50/60 text-[12px] text-zinc-400">
             {t("ai.doc.unrecognized")}
           </div>
-        ) : photo.fileId !== null ? (
-          <PhotoStrip
-            items={[{ fileId: photo.fileId, name: photo.name, url: photo.url }]}
-            size="lg"
-            strip={"summary-layout-" + label}
-            previewZClass="z-[85]"
-            onPreviewOpenChange={onPreviewOpenChange}
-          />
         ) : (
-          <>
-            <button
-              type="button"
-              data-layout-preview-open="true"
-              onClick={() => {
-                setPreviewOpen(true);
-                onPreviewOpenChange?.(true);
-              }}
-              className="block w-full overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50/60 transition hover:border-zinc-200"
-              title={photo.name}
-            >
-              <img src={photo.url ?? undefined} alt={label} className="h-28 w-full object-contain" />
-            </button>
-            {previewOpen && photo.url !== null ? (
-              <LayoutPreview url={photo.url} name={photo.name} onClose={closePreview} />
-            ) : null}
-          </>
+          <div className="grid grid-cols-2 gap-2">
+            {photos.map((photo, index) => (
+              <div key={(photo.id ?? photo.fileId ?? photo.url ?? "") + "#" + String(index)} className="relative">
+                {photo.fileId !== null ? (
+                  <PhotoStrip
+                    items={[{ fileId: photo.fileId, name: photo.name, url: photo.url }]}
+                    size="md"
+                    strip={"summary-layout-" + label + "-" + String(index)}
+                    previewZClass="z-[85]"
+                    onPreviewOpenChange={onPreviewOpenChange}
+                  />
+                ) : photo.url !== null ? (
+                  <button
+                    type="button"
+                    data-layout-preview-open="true"
+                    onClick={() => {
+                      setPreview(photo);
+                      onPreviewOpenChange?.(true);
+                    }}
+                    className="block w-full overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50/60 transition hover:border-zinc-200"
+                    title={photo.name}
+                  >
+                    <img src={photo.url} alt={photo.name} className="h-24 w-full object-contain" />
+                  </button>
+                ) : null}
+                {photo.manual === true && photo.id !== null && photo.id !== undefined ? (
+                  <button
+                    type="button"
+                    data-layout-remove="true"
+                    onClick={() => { void remove(photo); }}
+                    disabled={removing !== null}
+                    title={t("ai.doc.removeImage")}
+                    aria-label={t("ai.doc.removeImage")}
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white/95 text-[12px] leading-none text-zinc-500 shadow ring-1 ring-zinc-200 transition hover:text-rose-600 disabled:opacity-50"
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
         )}
       </div>
-      {photo === null ? null : <p className="mt-1 truncate text-[10px] text-zinc-400" title={photo.name}>{photo.name}</p>}
+      <p className="mt-1 truncate text-[10px] text-zinc-400" title={photos.map((photo) => photo.name).join(" / ")}>
+        {photos.length === 0 ? "" : photos.length === 1 ? (photos[0]?.name ?? "") : countText}
+      </p>
+      {preview !== null && preview.url !== null ? <LayoutPreview url={preview.url} name={preview.name} onClose={closePreview} /> : null}
     </div>
   );
 }
@@ -276,7 +316,7 @@ function BasicRows({ items }: { items: Array<{ label: string; value: string | nu
   );
 }
 
-export function ProjectSummaryDocument({ view, onPreviewOpenChange, onReplaceImage }: ProjectSummaryDocumentProps) {
+export function ProjectSummaryDocument({ view, onPreviewOpenChange, onReplaceImage, onRemoveImage }: ProjectSummaryDocumentProps) {
   const t = useT();
   const unidentified = t("ai.doc.unrecognized");
 
@@ -329,16 +369,18 @@ export function ProjectSummaryDocument({ view, onPreviewOpenChange, onReplaceIma
           <LayoutSlot
             label={t("ai.doc.cad")}
             kind="layout"
-            photo={view.layout.cad}
+            photos={view.layout.cad}
             onPreviewOpenChange={onPreviewOpenChange}
             onReplace={onReplaceImage}
+            onRemove={onRemoveImage}
           />
           <LayoutSlot
             label={t("ai.doc.threeD")}
             kind="three_d"
-            photo={view.layout.threeD}
+            photos={view.layout.threeD}
             onPreviewOpenChange={onPreviewOpenChange}
             onReplace={onReplaceImage}
+            onRemove={onRemoveImage}
           />
         </div>
         <SourceLine sources={view.layout.sources} />

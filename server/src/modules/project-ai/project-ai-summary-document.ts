@@ -89,13 +89,13 @@ export function buildSummaryDocument(
     equipmentLayout: {
       cadImage: {
         fileId: null,
-        url: agreement?.layout.url ?? null,
-        caption: agreement?.layout.caption ?? "",
+        url: agreement?.layout[0]?.url ?? null,
+        caption: agreement?.layout[0]?.caption ?? "",
       },
       threeDImage: {
         fileId: null,
-        url: agreement?.threeD.url ?? null,
-        caption: agreement?.threeD.caption ?? "",
+        url: agreement?.threeD[0]?.url ?? null,
+        caption: agreement?.threeD[0]?.caption ?? "",
       },
     },
     progressDetail: {

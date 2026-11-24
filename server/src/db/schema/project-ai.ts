@@ -1,4 +1,4 @@
-import { check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { desc, sql } from "drizzle-orm";
 import { projects } from "./projects.js";
 import { users } from "./identity.js";
@@ -32,20 +32,22 @@ export const projectAiSummaries = pgTable(
   ],
 );
 
-/** project_ai_manual_images（0115）：设备布局 / 三维图的人工替换；一项目一类型最多一张。 */
+/** project_ai_manual_images（0115 / 0117）：设备布局 / 三维图的人工图片；一项目一类型可多张，按 sort_order 排序。 */
 export const projectAiManualImages = pgTable(
   "project_ai_manual_images",
   {
+    id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
     objectKey: text("object_key").notNull(),
     mime: text("mime").notNull(),
     sizeBytes: integer("size_bytes").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
     updatedBy: uuid("updated_by").references(() => users.id),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    primaryKey({ name: "project_ai_manual_images_pkey", columns: [table.projectId, table.kind] }),
+    unique("uq_project_ai_manual_images_order").on(table.projectId, table.kind, table.sortOrder),
     check("ck_project_ai_manual_images_kind", sql`${table.kind} in ('layout', 'three_d')`),
     check("ck_project_ai_manual_images_size", sql`${table.sizeBytes} >= 0`),
   ],

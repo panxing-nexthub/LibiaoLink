@@ -18,7 +18,14 @@ import type {
   ProjectAiSummaryReportV4,
 } from "./projectAiApi";
 
-export type SummaryPhoto = { fileId: string | null; name: string; url: string | null };
+export type SummaryPhoto = {
+  fileId: string | null;
+  name: string;
+  url: string | null;
+  /** 人工图片行 id；自动抽取图 / 项目文件图为空。 */
+  id?: string | null;
+  manual?: boolean;
+};
 
 export type SummaryPeriod = {
   planFrom: string | null;
@@ -76,8 +83,8 @@ export type SummaryView = {
   name: string;
   basic: SummaryBasicInfo;
   layout: {
-    cad: SummaryPhoto | null;
-    threeD: SummaryPhoto | null;
+    cad: SummaryPhoto[];
+    threeD: SummaryPhoto[];
     sources: string[];
   };
   background: { text: string | null; sources: string[] };
@@ -230,34 +237,55 @@ function periodOf(context: ProjectAiContext | null): SummaryPeriod | null {
   return { planFrom, planTo, actualFrom, actualTo, ongoing };
 }
 
+function agreementPhotos(
+  context: ProjectAiContext | null,
+  kind: "layout" | "three_d",
+  fallbackName: string,
+): SummaryPhoto[] {
+  const raw: unknown = kind === "layout" ? context?.agreement?.layout : context?.agreement?.threeD;
+  const images = Array.isArray(raw) ? raw : raw === null || raw === undefined ? [] : [raw];
+  return images
+    .map((image) => image as { id?: string; manual?: boolean; url?: string | null; caption?: string | null })
+    .filter((image) => typeof image.url === "string" && image.url !== "")
+    .map((image) => ({
+      fileId: null,
+      name: image.caption ?? fallbackName,
+      url: image.url ?? null,
+      id: image.id ?? null,
+      manual: image.manual === true,
+    }));
+}
+
 function layoutOf(
   report: ProjectAiSummaryReportV4,
   context: ProjectAiContext | null,
-): { cad: SummaryPhoto | null; threeD: SummaryPhoto | null; sources: string[] } {
+): { cad: SummaryPhoto[]; threeD: SummaryPhoto[]; sources: string[] } {
   const fromReport = report.equipmentLayout;
   const reportCad = fromReport?.cadImage;
   const reportThreeD = fromReport?.threeDImage;
 
-  // 人工替换 / 最新抽取结果优先于生成时缓存的 report.equipmentLayout。
-  const cad: SummaryPhoto | null =
-    context?.agreement?.layout.url !== null && context?.agreement?.layout.url !== undefined
-      ? { fileId: null, name: context.agreement.layout.caption ?? "CAD 布局图", url: context.agreement.layout.url }
+  // 人工图片 / 最新抽取结果优先于生成时缓存的 report.equipmentLayout。
+  const agreementCad = agreementPhotos(context, "layout", "CAD 布局图");
+  const agreementThreeD = agreementPhotos(context, "three_d", "三维图");
+  const cad: SummaryPhoto[] =
+    agreementCad.length > 0
+      ? agreementCad
       : reportCad !== undefined && (reportCad.fileId !== null || reportCad.url !== null)
-        ? { fileId: reportCad.fileId, name: reportCad.caption === "" ? "CAD 布局图" : reportCad.caption, url: reportCad.url }
+        ? [{ fileId: reportCad.fileId, name: reportCad.caption === "" ? "CAD 布局图" : reportCad.caption, url: reportCad.url }]
         : context?.layout?.cad?.fileId !== null && context?.layout?.cad?.fileId !== undefined
-          ? { fileId: context.layout.cad.fileId, name: "CAD 布局图", url: null }
-          : null;
+          ? [{ fileId: context.layout.cad.fileId, name: "CAD 布局图", url: null }]
+          : [];
 
-  const threeD: SummaryPhoto | null =
-    context?.agreement?.threeD.url !== null && context?.agreement?.threeD.url !== undefined
-      ? { fileId: null, name: context.agreement.threeD.caption ?? "三维图", url: context.agreement.threeD.url }
+  const threeD: SummaryPhoto[] =
+    agreementThreeD.length > 0
+      ? agreementThreeD
       : reportThreeD !== undefined && (reportThreeD.fileId !== null || reportThreeD.url !== null)
-        ? { fileId: reportThreeD.fileId, name: reportThreeD.caption === "" ? "三维图" : reportThreeD.caption, url: reportThreeD.url }
+        ? [{ fileId: reportThreeD.fileId, name: reportThreeD.caption === "" ? "三维图" : reportThreeD.caption, url: reportThreeD.url }]
         : context?.layout?.threeD?.fileId !== null && context?.layout?.threeD?.fileId !== undefined
-          ? { fileId: context.layout.threeD.fileId, name: "三维图", url: null }
-          : null;
+          ? [{ fileId: context.layout.threeD.fileId, name: "三维图", url: null }]
+          : [];
 
-  return { cad, threeD, sources: cad === null && threeD === null ? [] : ["技术协议"] };
+  return { cad, threeD, sources: cad.length === 0 && threeD.length === 0 ? [] : ["技术协议"] };
 }
 
 function sampleSitePhotos(reports: readonly ProjectAiSummaryReportEntry[]): Array<{ photo: SummaryPhoto; caption: string }> {

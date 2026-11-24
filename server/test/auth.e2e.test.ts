@@ -216,6 +216,12 @@ class FakeSessionRepository {
     }
   }
 
+  ageCreatedAt(milliseconds: number): void {
+    for (const row of this.byHash.values()) {
+      row.createdAt = new Date(row.createdAt.getTime() - milliseconds);
+    }
+  }
+
   all(): SessionRow[] {
     return [...this.byHash.values()];
   }
@@ -240,7 +246,7 @@ interface TestContext {
   close(): Promise<void>;
 }
 
-async function createApp(idleMinutes: number): Promise<TestContext> {
+async function createApp(idleMinutes: number, absoluteMinutes = 10080): Promise<TestContext> {
   const env = loadEnv({
     NODE_ENV: "test",
     PORT: "3000",
@@ -251,6 +257,7 @@ async function createApp(idleMinutes: number): Promise<TestContext> {
     CASDOOR_CLIENT_SECRET: CLIENT_SECRET,
     CASDOOR_REDIRECT_URI: REDIRECT_URI,
     SESSION_IDLE_MINUTES: String(idleMinutes),
+    SESSION_ABSOLUTE_MINUTES: String(absoluteMinutes),
   });
   const fakeUsers = new FakeUserRepository();
   const fakeSessions = new FakeSessionRepository(fakeUsers);
@@ -503,6 +510,17 @@ describe("会话后端化 /auth/*（g6 验收：可登录 / 可登出 / 超时�
     const context = await createApp(30);
     const { session } = await completeLogin(context);
     context.fakeSessions.ageAll(31 * 60 * 1000);
+    const response = await context.agent.get("/auth/me").set("Cookie", cookieHeader({ ll_sid: session })).expect(401);
+    expect(response.body.code).toBe("AUTH_REQUIRED");
+    expect(context.fakeSessions.all()[0]?.revokedAt).not.toBeNull();
+    await context.close();
+  });
+
+  it("绝对上限：超过 SESSION_ABSOLUTE_MINUTES 后 /auth/me 401，即使 ID Token 仍未过期", async () => {
+    const context = await createApp(30, 1);
+    const now = Math.floor(Date.now() / 1000);
+    const { session } = await completeLogin(context, { ...defaultClaims, exp: now + 7 * 24 * 60 * 60 });
+    context.fakeSessions.ageCreatedAt(2 * 60 * 1000);
     const response = await context.agent.get("/auth/me").set("Cookie", cookieHeader({ ll_sid: session })).expect(401);
     expect(response.body.code).toBe("AUTH_REQUIRED");
     expect(context.fakeSessions.all()[0]?.revokedAt).not.toBeNull();

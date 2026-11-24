@@ -98,10 +98,10 @@ export class AuthController {
       metadata: {
         operation: "login",
         source: "sso",
-        expiresAt: new Date(exp * 1000).toISOString(),
+        expiresAt: session.expiresAt.toISOString(),
       },
     });
-    const maxAge = Math.max(0, exp - Math.floor(Date.now() / 1000));
+    const maxAge = Math.max(0, Math.floor((session.expiresAt.getTime() - Date.now()) / 1000));
     response.append(
       "Set-Cookie",
       serializeCookie(SESSION_COOKIE, session.token, { httpOnly: true, sameSite: "Lax", secure: this.cookieSecure, maxAgeSeconds: maxAge }),
@@ -131,7 +131,7 @@ export class AuthController {
     const csrfToken =
       existingCsrfToken === undefined || existingCsrfToken === "" ? randomBytes(16).toString("base64url") : existingCsrfToken;
     if (existingCsrfToken === undefined || existingCsrfToken === "") {
-      const maxAge = Math.max(0, exp - Math.floor(Date.now() / 1000));
+      const maxAge = Math.max(0, Math.floor((resolved.session.expiresAt.getTime() - Date.now()) / 1000));
       response.append(
         "Set-Cookie",
         serializeCookie(CSRF_COOKIE, csrfToken, { httpOnly: false, sameSite: "Lax", secure: this.cookieSecure, maxAgeSeconds: maxAge }),

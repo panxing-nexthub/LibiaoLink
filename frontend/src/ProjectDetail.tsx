@@ -1,3 +1,4 @@
+import type { CustomDeliverableTypes, DeliverableTypeCreator, ProjectDeliverableTypeCreator } from "./dicts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keepLiveOrder } from "./liveSync";
 import { useLiveRefresh } from "./useLiveRefresh";
@@ -109,10 +110,10 @@ type ProjectDetailProps = {
   onClearFocus: () => void;
   /** 清除企微日报查询深链的单日筛选。 */
   onClearDailyDate: () => void;
-  /** 全站自定义成果类型（字典 deliverableType）：项目内所有任务共享。 */
-  customDeliverableTypes?: readonly string[];
-  /** 项目经理新增全站自定义成果类型；服务端还会按当前项目再次校验。 */
-  onCreateDeliverableType?: (projectId: string, name: string) => Promise<string | null>;
+  /** 当前账号可选的公开和个人自定义成果类型。 */
+  customDeliverableTypes?: CustomDeliverableTypes;
+  /** 本项目经理或系统管理员新增自定义成果类型，由服务端裁决可见性。 */
+  onCreateDeliverableType?: ProjectDeliverableTypeCreator;
   /** 完整人员目录（GET /api/v1/users → directoryMemberOptions）：任务负责人 / 任务详情抽屉的非项目经理字段。 */
   members: readonly Member[];
   /** 项目经理候选（有效项目部成员 ∪ 系统管理员）：项目经理列 / 抽屉项目经理字段专用。 */
@@ -134,7 +135,7 @@ type ProjectDetailProps = {
   readOnly?: boolean;
 };
 
-export default function ProjectDetail({ me, project, view, dailySub, dailyDate, focus, onClearFocus, onClearDailyDate, customDeliverableTypes = [], onCreateDeliverableType, members, managerMembers, onTaskEdited, taskHiddenColumns, onTaskHiddenColumnsChange, canManageStakeholders, canManageProjectManagers, onArchiveProject, readOnly = false }: ProjectDetailProps) {
+export default function ProjectDetail({ me, project, view, dailySub, dailyDate, focus, onClearFocus, onClearDailyDate, customDeliverableTypes, onCreateDeliverableType, members, managerMembers, onTaskEdited, taskHiddenColumns, onTaskHiddenColumnsChange, canManageStakeholders, canManageProjectManagers, onArchiveProject, readOnly = false }: ProjectDetailProps) {
   /** 顶部视图（Push 82 / 121）：阶段标签收进「项目总览」，另两块是看板视图，最后一块是「日报及问题」；Push 154 起当前标签由地址 `?view=` 派生。 */
   const locale = useLocale();
   const t = useT();
@@ -150,10 +151,9 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   const canEditManagers = projectEditable && canManageProjectManagers;
   /** 任务级写入口即使项目只读也要下传，由每条任务的 capabilities 再逐项裁决。 */
   const taskWritable = !readOnly;
-  /** 自定义成果类型是项目级写操作：项目编辑者可新增，服务端仍做最终裁决。 */
-  const createDeliverableType =
-    projectEditable && project !== null && onCreateDeliverableType !== undefined
-      ? (name: string): Promise<string | null> => onCreateDeliverableType(project.id, name)
+  const createDeliverableType: DeliverableTypeCreator | undefined =
+    projectEditable && project?.canManageProjectManagers === true && onCreateDeliverableType !== undefined
+      ? (name, visibility) => onCreateDeliverableType(project.id, name, visibility)
       : undefined;
   /** 定档 / 取消定档：服务端任务能力投影 canFinalize 且任务已设定输出成果文件；未配置成果类型的任务不展示定档入口。 */
   const canFinalizeTask = (task: ProjectTask): boolean => taskWritable && taskCapabilitiesOf(task).canFinalize && hasOutputDeliverables(task);

@@ -263,13 +263,14 @@ export const ProjectUpdateBodySchema = z
   .openapi("ProjectUpdateBody");
 
 
-/** 项目编辑者新增全站自定义成果文件类型：名称同时作为字典 code / name；新增后所有项目与任务均可选用。 */
+/** 新增成果类型须明确下拉选项的可见范围。 */
 export const ProjectDeliverableTypeCreateBodySchema = z
   .object({
-    name: DeliverableTypeSchema.openapi({ description: "自定义成果文件类型名称（1–50 字，不含英文逗号 / 换行；新增后全站共享）" }),
+    name: DeliverableTypeSchema,
+    visibility: z.enum(["public", "private"]),
   })
   .openapi("ProjectDeliverableTypeCreateBody", {
-    description: "仅当前项目的项目编辑者（管理员、所管本项目的项目经理或部门 / 个人规则 edit）可新增；条目进入全站 deliverableType 字典，所有账号与项目可见",
+    description: "系统管理员可新增公共或个人下拉选项；本项目项目经理仅可新增个人选项。个人选项只有创建人可在自定义候选中看到；选入任务后沿用任务的可见范围。必须显式指定 visibility。",
   });
 
 const ZeroOrMore = z.number().int().min(0);

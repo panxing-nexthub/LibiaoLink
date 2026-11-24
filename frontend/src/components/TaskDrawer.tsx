@@ -1,3 +1,4 @@
+import type { CustomDeliverableTypes, DeliverableTypeCreator } from "../dicts";
 import { useLiveRefresh } from "../useLiveRefresh";
 import { keepLiveOrder } from "../liveSync";
 import { ApiError } from "../api";
@@ -298,10 +299,10 @@ type TaskDrawerProps = {
   onChanged?: () => void;
   /** 任务文件清单（详情接口 GET /projects/{id}/tasks/{taskId}）：不传 = 只显示列表随行计数（fileSummary）。 */
   projectId?: string;
-  /** 全站自定义成果类型（字典 deliverableType）：跨项目 / 任务共享。 */
-  customDeliverableTypes?: readonly string[];
-  /** 仅当前项目项目经理可新增；不传 = 成果选择器底部入口置灰。 */
-  onCreateDeliverableType?: (name: string) => Promise<string | null>;
+  /** 当前账号可选的公开和个人自定义成果类型。 */
+  customDeliverableTypes?: CustomDeliverableTypes;
+  /** 本项目的项目经理或系统管理员可以新增。 */
+  onCreateDeliverableType?: DeliverableTypeCreator;
   /** 完整人员目录（GET /api/v1/users 目录）：任务负责人等非项目经理字段使用。 */
   members: readonly Member[];
   /** 项目经理候选（有效项目部成员 ∪ 系统管理员）：项目经理多选专用。 */
@@ -325,7 +326,7 @@ type TaskDrawerProps = {
  * 任务名称（中文 / 英文）自 Push 196 起对「临时任务」开放（**Push 197 收窄：仅未归入阶段的临时任务** —— 业务口径 2026-09-28「这个不是临时任务 不能修改」；失焦即存，中文名必填），
  * 阶段任务与节点 / 模板生成的任务仍锁定（抽屉里不出这一行，服务端同口径 400 兜底）。
  */
-export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEditManagers = false, allowScheduleShift = false, allowFileChanges = true, members, managerMembers, customDeliverableTypes = [], onCreateDeliverableType, onSubmit, onRename, onProgress, onSetStatus, onSetActualEnd, onFinalize, onUnfinalize, onChanged, actorName, onUploadFiles, onDeleteFile, onRenameFile, projectId, onClose }: TaskDrawerProps) {
+export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEditManagers = false, allowScheduleShift = false, allowFileChanges = true, members, managerMembers, customDeliverableTypes, onCreateDeliverableType, onSubmit, onRename, onProgress, onSetStatus, onSetActualEnd, onFinalize, onUnfinalize, onChanged, actorName, onUploadFiles, onDeleteFile, onRenameFile, projectId, onClose }: TaskDrawerProps) {
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
   const taskId = task === null ? null : task.id;

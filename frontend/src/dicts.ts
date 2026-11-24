@@ -29,6 +29,15 @@ export const EMPTY_DICTS: Dicts = { region: [], projectType: [], deliverableType
 /** 条目名称 / 码上限：契约 code ≤ 64、name ≤ 80；前端两个入口（地区 / 项目类型）统一按 64 收口。 */
 export const DICT_NAME_MAX = 64;
 
+export type DeliverableTypeVisibility = "public" | "private";
+export type PersonalDeliverableType = { id: string; name: string };
+export type CustomDeliverableTypes = {
+  publicNames: readonly string[];
+  personal: readonly PersonalDeliverableType[];
+};
+export type DeliverableTypeCreator = (name: string, visibility: DeliverableTypeVisibility) => Promise<string | null>;
+export type ProjectDeliverableTypeCreator = (projectId: string, name: string, visibility: DeliverableTypeVisibility) => Promise<string | null>;
+
 type DictListResponse = { items: Array<{ type: string; items: DictItem[] }> };
 
 /**
@@ -91,19 +100,30 @@ export async function createDictItem(
   return toTypeResult(await apiSend<{ type: string; items: DictItem[] }>("/api/v1/dicts/" + type + "/items", "POST", input));
 }
 
-/**
- * 项目经理新增全站自定义成果文件类型：POST /api/v1/projects/{id}/deliverable-types。
- * 服务端校验当前账号是该项目的项目经理（manager_ids 或名册 project_manager）；新增后进入全站
- * deliverableType 字典，所有项目 / 任务 / 文件库共享。响应 = 更新后的整类字典（直接替换缓存）。
- */
-export async function createProjectDeliverableType(projectId: string, name: string): Promise<DictTypeResult> {
-  return toTypeResult(
-    await apiSend<{ type: string; items: DictItem[] }>(
-      "/api/v1/projects/" + encodeURIComponent(projectId) + "/deliverable-types",
-      "POST",
-      { name },
-    ),
+type ScopedDeliverableTypeResult =
+  | { visibility: "public"; dictionary: DictTypeResult }
+  | { visibility: "private"; item: PersonalDeliverableType };
+
+/** 仅当前登录账号的私有候选；与全站字典分别读取与缓存。 */
+export async function loadPersonalDeliverableTypes(): Promise<PersonalDeliverableType[]> {
+  const response = await apiRequest<{ items: PersonalDeliverableType[] }>("/api/v1/dicts/deliverableType/personal", { cache: "no-store" });
+  return response.items;
+}
+
+/** 新增私有或公开候选。沿用独立路径，避免旧服务端将私有名称当成全站新增。 */
+export async function createProjectDeliverableType(
+  projectId: string,
+  name: string,
+  visibility: DeliverableTypeVisibility,
+): Promise<ScopedDeliverableTypeResult> {
+  const result = await apiSend<ScopedDeliverableTypeResult>(
+    "/api/v1/projects/" + encodeURIComponent(projectId) + "/deliverable-types/scoped",
+    "POST",
+    { name, visibility },
   );
+  return result.visibility === "public"
+    ? { visibility: "public", dictionary: toTypeResult(result.dictionary) }
+    : result;
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { CustomDeliverableTypes, DeliverableTypeCreator, ProjectDeliverableTypeCreator } from "./dicts";
 /**
  * 工作台「我的任务」页（系统功能书 A6-01 / A6-03；M6-06 前端接线 · Push 230；任务表扩列 · Push 231；面板头「进入项目」深链 · Push 232；
  * Push 290 原「醒目模式」下架 → 任务 / 问题表统一改吃顶栏背景档位）。
@@ -135,10 +136,10 @@ type WorkspacePageProps = {
   workspaceOpenProjects?: WorkspaceOpenProjects | null;
   /** 保存展开态（单键 PATCH）；返回 null = 成功，返回文案 = 失败提示。不传 = 不做服务端记忆（展开态仅本页内存）。 */
   onWorkspaceOpenProjectsChange?: (value: WorkspaceOpenProjects) => Promise<string | null>;
-  /** 全站自定义成果文件类型（App 层字典缓存；项目页 / 工作台 / 文件库共用同一份）。 */
-  customDeliverableTypes?: readonly string[];
-  /** 项目经理新增全站自定义成果文件类型；返回 null = 成功，返回文案 = 失败提示。 */
-  onCreateDeliverableType?: (projectId: string, name: string) => Promise<string | null>;
+  /** 当前账号可选的公开和个人自定义成果类型。 */
+  customDeliverableTypes?: CustomDeliverableTypes;
+  /** 本项目经理或系统管理员新增自定义成果类型；返回文案时显示失败提示。 */
+  onCreateDeliverableType?: ProjectDeliverableTypeCreator;
 };
 
 /** 工作台三态（首屏加载 / 失败 / 就绪）—— 与「日报及问题」三个列表子视图同一套口径。 */
@@ -326,7 +327,7 @@ type TaskTableHandlers = {
   onDeleteFile: (fileId: string) => Promise<void>;
 };
 
-function TaskTable({ projectId, project, items, tierTint, members, managerMembers, onOpenTask, rowOf, handlers, customDeliverableTypes = [], onCreateDeliverableType }: {
+function TaskTable({ projectId, project, items, tierTint, members, managerMembers, onOpenTask, rowOf, handlers, customDeliverableTypes, onCreateDeliverableType }: {
   projectId: string;
   /** 随行项目卡（Push 302）：项目经理列与项目经理回写的项目级数据源。 */
   project: ApiProject | undefined;
@@ -345,9 +346,9 @@ function TaskTable({ projectId, project, items, tierTint, members, managerMember
   /** 行内写入（Push 279）；不传 = 部门只读，整表仅展示。 */
   handlers?: TaskTableHandlers;
   /** 全站自定义成果文件类型；只读行仍可展示已有值，新增入口由回调是否传入决定。 */
-  customDeliverableTypes?: readonly string[];
+  customDeliverableTypes?: CustomDeliverableTypes;
   /** 当前项目已裁决可新增时传入（工作台按可写项目 + 项目经理收口）。 */
-  onCreateDeliverableType?: (name: string) => Promise<string | null>;
+  onCreateDeliverableType?: DeliverableTypeCreator;
 }) {
   // 与项目页任务表同一套列宽口径（2026-10-10）：fr 列带 minmax 硬下限 + 最小宽算上行内衬 —— 窄窗下横向滚动、不压列。
   const locale = useLocale();
@@ -654,7 +655,7 @@ const TABS: ReadonlyArray<{ key: WorkspaceTab; label: string }> = [
  *  Push 278：任务行**点击开任务抽屉**（业务口径「做我的任务页面也可以点击编辑即可 编辑行 也在右侧出现抽屉」）——
  *  抽屉 = 项目页同款 TaskDrawer（全能力即时保存）；数据源 = 聚合读面全字段行（Push 302；带 version，打开零新增请求）；
  *  写后防抖静默刷新聚合读面（抽屉不打断：task 用写回响应就地更新、version 滚动前进）。 */
-function MyTasksView({ data, tierTint, openIds, onToggleProject, members, managerMembers, actorName, onReload, customDeliverableTypes = [], onCreateDeliverableType }: { data: ApiWorkspace; tierTint: TintedTier | false; openIds: ReadonlySet<string>; onToggleProject: (projectId: string) => void; members: readonly Member[]; managerMembers: readonly Member[]; actorName: string; onReload: () => void; customDeliverableTypes?: readonly string[]; onCreateDeliverableType?: (projectId: string, name: string) => Promise<string | null> }) {
+function MyTasksView({ data, tierTint, openIds, onToggleProject, members, managerMembers, actorName, onReload, customDeliverableTypes, onCreateDeliverableType }: { data: ApiWorkspace; tierTint: TintedTier | false; openIds: ReadonlySet<string>; onToggleProject: (projectId: string) => void; members: readonly Member[]; managerMembers: readonly Member[]; actorName: string; onReload: () => void; customDeliverableTypes?: CustomDeliverableTypes; onCreateDeliverableType?: ProjectDeliverableTypeCreator }) {
   const t = useT();
   const locale = useLocale();
   const projects = groupTasksByProject(data);
@@ -663,14 +664,12 @@ function MyTasksView({ data, tierTint, openIds, onToggleProject, members, manage
   const allTasks = [...data.myTasks.overdue, ...data.myTasks.today, ...data.myTasks.upcoming, ...data.myTasks.unscheduled];
   const taskById = new Map(allTasks.map((task) => [task.id, task]));
   const projectById = new Map(data.projects.map((project) => [project.id, project]));
-  /** 普通项目级写入口继续由 edit 裁决，经理任命使用项目随行能力。 */
-  const canEditProject = (projectId: string): boolean => projectById.get(projectId)?.accessLevel === "edit";
-  /** 自定义成果类型是项目级写操作：项目编辑者可新增；服务端仍作最终裁决。 */
-  const deliverableTypeCreatorFor = (projectId: string): ((name: string) => Promise<string | null>) | undefined => {
-    if (onCreateDeliverableType === undefined || !canEditProject(projectId)) {
+  const deliverableTypeCreatorFor = (projectId: string): DeliverableTypeCreator | undefined => {
+    const project = projectById.get(projectId);
+    if (onCreateDeliverableType === undefined || project?.accessLevel !== "edit" || project.canManageProjectManagers !== true) {
       return undefined;
     }
-    return (name) => onCreateDeliverableType(projectId, name);
+    return (name, visibility) => onCreateDeliverableType(projectId, name, visibility);
   };
 
   /** 抽屉里的当前任务（含 version；null = 抽屉关着）：写回响应就地更新 —— version 滚动前进，连续编辑不撞旧值。 */
@@ -1071,7 +1070,7 @@ function IssuesView({ view, issues, tierTint, openIds, onToggleProject, override
  *  Push 260：「我提出的问题」标签下再分两枚子标签（我提出的问题 / 待我处理的问题，`?sub=`，见 ISSUE_VIEW_TABS）——
  *  两枚子标签共用同一份读面（myIssues.raised / myIssues.handling）与同一组展开态记忆，只换数据栏与标题；
  *  展示口径 = 「已完成不显示」（Push 260 第七项 —— 见 IssuesView 的 visibleIssues 过滤）。 */
-export default function WorkspacePage({ me, members, managerMembers, tab, onChangeTab, sub, onChangeSub, workspaceOpenProjects, onWorkspaceOpenProjectsChange, customDeliverableTypes = [], onCreateDeliverableType }: WorkspacePageProps) {
+export default function WorkspacePage({ me, members, managerMembers, tab, onChangeTab, sub, onChangeSub, workspaceOpenProjects, onWorkspaceOpenProjectsChange, customDeliverableTypes, onCreateDeliverableType }: WorkspacePageProps) {
   const [state, setState] = useState<WorkspaceState>({ kind: "loading" });
   /** 重新加载令牌：bump 一次重新取数（错误态的「重新加载」用）。 */
   const [reloadToken, setReloadToken] = useState(0);

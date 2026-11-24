@@ -1,5 +1,6 @@
 import { z } from "../zod.ts";
-import { DateTimeSchema } from "../common/conventions.ts";
+import { DateTimeSchema, UuidSchema } from "../common/conventions.ts";
+import { DeliverableTypeSchema } from "../common/dicts.ts";
 
 /**
  * 字典类型（A3）：一期只下发「可运营数据字典」（业务会变的主数据）。
@@ -45,7 +46,26 @@ export const DictListResponseSchema = z
   .object({
     items: z.array(DictSchema),
   })
-  .openapi("DictListResponse", { description: "全量字典：region / projectType / deliverableType 全站自定义成果文件类型" });
+  .openapi("DictListResponse", { description: "公共字典：region / projectType / deliverableType 全站自定义成果文件类型" });
+
+export const PersonalDeliverableTypeSchema = z
+  .object({ id: UuidSchema, name: DeliverableTypeSchema })
+  .openapi("PersonalDeliverableType", { description: "仅创建账号可读取的成果文件下拉选项" });
+
+export const PersonalDeliverableTypeListSchema = z
+  .object({ items: z.array(PersonalDeliverableTypeSchema) })
+  .openapi("PersonalDeliverableTypeList");
+
+export const ProjectDeliverableTypeCreateResponseSchema = z
+  .discriminatedUnion("visibility", [
+    z.object({ visibility: z.literal("public"), dictionary: DictSchema }),
+    z.object({ visibility: z.literal("private"), item: PersonalDeliverableTypeSchema }),
+  ])
+  .openapi("ProjectDeliverableTypeCreateResponse");
+
+export type PersonalDeliverableType = z.infer<typeof PersonalDeliverableTypeSchema>;
+export type PersonalDeliverableTypeList = z.infer<typeof PersonalDeliverableTypeListSchema>;
+export type ProjectDeliverableTypeCreateResponse = z.infer<typeof ProjectDeliverableTypeCreateResponseSchema>;
 
 
 /**
@@ -76,7 +96,7 @@ export const DictItemCreateBodySchema = z
   })
   .openapi("DictItemCreateBody", {
     description:
-      "新增字典条目：region 任何登录用户可增（全站共享；重复码 409）；projectType 仅管理员 dict.manage；deliverableType 的自定义成果由项目编辑者走 POST /projects/{id}/deliverable-types（本通用端点仍仅 dict.manage）；变更写审计留痕（C9-02）；响应为更新后的整个字典",
+      "新增字典条目：region 任何登录用户可增（全站共享；重复码 409）；projectType 仅管理员 dict.manage；deliverableType 公共成果仅系统管理员可新增；项目内新增走 POST /projects/{id}/deliverable-types/scoped；变更写审计留痕（C9-02）；响应为更新后的整个字典",
   });
 
 /**

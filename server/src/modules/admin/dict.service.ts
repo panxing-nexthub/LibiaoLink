@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { CUSTOM_DELIVERABLE_DICT_TYPE, DOC_TYPES, type Dict, type DictItemCreateBody, type DictItemUpdateBody, type DictListResponse } from "@libiaolink/contracts";
+import { CUSTOM_DELIVERABLE_DICT_TYPE, DOC_TYPES, type Dict, type DictItemCreateBody, type DictItemUpdateBody, type DictListResponse, type PersonalDeliverableType, type PersonalDeliverableTypeList } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import { DatabaseService } from "../../db/database.service.js";
 import { AuditService } from "../audit/index.js";
@@ -43,7 +43,7 @@ export class DictService {
   }
 
   /**
-   * POST /api/v1/projects/{id}/deliverable-types（仅该项目项目经理）：
+   * POST /api/v1/projects/{id}/deliverable-types/scoped（仅系统管理员可提交 public）：
    * 自定义成果类型写入全站 deliverableType 字典，code = name、name = name；返回更新后的整类字典。
    * 内置十类不进 dict_items；与内置同名视为已存在（409 DICT_ITEM_EXISTS），避免选择器出现重复项。
    */
@@ -58,6 +58,26 @@ export class DictService {
       { code: name, name, sort: maxSort + 10, enabled: true, metadata: {} },
       actorId,
     );
+  }
+
+  async listPersonalDeliverableTypes(actorId: string): Promise<PersonalDeliverableTypeList> {
+    return { items: await this.dicts.listPersonalDeliverableTypes(actorId) };
+  }
+
+  async createPersonalDeliverableType(name: string, actorId: string): Promise<PersonalDeliverableType> {
+    return this.database.db.transaction(async (tx) => {
+      const item = await this.dicts.insertPersonalDeliverableType(actorId, name, tx);
+      if (item === null) throw new AppError("DICT_ITEM_EXISTS", "你的个人成果选项中已有同名条目");
+      await this.audit.record(tx, {
+        actorId,
+        action: "create",
+        objectType: "dict_item",
+        objectId: "personal-deliverable-type:" + item.id,
+        summary: "新增个人成果文件选项",
+        metadata: { visibility: "private" },
+      });
+      return item;
+    });
   }
 
   /** POST /api/v1/dicts/{type}/items（C9-02 修订：region = 登录即可；其余类型 dict.manage）：同类型内码唯一 409 DICT_ITEM_EXISTS；写审计 create。 */

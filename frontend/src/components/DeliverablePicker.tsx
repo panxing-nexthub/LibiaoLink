@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { InlineCell } from "./InlineEdit";
+import type { CustomDeliverableTypes, DeliverableTypeCreator, DeliverableTypeVisibility } from "../dicts";
+import { useMyPermissions } from "../permissions";
 import {
   DOC_TYPE_NAME_MAX,
   DOC_TYPE_NAME_PATTERN,
@@ -12,9 +14,9 @@ import { fieldText, useLocale, useT, type Locale } from "../i18n";
 /**
  * 输出成果文件（deliverableTypes）选择器（2026-10-08 · 业务口径「文件输出成果也要可以选择」）：
  * 内置十类成果文件（契约 DOC_TYPES；顺序 = 契约顺序：CAD图纸 / 技术协议 / 合同 / 评审单 / 设备清单 /
- * 物料总清单 / 发货装箱单 / 到货单 / 安装完成证明 / 验收单）+ 全站 deliverableType 自定义类型。项目项目经理可新增，新增后所有项目共享。
+ * 物料总清单 / 发货装箱单 / 到货单 / 安装完成证明 / 验收单），以及公开与本账号的私有候选。
  * 样式照业务给的参考图 —— 顶部搜索框（「查找选项」）+ 「多选」小标 + 彩签选项（悬停浅灰底、选中打绿勾、
- * 点选不收浮层、再点取消）；列表底部新增「＋ 自定义」，输入名称后立即选中并保存。
+ * 点选不收浮层、再点取消）；私有新增只登记候选，点选后才保存至任务。
  * 色表（2026-10-08 业务口径「和这个相同即可 简约一点」）对齐「是否按时交付」列徽标：浅彩底（Tailwind 50 档 hex）+ 同色系深字小签（rounded + px-1.5 py-0.5 + text-[11px]）。
  * 任务表「输出成果文件」列与任务详情抽屉「输出成果文件」行共用（DeliverableCell）。
  */
@@ -87,40 +89,41 @@ export function docTypeCapsule(name: string, locale: Locale) {
   );
 }
 
-/** 选择面板（搜索 + 内置十类 + 全站自定义）：点选项不关浮层、可连着选；再点已选项 = 取消。 */
+const EMPTY_CUSTOM_TYPES: CustomDeliverableTypes = { publicNames: [], personal: [] };
+
+/** 搜索并选择内置、公开或个人候选。已选任务值也保留，方便成员查看和取消。 */
 type DeliverablePanelProps = {
   values: readonly string[];
   /** 勾选 / 取消一枚（浮层不自动关；落值 = 勾选顺序的数组）。 */
   onChange: (next: string[]) => void;
-  /** 全站 deliverableType 字典名称（后端已按 sort 排好；面板再去重并追加当前任务里尚未入字典的历史值）。 */
-  customTypes?: readonly string[];
-  /** 当前项目项目经理 = true；非项目经理仍显示入口，但置灰并给出说明。 */
+  /** 公开字典候选与当前账号的私有候选。 */
+  customTypes?: CustomDeliverableTypes;
+  /** 本项目的项目经理或系统管理员可以新增。 */
   canCreateCustom?: boolean;
-  /** 新增全站自定义类型：返回 null = 成功；返回文案 = 面板内联错误。 */
-  onCreateCustom?: (name: string) => Promise<string | null>;
+  /** 新增指定范围的自定义候选；返回文案时显示内联错误。 */
+  onCreateCustom?: DeliverableTypeCreator;
 };
 
-export function DeliverablePanel({ values, onChange, customTypes = [], canCreateCustom = false, onCreateCustom }: DeliverablePanelProps) {
+export function DeliverablePanel({ values, onChange, customTypes = EMPTY_CUSTOM_TYPES, canCreateCustom = false, onCreateCustom }: DeliverablePanelProps) {
   const t = useT();
   const locale = useLocale();
+  const isAdmin = useMyPermissions()?.groupAccessAdmin === true;
   const [keyword, setKeyword] = useState("");
   const [customOpen, setCustomOpen] = useState(false);
   const [customName, setCustomName] = useState("");
+  const [customVisibility, setCustomVisibility] = useState<DeliverableTypeVisibility>("private");
   const [customError, setCustomError] = useState<string | null>(null);
   const [customSaving, setCustomSaving] = useState(false);
   const query = keyword.trim().toLowerCase();
-  const options = Array.from(
-    new Set([
-      ...DOC_TYPE_OPTIONS,
-      ...customTypes.filter((name) => name.trim() !== "" && !isBuiltinDocType(name)),
-      ...values.filter((value) => value.trim() !== "" && !isBuiltinDocType(value)),
-    ]),
-  );
+  const publicNames = new Set([...DOC_TYPE_OPTIONS, ...customTypes.publicNames.filter((name) => name.trim() !== "")]);
+  const personalNames = new Set(customTypes.personal.map((item) => item.name));
+  const options = [...new Set([...publicNames, ...personalNames, ...values.filter((value) => value.trim() !== "")])];
   const filtered = query === "" ? options : options.filter((option) => option.toLowerCase().includes(query));
 
   const closeCustom = (): void => {
     setCustomOpen(false);
     setCustomName("");
+    setCustomVisibility("private");
     setCustomError(null);
   };
 
@@ -139,13 +142,14 @@ export function DeliverablePanel({ values, onChange, customTypes = [], canCreate
       setCustomError(t("dp.customInvalidChars"));
       return;
     }
-    if (!values.includes(name) && values.length >= DOC_TYPE_SELECTION_MAX) {
+    const visibility = isAdmin ? customVisibility : "private";
+    if (visibility === "public" && !values.includes(name) && values.length >= DOC_TYPE_SELECTION_MAX) {
       setCustomError(t("dp.customMax"));
       return;
     }
-    // 内置十类或已存在的全站自定义项：直接选中，不重复写字典。
-    if (options.includes(name)) {
-      if (!values.includes(name)) onChange([...values, name]);
+    // 用公开候选和私有候选各自去重。同名私有新增也不改任务选择。
+    if ((visibility === "private" && personalNames.has(name)) || (visibility === "public" && publicNames.has(name))) {
+      if (visibility === "public" && !values.includes(name)) onChange([...values, name]);
       setKeyword("");
       closeCustom();
       return;
@@ -156,12 +160,12 @@ export function DeliverablePanel({ values, onChange, customTypes = [], canCreate
     }
     setCustomSaving(true);
     try {
-      const error = await onCreateCustom(name);
+      const error = await onCreateCustom(name, visibility);
       if (error !== null) {
         setCustomError(error);
         return;
       }
-      if (!values.includes(name)) onChange([...values, name]);
+      if (visibility === "public" && !values.includes(name)) onChange([...values, name]);
       setKeyword("");
       closeCustom();
     } catch (error: unknown) {
@@ -171,7 +175,7 @@ export function DeliverablePanel({ values, onChange, customTypes = [], canCreate
     }
   };
 
-  const customLabel = t("dp.customWithRole");
+  const customLabel = t(canCreateCustom ? "dp.custom" : "dp.customWithRole");
   return (
     <div
       data-deliverable-panel="true"
@@ -215,6 +219,7 @@ export function DeliverablePanel({ values, onChange, customTypes = [], canCreate
               className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition hover:bg-zinc-100"
             >
               {docTypeChip(option, locale)}
+              {personalNames.has(option) && !publicNames.has(option) ? <span className="shrink-0 text-[10px] text-zinc-500">{t("dp.privateBadge")}</span> : null}
               {selected ? (
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-600">
                   <path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -253,6 +258,20 @@ export function DeliverablePanel({ values, onChange, customTypes = [], canCreate
               }}
               className="w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10 disabled:bg-zinc-50 disabled:text-zinc-400"
             />
+            {isAdmin ? (
+              <fieldset disabled={customSaving} className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-zinc-700">
+                <legend className="sr-only">{t("dp.customVisibility")}</legend>
+                <label className="inline-flex items-center gap-1.5">
+                  <input type="radio" name="visibility" value="private" checked={customVisibility === "private"} onChange={() => setCustomVisibility("private")} />
+                  {t("dp.customPrivate")}
+                </label>
+                <label className="inline-flex items-center gap-1.5">
+                  <input type="radio" name="visibility" value="public" checked={customVisibility === "public"} onChange={() => setCustomVisibility("public")} />
+                  {t("dp.customPublic")}
+                </label>
+              </fieldset>
+            ) : <p className="mt-2 text-[11px] text-zinc-700">{t("dp.customPrivate")}</p>}
+            <p className="mt-1 text-[11px] leading-4 text-zinc-500">{t("dp.customTaskVisibility")}</p>
             {customError === null ? null : (
               <p role="alert" className="mt-1 text-[11px] leading-4 text-rose-600">
                 {customError}
@@ -273,7 +292,7 @@ export function DeliverablePanel({ values, onChange, customTypes = [], canCreate
                 disabled={customSaving}
                 className="rounded-md bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:cursor-wait disabled:opacity-60"
               >
-                {customSaving ? t("dp.customSaving") : t("dp.customAdd")}
+                {t(customSaving ? "dp.customSaving" : isAdmin && customVisibility === "public" ? "dp.customAddAndSelect" : "dp.customAdd")}
               </button>
             </div>
           </form>
@@ -304,12 +323,12 @@ export function DeliverablePanel({ values, onChange, customTypes = [], canCreate
 
 type DeliverableCellProps = {
   values: readonly string[];
-  /** 全站自定义成果类型名称（bootstrap 字典 deliverableType）。 */
-  customTypes?: readonly string[];
-  /** 当前项目项目经理才可新增；false = 入口置灰。 */
+  /** 公开字典候选与当前账号的私有候选。 */
+  customTypes?: CustomDeliverableTypes;
+  /** 本项目的项目经理或系统管理员可以新增。 */
   canCreateCustom?: boolean;
-  /** 新增全站自定义类型（返回 null = 成功；文案 = 错误）。 */
-  onCreateCustom?: (name: string) => Promise<string | null>;
+  /** 新增指定范围的自定义候选；返回文案时显示内联错误。 */
+  onCreateCustom?: DeliverableTypeCreator;
   /** 勾选 / 取消一枚（浮层不自动关；落值 = 勾选顺序的数组）。 */
   onChange: (next: string[]) => void;
   /** 全量摊开（抽屉行用：色签折行全显）；缺省 = 首枚 + 「+N」（任务表列用，窄列单行）。 */
@@ -322,7 +341,7 @@ type DeliverableCellProps = {
 
 /** 行内选择单元格（任务表列 / 抽屉行共用）：空值 = 「—」（液态玻璃小框，同列内其它空态口径）；
  *  有值 = 浅彩底小色签（首枚 + 「+N」；抽屉行 all = 全量摊开逐枚）—— 点开 = DeliverablePanel。 */
-export function DeliverableCell({ values, onChange, customTypes = [], canCreateCustom = false, onCreateCustom, all = false, disabled = false, disabledHint }: DeliverableCellProps) {
+export function DeliverableCell({ values, onChange, customTypes = EMPTY_CUSTOM_TYPES, canCreateCustom = false, onCreateCustom, all = false, disabled = false, disabledHint }: DeliverableCellProps) {
   const t = useT();
   const locale = useLocale();
   const filled = values.length > 0;

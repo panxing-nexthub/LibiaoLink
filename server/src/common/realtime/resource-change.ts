@@ -7,14 +7,17 @@ export type LiveResource = (typeof LIVE_RESOURCES)[number];
 export interface ResourceChangeSink { changed(resources: readonly LiveResource[]): void }
 
 /** Invalidation hints contain no record ids or business data; reads still enforce their original permissions. */
-export function changedResources(method: string, url: string): LiveResource[] {
+export function changedResources(method: string, url: string, result?: unknown): LiveResource[] {
   if (!["POST", "PATCH", "PUT", "DELETE"].includes(method)) return [];
   const path = url.split("?")[0] ?? "";
   if (/^\/api\/v1\/projects(?:\/|$)/.test(path)) {
     if (path.endsWith("/view-grants/preview")) return [];
     if (/\/view-grants(?:\/|$)/.test(path)) return ["permissions", "projects", "tasks", "audit"];
     if (/\/(?:exports|can-complete|can-advance)(?:\/|$)/.test(path)) return [];
-    if (/\/deliverable-types(?:\/|$)/.test(path)) return ["dicts", "projects", "tasks"];
+    if (/\/deliverable-types(?:\/|$)/.test(path)) {
+      if (typeof result === "object" && result !== null && "visibility" in result && result.visibility === "private") return [];
+      return ["dicts", "projects", "tasks"];
+    }
     if (/\/reports(?:\/|$)/.test(path)) return ["reports", "issues", "tasks", "projects"];
     if (/\/issues(?:\/|$)/.test(path)) return ["issues", "reports"];
     return ["projects", "tasks"];
@@ -43,9 +46,9 @@ export class ResourceChangeInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler) {
     const request = context.switchToHttp().getRequest<{ method: string; originalUrl?: string; url: string }>();
-    const resources = changedResources(request.method, request.originalUrl ?? request.url);
     // Controller promises resolve after the business transaction commits. Rejected writes never emit.
-    return next.handle().pipe(tap(() => {
+    return next.handle().pipe(tap((result: unknown) => {
+      const resources = changedResources(request.method, request.originalUrl ?? request.url, result);
       if (resources.length > 0) this.sink.changed(resources);
     }));
   }

@@ -205,6 +205,8 @@ import {
   DictListResponseSchema,
   DictReadQuerySchema,
   DictSchema,
+  PersonalDeliverableTypeListSchema,
+  ProjectDeliverableTypeCreateResponseSchema,
 } from "./modules/dicts.ts";
 import { AuditLogListQuerySchema, AuditLogListResponseSchema } from "./modules/audits.ts";
 import {
@@ -541,12 +543,13 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
 
   registry.registerPath({
     method: "post",
-    path: "/api/v1/projects/{id}/deliverable-types",
+    path: "/api/v1/projects/{id}/deliverable-types/scoped",
     tags: ["projects"],
-    summary: "新增全站自定义成果文件类型（仅当前项目编辑者；写入 deliverableType 全局字典，所有项目共享）",
+    summary: "新增成果文件下拉选项（本项目经理仅个人；系统管理员可新增公共或个人）",
     request: { params: idParams, body: json(ProjectDeliverableTypeCreateBodySchema) },
     responses: {
-      201: { description: "创建成功（更新后的 deliverableType 字典）", ...json(DictSchema) },
+      201: { description: "公共选项返回公共字典；个人选项仅返回创建人自己的条目", ...json(ProjectDeliverableTypeCreateResponseSchema) },
+      401: commonErrors[401],
       400: commonErrors[400],
       403: commonErrors[403],
       404: commonErrors[404],
@@ -1290,6 +1293,17 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     request: { query: DictReadQuerySchema },
     responses: {
       200: { description: "全部字典", ...json(DictListResponseSchema) },
+      401: commonErrors[401],
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/dicts/deliverableType/personal",
+    tags: ["dicts"],
+    summary: "获取当前账号的个人成果文件下拉选项",
+    responses: {
+      200: { description: "仅当前账号创建的个人选项", ...json(PersonalDeliverableTypeListSchema) },
       401: commonErrors[401],
     },
   });

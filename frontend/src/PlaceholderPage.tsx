@@ -141,10 +141,10 @@ function nodeTitleHitsDictionary(title: string, dictionary: ReadonlyMap<string, 
 async function translateNodeTitle(
   title: string,
   dictionary: ReadonlyMap<string, string>,
-): Promise<{ text: string; usedDictionary: boolean } | null> {
+): Promise<string | null> {
   const direct = dictionary.get(nodeNameKey(title));
   if (direct !== undefined) {
-    return { text: direct, usedDictionary: true };
+    return direct;
   }
   const terms = Array.from(dictionary.keys()).filter((term) => term.length >= 2).sort((a, b) => b.length - a.length);
   const parts = splitNodeTitleByDictionary(title, terms);
@@ -168,13 +168,13 @@ async function translateNodeTitle(
       }
       const composed = normalizeProductTermEnglish(pieces.join(" ").trim());
       if (composed !== "") {
-        return { text: composed, usedDictionary: true };
+        return composed;
       }
     }
   }
   const whole = await translateZhTo([title], "en");
   const translated = whole.get(title);
-  return translated === undefined ? null : { text: normalizeProductTermEnglish(translated), usedDictionary: false };
+  return translated === undefined ? null : normalizeProductTermEnglish(translated);
 }
 
 /** 全阶段节点库字典：首次打开节点表单时补拉一次，供专业名词匹配使用（失败阶段静默跳过）。 */
@@ -1159,7 +1159,6 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   /** 自动翻译请求序号：中文继续输入时，旧的翻译结果回来就直接丢弃。 */
   const nodeTitleTranslateSeq = useRef(0);
   /** 当前英文名是否来自节点库字典（提示文案与纯机翻区分）。 */
-  const [formTitleEnFromDict, setFormTitleEnFromDict] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formBusy, setFormBusy] = useState(false);
   /** 待确认删除的节点（同款红胶囊的第一下：第二下在顶部确认 Toast 上）+ 写入失败的提示文案。 */
@@ -1231,7 +1230,6 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     if (title === "") {
       if (!formTitleEnManual) {
         setFormTitleEn("");
-        setFormTitleEnFromDict(false);
       }
       setFormTitleEnTranslating(false);
       return;
@@ -1241,33 +1239,29 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       return;
     }
     if (!/[一-鿿]/.test(title)) {
-      setFormTitleEnFromDict(false);
       setFormTitleEnTranslating(false);
       return;
     }
     const dictionaryEnglish = nodeEnglishDictionary.get(title);
     if (dictionaryEnglish !== undefined) {
       setFormTitleEn(dictionaryEnglish);
-      setFormTitleEnFromDict(true);
       setFormTitleEnTranslating(false);
       return;
     }
     const cached = cachedZhTo(title, "en");
     if (cached !== null && !nodeTitleHitsDictionary(title, nodeEnglishDictionary)) {
       setFormTitleEn(cached);
-      setFormTitleEnFromDict(false);
       setFormTitleEnTranslating(false);
       return;
     }
     setFormTitleEnTranslating(true);
     const timer = window.setTimeout(() => {
-      void translateNodeTitle(title, nodeEnglishDictionary).then((result) => {
+      void translateNodeTitle(title, nodeEnglishDictionary).then((translated) => {
         if (nodeTitleTranslateSeq.current !== seq) {
           return;
         }
-        if (result !== null) {
-          setFormTitleEn(result.text);
-          setFormTitleEnFromDict(result.usedDictionary);
+        if (translated !== null) {
+          setFormTitleEn(translated);
         }
         setFormTitleEnTranslating(false);
       });
@@ -1295,7 +1289,6 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     setFormTitle("");
     setFormTitleEn("");
     setFormTitleEnManual(false);
-    setFormTitleEnFromDict(false);
     setFormTitleEnTranslating(false);
     nodeTitleTranslateSeq.current += 1;
     setNodeForm({ mode: "create", templateId });
@@ -1312,7 +1305,6 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     setFormTitle(node.title);
     setFormTitleEn(node.titleEn);
     setFormTitleEnManual(node.titleEn.trim() !== "");
-    setFormTitleEnFromDict(false);
     setFormTitleEnTranslating(false);
     nodeTitleTranslateSeq.current += 1;
     setNodeForm({ mode: "edit", node });
@@ -1324,7 +1316,6 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     setNodeForm(null);
     setFormError(null);
     setFormTitleEnManual(false);
-    setFormTitleEnFromDict(false);
     setFormTitleEnTranslating(false);
   };
 
@@ -1362,7 +1353,6 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         setFormTitle("");
         setFormTitleEn("");
         setFormTitleEnManual(false);
-        setFormTitleEnFromDict(false);
         setFormTitleEnTranslating(false);
         if (form.mode === "edit" || (form.mode === "create" && form.templateId === null)) {
           setNodesVersion((version) => version + 1);
@@ -1418,7 +1408,6 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         onChange={(event) => {
           setFormTitleEn(event.target.value);
           setFormTitleEnManual(true);
-          setFormTitleEnFromDict(false);
           setFormTitleEnTranslating(false);
         }}
         placeholder={t("tpl.node.nameEnPlaceholder")}
@@ -1432,9 +1421,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
           ? t("tpl.node.nameEnTranslating")
           : formTitleEnManual
             ? t("tpl.node.nameEnManualHint")
-            : formTitleEnFromDict
-              ? t("tpl.node.nameEnDictHint")
-              : t("tpl.node.nameEnAutoHint")}
+            : t("tpl.node.nameEnAutoHint")}
       </p>
       {formError === null ? null : <p className="mb-2 text-xs text-rose-600">{formError}</p>}
       <div className="flex items-center justify-end gap-2">

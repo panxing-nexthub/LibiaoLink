@@ -1604,7 +1604,6 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "tpl.node.nameEnAutoHint": "中国語名から自動翻訳しています。直接編集できます",
   "tpl.node.nameEnManualHint": "英語名が入力済みのため、自動翻訳で上書きしません",
   "tpl.node.nameEnTranslating": "自動翻訳中…",
-  "tpl.node.nameEnDictHint": "専門用語辞書を反映して自動入力しました。直接編集できます",
   "tpl.new": "+ 新規テンプレート",
   "tpl.new.busy": "作成中…",
   "tpl.new.title": "新規テンプレート：個人用または公共テンプレートを選択します",

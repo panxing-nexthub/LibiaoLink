@@ -7,6 +7,7 @@ import { TaskProgressSchema } from "./tasks.ts";
 import { IssueCategoryListSchema, IssueStateSchema } from "./issues.ts";
 import { DailyReportStateSchema } from "./reports.ts";
 import { ChangeTypeSchema } from "./files.ts";
+import { ProjectFileAiSummarySchema } from "./document-analysis.ts";
 
 /**
  * AI 项目总结读面（只读聚合）：项目 / 阶段 / 任务当前快照 / 变更 / 日报 / 问题。
@@ -16,7 +17,7 @@ import { ChangeTypeSchema } from "./files.ts";
  * - 阶段不取节点明细与节点计数；阶段日期为空时用该阶段任务日期兜底（plannedStart=min、plannedEnd=max、actualEnd=max；
  *   actualStart 无可靠来源，保持 null），datesFallback=true 表示至少一项来自任务兜底。
  * - 任务只给当前快照，不取 task_events 变更历史与变更原因；任务描述（note）只作自然语言补充。
- * - 日报 / 问题只取文字字段与附图数量，图片识别与文件正文提取不在本期范围。
+ * - 日报 / 问题只取文字字段与附图数量；项目文件摘要只取项目文件视图中 PDF / 图片 / Word / Excel 的成功分析结果，日报 / 问题图片不进入。
  * - 所有字段为空时保持 null / 空数组，由下游总结明确写「暂无数据」，不得编造。
  */
 export const ProjectAiProjectSchema = z
@@ -175,6 +176,7 @@ export const ProjectAiContextSchema = z
     changes: z.array(ProjectAiChangeSchema),
     reports: z.array(ProjectAiReportSchema),
     issues: z.array(ProjectAiIssueSchema),
+    fileAnalyses: z.array(ProjectFileAiSummarySchema).default([]).openapi({ description: "项目文件 AI 分析摘要（仅当前文件版本的成功分析；日报 / 问题图片不进入）" }),
     generatedAt: DateTimeSchema,
     truncated: z.boolean().openapi({ description: "true = 任务 / 日报 / 问题 / 变更任一集合超出读取上限被截断" }),
   })

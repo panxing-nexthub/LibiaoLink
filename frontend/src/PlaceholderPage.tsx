@@ -1,10 +1,10 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { subscribeLiveHints, keepLiveOrder } from "./liveSync";
 import { useLiveRefresh } from "./useLiveRefresh";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { AppHeader } from "./components/AppHeader";
 import { RowDeleteButton } from "./components/RowDeleteButton";
-import { Toast, ToastConfirm } from "./components/Toast";
+import { Toast, ToastConfirm, type ToastKind } from "./components/Toast";
 import { useFocusTrap } from "./components/useFocusTrap";
 import { TaskNodeCard } from "./components/TaskNodeCard";
 import { SelectMenu } from "./components/SelectMenu";
@@ -39,6 +39,7 @@ import { formatDateTime } from "./projectApi";
 import { stageNameOf } from "./taskApi";
 import { replaceTemplateSection, templateSectionFromParam, templateSectionSlug, type PlaceholderPage as PlaceholderPageKey } from "./useHashRoute";
 import { isLocalizedLocale, stageText, prefetchLocalizedText, useLocale, useLocalizedTranslator, useT } from "./i18n";
+import { cachedZhTo, translateZhTo } from "./translateApi";
 import { lockBodyScroll } from "./scrollLock";
 import { markTaskNodeNotificationsSeen, refreshTaskNodePending, taskNodeNotificationKeys, useTaskNodePendingBadge } from "./taskNodePending";
 import type { MeResponse } from "./types";
@@ -60,6 +61,138 @@ function templateTabClass(active: boolean): string {
 
 /** 左列节点池的兜底空数组（取不到该板块那份时用，避免每次渲染都新建一个）。 */
 const EMPTY_NODE_LIST: readonly TaskNodeItem[] = [];
+
+/** 节点名比对键：去首尾空白 + 合并连续空格（字典查找与同名判重共用）。 */
+function nodeNameKey(text: string): string {
+  return text.trim().replace(/ {2,}/g, " ");
+}
+
+/**
+ * 官方产品名（业务口径 2026-10-13 / 2026-11-24 复核）：节点名里出现这些产品词时固定用官方英文名，
+ * 不交给机翻自由发挥；项目类型码 / 字典码仍保持原值（T-sort / 3D分拣 / 飞箱）。
+ */
+const PRODUCT_NAME_TERMS: ReadonlyArray<{ readonly zh: string; readonly en: string }> = [
+  { zh: "T-sort", en: "T-Sort" },
+  { zh: "T-Sort", en: "T-Sort" },
+  { zh: "T型分拣", en: "T-Sort" },
+  { zh: "T型分选", en: "T-Sort" },
+  { zh: "3D分拣", en: "3D Sorting" },
+  { zh: "3D分选", en: "3D Sorting" },
+  { zh: "飞箱", en: "AirRob" },
+];
+
+/** 机翻 / 库内旧英文里的产品名统一回官方写法（AirRobot / Air Robot / Flying Box → AirRob）。 */
+function normalizeProductTermEnglish(text: string): string {
+  return text
+    .replace(/AirRobot(?![A-Za-z])/gi, "AirRob")
+    .replace(/Air Robot(?![A-Za-z])/gi, "AirRob")
+    .replace(/AirRob(?![A-Za-z])/gi, "AirRob")
+    .replace(/Flying Box(?![A-Za-z])/gi, "AirRob")
+    .replace(/T-Sort(?![A-Za-z])/gi, "T-Sort")
+    .replace(/T Sort(?![A-Za-z])/gi, "T-Sort")
+    .replace(/TSort(?![A-Za-z])/gi, "T-Sort")
+    .replace(/3D Sorting(?![A-Za-z])/gi, "3D Sorting")
+    .replace(/3D Sorter(?![A-Za-z])/gi, "3D Sorting");
+}
+
+/** 中文节点名按节点库词条切段（长词优先）；没有任何词条命中返回 null。 */
+function splitNodeTitleByDictionary(
+  title: string,
+  terms: readonly string[],
+): Array<{ text: string; dictionary: boolean }> | null {
+  const parts: Array<{ text: string; dictionary: boolean }> = [];
+  let cursor = 0;
+  let matched = false;
+  while (cursor < title.length) {
+    const hit = terms.find((term) => title.startsWith(term, cursor));
+    if (hit !== undefined) {
+      parts.push({ text: hit, dictionary: true });
+      cursor += hit.length;
+      matched = true;
+      continue;
+    }
+    let end = cursor + 1;
+    while (end < title.length && !terms.some((term) => title.startsWith(term, end))) {
+      end += 1;
+    }
+    parts.push({ text: title.slice(cursor, end), dictionary: false });
+    cursor = end;
+  }
+  return matched ? parts : null;
+}
+
+/** 节点名是否命中节点库词条（缓存命中时也要让字典优先，不能直接吃旧的整句机翻）。 */
+function nodeTitleHitsDictionary(title: string, dictionary: ReadonlyMap<string, string>): boolean {
+  for (const term of dictionary.keys()) {
+    if (term.length >= 2 && title.includes(term)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 节点名自动翻译（优先结合节点库字典）：
+ * ① 整名命中节点库 → 直接采用库内英文；
+ * ② 命中部分词条 → 词条取库内英文、剩余片段走机翻后拼接（长词优先；英文把名词短语中心词放前）；
+ * ③ 无词条命中 / 片段翻译失败 → 回落整句机翻（服务端仍会做专业术语保护）。
+ * 翻译失败返回 null，调用方保持英文输入框现状。
+ */
+async function translateNodeTitle(
+  title: string,
+  dictionary: ReadonlyMap<string, string>,
+): Promise<string | null> {
+  const direct = dictionary.get(nodeNameKey(title));
+  if (direct !== undefined) {
+    return direct;
+  }
+  const terms = Array.from(dictionary.keys()).filter((term) => term.length >= 2).sort((a, b) => b.length - a.length);
+  const parts = splitNodeTitleByDictionary(title, terms);
+  if (parts !== null) {
+    const freeTexts = Array.from(
+      new Set(parts.filter((part) => !part.dictionary && /[一-鿿]/.test(part.text)).map((part) => part.text.trim())),
+    );
+    const translations = freeTexts.length === 0 ? new Map<string, string>() : await translateZhTo(freeTexts, "en");
+    if (freeTexts.every((text) => translations.has(text))) {
+      const pieces: string[] = [];
+      for (const part of parts) {
+        if (!part.dictionary) continue;
+        const english = dictionary.get(part.text);
+        if (english !== undefined) pieces.push(english);
+      }
+      for (const part of parts) {
+        if (part.dictionary) continue;
+        const raw = part.text.trim();
+        if (raw === "") continue;
+        pieces.push(/[一-鿿]/.test(raw) ? translations.get(raw) ?? raw : raw);
+      }
+      const composed = normalizeProductTermEnglish(pieces.join(" ").trim());
+      if (composed !== "") {
+        return composed;
+      }
+    }
+  }
+  const whole = await translateZhTo([title], "en");
+  const translated = whole.get(title);
+  return translated === undefined ? null : normalizeProductTermEnglish(translated);
+}
+
+/** 全阶段节点库字典：首次打开节点表单时补拉一次，供专业名词匹配使用（失败阶段静默跳过）。 */
+let allStageNodeDictionaryPromise: Promise<readonly TaskNodeItem[]> | null = null;
+function loadAllStageNodeDictionary(): Promise<readonly TaskNodeItem[]> {
+  if (allStageNodeDictionaryPromise === null) {
+    allStageNodeDictionaryPromise = Promise.all(
+      TEMPLATE_STAGE_SECTIONS.map(async (stage) => {
+        try {
+          return await fetchStageNodes(stage);
+        } catch {
+          return EMPTY_NODE_LIST;
+        }
+      }),
+    ).then((lists) => lists.flat());
+  }
+  return allStageNodeDictionaryPromise;
+}
 
 /** 每日通知时间下拉：小时 / 分钟都用系统自绘 SelectMenu，不再使用浏览器原生 time 选择器。 */
 const REVIEW_NOTIFY_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => {
@@ -212,7 +345,7 @@ function sourceProjectLabel(request: TaskNodeRequest): string {
   return parts.length === 0 ? "—" : parts.join(" · ");
 }
 
-/** 按住卡片后位移超过这个数才算「拖动」（没过阈值就是点一下，什么都不改）。 */
+/** 按住卡片后位移超过这个数才算「拖动」；没过阈值交给 click（编辑中时把节点加入当前模板）。 */
 const DRAG_THRESHOLD = 4;
 
 /**
@@ -280,7 +413,8 @@ type PlaceholderPageProps = {
  * 拖动（Push 116，业务口径「这里拖动卡片也要可以滑动鼠标」）：改成**指针拖动** —— 原生 HTML5 拖拽在拖动期间会把 `wheel` 吞掉,
  * 「拖着的同时用滚轮翻列表」就不成立。现在的口径：按住卡片、位移超过 `DRAG_THRESHOLD` 才算拖动，拖起来之后**滚轮直接可用**（指针在页面上 = 滚页面）；拖到视口上 / 下边缘附近也会逐帧自动滚页，不再只依赖滚轮，
  * 拖动中另有一块跟着鼠标走的**半透明拖动卡片**（`data-drag-ghost`，`pointer-events-none`，不挡 `elementFromPoint` 的落点判定），
- * 插入线（`InsertLine`）按「落在哪块面板的第几格」实时跟着走；没过阈值 = 点一下，什么都不改；Esc / 指针取消 = 原地取消。
+ * 插入线（`InsertLine`）按「落在哪块面板的第几格」实时跟着走；没过阈值 = 点一下，编辑中时把节点追加到当前模板；
+ * 未进入编辑中则只提示先切换状态；Esc / 指针取消 = 原地取消。
  * 左侧节点池拖过来 = 复制一份（同面板按节点 id 去重），模板面板里的卡片 = 在同面板内调顺序。
  */
 
@@ -319,6 +453,13 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   const [templatesByStage, setTemplatesByStage] = useState<Record<string, TemplateDraft[]>>({});
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
+  /**
+   * 当前唯一处于「编辑中」的模板 id（跨阶段也只允许一份）：状态由模板列头的「已保存」下拉切换。
+   * 只有这份模板允许改名 / 调整可见范围 / 加删节点 / 拖动排序；其它面板一律保持「已保存」。
+   */
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  /** 点击左列节点加入模板后，等新卡片落 DOM 再把这个模板的节点区滚到最底部。 */
+  const [autoScrollTemplateId, setAutoScrollTemplateId] = useState<string | null>(null);
   /** 模板取数版本号：首次进入 / 失败重试 / 节点库改动 / 冲突重取后 +1（重取按面板合并：只有脏草稿会保留）。 */
   const [templatesVersion, setTemplatesVersion] = useState(0);
   /** 模板名展示态（Push 301 追订）：未聚焦 = 英文界面出机翻译文；聚焦 = 回原文供编辑（保存回写原文，译文不落库）。 */
@@ -340,6 +481,8 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   const grabRef = useRef({ dx: 0, dy: 0, width: 0 });
   /** 跟着鼠标走的拖动卡片（Push 116）：直接用 DOM 改 `transform`，不走 state（每帧都要动）。 */
   const ghostRef = useRef<HTMLDivElement | null>(null);
+  /** 真拖动结束后浏览器可能补发一次 click；拦住它，避免「拖进模板后又点击加一次」。 */
+  const suppressNodeClickRef = useRef(false);
   /** 最新的落点计算 / 落地实现（每帧回调里读，免得闭包吃到旧值）。 */
   const dropTargetAtRef = useRef<(x: number, y: number) => DropSpot | null>(() => null);
   const commitDropRef = useRef<(info: DragInfo, spot: DropSpot | null) => void>(() => undefined);
@@ -353,6 +496,37 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   /** 公共节点库取数版本号：左侧新增 / 删除成功后 +1；模板内新增私有节点不触发这里。 */
   const [nodesVersion, setNodesVersion] = useState(0);
   const activeNodes = nodesByStage[activeSection] ?? EMPTY_NODE_LIST;
+  /** 全阶段节点库（打开节点表单后补拉一次）：专业名词字典不只看当前板块。 */
+  const [dictionaryNodes, setDictionaryNodes] = useState<readonly TaskNodeItem[]>(EMPTY_NODE_LIST);
+  /**
+   * 新建 / 编辑节点的「专业名词字典」：全阶段节点库 + 已加载模板私有节点，中文名 → 英文名。
+   * 自动翻译优先采用这里的既有译法（精确同名直接取；长词命中则保留库内英文再拼剩余片段），
+   * 避免同一个专业名词在不同节点里被机翻成不同叫法。
+   */
+  const nodeEnglishDictionary = useMemo(() => {
+    const dictionary = new Map<string, string>();
+    for (const term of PRODUCT_NAME_TERMS) {
+      dictionary.set(nodeNameKey(term.zh), term.en);
+    }
+    const containsProductTerm = (key: string): boolean =>
+      PRODUCT_NAME_TERMS.some((term) => key.includes(nodeNameKey(term.zh)));
+    const add = (nodes: readonly TaskNodeItem[]): void => {
+      for (const node of nodes) {
+        const key = nodeNameKey(node.title);
+        const english = normalizeProductTermEnglish(node.titleEn.trim());
+        if (key !== "" && english !== "" && !dictionary.has(key) && !containsProductTerm(key)) {
+          dictionary.set(key, english);
+        }
+      }
+    };
+    add(activeNodes);
+    add(dictionaryNodes);
+    for (const list of Object.values(nodesByStage)) add(list);
+    for (const list of Object.values(templatesByStage)) {
+      for (const template of list) add(template.nodes);
+    }
+    return dictionary;
+  }, [activeNodes, dictionaryNodes, nodesByStage, templatesByStage]);
 
   /**
    * 「入库审核」独立板块是否正在展示（远端 b66ffd88 新增的板块）：审核工作台挂在这个板块内容上方。
@@ -420,6 +594,32 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       });
     };
   }, activeSection + ":" + String(nodesVersion) + ":" + String(templatesVersion), page === "templates" && !nodesLoading && !templatesLoading);
+
+  // 模板被别处删除 / 刷新带走时，收起唯一的编辑态，避免留下一个指向不存在面板的「编辑中」。
+  useEffect(() => {
+    if (editingTemplateId === null || templatesLoading) {
+      return;
+    }
+    const exists = Object.values(templatesByStage).some((list) => list.some((template) => template.id === editingTemplateId));
+    if (!exists) {
+      setEditingTemplateId(null);
+    }
+  }, [editingTemplateId, templatesByStage, templatesLoading]);
+
+  // 点击节点加入后，模板节点区会多出一张末尾卡片：等 React 提交后直接滚到底，让新增内容立即可见。
+  useEffect(() => {
+    if (autoScrollTemplateId === null) {
+      return;
+    }
+    const scroller = document.querySelector<HTMLElement>(
+      '[data-template-panel-scroll="' + autoScrollTemplateId + '"]',
+    );
+    if (scroller !== null) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+    setAutoScrollTemplateId(null);
+  }, [autoScrollTemplateId, templates]);
+
   /** 左列「任务节点」的搜索词：按中 / 英文名过滤当前板块的节点卡片。 */
   const [nodeQuery, setNodeQuery] = useState("");
 
@@ -608,6 +808,13 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       : activeNodes.filter((node) =>
           (node.title + "\n" + node.titleEn).toLowerCase().includes(normalizedQuery),
         );
+  /** 当前阶段里正被编辑的那一份（跨阶段编辑时为 null）；左列点击 / 拖拽只认它。 */
+  const editingTemplateHere =
+    templates.find((template) => template.id === editingTemplateId && canManageTemplate(template.createdBy)) ?? null;
+  /** 当前阶段是否有可维护的模板：没有就不给节点卡片挂「点击加入」提示。 */
+  const canEditAnyTemplateHere = templates.some((template) => canManageTemplate(template.createdBy));
+  /** 当前唯一编辑项；切到别的阶段时仍能认出它，提示用户先回原阶段收尾。 */
+  const editingTemplateAnywhere = editingTemplateId === null ? null : findTemplateAnywhere(editingTemplateId);
 
   /**
    * 拖拽只传 id，落点时按 id 找回节点内容（相当于复制一份到右侧模板）：
@@ -652,13 +859,123 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     setDropTarget(null);
   };
 
+  /** 在所有阶段缓存里找模板：用于「同时只能编辑一份」的跨阶段守卫。 */
+  function findTemplateAnywhere(templateId: string): TemplateDraft | null {
+    for (const list of Object.values(templatesByStage)) {
+      const found = list.find((template) => template.id === templateId);
+      if (found !== undefined) {
+        return found;
+      }
+    }
+    return null;
+  }
+
+  /** 退出某份模板的编辑态；收起它专属的新增节点表单，并取消正在进行的拖动。 */
+  function finishTemplateEditing(templateId: string): void {
+    setEditingTemplateId((current) => (current === templateId ? null : current));
+    setNameFocusedId((current) => (current === templateId ? null : current));
+    setNodeForm((current) =>
+      current !== null && current.mode === "create" && current.templateId === templateId ? null : current,
+    );
+    resetDrag();
+  }
+
+  /**
+   * 进入某份模板的编辑态。同时只能有一份：
+   * - 上一份没有未保存改动（或本来就同一份）= 直接切换；
+   * - 上一份有未保存改动 = 拦下并提示先保存 / 放弃，绝不静默丢掉草稿。
+   */
+  function beginTemplateEditing(templateId: string): boolean {
+    const target = templates.find((template) => template.id === templateId);
+    if (target === undefined || !canManageTemplate(target.createdBy)) {
+      return false;
+    }
+    if (editingTemplateId !== null && editingTemplateId !== templateId) {
+      const active = findTemplateAnywhere(editingTemplateId);
+      if (active !== null && isDirty(active)) {
+        setTemplateNotice({
+          kind: "info",
+          text: t("tpl.edit.onlyOne", { name: localize(active.name) }),
+        });
+        return false;
+      }
+    }
+    setNodeForm((current) =>
+      current !== null && current.mode === "create" && current.templateId !== null && current.templateId !== templateId
+        ? null
+        : current,
+    );
+    resetDrag();
+    setTemplateNotice(null);
+    setEditingTemplateId(templateId);
+    return true;
+  }
+
+  /** 列头状态下拉：选「编辑中」进入编辑；选「已保存」= 有改动先保存再退出，无改动直接退出。 */
+  function changeTemplateStatus(template: TemplateDraft, next: string): void {
+    if (next === "editing") {
+      beginTemplateEditing(template.id);
+      return;
+    }
+    if (editingTemplateId !== template.id) {
+      return;
+    }
+    if (isDirty(template)) {
+      saveTemplate(template.id, true);
+    } else {
+      finishTemplateEditing(template.id);
+    }
+  }
+
+  /** 点击左侧节点 = 直接追加到当前「编辑中」的模板末尾；重复节点不重复加。 */
+  function addNodeToEditingTemplate(node: TaskNodeItem): void {
+    if (suppressNodeClickRef.current || savingTemplateId !== null) {
+      return;
+    }
+    const target = templates.find((template) => template.id === editingTemplateId);
+    if (target === undefined || !canManageTemplate(target.createdBy)) {
+      const active = editingTemplateId === null ? null : findTemplateAnywhere(editingTemplateId);
+      setTemplateNotice({
+        kind: "info",
+        text: active === null
+          ? t("tpl.edit.needActive")
+          : t("tpl.edit.otherStage", { name: localize(active.name) }),
+      });
+      return;
+    }
+    if (target.nodes.some((item) => item.id === node.id)) {
+      setTemplateNotice({ kind: "info", text: t("tpl.dup") });
+      return;
+    }
+    setTemplateNotice(null);
+    updateTemplates((previous) =>
+      previous.map((template) =>
+        template.id === target.id && !template.nodes.some((item) => item.id === node.id)
+          ? { ...template, nodes: [...template.nodes, node] }
+          : template,
+      ),
+    );
+    setAutoScrollTemplateId(target.id);
+  }
+
   /**
    * 新建模板 = `POST /api/v1/task-templates`（默认名「未命名模板」、空节点，回来可拖入节点或在模板内直接添加）：
    * 成功 = 新面板插到最前（原来的往右挪）并把焦点 / 全选落到它的名字上；失败 = 底部提示条。
    */
   const startNewTemplate = (visibility: TemplateVisibility): void => {
-    if (newTemplateBusy) {
+    if (newTemplateBusy || savingTemplateId !== null) {
       return;
+    }
+    if (editingTemplateId !== null) {
+      const active = findTemplateAnywhere(editingTemplateId);
+      if (active !== null && isDirty(active)) {
+        setNewTemplateVisibilityOpen(false);
+        setTemplateNotice({
+          kind: "info",
+          text: t("tpl.edit.onlyOne", { name: localize(active.name) }),
+        });
+        return;
+      }
     }
     setNewTemplateVisibilityOpen(false);
     setNewTemplateBusy(true);
@@ -668,10 +985,19 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         const created = await createTaskTemplate(activeSection, t("tpl.unnamed"), [], visibility);
         const draft = toTemplateDraft(created);
         updateTemplates((previous) => [draft, ...previous]);
+        // 新建完成直接进入编辑中：用户接下来就能改名、点节点 / 拖节点，保存后回到已保存。
+        setNodeForm((current) =>
+          current !== null && current.mode === "create" && current.templateId !== null ? null : current,
+        );
+        resetDrag();
+        setEditingTemplateId(draft.id);
         // 焦点 / 全选等这块面板渲染出来再落（下面那个 useEffect 里做 —— 不用 setTimeout 抢时机）
         setFocusTemplateId(draft.id);
       } catch (error) {
-        setTemplateNotice(t("tpl.err.create", { message: templateErrorMessage(error, t("tpl.err.retryLater")) }));
+        setTemplateNotice({
+          kind: "error",
+          text: t("tpl.err.create", { message: templateErrorMessage(error, t("tpl.err.retryLater")) }),
+        });
       } finally {
         setNewTemplateBusy(false);
       }
@@ -679,11 +1005,17 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   };
 
   const renameTemplate = (templateId: string, name: string): void => {
+    if (editingTemplateId !== templateId) {
+      return;
+    }
     updateTemplates((previous) => previous.map((item) => (item.id === templateId ? { ...item, name } : item)));
   };
 
-  /** 切换可见范围只改本地草稿；点「保存」时与名称 / 节点顺序一起 PATCH。 */
+  /** 切换可见范围只改本地草稿；只有编辑中的模板可改，保存时与名称 / 节点顺序一起 PATCH。 */
   const setTemplateVisibility = (templateId: string, visibility: TemplateVisibility): void => {
+    if (editingTemplateId !== templateId) {
+      return;
+    }
     updateTemplates((previous) => previous.map((item) => (item.id === templateId ? { ...item, visibility } : item)));
   };
 
@@ -693,7 +1025,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
    * 失败 = 顶部 Toast（本地改动不丢）；version 过期（409）/ 模板已被删除（404）额外重取该板块 ——
    * 重取按面板合并：只有脏草稿保留，这块会标上「有冲突 / 库中已删除」，出路 = 面板上的「放弃改动」。
    */
-  const saveTemplate = (templateId: string): void => {
+  const saveTemplate = (templateId: string, exitEditing = false): void => {
     const draft = templates.find((item) => item.id === templateId);
     if (draft === undefined || savingTemplateId !== null) {
       return;
@@ -711,12 +1043,17 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         });
         const next = toTemplateDraft(saved);
         updateTemplates((previous) => previous.map((item) => (item.id === templateId ? next : item)));
+        if (exitEditing) {
+          finishTemplateEditing(templateId);
+        }
       } catch (error) {
         const conflict = error instanceof ApiError && (error.code === "VERSION_CONFLICT" || error.code === "NOT_FOUND");
-        setTemplateNotice(
-          t("tpl.err.save", { name: draft.name, message: templateErrorMessage(error, t("tpl.err.retryLater")) }) +
+        setTemplateNotice({
+          kind: "error",
+          text:
+            t("tpl.err.save", { name: draft.name, message: templateErrorMessage(error, t("tpl.err.retryLater")) }) +
             (conflict ? t("tpl.err.saveKept") : ""),
-        );
+        });
         if (conflict) {
           setTemplatesVersion((version) => version + 1);
         }
@@ -747,13 +1084,18 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       try {
         await deleteTaskTemplate(draft.id, draft.version);
         updateTemplates((previous) => previous.filter((item) => item.id !== draft.id));
+        if (editingTemplateId === draft.id) {
+          finishTemplateEditing(draft.id);
+        }
       } catch (error) {
         const gone = error instanceof ApiError && error.code === "NOT_FOUND";
         const conflict = error instanceof ApiError && error.code === "VERSION_CONFLICT";
-        setTemplateNotice(
-          t("tpl.err.delete", { name: draft.name, message: templateErrorMessage(error, t("tpl.err.retryLater")) }) +
+        setTemplateNotice({
+          kind: "error",
+          text:
+            t("tpl.err.delete", { name: draft.name, message: templateErrorMessage(error, t("tpl.err.retryLater")) }) +
             (gone ? t("tpl.err.deleteGone") : ""),
-        );
+        });
         if (gone || conflict) {
           setTemplatesVersion((version) => version + 1);
         }
@@ -794,8 +1136,30 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   const [nodeForm, setNodeForm] = useState<
     { mode: "create"; templateId: string | null } | { mode: "edit"; node: TaskNodeItem } | null
   >(null);
+  /** 打开节点表单时补拉全阶段节点库（模块级只拉一次），让专业名词字典覆盖所有板块。 */
+  useEffect(() => {
+    if (page !== "templates" || nodeForm === null) {
+      return;
+    }
+    let alive = true;
+    void loadAllStageNodeDictionary().then((nodes) => {
+      if (alive) {
+        setDictionaryNodes(nodes);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [page, nodeForm]);
   const [formTitle, setFormTitle] = useState("");
   const [formTitleEn, setFormTitleEn] = useState("");
+  /** 英文名是否已被用户手动改过：一旦改过就停止自动翻译（仍可继续编辑 / 清空）。 */
+  const [formTitleEnManual, setFormTitleEnManual] = useState(false);
+  /** 自动翻译进行中：输入框下方显示状态，避免用户以为英文名没反应。 */
+  const [formTitleEnTranslating, setFormTitleEnTranslating] = useState(false);
+  /** 自动翻译请求序号：中文继续输入时，旧的翻译结果回来就直接丢弃。 */
+  const nodeTitleTranslateSeq = useRef(0);
+  /** 当前英文名是否来自节点库字典（提示文案与纯机翻区分）。 */
   const [formError, setFormError] = useState<string | null>(null);
   const [formBusy, setFormBusy] = useState(false);
   /** 待确认删除的节点（同款红胶囊的第一下：第二下在顶部确认 Toast 上）+ 写入失败的提示文案。 */
@@ -808,7 +1172,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   const [focusTemplateId, setFocusTemplateId] = useState<string | null>(null);
   const [savingTemplateId, setSavingTemplateId] = useState<string | null>(null);
   const [pendingDeleteTemplate, setPendingDeleteTemplate] = useState<TemplateDraft | null>(null);
-  const [templateNotice, setTemplateNotice] = useState<string | null>(null);
+  const [templateNotice, setTemplateNotice] = useState<{ kind: ToastKind; text: string } | null>(null);
   /** 键盘焦点陷阱（Push 264 追订）：删除确认条开着时焦点进条内、Tab 在条内循环、关闭还原到行内删除按钮。 */
   const deleteNodeConfirmTrapRef = useFocusTrap<HTMLDivElement>(pendingDeleteNode !== null);
   const deleteTemplateConfirmTrapRef = useFocusTrap<HTMLDivElement>(pendingDeleteTemplate !== null);
@@ -850,6 +1214,64 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     }
   }, [nodeForm]);
 
+  /**
+   * 新增 / 编辑节点的中英文同步（业务口径 2026-11-24「新建节点输入中文英文同步自动翻译 可编辑」）：
+   * 中文名停顿约 450ms 后自动填充英文名；专业名词优先取节点库既有中英对照（精确同名 / 长词命中），
+   * 未命中的部分再走 POST /api/v1/translate 机翻（服务端仍会做术语保护）。
+   * 用户一旦手动改英文名就停止覆盖（可自由修改 / 清空）；翻译失败静默保留输入，不阻断保存。
+   */
+  useEffect(() => {
+    const seq = nodeTitleTranslateSeq.current + 1;
+    nodeTitleTranslateSeq.current = seq;
+    if (nodeForm === null) {
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    const title = nodeNameKey(formTitle);
+    if (title === "") {
+      if (!formTitleEnManual) {
+        setFormTitleEn("");
+      }
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    if (formTitleEnManual) {
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    if (!/[一-鿿]/.test(title)) {
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    const dictionaryEnglish = nodeEnglishDictionary.get(title);
+    if (dictionaryEnglish !== undefined) {
+      setFormTitleEn(dictionaryEnglish);
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    const cached = cachedZhTo(title, "en");
+    if (cached !== null && !nodeTitleHitsDictionary(title, nodeEnglishDictionary)) {
+      setFormTitleEn(cached);
+      setFormTitleEnTranslating(false);
+      return;
+    }
+    setFormTitleEnTranslating(true);
+    const timer = window.setTimeout(() => {
+      void translateNodeTitle(title, nodeEnglishDictionary).then((translated) => {
+        if (nodeTitleTranslateSeq.current !== seq) {
+          return;
+        }
+        if (translated !== null) {
+          setFormTitleEn(translated);
+        }
+        setFormTitleEnTranslating(false);
+      });
+    }, 450);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [formTitle, formTitleEnManual, nodeForm, nodeEnglishDictionary]);
+
   /** 写节点库失败的统一文案（ApiError 带业务码；其它异常给兜底话术，不把原始堆栈抛给用户）。 */
   const nodeErrorMessage = (error: unknown, fallback: string): string =>
     error instanceof ApiError ? nodeWriteMessage(error) : fallback;
@@ -867,6 +1289,9 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     }
     setFormTitle("");
     setFormTitleEn("");
+    setFormTitleEnManual(false);
+    setFormTitleEnTranslating(false);
+    nodeTitleTranslateSeq.current += 1;
     setNodeForm({ mode: "create", templateId });
   };
 
@@ -880,13 +1305,19 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     }
     setFormTitle(node.title);
     setFormTitleEn(node.titleEn);
+    setFormTitleEnManual(node.titleEn.trim() !== "");
+    setFormTitleEnTranslating(false);
+    nodeTitleTranslateSeq.current += 1;
     setNodeForm({ mode: "edit", node });
   };
 
   /** 收起表单（取消按钮 / 保存成功后）。 */
   const closeNodeForm = (): void => {
+    nodeTitleTranslateSeq.current += 1;
     setNodeForm(null);
     setFormError(null);
+    setFormTitleEnManual(false);
+    setFormTitleEnTranslating(false);
   };
 
   /**
@@ -918,9 +1349,12 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         } else {
           await updateStageNode(form.node.id, { title, titleEn: formTitleEn.trim(), version: form.node.version });
         }
+        nodeTitleTranslateSeq.current += 1;
         setNodeForm(null);
         setFormTitle("");
         setFormTitleEn("");
+        setFormTitleEnManual(false);
+        setFormTitleEnTranslating(false);
         if (form.mode === "edit" || (form.mode === "create" && form.templateId === null)) {
           setNodesVersion((version) => version + 1);
           // 节点名变了：模板面板里的节点摘要跟着刷新（本地没有未保存改动时才会被覆盖）
@@ -946,7 +1380,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         submitNodeForm();
       }}
       className={
-        (form.mode === "create" ? "mb-3 " : "") + "rounded-xl border border-white/80 bg-white/70 p-3"
+        (form.mode === "create" ? "mb-3 " : "") + "shrink-0 rounded-xl border border-white/80 bg-white/70 p-3"
       }
     >
       <p className="mb-2 text-xs font-medium text-zinc-700">
@@ -972,12 +1406,26 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       <input
         type="text"
         value={formTitleEn}
-        onChange={(event) => { setFormTitleEn(event.target.value); }}
+        onChange={(event) => {
+          const value = event.target.value;
+          setFormTitleEn(value);
+          // 英文名清空后恢复自动翻译：允许「先输入英文 → 删除 → 再输入中文」的正常流程。
+          setFormTitleEnManual(value.trim() !== "");
+          setFormTitleEnTranslating(false);
+        }}
         placeholder={t("tpl.node.nameEnPlaceholder")}
         aria-label={t("tpl.node.nameEnAria")}
+        aria-describedby="node-form-title-en-hint"
         maxLength={200}
-        className="mb-2 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 outline-none transition placeholder:text-zinc-400 focus:border-zinc-300"
+        className="w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 outline-none transition placeholder:text-zinc-400 focus:border-zinc-300"
       />
+      <p id="node-form-title-en-hint" className="mb-2 mt-1 text-[11px] leading-4 text-zinc-400" aria-live="polite">
+        {formTitleEnTranslating
+          ? t("tpl.node.nameEnTranslating")
+          : formTitleEnManual
+            ? t("tpl.node.nameEnManualHint")
+            : t("tpl.node.nameEnAutoHint")}
+      </p>
       {formError === null ? null : <p className="mb-2 text-xs text-rose-600">{formError}</p>}
       <div className="flex items-center justify-end gap-2">
         <button
@@ -1202,6 +1650,10 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       return null;
     }
     const templateId = panel.getAttribute("data-template-panel") ?? "";
+    // 落点只认「当前唯一编辑中」的那份模板；其它已保存面板不接受拖入。
+    if (editingTemplateId === null || templateId !== editingTemplateId) {
+      return null;
+    }
     if (!templates.some((template) => template.id === templateId && canManageTemplate(template.createdBy))) {
       return null;
     }
@@ -1220,7 +1672,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
    * 面板里的卡片 = **在同面板内调顺序**（原位置后面的下标要减 1）；拖到别的面板上不处理（与原生拖拽那版口径一致）。
    */
   const commitDrop = (info: DragInfo, spot: DropSpot | null): void => {
-    if (spot === null) {
+    if (spot === null || editingTemplateId === null || spot.templateId !== editingTemplateId) {
       return;
     }
     const targetTemplate = templates.find((template) => template.id === spot.templateId);
@@ -1279,7 +1731,8 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   /**
    * 指针拖动（Push 116，业务口径「这里拖动卡片也要可以滑动鼠标」）：① 按下卡片、位移超过 `DRAG_THRESHOLD` 才算真拖动；
    * ② 拖动中**滚轮照常可用**（整段拖动没有原生拖拽参与，浏览器不会吞滚轮 —— 指针在页面上就是滚页面）；
-   * ③ 放开时落在哪块面板的第几格就交给 `commitDrop`；④ Esc / 指针取消 = 原地取消；没过阈值 = 点一下，什么都不改。
+   * ③ 放开时落在哪块面板的第几格就交给 `commitDrop`；④ Esc / 指针取消 = 原地取消；没过阈值 = 点一下，
+   * 编辑中时由卡片的 `onClick` 追加到当前模板。
    */
   useEffect(() => {
     /** 收尾（放开 / Esc / 指针取消）：清掉暂存与落点，恢复页面文字选择。 */
@@ -1324,6 +1777,11 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       if (!wasDragging) {
         return;
       }
+      // pointerup 之后浏览器还会补发 click；先打一个同步标记，本拍内到达的 click 不再触发「点击加入」。
+      suppressNodeClickRef.current = true;
+      window.setTimeout(() => {
+        suppressNodeClickRef.current = false;
+      }, 0);
       commitDropRef.current({ ...pending.info, width: grabRef.current.width }, dropTargetAtRef.current(event.clientX, event.clientY));
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1375,7 +1833,13 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     info: { nodeId: string; source: "left" | "right"; fromTemplateId: string | null },
     event: ReactPointerEvent<HTMLElement>,
   ): void => {
-    if (event.button !== 0) {
+    if (
+      event.button !== 0 ||
+      savingTemplateId !== null ||
+      editingTemplateId === null ||
+      (info.source === "left" && editingTemplateHere === null) ||
+      (info.source === "right" && info.fromTemplateId !== editingTemplateId)
+    ) {
       return;
     }
     const target = event.target as Element | null;
@@ -1451,10 +1915,20 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                 data-template-new=""
                 aria-label={t("tpl.new.title")}
                 onClick={() => {
+                  if (editingTemplateId !== null) {
+                    const active = findTemplateAnywhere(editingTemplateId);
+                    if (active !== null && isDirty(active)) {
+                      setTemplateNotice({
+                        kind: "info",
+                        text: t("tpl.edit.onlyOne", { name: localize(active.name) }),
+                      });
+                      return;
+                    }
+                  }
                   setTemplateNotice(null);
                   setNewTemplateVisibilityOpen(true);
                 }}
-                disabled={newTemplateBusy}
+                disabled={newTemplateBusy || savingTemplateId !== null}
                 title={t("tpl.new.title")}
                 className="shrink-0 rounded-lg border border-white/80 bg-white/70 px-3 py-1.5 text-sm font-medium text-zinc-700 shadow-[0_2px_10px_rgba(15,23,42,0.08)] transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -1936,12 +2410,12 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
 
             {/* 左列「任务节点」固定不动（宽屏滚动时钉住；Push 235 起叠在吸顶的板块标签栏下面：top = 122px = 顶栏 64 + 标签栏 59 − 1px 防缝），右侧模板面板一行放不下就换到下一行 */}
             <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-start">
-              <section className="flex w-full flex-col rounded-2xl border border-white/80 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.62),rgba(255,255,255,0.32))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_8px_32px_rgba(15,23,42,0.14)] backdrop-blur-2xl backdrop-saturate-150 lg:sticky lg:top-[122px] lg:w-[370px] lg:shrink-0 lg:self-start">
+              <section className="flex max-h-[calc(100dvh-190px)] w-full flex-col overflow-hidden rounded-2xl border border-white/80 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.62),rgba(255,255,255,0.32))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_8px_32px_rgba(15,23,42,0.14)] backdrop-blur-2xl backdrop-saturate-150 lg:sticky lg:top-[122px] lg:w-[370px] lg:shrink-0 lg:self-start">
                 {/* 列头行（Push 181）：左边板块标题、右边计数 + 「＋ 添加节点」——业务口径「在图二任务节点的位置加一个添加节点的按钮」。
                     2026-10-13 英文界面追订（「add 键漂移」= 整行超宽把按钮顶出玻璃面板右缘）：整行允许换行 ——
                     英文状态文案（Hardware Implementation · 24 nodes）比中文长，一行放不下时「计数 + 按钮」整组换到第二行右对齐，
                     按钮锚在面板里不再飘出去；中文文案短，仍是一行、布局不变。 */}
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm">
+                <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm">
                   <span className="shrink-0 font-semibold text-zinc-800">{t("tpl.nodes.title")}</span>
                   <span className="ml-auto flex min-w-0 items-center gap-2">
                     <span className="min-w-0 truncate text-xs text-zinc-500">
@@ -1965,7 +2439,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                 </div>
                 {nodeForm !== null && nodeForm.mode === "create" && nodeForm.templateId === null ? renderNodeForm(nodeForm) : null}
                 {/* 搜索框：按中 / 英文名过滤左列的节点卡片（切板块时自动清空） */}
-                <div className="relative mb-3">
+                <div className="relative mb-3 shrink-0">
                   <svg
                     aria-hidden="true"
                     viewBox="0 0 24 24"
@@ -2008,7 +2482,36 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                     </button>
                   )}
                 </div>
-                <div className="space-y-3">
+                {canEditAnyTemplateHere ? (
+                  <div
+                    data-template-node-hint={
+                      editingTemplateHere !== null
+                        ? "editing"
+                        : editingTemplateAnywhere !== null && isDirty(editingTemplateAnywhere)
+                          ? "other-stage"
+                          : "idle"
+                    }
+                    className={
+                      "mb-3 shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] leading-5 " +
+                      (editingTemplateHere === null
+                        ? "border-white/70 bg-white/35 text-zinc-500"
+                        : "border-amber-300/80 bg-amber-50/85 font-medium text-amber-800")
+                    }
+                  >
+                    {editingTemplateHere !== null
+                      ? t("tpl.nodes.clickAddHint", { name: localize(editingTemplateHere.name) })
+                      : editingTemplateAnywhere !== null && isDirty(editingTemplateAnywhere)
+                        ? t("tpl.edit.otherStage", { name: localize(editingTemplateAnywhere.name) })
+                        : t("tpl.nodes.editFirstHint")}
+                  </div>
+                ) : null}
+                <div
+                  data-template-node-scroll="true"
+                  role="region"
+                  aria-label={t("tpl.nodes.scrollAria")}
+                  tabIndex={0}
+                  className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain pb-1 pr-1 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zinc-300/60"
+                >
                   {nodesLoading && activeNodes.length === 0 ? (
                     <p className="rounded-xl border border-dashed border-white/80 bg-white/35 px-4 py-8 text-center text-xs text-zinc-500">{t("tpl.nodes.loading")}</p>
                   ) : null}
@@ -2029,11 +2532,18 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                       <TaskNodeCard
                         title={item.title}
                         subtitle={item.titleEn}
-                        grab={canManageTemplates}
+                        grab={editingTemplateHere !== null && savingTemplateId === null}
                         onPointerDown={
-                          canManageTemplates
+                          editingTemplateHere !== null && savingTemplateId === null
                             ? (event) => {
                                 beginDrag({ nodeId: item.id, source: "left", fromTemplateId: null }, event);
+                              }
+                            : undefined
+                        }
+                        onClick={
+                          canEditAnyTemplateHere
+                            ? () => {
+                                addNodeToEditingTemplate(item);
                               }
                             : undefined
                         }
@@ -2075,22 +2585,30 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                   const nodeCount = template.nodes.length;
                   const savedOk = !isDirty(template);
                   const canManageThisTemplate = canManageTemplate(template.createdBy);
+                  /** 只有这块面板处于唯一「编辑中」状态时才允许改名 / 调可见范围 / 增删节点 / 拖拽排序。 */
+                  const isEditing = canManageThisTemplate && editingTemplateId === template.id;
                   return (
                     <section
                       key={template.id}
                       data-template-panel={template.id}
+                      data-template-status={isEditing ? "editing" : "saved"}
+                      data-template-editing={isEditing ? "true" : undefined}
                       aria-label={t("tpl.panel.aria", { name: localize(template.name) })}
                       className={
-                        "group/panel flex w-full flex-col rounded-2xl border bg-[linear-gradient(to_bottom,rgba(255,255,255,0.62),rgba(255,255,255,0.32))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_8px_32px_rgba(15,23,42,0.14)] backdrop-blur-2xl backdrop-saturate-150 transition lg:w-[370px] lg:shrink-0 " +
+                        "group/panel flex min-h-0 max-h-[calc(100dvh-190px)] w-full flex-col overflow-hidden rounded-2xl border bg-[linear-gradient(to_bottom,rgba(255,255,255,0.62),rgba(255,255,255,0.32))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_8px_32px_rgba(15,23,42,0.14)] backdrop-blur-2xl backdrop-saturate-150 transition lg:w-[370px] lg:shrink-0 " +
                         (hovered
                           ? duplicate
                             ? "border-amber-400/70 ring-2 ring-amber-300/40"
-                            : "border-zinc-900/30 ring-2 ring-zinc-900/10"
-                          : "border-white/80")
+                            : isEditing
+                              ? "border-amber-500 ring-2 ring-amber-300/60"
+                              : "border-zinc-900/30 ring-2 ring-zinc-900/10"
+                          : isEditing
+                            ? "border-amber-400/80 ring-2 ring-amber-300/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_10px_34px_rgba(245,158,11,0.18)]"
+                            : "border-white/80")
                       }
                     >
-                      <div className="mb-3">
-                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm">
+                      <div className="mb-3 shrink-0">
+                        <div className="flex min-w-0 items-center text-sm">
                           <input
                             id={"template-name-" + template.id}
                             type="text"
@@ -2098,67 +2616,22 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                             onFocus={() => { setNameFocusedId(template.id); }}
                             onBlur={() => { setNameFocusedId(null); }}
                             onChange={(event) => renameTemplate(template.id, event.target.value)}
-                            disabled={!canManageThisTemplate}
+                            disabled={!isEditing || savingTemplateId === template.id}
                             aria-label={t("tpl.name.placeholder")}
                             placeholder={t("tpl.name.placeholder")}
-                            title={canManageThisTemplate ? t("tpl.name.title") : t("tpl.template.ownerReadonlyTitle")}
+                            title={
+                              !canManageThisTemplate
+                                ? t("tpl.template.ownerReadonlyTitle")
+                                : isEditing
+                                  ? t("tpl.name.title")
+                                  : t("tpl.edit.nameLockedTitle")
+                            }
                             className={
                               "-mx-1 flex-1 truncate rounded px-1 font-semibold text-zinc-800 outline-none transition hover:bg-white/40 focus:bg-white/70 disabled:cursor-not-allowed " +
-                              // 2026-10-13 业务口径（英文界面「模板名称省略」）：英文模板名比中文长，名字和「计数 / 保存 / 删除」抢一行 ——
-                              // 用最小宽 12rem 当换行阈值：整行放不下时这一组整组换到下一行右对齐，名字（Hardware Implementation）不再被截成 Hardware Implementa…。
-                              (isLocalizedLocale(locale) ? "min-w-[12rem]" : "min-w-0")
+                              // 名称独占第一行；中英文都保留可读最小宽度，不再和按钮抢行。
+                              (isLocalizedLocale(locale) ? "min-w-[12rem]" : "min-w-[8.5rem]")
                             }
                           />
-                          {/* 「计数 / 添加节点 / 保存 / 删除」收成一组：放得下就一行右对齐；英文面板放不下时整组换到第二行（名字优先占满第一行）。 */}
-                          <span className="ml-auto flex min-w-0 items-center gap-2">
-                            <span aria-label={t("tpl.nodes.selectedAria")} className="shrink-0 text-xs text-zinc-500">
-                              {t("tpl.nodes.n", { n: nodeCount })}
-                            </span>
-                            {canManageThisTemplate ? (
-                              <button
-                                type="button"
-                                data-template-add-node={template.id}
-                                onClick={() => { openCreateForm(template.id); }}
-                                aria-expanded={nodeForm?.mode === "create" && nodeForm.templateId === template.id}
-                                title={t("tpl.nodes.addToTemplateTitle", { name: localize(template.name) })}
-                                className="shrink-0 whitespace-nowrap rounded-md border border-white/70 bg-white/60 px-2 py-0.5 text-xs font-medium text-zinc-700 transition hover:bg-white hover:text-zinc-900"
-                              >
-                                {t("tpl.nodes.add")}
-                              </button>
-                            ) : null}
-                            {canManageThisTemplate ? (
-                              <button
-                                type="button"
-                                data-template-save={template.id}
-                                onClick={() => saveTemplate(template.id)}
-                                disabled={savedOk || savingTemplateId !== null}
-                                title={t("tpl.save.title")}
-                                className={
-                                  "shrink-0 rounded-md px-2 py-0.5 text-xs font-medium transition disabled:cursor-not-allowed " +
-                                  (savedOk
-                                    ? "border border-white/70 bg-white/50 text-zinc-400"
-                                    : "bg-zinc-900 text-white hover:bg-zinc-800 disabled:bg-zinc-400")
-                                }
-                              >
-                                {savingTemplateId === template.id ? t("common.saving") : savedOk ? t("tpl.save.saved") : t("common.save")}
-                              </button>
-                            ) : (
-                              <span
-                                aria-label={t("tpl.save.saved")}
-                                title={t("tpl.template.ownerReadonlyTitle")}
-                                className="shrink-0 rounded-md border border-white/70 bg-white/50 px-2 py-0.5 text-xs font-medium text-zinc-400"
-                              >
-                                {t("tpl.readonly")}
-                              </span>
-                            )}
-                            {canManageThisTemplate ? (
-                              <RowDeleteButton
-                                onDelete={() => removeTemplate(template.id)}
-                                label={t("row.delete.template", { name: localize(template.name) })}
-                                scope="panel"
-                              />
-                            ) : null}
-                          </span>
                         </div>
                         <div
                           data-template-creator={template.id}
@@ -2172,7 +2645,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                             {t("tpl.creator", { name: template.createdByName ?? t("tpl.creatorSystem") })}
                           </span>
                           <span aria-hidden="true" className="shrink-0 text-zinc-300">·</span>
-                          {canChangeTemplateVisibility(template.createdBy) ? (
+                          {canChangeTemplateVisibility(template.createdBy) && isEditing ? (
                             <div data-template-visibility-control={template.id} className="w-[8.75rem] shrink-0">
                               <SelectMenu
                                 compact
@@ -2185,17 +2658,115 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                                   setTemplateVisibility(template.id, next as TemplateVisibility);
                                 }}
                                 ariaLabel={t("tpl.visibility.editTitle")}
+                                disabled={savingTemplateId === template.id}
                                 popoverClassName="z-[80]"
                               />
                             </div>
                           ) : (
                             <span
                               className="shrink-0"
-                              title={t("tpl.visibility.systemHint")}
+                              title={
+                                canChangeTemplateVisibility(template.createdBy)
+                                  ? t("tpl.edit.visibilityLockedTitle")
+                                  : t("tpl.visibility.systemHint")
+                              }
                             >
                               {t(template.visibility === "private" ? "tpl.visibility.private" : "tpl.visibility.public")}
                             </span>
                           )}
+                        </div>
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs">
+                            <span aria-label={t("tpl.nodes.selectedAria")} className="shrink-0 text-xs text-zinc-500">
+                              {t("tpl.nodes.n", { n: nodeCount })}
+                            </span>
+                            {canManageThisTemplate ? (
+                              <button
+                                type="button"
+                                data-template-add-node={template.id}
+                                onClick={() => {
+                                  if (!isEditing && !beginTemplateEditing(template.id)) {
+                                    return;
+                                  }
+                                  openCreateForm(template.id);
+                                }}
+                                disabled={savingTemplateId !== null}
+                                aria-expanded={nodeForm?.mode === "create" && nodeForm.templateId === template.id}
+                                title={t("tpl.nodes.addToTemplateTitle", { name: localize(template.name) })}
+                                className="shrink-0 whitespace-nowrap rounded-md border border-white/70 bg-white/60 px-2 py-0.5 text-xs font-medium text-zinc-700 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:border-zinc-200/70 disabled:bg-white/35 disabled:text-zinc-400"
+                              >
+                                {t("tpl.nodes.add")}
+                              </button>
+                            ) : null}
+                            {canManageThisTemplate ? (
+                              <span
+                                data-template-status-menu={template.id}
+                                className="w-[5.6rem] shrink-0"
+                              >
+                                <SelectMenu
+                                  compact
+                                  value={isEditing ? "editing" : "saved"}
+                                  options={[
+                                    {
+                                      value: "saved",
+                                      label: (
+                                        <span className="inline-flex items-center gap-1 text-emerald-700">
+                                          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                          {t("tpl.save.saved")}
+                                        </span>
+                                      ),
+                                    },
+                                    {
+                                      value: "editing",
+                                      label: (
+                                        <span
+                                          data-template-editing-label={isEditing ? "true" : undefined}
+                                          className="inline-flex items-center gap-1 font-semibold text-amber-800"
+                                        >
+                                          <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
+                                          {t("tpl.status.editing")}
+                                        </span>
+                                      ),
+                                    },
+                                  ]}
+                                  onChange={(next) => { changeTemplateStatus(template, next); }}
+                                  disabled={savingTemplateId !== null}
+                                  ariaLabel={t("tpl.status.aria", { name: localize(template.name) })}
+                                  triggerClassName={
+                                    isEditing
+                                      ? "border-amber-400! bg-amber-50! shadow-[0_0_0_2px_rgba(245,158,11,0.18)] hover:bg-amber-100!"
+                                      : "border-emerald-200/90! bg-white/75! hover:bg-white!"
+                                  }
+                                  triggerTitle={isEditing ? t("tpl.status.editingTitle") : t("tpl.status.savedTitle")}
+                                />
+                              </span>
+                            ) : (
+                              <span
+                                aria-label={t("tpl.save.saved")}
+                                title={t("tpl.template.ownerReadonlyTitle")}
+                                className="shrink-0 rounded-md border border-white/70 bg-white/50 px-2 py-0.5 text-xs font-medium text-zinc-400"
+                              >
+                                {t("tpl.readonly")}
+                              </span>
+                            )}
+                            {canManageThisTemplate && isEditing ? (
+                              <button
+                                type="button"
+                                data-template-save={template.id}
+                                onClick={() => saveTemplate(template.id, true)}
+                                disabled={savingTemplateId !== null}
+                                title={t("tpl.save.title")}
+                                className="shrink-0 rounded-md bg-zinc-900 px-2 py-0.5 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                              >
+                                {savingTemplateId === template.id ? t("common.saving") : t("common.save")}
+                              </button>
+                            ) : null}
+                            {canManageThisTemplate && savingTemplateId === null ? (
+                              <RowDeleteButton
+                                onDelete={() => removeTemplate(template.id)}
+                                label={t("row.delete.template", { name: localize(template.name) })}
+                                scope="panel"
+                              />
+                            ) : null}
                         </div>
                         {/* 提示行固定高度：出现 / 消失都不顶动下方列表（否则拖拽时会跟着抖）；
                             不拖拽时这一行留给「未保存 / 冲突」状态 + 「放弃改动」出路（Push 264 追订） */}
@@ -2247,22 +2818,23 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                       {nodeForm?.mode === "create" && nodeForm.templateId === template.id ? (
                         renderNodeForm(nodeForm, localize(template.name))
                       ) : null}
-                      <div
-                        className={
-                          "flex flex-1 flex-col rounded-xl border transition " +
-                          (hovered
-                            ? duplicate
-                              ? "border-amber-300/70 bg-white/45"
-                              : "border-zinc-400 bg-white/70"
-                            : "border-white/60 bg-white/25")
-                        }
-                      >
+                      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {nodeCount === 0 ? (
                           <p className="flex min-h-[160px] flex-1 items-center justify-center px-4 text-center text-xs text-zinc-400">
-                            {canManageThisTemplate ? t("tpl.dropHereOrAdd") : t("tpl.dropHereReadonly")}
+                            {!canManageThisTemplate
+                              ? t("tpl.dropHereReadonly")
+                              : isEditing
+                                ? t("tpl.dropHereEditing")
+                                : t("tpl.dropHereInactive")}
                           </p>
                         ) : (
-                          <div className="space-y-3 p-3">
+                          <div
+                            data-template-panel-scroll={template.id}
+                            role="region"
+                            aria-label={t("tpl.templateNodes.scrollAria", { name: localize(template.name) })}
+                            tabIndex={0}
+                            className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-3 pr-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zinc-300/60"
+                          >
                             {template.nodes.map((item, index) => (
                               <div key={item.id} className="relative">
                                 {dropTarget?.templateId === template.id && dropTarget.index === index ? (
@@ -2276,11 +2848,11 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                                 <TaskNodeCard
                                   title={item.title}
                                   subtitle={item.titleEn}
-                                  grab={canManageThisTemplate}
+                                  grab={isEditing && savingTemplateId === null}
                                   highlighted={duplicate && item.id === drag?.nodeId}
                                   dimmed={drag?.source === "right" && item.id === drag.nodeId}
                                   onPointerDown={
-                                    canManageThisTemplate
+                                    isEditing && savingTemplateId === null
                                       ? (event) => {
                                           beginDrag({ nodeId: item.id, source: "right", fromTemplateId: template.id }, event);
                                         }
@@ -2288,7 +2860,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                                   }
                                   deleteLabel={t("row.delete.template", { name: item.title })}
                                   onDelete={
-                                    canManageThisTemplate
+                                    isEditing && savingTemplateId === null
                                       ? () =>
                                           updateTemplates((previous) =>
                                             previous.map((entry) =>
@@ -2429,8 +3001,8 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
           )}
           {templateNotice === null ? null : (
             <Toast
-              kind="error"
-              text={templateNotice}
+              kind={templateNotice.kind}
+              text={templateNotice.text}
               onClose={() => { setTemplateNotice(null); }}
             />
           )}

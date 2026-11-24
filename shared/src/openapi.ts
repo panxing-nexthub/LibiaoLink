@@ -6,6 +6,7 @@ import { CadJobSchema, CadJobCreateBodySchema, CadJobCreateResponseSchema, CadNa
 import { DateOnlySchema, IdempotencyKeySchema, UuidSchema } from "./common/conventions.ts";
 import { StageKeySchema } from "./common/dicts.ts";
 import { ProjectAiContextSchema, ProjectAiSummaryGenerateBodySchema, ProjectAiSummarySchema } from "./modules/project-ai.ts";
+import { ProjectDocumentAnalysisViewSchema, ProjectDocumentAnalysisRunSchema } from "./modules/document-analysis.ts";
 import { ApiErrorSchema } from "./common/errors.ts";
 import {
   ProjectArchiveBodySchema,
@@ -641,7 +642,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "get",
     path: "/api/v1/projects/{id}/view-grants",
     tags: ["projects"],
-    summary: "本项目经理列出此入口添加的项目只读授权",
+    summary: "本项目经理或系统管理员列出此入口添加的项目仅浏览授权",
     request: { params: idParams },
     responses: {
       200: { description: "授权列表", ...json(ProjectViewGrantListSchema) },
@@ -668,7 +669,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "post",
     path: "/api/v1/projects/{id}/view-grants",
     tags: ["projects"],
-    summary: "本项目经理按确认的系统用户 ID 批量追加项目只读授权",
+    summary: "本项目经理或系统管理员按确认的系统用户 ID 批量追加项目仅浏览授权",
     request: { params: idParams, body: json(ProjectViewGrantAddBodySchema) },
     responses: {
       200: { description: "实际新增数", ...json(ProjectViewGrantAddResultSchema) },
@@ -682,7 +683,7 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "delete",
     path: "/api/v1/projects/{id}/view-grants/{userId}",
     tags: ["projects"],
-    summary: "本项目经理撤销指定账号从此入口获取的项目只读授权",
+    summary: "本项目经理或系统管理员撤销指定账号从此入口获取的项目仅浏览授权",
     request: { params: idParams.extend({ userId: UuidSchema }) },
     responses: {
       204: { description: "授权已撤销或不存在" },
@@ -1506,11 +1507,11 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "get",
     path: "/api/v1/projects/{id}/ai-summary",
     tags: ["project-ai"],
-    summary: "最近一次 AI 项目总结（不调模型；未生成为 404，stale 表示数据已变化）",
+    summary: "最近一次 AI 项目总结（不调模型；未生成为 404 AI_SUMMARY_NOT_GENERATED，stale 表示数据已变化）",
     request: { params: idParams },
     responses: {
       200: { description: "AI 项目总结", ...json(ProjectAiSummarySchema) },
-      404: commonErrors[404],
+      404: errorResponse("尚未生成（AI_SUMMARY_NOT_GENERATED，正常空态）或项目不可见（NOT_FOUND）"),
     },
   });
 
@@ -1523,6 +1524,31 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     responses: {
       200: { description: "AI 项目总结", ...json(ProjectAiSummarySchema) },
       400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/projects/{id}/document-analysis",
+    tags: ["project-ai"],
+    summary: "项目文件 AI 分析视图：最近一次 run + 当前文件版本摘要",
+    request: { params: idParams },
+    responses: {
+      200: { description: "项目文件 AI 分析视图", ...json(ProjectDocumentAnalysisViewSchema) },
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/document-analysis",
+    tags: ["project-ai"],
+    summary: "排队项目文件 AI 分析（需 project.export；由 document-analysis worker 消费）",
+    request: { params: idParams },
+    responses: {
+      200: { description: "排队后的 run", ...json(ProjectDocumentAnalysisRunSchema) },
       403: commonErrors[403],
       404: commonErrors[404],
     },

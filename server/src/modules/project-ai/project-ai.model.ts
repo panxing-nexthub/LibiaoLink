@@ -14,6 +14,7 @@ const PROMPT_MAX_TASKS = 300;
 const PROMPT_MAX_REPORTS = 80;
 const PROMPT_MAX_ISSUES = 200;
 const PROMPT_MAX_CHANGES = 100;
+const PROMPT_MAX_FILES = 20;
 const PROMPT_NOTE_MAX = 300;
 
 const PROJECT_STATUS_LABELS: Record<string, string> = { active: "进行中", paused: "已暂停", archived: "已归档" };
@@ -39,11 +40,12 @@ const SYSTEM_PROMPT = [
   "</PROJECT_FACTS>",
   "",
   "<PROJECT_RECORDS>",
-  "与项目有关的任务、日报、问题、变更记录，均带业务标签和日期：",
+  "与项目有关的任务、日报、问题、变更记录，以及项目文件 AI 摘要，均带业务标签和日期：",
   "- tasks：阶段名称、任务名称、任务描述、负责人、项目经理、任务状态、完成度、计划开始 / 计划结束、实际完成、预计工期、人数、优先级、成果类型要求、是否按时交付、定档时间",
   "- reports：日期、填写者、当日完成工作、明日计划、施工人数、关联阶段、提交时间",
   "- issues：问题描述、问题归类、问题状态、提出人、责任人、责任部门、提出日期、解决方案、关闭时间",
   "- changes：所属阶段、变更原因、变更前后摘要、生效时间、申请人",
+  "- files：项目文件名称、文件类型、文档用途、摘要、关键事实、风险与需要人工确认的内容；只来自项目文件视图中 PDF / 图片 / Word / Excel 的成功分析，日报 / 问题图片不进入",
   "</PROJECT_RECORDS>",
   "",
   "【绝对规则】",
@@ -52,7 +54,7 @@ const SYSTEM_PROMPT = [
   "",
   "2. 所有数字、日期、人员、项目状态必须原样取自输入。不得自行重新计算数字；完成百分比只使用 metrics 给出的值，不得用完成数除以总数重算。不得改变日期精度，不得把缺失值补成 0。",
   "",
-  "3. 每一条事实陈述必须能对应到来源。来源只使用以下业务标签（可带日期）：“项目统计”“阶段记录”“任务记录 YYYY-MM-DD”“日报 YYYY-MM-DD”“问题记录 YYYY-MM-DD”“变更记录 YYYY-MM-DD”。不得在正文、标题、来源、任何字段中出现数据库表名、字段名、SQL、接口名、内部 ID、UUID 或状态码。",
+  "3. 每一条事实陈述必须能对应到来源。来源只使用以下业务标签（可带日期）：“项目统计”“阶段记录”“任务记录 YYYY-MM-DD”“日报 YYYY-MM-DD”“问题记录 YYYY-MM-DD”“变更记录 YYYY-MM-DD”“项目文件”。不得在正文、标题、来源、任何字段中出现数据库表名、字段名、SQL、接口名、内部 ID、UUID 或状态码。",
   "",
   "4. 禁止评论数据来源、导入、补录或迁移过程。禁止出现“疑似历史数据导入”“系统与实际不一致”“数据异常”“疑似测试数据”等判断。不得将系统建档时间与任务计划日期、日报日期做一致性比较。",
   "",
@@ -72,6 +74,8 @@ const SYSTEM_PROMPT = [
   "",
   "12. 输出必须是合法 JSON，严格符合下方 REPORT_SCHEMA。不输出 Markdown 代码围栏、前后解释或 JSON 之外的文字。",
   "",
+  "13. files 是项目文件的补充证据：可用于补充范围、规则、交付物、风险与待确认事项，但不得覆盖任务、日报、问题、变更和项目统计中的数字、日期、责任边界与进度；文件摘要中的 warnings 只能转述为待确认，不得当作事实。",
+  "",
   "【业务口径】",
   "",
   "- 项目摘要控制在 250～400 字。",
@@ -81,7 +85,7 @@ const SYSTEM_PROMPT = [
   "- 交接建议必须写清“事项、依据、建议下一步、建议验收标准”，每条标记 needsHumanConfirmation。",
   "- 没有交接事项时 existing 为空数组，并在 notes 写“暂无交接事项”。",
   "- 不写“加强沟通”“持续关注”“继续努力”等空话。",
-  "- 相同事实不要在不同章节重复。",
+  "- 相同事实不要在不同章节重复；文件摘要不要逐文件复述，只提炼影响项目结论的内容。",
   "- 使用平实、具体、可核对的中文，不使用广告式修辞。",
   "- 输入标记 promptTruncated 为 true 时，不解释系统限制，只在 notes 写“本次整理基于已提供的项目记录”。",
   "- 长度上限为硬约束，超出即视为不合格输出：title ≤ 20 字；summary.text 250～350 字、claims ≤ 4 条；timeline 5～6 条、每条 text ≤ 50 字；issues.summary ≤ 80 字，currentItems 每条 text ≤ 60 字、handling ≤ 40 字、nextStep ≤ 30 字；resultsAndRisks.text ≤ 150 字、claims ≤ 4 条、risks ≤ 3 条；handoff.existing ≤ 3 条、suggestions ≤ 3 条、每条 ≤ 80 字；notes ≤ 2 条；整份 JSON 控制在 3000 个汉字以内。",
@@ -253,11 +257,31 @@ function buildPromptInput(context: ProjectAiContext): { facts: unknown; records:
       appliedAt: change.appliedAt,
       appliedByName: change.appliedByName,
     })),
+    files: context.fileAnalyses.slice(0, PROMPT_MAX_FILES).map((file) => ({
+      fileName: file.fileName,
+      fileKind: file.fileKind,
+      documentType: file.summary.documentType,
+      purpose: file.summary.purpose,
+      summary: file.summary.summaries.slice(-4),
+      keyFacts: file.summary.keyFacts.slice(0, 8).map((fact) => ({
+        category: fact.category,
+        key: fact.key,
+        value: fact.value,
+        unit: fact.unit,
+        evidence: fact.evidence,
+        confidence: fact.confidence,
+        sourcePage: fact.sourcePage,
+      })),
+      risks: file.summary.risks.slice(0, 8),
+      warnings: file.summary.warnings.slice(0, 8),
+      missing: file.summary.missing.slice(0, 8),
+    })),
     promptTruncated:
       context.tasks.length > PROMPT_MAX_TASKS ||
       context.reports.length > PROMPT_MAX_REPORTS ||
       context.issues.length > PROMPT_MAX_ISSUES ||
       context.changes.length > PROMPT_MAX_CHANGES ||
+      context.fileAnalyses.length > PROMPT_MAX_FILES ||
       context.truncated,
   });
 

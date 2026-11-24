@@ -49,7 +49,7 @@ function context(): ProjectAiContext {
     },
     stages: [],
     ungroupedTasks: { taskDoneCount: 0, taskTotalCount: 0 },
-    tasks: [], changes: [], reports: [], issues: [],
+    tasks: [], changes: [], reports: [], issues: [], fileAnalyses: [],
     generatedAt: "2026-11-22T12:00:00.000Z",
     truncated: false,
   };
@@ -97,5 +97,33 @@ describe("ProjectAiModelClient", () => {
     expect(seen).toHaveLength(2);
     expect(seen[0]?.response_format).toEqual({ type: "json_object" });
     expect(seen[1]?.response_format).toBeUndefined();
+  });
+  it("把项目文件摘要送入模型输入", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init?: { body?: string }) => {
+      seen.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      return new Response(JSON.stringify(completion(JSON.stringify(REPORT), "stop")), { status: 200 });
+    }));
+    const withFiles = context();
+    withFiles.fileAnalyses = [{
+      fileId: "22222222-2222-4222-8222-222222222222",
+      fileVersionId: "33333333-3333-4333-8333-333333333333",
+      fileName: "技术协议.pdf",
+      fileKind: "pdf",
+      summary: {
+        documentType: "技术协议",
+        purpose: "说明项目性能",
+        summaries: ["项目产能为 4200 件/H。"],
+        keyFacts: [{ category: "performance", key: "分拣产能", value: "4200", unit: "件/H", evidence: "4200 件/H", confidence: 0.99 }],
+        risks: [],
+        decisions: [],
+        warnings: [],
+        missing: [],
+      },
+    }];
+    await client().summarize(withFiles);
+    const body = JSON.stringify(seen[0]);
+    expect(body).toContain("技术协议.pdf");
+    expect(body).toContain("分拣产能");
   });
 });

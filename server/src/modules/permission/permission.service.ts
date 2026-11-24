@@ -487,6 +487,7 @@ export class PermissionService {
       projectId,
       member: rosterMember || managerOfRecord,
       projectManager,
+      ...(groupAccess.admin ? { admin: true } : {}),
       taskOwner,
       groupAccessLevel,
       accessLevel: groupAccess.admin || projectManager || groupAccessLevel === "edit" ? "edit" : "view",

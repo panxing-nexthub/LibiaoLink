@@ -17,6 +17,12 @@ import { PermissionService } from "../permission/index.js";
 
 type ProjectViewGrantPreview = z.infer<typeof ProjectViewGrantPreviewSchema>;
 type DirectoryUser = ProjectViewGrantPreview["items"][number]["candidates"][number];
+type ParsedMember = ReturnType<typeof parseMember>;
+
+interface CandidateMatch {
+  candidates: DirectoryUser[];
+  confident: boolean;
+}
 
 function key(text: string): string {
   return text.trim().toLowerCase();
@@ -30,8 +36,38 @@ function parseMember(text: string) {
   return { text, fullName: key(name), name: key(alias?.[1] ?? name), alias: key(alias?.[2] ?? ""), identifier };
 }
 
+/** 去掉显示名末尾的括号别名，如 "Dennis Lee(Dennis)" → "dennis lee"。 */
+function stripTrailingAlias(displayName: string): string {
+  const normalized = key(displayName);
+  const match = /^(.+?)\s*[(（][^()（）]+[)）]$/u.exec(normalized);
+  return key(match?.[1] ?? normalized);
+}
+
 function matchesIdentifier(user: DirectoryUser, identifier: string): boolean {
   return key(user.username) === identifier || (user.email !== null && key(user.email) === identifier);
+}
+
+/** 原有精确匹配：显示名全等，或工号 / 邮箱全等；别名命中时仍需人工确认。 */
+function exactMatch(member: ParsedMember, directory: readonly DirectoryUser[]): CandidateMatch {
+  const primary = directory.filter((user) =>
+    key(user.displayName) === member.fullName || key(user.displayName) === member.name ||
+    matchesIdentifier(user, member.fullName),
+  );
+  const candidates = member.identifier !== ""
+    ? primary.filter((user) => matchesIdentifier(user, member.identifier))
+    : primary.length > 0 || member.alias === ""
+      ? primary
+      : directory.filter((user) => key(user.displayName) === member.alias || matchesIdentifier(user, member.alias));
+  return { candidates, confident: candidates.length === 1 && primary.length > 0 };
+}
+
+/** 精确匹配无结果时，仅按去掉末尾括号别名后的系统显示名回退匹配。 */
+function baseNameMatch(member: ParsedMember, directory: readonly DirectoryUser[]): CandidateMatch {
+  const candidates = directory.filter((user) =>
+    stripTrailingAlias(user.displayName) === member.name &&
+    (member.identifier === "" || matchesIdentifier(user, member.identifier)),
+  );
+  return { candidates, confident: candidates.length === 1 };
 }
 
 @Injectable()
@@ -51,22 +87,22 @@ export class ProjectViewGrantService {
     }
     const keys = new Set(members.flatMap((member) => [member.fullName, member.name, member.alias, member.identifier]));
     keys.delete("");
-    const directory = await this.users.findActiveDirectoryMatches([...keys]);
+    const exactDirectory = await this.users.findActiveDirectoryMatches([...keys]);
+    const exactByMember = new Map(members.map((member) => [member, exactMatch(member, exactDirectory)] as const));
+    const fallbackKeys = [...new Set(members.flatMap((member) =>
+      (exactByMember.get(member)?.candidates.length ?? 0) === 0 && member.name !== "" ? [member.name] : [],
+    ))];
+    const baseDirectory = fallbackKeys.length === 0
+      ? []
+      : await this.users.findActiveDirectoryBaseNameMatches(fallbackKeys);
     return {
       items: members.map((member) => {
-        const primary = directory.filter((user) =>
-          key(user.displayName) === member.fullName || key(user.displayName) === member.name ||
-          matchesIdentifier(user, member.fullName),
-        );
-        const candidates = member.identifier !== ""
-          ? primary.filter((user) => matchesIdentifier(user, member.identifier))
-          : primary.length > 0 || member.alias === ""
-            ? primary
-            : directory.filter((user) => key(user.displayName) === member.alias || matchesIdentifier(user, member.alias));
+        const exact = exactByMember.get(member) ?? { candidates: [], confident: false };
+        const match = exact.candidates.length > 0 ? exact : baseNameMatch(member, baseDirectory);
         return {
           text: member.text,
-          status: candidates.length === 0 ? "unmatched" : candidates.length === 1 && primary.length > 0 ? "matched" : "confirm",
-          candidates,
+          status: match.candidates.length === 0 ? "unmatched" : match.confident ? "matched" : "confirm",
+          candidates: match.candidates,
         };
       }),
     };
@@ -143,8 +179,8 @@ export class ProjectViewGrantService {
 
   private async assertManager(projectId: string, actorId: string): Promise<void> {
     const access = await this.permission.assertProjectVisible(actorId, projectId);
-    if (!access.projectManager) {
-      throw new AppError("FORBIDDEN", "仅本项目的项目经理可以管理项目只读授权");
+    if (!access.projectManager && access.admin !== true) {
+      throw new AppError("FORBIDDEN", "仅本项目的项目经理或系统管理员可以管理项目仅浏览授权");
     }
   }
 }

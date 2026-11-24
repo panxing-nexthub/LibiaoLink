@@ -128,7 +128,7 @@ export class ProjectsController {
     @CurrentActorId() actorId: string,
     @CurrentProjectAccess() access: ProjectAccessContext,
   ): Promise<z.infer<typeof ProjectDetailSchema>> {
-    return { ...await this.projects.getProject(id, actorId), canManageViewGrants: access.projectManager };
+    return { ...await this.projects.getProject(id, actorId), canManageViewGrants: access.projectManager || access.admin === true };
   }
 
   /** 记录访问（2026-10-23）：前端进入项目详情时调用一次；每次进入写一条 action=visit。 */

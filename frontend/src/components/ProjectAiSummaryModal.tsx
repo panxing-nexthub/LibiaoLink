@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useT } from "../i18n";
 import { lockBodyScroll } from "../scrollLock";
 import { formatDateTime } from "../projectApi";
-import { fetchProjectAiSummary, generateProjectAiSummary, type ProjectAiClaim, type ProjectAiSummary, type ProjectAiSummaryReport } from "../projectAiApi";
+import { enqueueProjectDocumentAnalysis, fetchProjectAiSummary, fetchProjectDocumentAnalysis, generateProjectAiSummary, type ProjectAiClaim, type ProjectAiSummary, type ProjectAiSummaryReport } from "../projectAiApi";
 import { ProjectAiIcon } from "./ProjectAiIcon";
 import { useFocusTrap } from "./useFocusTrap";
 
@@ -255,6 +255,9 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
   const [summary, setSummary] = useState<ProjectAiSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [generatePhase, setGeneratePhase] = useState<"files" | "summary">("files");
+  const [analysisProgress, setAnalysisProgress] = useState<{ done: number; total: number } | null>(null);
+  const [analysisWarning, setAnalysisWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorKind, setErrorKind] = useState<"load" | "generate" | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
@@ -286,15 +289,44 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
   const generate = async (force: boolean) => {
     if (generating) return;
     setGenerating(true);
+    setGeneratePhase("files");
+    setAnalysisProgress({ done: 0, total: 0 });
+    setAnalysisWarning(null);
     setError(null);
     setErrorKind(null);
     try {
+      let warning: string | null = null;
+      try {
+        const initial = await enqueueProjectDocumentAnalysis(project.id);
+        setAnalysisProgress({ done: initial.succeededCount + initial.failedCount, total: initial.fileCount });
+        let attempts = 0;
+        for (;;) {
+          const view = await fetchProjectDocumentAnalysis(project.id);
+          const run = view.run ?? initial;
+          setAnalysisProgress({ done: run.succeededCount + run.failedCount, total: run.fileCount });
+          if (run.status === "succeeded" || run.status === "failed") {
+            if (run.status === "failed" || run.failedCount > 0) warning = t("ai.files.partial");
+            break;
+          }
+          if (attempts >= 300) {
+            warning = t("ai.files.timeout");
+            break;
+          }
+          attempts += 1;
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 2000));
+        }
+      } catch {
+        warning = t("ai.files.partial");
+      }
+      if (warning !== null) setAnalysisWarning(warning);
+      setGeneratePhase("summary");
       setSummary(await generateProjectAiSummary(project.id, force));
     } catch {
       setError(summary === null ? t("ai.failed") : t("ai.regenerateFailed"));
       setErrorKind("generate");
     } finally {
       setGenerating(false);
+      setAnalysisProgress(null);
     }
   };
 
@@ -356,10 +388,22 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
               <p className="text-xs">{t("ai.loading")}</p>
             </div>
           ) : generating ? (
-            <div data-ai-generating="true" className="flex h-full flex-col items-center justify-center gap-3 text-zinc-400">
+            <div data-ai-generating="true" data-ai-generate-phase={generatePhase} className="flex h-full flex-col items-center justify-center gap-3 text-zinc-400">
               <ProjectAiIcon className="h-9 w-9 animate-pulse" />
-              <p className="text-sm font-medium text-zinc-600">{t("ai.generating")}</p>
-              <p className="text-xs text-zinc-400">{t("ai.generatingHint")}</p>
+              <p className="text-sm font-medium text-zinc-600">{generatePhase === "files" ? t("ai.files.analyzing") : t("ai.generating")}</p>
+              {generatePhase === "files" && analysisProgress !== null && analysisProgress.total > 0 ? (
+                <div className="w-full max-w-[360px]" data-ai-files-progress="">
+                  <div className="mb-2 flex justify-between text-[11px] text-zinc-500">
+                    <span>{t("ai.files.progress", { done: analysisProgress.done, total: analysisProgress.total })}</span>
+                    <span>{Math.round((analysisProgress.done / analysisProgress.total) * 100)}%</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
+                    <div className="h-full rounded-full bg-[#FF8F6B] transition-[width]" style={{ width: String(Math.max(0, Math.min(100, Math.round((analysisProgress.done / analysisProgress.total) * 100)))) + "%" }} />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-400">{generatePhase === "files" ? t("ai.files.analyzingHint") : t("ai.generatingHint")}</p>
+              )}
             </div>
           ) : summary === null ? (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
@@ -369,6 +413,7 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
               <h2 className="mt-4 text-base font-semibold text-zinc-800">{t("ai.empty.title")}</h2>
               <p className="mt-1.5 max-w-[440px] text-xs leading-5 text-zinc-500">{t("ai.empty.hint")}</p>
               {error === null ? null : <p className="mt-2 text-xs text-rose-500">{error}</p>}
+              {analysisWarning === null ? null : <p className="mt-2 text-xs text-amber-600">{analysisWarning}</p>}
               <button
                 type="button"
                 data-ai-generate="true"
@@ -386,6 +431,9 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
             <>
               {error === null ? null : (
                 <p data-ai-error="true" className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-600">{error}</p>
+              )}
+              {analysisWarning === null ? null : (
+                <p data-ai-files-warning="true" className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-100">{analysisWarning}</p>
               )}
               {summary.stale ? (
                 <div data-ai-stale="true" className="mb-4 flex flex-wrap items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-800 ring-1 ring-amber-100">

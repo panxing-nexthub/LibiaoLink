@@ -67,9 +67,10 @@ export function objectRefOfUrl(url: string): { objectType: string; objectId: str
   return { objectType, objectId };
 }
 
-/** 越权 / 未命中留痕判定：403 功能权限拒绝记录；CSRF 凭证失配不冒充越权；404 只记写请求与项目域路径，避免普通 404 噪声。 */
+/** 越权 / 未命中留痕判定：403 功能权限拒绝记录；CSRF 凭证失配不冒充越权；预期空态（如未生成 AI 总结）不记；404 只记写请求与项目域路径，避免普通 404 噪声。 */
 export function shouldRecordDenied(method: string, url: string, errorCode: string): boolean {
   if (errorCode === "CSRF_FAILED") return false;
+  if (errorCode === "AI_SUMMARY_NOT_GENERATED") return false;
   if (errorCode === "FORBIDDEN") return true;
   if (errorCode !== "NOT_FOUND") return false;
   if (WRITE_METHODS.has(method.toUpperCase())) return true;

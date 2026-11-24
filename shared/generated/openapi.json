@@ -654,9 +654,10 @@
           "task_node_reviewer_roster",
           "task_node_review_notification_settings",
           "ai_model_provider",
-          "project_ai_summary"
+          "project_ai_summary",
+          "project_management_record"
         ],
-        "description": "审计对象类型：project 项目 / project_member 名册 / project_view_grant 项目只读授权（对象 id = 项目 id） / task 任务 / node 节点 / stage 阶段 / dict_item 字典条目 / blueprint 蓝图 / calendar_day 日历例外（对象 id = 业务日期） / calendar_settings 顺延配置（对象 id = default） / file 文件（对象 id = fileId；上传会话事件经 metadata.uploadId 定位；仅用户点开具体预览（recordView=true）且实际送达时写 preview 审计，缩略图不写 —— 不为同一 fileId 开第二种对象类型） / change 变更记录（对象 id = changeRequestId，M4-04） / stakeholder 干系人（对象 id = stakeholderId；项目关联 / 解除经 metadata.projectId 记录，j6） / daily_report 日报（对象 id = reportId，M6-01 / M6-02） / issue 问题（对象 id = issueId，M6-02 / M6-03） / task_node 任务节点（对象 id = taskNodeId，M3-05 余：节点库新增 / 编辑 / 删除） / task_node_request 公共任务节点申请（对象 id = 申请 id；导入侧提交不单独留痕，审核通过 / 驳回 / 申请人撤销写审计） / task_template 任务模板（对象 id = templateId，M3-05 余第二段：模板新增 / 编辑 / 软删） / user 系统用户（对象 id = users.id；Push 173：离职回收 / 组织同步的停用 · 启用 · 软删；登录成功记 visit，metadata.operation=login） / wecom_dm_binding 企微绑定验证（对象 id = 机器人标识 + 掩码 open_userid；失败 / 锁定记 deny + denied，不落完整 userid 或绑定码） / automation_rule 自动化规则（对象 id = 规则 id；保存记录字段级 diff，metadata 带 code / beforeVersion / afterVersion，M5-06） / notify_delivery 发送记录（对象 id = 消息归档 id；仅管理员重发写 update + metadata.operation=resend，M5-06） / group_access_rule 部门访问规则（对象 id = 群组键；保存 / 删除写审计，2026-10-23） / group_access_admin 系统管理员（对象 id = users.id；手工授予 / 撤销写审计，2026-10-24） / task_node_reviewer_roster 公共节点审核人名单（对象 id = task_node_reviewer_roster；保存名单写审计，2026-11-14） / task_node_review_notification_settings 公共节点审核企微通知个人设置（对象 id = 审核人 users.id；开关 / 通知方式 / 固定时间变更写审计，2026-11-15） / ai_model_provider 模型服务（对象 id = 服务 id；不记录密钥）"
+        "description": "审计对象类型：project 项目 / project_member 名册 / project_view_grant 项目仅浏览授权（对象 id = 项目 id） / task 任务 / node 节点 / stage 阶段 / dict_item 字典条目 / blueprint 蓝图 / calendar_day 日历例外（对象 id = 业务日期） / calendar_settings 顺延配置（对象 id = default） / file 文件（对象 id = fileId；上传会话事件经 metadata.uploadId 定位；仅用户点开具体预览（recordView=true）且实际送达时写 preview 审计，缩略图不写 —— 不为同一 fileId 开第二种对象类型） / change 变更记录（对象 id = changeRequestId，M4-04） / stakeholder 干系人（对象 id = stakeholderId；项目关联 / 解除经 metadata.projectId 记录，j6） / daily_report 日报（对象 id = reportId，M6-01 / M6-02） / issue 问题（对象 id = issueId，M6-02 / M6-03） / task_node 任务节点（对象 id = taskNodeId，M3-05 余：节点库新增 / 编辑 / 删除） / task_node_request 公共任务节点申请（对象 id = 申请 id；导入侧提交不单独留痕，审核通过 / 驳回 / 申请人撤销写审计） / task_template 任务模板（对象 id = templateId，M3-05 余第二段：模板新增 / 编辑 / 软删） / user 系统用户（对象 id = users.id；Push 173：离职回收 / 组织同步的停用 · 启用 · 软删；登录成功记 visit，metadata.operation=login） / wecom_dm_binding 企微绑定验证（对象 id = 机器人标识 + 掩码 open_userid；失败 / 锁定记 deny + denied，不落完整 userid 或绑定码） / automation_rule 自动化规则（对象 id = 规则 id；保存记录字段级 diff，metadata 带 code / beforeVersion / afterVersion，M5-06） / notify_delivery 发送记录（对象 id = 消息归档 id；仅管理员重发写 update + metadata.operation=resend，M5-06） / group_access_rule 部门访问规则（对象 id = 群组键；保存 / 删除写审计，2026-10-23） / group_access_admin 系统管理员（对象 id = users.id；手工授予 / 撤销写审计，2026-10-24） / task_node_reviewer_roster 公共节点审核人名单（对象 id = task_node_reviewer_roster；保存名单写审计，2026-11-14） / task_node_review_notification_settings 公共节点审核企微通知个人设置（对象 id = 审核人 users.id；开关 / 通知方式 / 固定时间变更写审计，2026-11-15） / ai_model_provider 模型服务（对象 id = 服务 id；不记录密钥） / project_management_record 项目管理记录（对象 id = recordId；新增 / 修改 / 删除写审计，只有项目管理白名单三位可写账号可以查看）"
       },
       "AuditResult": {
         "type": "string",
@@ -4486,6 +4487,7 @@
           "FORBIDDEN",
           "CSRF_FAILED",
           "NOT_FOUND",
+          "AI_SUMMARY_NOT_GENERATED",
           "VERSION_CONFLICT",
           "PROJECT_CODE_EXISTS",
           "PROJECT_ARCHIVED",
@@ -5496,7 +5498,7 @@
           "edit",
           "view"
         ],
-        "description": "当前登录账号对该项目的最终有效访问级别：edit = 可执行项目级写操作 / view = 仅浏览。管理员、所管本项目的项目经理或部门 / 个人规则命中 edit 时为 edit；项目成员、任务负责人及项目只读授权仅保证浏览，且项目经理身份不外溢到其他项目"
+        "description": "当前登录账号对该项目的最终有效访问级别：edit = 可执行项目级写操作 / view = 仅浏览。管理员、所管本项目的项目经理或部门 / 个人规则命中 edit 时为 edit；项目成员、任务负责人及项目仅浏览授权仅保证浏览，且项目经理身份不外溢到其他项目"
       },
       "GroupAccessAdmin": {
         "type": "object",
@@ -5946,7 +5948,7 @@
                 "projectId"
               ]
             },
-            "description": "当前生效的项目内只读授权，独立于自动角色和部门 / 个人规则"
+            "description": "当前生效的项目内仅浏览授权，独立于自动角色和部门 / 个人规则"
           }
         },
         "required": [
@@ -9607,6 +9609,14 @@
               "$ref": "#/components/schemas/ProjectAiIssue"
             }
           },
+          "fileAnalyses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectFileAiSummary"
+            },
+            "default": [],
+            "description": "项目文件 AI 分析摘要（仅当前文件版本的成功分析；日报 / 问题图片不进入）"
+          },
           "generatedAt": {
             "$ref": "#/components/schemas/DateTime"
           },
@@ -11507,7 +11517,7 @@
             "properties": {
               "canManageViewGrants": {
                 "type": "boolean",
-                "description": "当前账号是本项目经理，可管理本项目的只读授权"
+                "description": "当前账号是本项目经理或系统管理员，可管理本项目的仅浏览授权"
               }
             },
             "required": [
@@ -11516,6 +11526,123 @@
           }
         ],
         "description": "项目（v0.2 §2.3 projects）"
+      },
+      "ProjectDocumentAnalysisRun": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectDocumentAnalysisRunStatus"
+          },
+          "promptVersion": {
+            "type": "string"
+          },
+          "fileCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "succeededCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failedCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "skippedCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "startedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateTime"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "finishedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateTime"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/DateTime"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/DateTime"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "status",
+          "promptVersion",
+          "fileCount",
+          "succeededCount",
+          "failedCount",
+          "skippedCount",
+          "error",
+          "startedAt",
+          "finishedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "ProjectDocumentAnalysisRunStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "running",
+          "succeeded",
+          "failed"
+        ]
+      },
+      "ProjectDocumentAnalysisView": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/ProjectDocumentAnalysisRun"
+          },
+          "analyses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectFileAnalysis"
+            }
+          }
+        },
+        "required": [
+          "run",
+          "analyses"
+        ],
+        "description": "项目文件 AI 分析：最近一次 run + 当前文件版本的成功摘要"
       },
       "ProjectFacets": {
         "type": "object",
@@ -11570,6 +11697,301 @@
           "status"
         ],
         "description": "首页分类计数；计数与列表同口径（同筛选条件）；五组固定返回，前端按需展示（A6）"
+      },
+      "ProjectFileAiSummary": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "fileVersionId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "fileName": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "fileKind": {
+            "$ref": "#/components/schemas/ProjectFileAnalysisKind"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ProjectFileAnalysisSummary"
+          }
+        },
+        "required": [
+          "fileId",
+          "fileVersionId",
+          "fileName",
+          "fileKind",
+          "summary"
+        ]
+      },
+      "ProjectFileAnalysis": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "fileId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "fileVersionId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "fileName": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "fileKind": {
+            "$ref": "#/components/schemas/ProjectFileAnalysisKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectFileAnalysisStatus"
+          },
+          "summary": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProjectFileAnalysisSummary"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "modelId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "promptVersion": {
+            "type": "string"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generatedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateTime"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/DateTime"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/DateTime"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "fileId",
+          "fileVersionId",
+          "fileName",
+          "fileKind",
+          "status",
+          "summary",
+          "modelId",
+          "promptVersion",
+          "error",
+          "generatedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "ProjectFileAnalysisFact": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "basic_info",
+              "business",
+              "performance",
+              "scope",
+              "responsibility",
+              "site",
+              "network",
+              "power",
+              "team",
+              "schedule",
+              "safety",
+              "delivery",
+              "other"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 600
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "sourcePage": {
+            "type": "object",
+            "properties": {
+              "pdfPage": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "printedPageLabel": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "pdfPage",
+              "printedPageLabel"
+            ]
+          }
+        },
+        "required": [
+          "category",
+          "key",
+          "value",
+          "evidence",
+          "confidence"
+        ]
+      },
+      "ProjectFileAnalysisKind": {
+        "type": "string",
+        "enum": [
+          "pdf",
+          "image",
+          "word",
+          "excel"
+        ]
+      },
+      "ProjectFileAnalysisStatus": {
+        "type": "string",
+        "enum": [
+          "succeeded",
+          "failed",
+          "skipped"
+        ]
+      },
+      "ProjectFileAnalysisSummary": {
+        "type": "object",
+        "properties": {
+          "documentType": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 600
+          },
+          "summaries": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1500
+            },
+            "maxItems": 30,
+            "default": []
+          },
+          "keyFacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectFileAnalysisFact"
+            },
+            "maxItems": 30,
+            "default": []
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 600
+            },
+            "maxItems": 20,
+            "default": []
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 600
+            },
+            "maxItems": 20,
+            "default": []
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 20,
+            "default": []
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "maxItems": 20,
+            "default": []
+          }
+        },
+        "required": [
+          "documentType",
+          "purpose"
+        ]
       },
       "ProjectFlow": {
         "type": "object",
@@ -19957,7 +20379,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "本项目经理列出此入口添加的项目只读授权",
+        "summary": "本项目经理或系统管理员列出此入口添加的项目仅浏览授权",
         "parameters": [
           {
             "schema": {
@@ -20006,7 +20428,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "本项目经理按确认的系统用户 ID 批量追加项目只读授权",
+        "summary": "本项目经理或系统管理员按确认的系统用户 ID 批量追加项目仅浏览授权",
         "parameters": [
           {
             "schema": {
@@ -20146,7 +20568,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "本项目经理撤销指定账号从此入口获取的项目只读授权",
+        "summary": "本项目经理或系统管理员撤销指定账号从此入口获取的项目仅浏览授权",
         "parameters": [
           {
             "schema": {
@@ -24246,7 +24668,7 @@
         "tags": [
           "project-ai"
         ],
-        "summary": "最近一次 AI 项目总结（不调模型；未生成为 404，stale 表示数据已变化）",
+        "summary": "最近一次 AI 项目总结（不调模型；未生成为 404 AI_SUMMARY_NOT_GENERATED，stale 表示数据已变化）",
         "parameters": [
           {
             "schema": {
@@ -24270,7 +24692,7 @@
             }
           },
           "404": {
-            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "description": "尚未生成（AI_SUMMARY_NOT_GENERATED，正常空态）或项目不可见（NOT_FOUND）",
             "content": {
               "application/json": {
                 "schema": {
@@ -24323,6 +24745,96 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{id}/document-analysis": {
+      "get": {
+        "tags": [
+          "project-ai"
+        ],
+        "summary": "项目文件 AI 分析视图：最近一次 run + 当前文件版本摘要",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "项目文件 AI 分析视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocumentAnalysisView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "project-ai"
+        ],
+        "summary": "排队项目文件 AI 分析（需 project.export；由 document-analysis worker 消费）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "排队后的 run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocumentAnalysisRun"
                 }
               }
             }

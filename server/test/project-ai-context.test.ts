@@ -11,6 +11,7 @@ import type { FlowService, ProjectService } from "../src/modules/project/index.j
 import type { IssueService, ReportService } from "../src/modules/report-issue/index.js";
 import type { TaskService } from "../src/modules/task/index.js";
 import { ProjectAiContextService } from "../src/modules/project-ai/project-ai-context.service.js";
+import type { DocumentAnalysisService } from "../src/modules/document-analysis/index.js";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const MANAGER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -222,6 +223,26 @@ describe("ProjectAiContextService", () => {
     const changeService = { async listProjectChangesForExport() { return changes; } };
     const reportService = { async listForExport() { return reports; } };
     const issueService = { async listForExport() { return issues; } };
+    const documentAnalyses = {
+      async forAi() {
+        return [{
+          fileId: "22222222-2222-4222-8222-222222222222",
+          fileVersionId: "33333333-3333-4333-8333-333333333333",
+          fileName: "技术协议.pdf",
+          fileKind: "pdf",
+          summary: {
+            documentType: "技术协议",
+            purpose: "说明项目性能",
+            summaries: ["项目产能为 4200 件/H。"],
+            keyFacts: [{ category: "performance", key: "分拣产能", value: "4200", unit: "件/H", evidence: "4200 件/H", confidence: 0.99 }],
+            risks: [],
+            decisions: [],
+            warnings: [],
+            missing: [],
+          },
+        }];
+      },
+    };
     const userService = {
       async countForExport() { return 2; },
       async listForExport() {
@@ -240,6 +261,7 @@ describe("ProjectAiContextService", () => {
       reportService as unknown as ReportService,
       issueService as unknown as IssueService,
       userService as unknown as UserService,
+      documentAnalyses as unknown as DocumentAnalysisService,
     );
 
     const context = await service.build(PROJECT_ID, MANAGER_ID);
@@ -247,6 +269,7 @@ describe("ProjectAiContextService", () => {
     expect(() => ProjectAiContextSchema.parse(context)).not.toThrow();
 
     expect(context.project.startedAt).toBe("2026-01-03");
+    expect(context.fileAnalyses[0]?.fileName).toBe("技术协议.pdf");
     expect(context.project.managerNames).toEqual(["项目经理乙"]);
 
     // 采集器预先算好的统计：模型只引用、不重算。
@@ -327,6 +350,7 @@ describe("ProjectAiContextService", () => {
       empty as unknown as ReportService,
       empty as unknown as IssueService,
       users as unknown as UserService,
+      { async forAi() { return []; } } as unknown as DocumentAnalysisService,
     );
 
     const context = await service.build(PROJECT_ID, MANAGER_ID);

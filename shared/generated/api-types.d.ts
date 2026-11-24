@@ -1781,7 +1781,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 本项目经理列出此入口添加的项目只读授权 */
+        /** 本项目经理或系统管理员列出此入口添加的项目仅浏览授权 */
         get: {
             parameters: {
                 query?: never;
@@ -1824,7 +1824,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** 本项目经理按确认的系统用户 ID 批量追加项目只读授权 */
+        /** 本项目经理或系统管理员按确认的系统用户 ID 批量追加项目仅浏览授权 */
         post: {
             parameters: {
                 query?: never;
@@ -1965,7 +1965,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** 本项目经理撤销指定账号从此入口获取的项目只读授权 */
+        /** 本项目经理或系统管理员撤销指定账号从此入口获取的项目仅浏览授权 */
         delete: {
             parameters: {
                 query?: never;
@@ -5637,7 +5637,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 最近一次 AI 项目总结（不调模型；未生成为 404，stale 表示数据已变化） */
+        /** 最近一次 AI 项目总结（不调模型；未生成为 404 AI_SUMMARY_NOT_GENERATED，stale 表示数据已变化） */
         get: {
             parameters: {
                 query?: never;
@@ -5659,7 +5659,7 @@ export interface paths {
                         "application/json": components["schemas"]["ProjectAiSummary"];
                     };
                 };
-                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                /** @description 尚未生成（AI_SUMMARY_NOT_GENERATED，正常空态）或项目不可见（NOT_FOUND） */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -5704,6 +5704,95 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{id}/document-analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 项目文件 AI 分析视图：最近一次 run + 当前文件版本摘要 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 项目文件 AI 分析视图 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectDocumentAnalysisView"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** 排队项目文件 AI 分析（需 project.export；由 document-analysis worker 消费） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 排队后的 run */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectDocumentAnalysisRun"];
                     };
                 };
                 /** @description 无权限（FORBIDDEN） */
@@ -12279,10 +12368,10 @@ export interface components {
             windowId: number | null;
         };
         /**
-         * @description 审计对象类型：project 项目 / project_member 名册 / project_view_grant 项目只读授权（对象 id = 项目 id） / task 任务 / node 节点 / stage 阶段 / dict_item 字典条目 / blueprint 蓝图 / calendar_day 日历例外（对象 id = 业务日期） / calendar_settings 顺延配置（对象 id = default） / file 文件（对象 id = fileId；上传会话事件经 metadata.uploadId 定位；仅用户点开具体预览（recordView=true）且实际送达时写 preview 审计，缩略图不写 —— 不为同一 fileId 开第二种对象类型） / change 变更记录（对象 id = changeRequestId，M4-04） / stakeholder 干系人（对象 id = stakeholderId；项目关联 / 解除经 metadata.projectId 记录，j6） / daily_report 日报（对象 id = reportId，M6-01 / M6-02） / issue 问题（对象 id = issueId，M6-02 / M6-03） / task_node 任务节点（对象 id = taskNodeId，M3-05 余：节点库新增 / 编辑 / 删除） / task_node_request 公共任务节点申请（对象 id = 申请 id；导入侧提交不单独留痕，审核通过 / 驳回 / 申请人撤销写审计） / task_template 任务模板（对象 id = templateId，M3-05 余第二段：模板新增 / 编辑 / 软删） / user 系统用户（对象 id = users.id；Push 173：离职回收 / 组织同步的停用 · 启用 · 软删；登录成功记 visit，metadata.operation=login） / wecom_dm_binding 企微绑定验证（对象 id = 机器人标识 + 掩码 open_userid；失败 / 锁定记 deny + denied，不落完整 userid 或绑定码） / automation_rule 自动化规则（对象 id = 规则 id；保存记录字段级 diff，metadata 带 code / beforeVersion / afterVersion，M5-06） / notify_delivery 发送记录（对象 id = 消息归档 id；仅管理员重发写 update + metadata.operation=resend，M5-06） / group_access_rule 部门访问规则（对象 id = 群组键；保存 / 删除写审计，2026-10-23） / group_access_admin 系统管理员（对象 id = users.id；手工授予 / 撤销写审计，2026-10-24） / task_node_reviewer_roster 公共节点审核人名单（对象 id = task_node_reviewer_roster；保存名单写审计，2026-11-14） / task_node_review_notification_settings 公共节点审核企微通知个人设置（对象 id = 审核人 users.id；开关 / 通知方式 / 固定时间变更写审计，2026-11-15） / ai_model_provider 模型服务（对象 id = 服务 id；不记录密钥）
+         * @description 审计对象类型：project 项目 / project_member 名册 / project_view_grant 项目仅浏览授权（对象 id = 项目 id） / task 任务 / node 节点 / stage 阶段 / dict_item 字典条目 / blueprint 蓝图 / calendar_day 日历例外（对象 id = 业务日期） / calendar_settings 顺延配置（对象 id = default） / file 文件（对象 id = fileId；上传会话事件经 metadata.uploadId 定位；仅用户点开具体预览（recordView=true）且实际送达时写 preview 审计，缩略图不写 —— 不为同一 fileId 开第二种对象类型） / change 变更记录（对象 id = changeRequestId，M4-04） / stakeholder 干系人（对象 id = stakeholderId；项目关联 / 解除经 metadata.projectId 记录，j6） / daily_report 日报（对象 id = reportId，M6-01 / M6-02） / issue 问题（对象 id = issueId，M6-02 / M6-03） / task_node 任务节点（对象 id = taskNodeId，M3-05 余：节点库新增 / 编辑 / 删除） / task_node_request 公共任务节点申请（对象 id = 申请 id；导入侧提交不单独留痕，审核通过 / 驳回 / 申请人撤销写审计） / task_template 任务模板（对象 id = templateId，M3-05 余第二段：模板新增 / 编辑 / 软删） / user 系统用户（对象 id = users.id；Push 173：离职回收 / 组织同步的停用 · 启用 · 软删；登录成功记 visit，metadata.operation=login） / wecom_dm_binding 企微绑定验证（对象 id = 机器人标识 + 掩码 open_userid；失败 / 锁定记 deny + denied，不落完整 userid 或绑定码） / automation_rule 自动化规则（对象 id = 规则 id；保存记录字段级 diff，metadata 带 code / beforeVersion / afterVersion，M5-06） / notify_delivery 发送记录（对象 id = 消息归档 id；仅管理员重发写 update + metadata.operation=resend，M5-06） / group_access_rule 部门访问规则（对象 id = 群组键；保存 / 删除写审计，2026-10-23） / group_access_admin 系统管理员（对象 id = users.id；手工授予 / 撤销写审计，2026-10-24） / task_node_reviewer_roster 公共节点审核人名单（对象 id = task_node_reviewer_roster；保存名单写审计，2026-11-14） / task_node_review_notification_settings 公共节点审核企微通知个人设置（对象 id = 审核人 users.id；开关 / 通知方式 / 固定时间变更写审计，2026-11-15） / ai_model_provider 模型服务（对象 id = 服务 id；不记录密钥） / project_management_record 项目管理记录（对象 id = recordId；新增 / 修改 / 删除写审计，只有项目管理白名单三位可写账号可以查看）
          * @enum {string}
          */
-        AuditObjectType: "project" | "project_member" | "project_view_grant" | "task" | "node" | "stage" | "dict_item" | "blueprint" | "calendar_day" | "calendar_settings" | "file" | "change" | "stakeholder" | "daily_report" | "issue" | "task_node" | "task_node_request" | "task_template" | "user" | "wecom_dm_binding" | "automation_rule" | "notify_delivery" | "group_access_rule" | "group_access_admin" | "task_node_reviewer_roster" | "task_node_review_notification_settings" | "ai_model_provider" | "project_ai_summary";
+        AuditObjectType: "project" | "project_member" | "project_view_grant" | "task" | "node" | "stage" | "dict_item" | "blueprint" | "calendar_day" | "calendar_settings" | "file" | "change" | "stakeholder" | "daily_report" | "issue" | "task_node" | "task_node_request" | "task_template" | "user" | "wecom_dm_binding" | "automation_rule" | "notify_delivery" | "group_access_rule" | "group_access_admin" | "task_node_reviewer_roster" | "task_node_review_notification_settings" | "ai_model_provider" | "project_ai_summary" | "project_management_record";
         /**
          * @description 审计结果：succeeded 成功 / denied 越权尝试（C7-03）/ failed 业务拒绝（门禁等）
          * @enum {string}
@@ -13293,7 +13382,7 @@ export interface components {
          * @description 统一错误码（技术设计v0.2 §7.2）
          * @enum {string}
          */
-        ErrorCode: "VALIDATION_FAILED" | "AUTH_REQUIRED" | "AUTH_CALLBACK_FAILED" | "FORBIDDEN" | "CSRF_FAILED" | "NOT_FOUND" | "VERSION_CONFLICT" | "PROJECT_CODE_EXISTS" | "PROJECT_ARCHIVED" | "DICT_ITEM_EXISTS" | "DICT_ITEM_IN_USE" | "STAGE_GATE_NOT_PASSED" | "ARCHIVE_NOT_READY" | "ARCHIVE_GATE_NOT_PASSED" | "BLUEPRINT_NOT_PUBLISHED" | "NODE_REQUIRED_DOC_MISSING" | "TASK_REQUIRED_DOC_MISSING" | "NODE_HAS_FILES" | "STAGE_STATE_INVALID" | "NODE_ALREADY_DONE" | "NODE_ALREADY_EXISTS" | "NODE_DELETED" | "TASK_ALREADY_EXISTS" | "TASK_ALREADY_DONE" | "TASK_HAS_REFERENCES" | "TASK_FINALIZED" | "TASK_FINALIZE_NOT_READY" | "TASK_UNFINALIZE_AFTER_PLAN" | "REPORT_ALREADY_EXISTS" | "REPORT_GROUP_NOT_BOUND" | "BLUEPRINT_SCHEMA_INVALID" | "BLUEPRINT_REF_UNKNOWN" | "FILE_STATE_INVALID" | "UPLOAD_INCOMPLETE" | "UPLOAD_SESSION_EXPIRED" | "FILE_HASH_MISMATCH" | "IDEMPOTENT_REPLAY" | "PREVIEW_NOT_READY" | "PREVIEW_FAILED" | "IMPORT_FILE_INVALID" | "IMPORT_PARSE_FAILED" | "IMPORT_PREVIEW_EXPIRED" | "IMPORT_CANCELLED" | "RATE_LIMITED" | "INTERNAL";
+        ErrorCode: "VALIDATION_FAILED" | "AUTH_REQUIRED" | "AUTH_CALLBACK_FAILED" | "FORBIDDEN" | "CSRF_FAILED" | "NOT_FOUND" | "AI_SUMMARY_NOT_GENERATED" | "VERSION_CONFLICT" | "PROJECT_CODE_EXISTS" | "PROJECT_ARCHIVED" | "DICT_ITEM_EXISTS" | "DICT_ITEM_IN_USE" | "STAGE_GATE_NOT_PASSED" | "ARCHIVE_NOT_READY" | "ARCHIVE_GATE_NOT_PASSED" | "BLUEPRINT_NOT_PUBLISHED" | "NODE_REQUIRED_DOC_MISSING" | "TASK_REQUIRED_DOC_MISSING" | "NODE_HAS_FILES" | "STAGE_STATE_INVALID" | "NODE_ALREADY_DONE" | "NODE_ALREADY_EXISTS" | "NODE_DELETED" | "TASK_ALREADY_EXISTS" | "TASK_ALREADY_DONE" | "TASK_HAS_REFERENCES" | "TASK_FINALIZED" | "TASK_FINALIZE_NOT_READY" | "TASK_UNFINALIZE_AFTER_PLAN" | "REPORT_ALREADY_EXISTS" | "REPORT_GROUP_NOT_BOUND" | "BLUEPRINT_SCHEMA_INVALID" | "BLUEPRINT_REF_UNKNOWN" | "FILE_STATE_INVALID" | "UPLOAD_INCOMPLETE" | "UPLOAD_SESSION_EXPIRED" | "FILE_HASH_MISMATCH" | "IDEMPOTENT_REPLAY" | "PREVIEW_NOT_READY" | "PREVIEW_FAILED" | "IMPORT_FILE_INVALID" | "IMPORT_PARSE_FAILED" | "IMPORT_PREVIEW_EXPIRED" | "IMPORT_CANCELLED" | "RATE_LIMITED" | "INTERNAL";
         /** @description 字段级错误明细（校验失败、门禁缺件等） */
         ErrorDetail: {
             /** @example too_small */
@@ -13536,7 +13625,7 @@ export interface components {
          */
         FollowObjectType: "project" | "task";
         /**
-         * @description 当前登录账号对该项目的最终有效访问级别：edit = 可执行项目级写操作 / view = 仅浏览。管理员、所管本项目的项目经理或部门 / 个人规则命中 edit 时为 edit；项目成员、任务负责人及项目只读授权仅保证浏览，且项目经理身份不外溢到其他项目
+         * @description 当前登录账号对该项目的最终有效访问级别：edit = 可执行项目级写操作 / view = 仅浏览。管理员、所管本项目的项目经理或部门 / 个人规则命中 edit 时为 edit；项目成员、任务负责人及项目仅浏览授权仅保证浏览，且项目经理身份不外溢到其他项目
          * @enum {string}
          */
         GroupAccessAccessLevel: "edit" | "view";
@@ -13662,7 +13751,7 @@ export interface components {
             projects: components["schemas"]["GroupAccessProject"][];
             /** @description 自动项目角色（项目经理 / 项目成员 / 任务负责人）；按用户聚合，项目或任务关系变化后随接口实时更新 */
             automaticRoles: components["schemas"]["GroupAccessAutomaticRole"][];
-            /** @description 当前生效的项目内只读授权，独立于自动角色和部门 / 个人规则 */
+            /** @description 当前生效的项目内仅浏览授权，独立于自动角色和部门 / 个人规则 */
             projectViewGrants: {
                 userId: components["schemas"]["Uuid"];
                 projectId: components["schemas"]["Uuid"];
@@ -14654,6 +14743,11 @@ export interface components {
             changes: components["schemas"]["ProjectAiChange"][];
             reports: components["schemas"]["ProjectAiReport"][];
             issues: components["schemas"]["ProjectAiIssue"][];
+            /**
+             * @description 项目文件 AI 分析摘要（仅当前文件版本的成功分析；日报 / 问题图片不进入）
+             * @default []
+             */
+            fileAnalyses: components["schemas"]["ProjectFileAiSummary"][];
             generatedAt: components["schemas"]["DateTime"];
             /** @description true = 任务 / 日报 / 问题 / 变更任一集合超出读取上限被截断 */
             truncated: boolean;
@@ -15068,8 +15162,30 @@ export interface components {
         };
         /** @description 项目（v0.2 §2.3 projects） */
         ProjectDetail: components["schemas"]["Project"] & {
-            /** @description 当前账号是本项目经理，可管理本项目的只读授权 */
+            /** @description 当前账号是本项目经理或系统管理员，可管理本项目的仅浏览授权 */
             canManageViewGrants: boolean;
+        };
+        ProjectDocumentAnalysisRun: {
+            id: components["schemas"]["Uuid"];
+            projectId: components["schemas"]["Uuid"];
+            status: components["schemas"]["ProjectDocumentAnalysisRunStatus"];
+            promptVersion: string;
+            fileCount: number;
+            succeededCount: number;
+            failedCount: number;
+            skippedCount: number;
+            error: string | null;
+            startedAt: components["schemas"]["DateTime"] & (string | null);
+            finishedAt: components["schemas"]["DateTime"] & (string | null);
+            createdAt: components["schemas"]["DateTime"];
+            updatedAt: components["schemas"]["DateTime"];
+        } | null;
+        /** @enum {string} */
+        ProjectDocumentAnalysisRunStatus: "queued" | "running" | "succeeded" | "failed";
+        /** @description 项目文件 AI 分析：最近一次 run + 当前文件版本的成功摘要 */
+        ProjectDocumentAnalysisView: {
+            run: components["schemas"]["ProjectDocumentAnalysisRun"];
+            analyses: components["schemas"]["ProjectFileAnalysis"][];
         };
         /** @description 首页分类计数；计数与列表同口径（同筛选条件）；五组固定返回，前端按需展示（A6） */
         ProjectFacets: {
@@ -15090,6 +15206,62 @@ export interface components {
             status: {
                 [key: string]: number;
             };
+        };
+        ProjectFileAiSummary: {
+            fileId: components["schemas"]["Uuid"];
+            fileVersionId: components["schemas"]["Uuid"];
+            fileName: string;
+            fileKind: components["schemas"]["ProjectFileAnalysisKind"];
+            summary: components["schemas"]["ProjectFileAnalysisSummary"];
+        };
+        ProjectFileAnalysis: {
+            id: components["schemas"]["Uuid"];
+            projectId: components["schemas"]["Uuid"];
+            fileId: components["schemas"]["Uuid"];
+            fileVersionId: components["schemas"]["Uuid"];
+            fileName: string;
+            fileKind: components["schemas"]["ProjectFileAnalysisKind"];
+            status: components["schemas"]["ProjectFileAnalysisStatus"];
+            summary: components["schemas"]["ProjectFileAnalysisSummary"] & (Record<string, never> | null);
+            modelId: string | null;
+            promptVersion: string;
+            error: string | null;
+            generatedAt: components["schemas"]["DateTime"] & (string | null);
+            createdAt: components["schemas"]["DateTime"];
+            updatedAt: components["schemas"]["DateTime"];
+        };
+        ProjectFileAnalysisFact: {
+            /** @enum {string} */
+            category: "basic_info" | "business" | "performance" | "scope" | "responsibility" | "site" | "network" | "power" | "team" | "schedule" | "safety" | "delivery" | "other";
+            key: string;
+            value: string | number | boolean | string[] | null;
+            unit?: string | null;
+            evidence: string;
+            confidence: number;
+            sourcePage?: {
+                pdfPage: number;
+                printedPageLabel: string | null;
+            };
+        };
+        /** @enum {string} */
+        ProjectFileAnalysisKind: "pdf" | "image" | "word" | "excel";
+        /** @enum {string} */
+        ProjectFileAnalysisStatus: "succeeded" | "failed" | "skipped";
+        ProjectFileAnalysisSummary: {
+            documentType: string;
+            purpose: string;
+            /** @default [] */
+            summaries: string[];
+            /** @default [] */
+            keyFacts: components["schemas"]["ProjectFileAnalysisFact"][];
+            /** @default [] */
+            risks: string[];
+            /** @default [] */
+            decisions: string[];
+            /** @default [] */
+            warnings: string[];
+            /** @default [] */
+            missing: string[];
         };
         /** @description 项目流程（阶段 + 节点 + 约束 + 状态）；导入即快照 */
         ProjectFlow: {

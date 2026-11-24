@@ -290,7 +290,7 @@ export const GroupAccessOverviewSchema = z
     projects: z.array(GroupAccessProjectSchema),
     automaticRoles: z.array(GroupAccessAutomaticRoleSchema).openapi({ description: "自动项目角色（项目经理 / 项目成员 / 任务负责人）；按用户聚合，项目或任务关系变化后随接口实时更新" }),
     projectViewGrants: z.array(z.object({ userId: UuidSchema, projectId: UuidSchema }))
-      .describe("当前生效的项目内只读授权，独立于自动角色和部门 / 个人规则"),
+      .describe("当前生效的项目内仅浏览授权，独立于自动角色和部门 / 个人规则"),
   })
   .openapi("GroupAccessOverview", { description: "权限管理页数据：开关状态、当前账号部门、系统管理员、可配置部门树、项目与自动项目角色；无部门账号汇总在虚拟未分组节点" });
 

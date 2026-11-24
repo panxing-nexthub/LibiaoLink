@@ -43,26 +43,26 @@ export class ProjectManagementController {
   @Post()
   create(
     @Body(new ZodValidationPipe(ProjectManagementRecordCreateBodySchema)) body: ProjectManagementRecordCreateBody,
-    @CurrentActorId() _actorId: string,
+    @CurrentActorId() actorId: string,
   ) {
-    return this.records.create(body);
+    return this.records.create(body, actorId);
   }
 
   @Patch(":id")
   update(
     @Param("id", uuidParam) id: string,
     @Body(new ZodValidationPipe(ProjectManagementRecordUpdateBodySchema)) body: ProjectManagementRecordUpdateBody,
-    @CurrentActorId() _actorId: string,
+    @CurrentActorId() actorId: string,
   ) {
-    return this.records.update(id, body);
+    return this.records.update(id, body, actorId);
   }
 
   @Delete(":id")
   remove(
     @Param("id", uuidParam) id: string,
     @Headers("if-match") ifMatch: string | undefined,
-    @CurrentActorId() _actorId: string,
+    @CurrentActorId() actorId: string,
   ) {
-    return this.records.remove(id, parseVersionHeader(ifMatch));
+    return this.records.remove(id, parseVersionHeader(ifMatch), actorId);
   }
 }

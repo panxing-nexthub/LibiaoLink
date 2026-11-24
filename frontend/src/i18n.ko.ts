@@ -801,6 +801,8 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "ai.doc.replace": "교체",
   "ai.doc.replacing": "업로드 중…",
   "ai.doc.replaceFailed": "교체에 실패했습니다. 다시 시도해 주세요.",
+  "ai.doc.imageCount": "총 {n}장",
+  "ai.doc.removeImage": "이 이미지 제거",
   "ai.doc.ongoing": "진행 중",
   "ai.doc.plan": "계획",
   "ai.doc.actual": "실제",

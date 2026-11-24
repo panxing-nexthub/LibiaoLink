@@ -801,6 +801,8 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "ai.doc.replace": "置き換え",
   "ai.doc.replacing": "アップロード中…",
   "ai.doc.replaceFailed": "置き換えに失敗しました。もう一度お試しください。",
+  "ai.doc.imageCount": "全 {n} 枚",
+  "ai.doc.removeImage": "この画像を削除",
   "ai.doc.ongoing": "進行中",
   "ai.doc.plan": "計画",
   "ai.doc.actual": "実績",

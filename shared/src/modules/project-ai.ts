@@ -188,6 +188,10 @@ export const ProjectAiExtractedFieldSchema = z
 
 export const ProjectAiAgreementImageSchema = z
   .object({
+    /** 人工图片为数据库行 id；自动抽取图为 auto-0 / auto-1…。 */
+    id: z.string(),
+    /** 是否人工上传；人工图为 true，可逐张移除。 */
+    manual: z.boolean(),
     pageNo: z.number().int().positive().nullable(),
     url: z.string().nullable(),
     caption: z.string().nullable(),
@@ -202,8 +206,8 @@ export const ProjectAiAgreementSchema = z
     customer: ProjectAiExtractedFieldSchema,
     projectAddress: ProjectAiExtractedFieldSchema,
     background: ProjectAiExtractedFieldSchema,
-    layout: ProjectAiAgreementImageSchema,
-    threeD: ProjectAiAgreementImageSchema,
+    layout: z.array(ProjectAiAgreementImageSchema),
+    threeD: z.array(ProjectAiAgreementImageSchema),
     extractedAt: DateTimeSchema,
   })
   .openapi("ProjectAiAgreement", { description: "最新版技术协议定向抽取结果；字段不是 found 时前端显示「未识别」" });

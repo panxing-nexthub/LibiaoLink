@@ -16,11 +16,6 @@ export type ProjectAiClaim = {
   sources: string[];
 };
 
-export type ProjectAiTimelineItem = ProjectAiClaim & {
-  date: string;
-  title: string;
-};
-
 export type ProjectAiIssueItem = {
   text: string;
   owner: string;
@@ -51,39 +46,14 @@ export type ProjectAiSummaryReport = {
     planRange: ProjectAiRange;
     reportRange: ProjectAiRange;
   };
-  timeline: ProjectAiTimelineItem[];
   issues: {
     total: number;
     done: number;
     inProgress: number;
     open: number;
     summary: string;
-    currentItems: ProjectAiIssueItem[];
+    currentItems?: ProjectAiIssueItem[];
   };
-  resultsAndRisks: {
-    text: string;
-    claims: ProjectAiClaim[];
-    risks: ProjectAiClaim[];
-  };
-  handoff: {
-    existing: Array<{
-      text: string;
-      owner: string;
-      nextStep: string;
-      type: ProjectAiClaimType;
-      sources: string[];
-    }>;
-    suggestions: Array<{
-      text: string;
-      reason: string;
-      nextStep: string;
-      acceptance: string;
-      type: ProjectAiClaimType;
-      needsHumanConfirmation: boolean;
-      sources: string[];
-    }>;
-  };
-  notes: ProjectAiClaim[];
 };
 
 export type ProjectAiSummary = {

@@ -4,7 +4,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { createPortal } from "react-dom";
 import { addedNodeKey } from "../data/tasks";
 import type { TemplatePresetNode } from "../data/templatePresets";
-import { createTaskTemplate, fetchStageNodes, fetchStageTemplates, templateWriteMessage, updateTaskTemplate, type TemplateItem } from "../templateApi";
+import { createTaskTemplate, createTemplateStageNode, fetchStageNodes, fetchStageTemplates, nodeWriteMessage, type TemplateItem } from "../templateApi";
+import { cachedZhTo, translateZhTo } from "../translateApi";
 import { ApiError } from "../api";
 import { canEditTaskTemplate, useMyPermissions } from "../permissions";
 import { PERSONAL_DEFAULT_TEMPLATE_ID_PREFIX, PERSONAL_DEFAULT_TEMPLATE_NAME, ensurePersonalDefaultTemplate, rememberPersonalDefaultTemplate } from "../personalTemplate";
@@ -18,6 +19,11 @@ import { stageText, prefetchLocalizedText, useLocale, useLocalizedTranslator, us
  * `last` = 该阶段最后（默认）；`before` / `after` = 以某张同阶段任务为锚，插到它前面 / 后面。
  */
 export type StagePlacement = { kind: "last" } | { kind: "before"; taskId: string } | { kind: "after"; taskId: string };
+
+/** 节点名比对键：去首尾空白 + 合并连续空格（与任务模板页的字典查找同口径）。 */
+function nodeNameKey(text: string): string {
+  return text.trim().replace(/ {2,}/g, " ");
+}
 
 /**
  * 插入位置浮层（Push 113，业务口径「我要点击这个添加后选择位置」；Push 114 起「默认顺序添加」取消勾选后才弹）：点某一条「＋ 添加」时贴这条浮出 ——
@@ -259,7 +265,13 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
   const [nodeQuery, setNodeQuery] = useState("");
   /** 当前正在往哪块可编辑模板里加节点（默认个人模版 / 自己创建的模板）。 */
   const [templateEditorId, setTemplateEditorId] = useState<string | null>(null);
-  const [templateSavingId, setTemplateSavingId] = useState<string | null>(null);
+  const [templateFormTitle, setTemplateFormTitle] = useState("");
+  const [templateFormTitleEn, setTemplateFormTitleEn] = useState("");
+  const [templateFormTitleEnManual, setTemplateFormTitleEnManual] = useState(false);
+  const [templateFormTranslating, setTemplateFormTranslating] = useState(false);
+  const templateFormTranslateSeq = useRef(0);
+  const [templateFormError, setTemplateFormError] = useState<string | null>(null);
+  const [templateFormBusy, setTemplateFormBusy] = useState(false);
   const [templateNotice, setTemplateNotice] = useState<{ kind: "ok" | "error" | "info"; text: string } | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const cardRef = useRef<HTMLElement | null>(null);
@@ -342,6 +354,11 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
     setNodeQuery("");
     setTemplateEditorId(null);
     setTemplateNotice(null);
+    setTemplateFormTitle("");
+    setTemplateFormTitleEn("");
+    setTemplateFormTitleEnManual(false);
+    setTemplateFormTranslating(false);
+    setTemplateFormError(null);
   }, [stage]);
 
   useEffect(() => {
@@ -457,41 +474,51 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
   );
   const currentTemplate = displayedTemplates.find((item) => item.id === activeTab);
   const isNodesTab = currentTemplate === undefined;
-  const pickerMode = currentTemplate !== undefined && templateEditorId === currentTemplate.id;
+  const templateFormOpen = currentTemplate !== undefined && templateEditorId === currentTemplate.id;
   const virtualCurrentTemplate = currentTemplate?.id.startsWith(PERSONAL_DEFAULT_TEMPLATE_ID_PREFIX) ?? false;
   const canEditCurrentTemplate = currentTemplate !== undefined && canEditTaskTemplate(permissions, currentTemplate.createdBy);
-  const items = pickerMode ? nodes : currentTemplate?.nodes ?? nodes;
+  const items = currentTemplate?.nodes ?? nodes;
   const normalizedQuery = nodeQuery.trim().toLowerCase();
   const visibleItems = items.map((node, index) => ({ node, index })).filter(({ node }) =>
     normalizedQuery === "" || (node.title + "\n" + node.titleEn).toLowerCase().includes(normalizedQuery));
   /** 这条节点加过没有（M3-07 刀 3）：先看来源 id（精确），再回落「同阶段同名」（本刀之前的旧行 / 手工同名任务）。 */
   const isAdded = (node: TemplatePresetNode): boolean =>
     addedNodeIds.has(node.id) || addedNodeKeys.has(addedNodeKey(stage, node.title));
-  /** 这条节点是否已经在这块模板里（模板编辑模式用）。 */
-  const inTemplate = (node: TemplatePresetNode): boolean =>
-    currentTemplate?.nodes.some((item) => item.id === node.id) ?? false;
+  const templateEnglishDictionary = useMemo(() => {
+    const dictionary = new Map<string, string>();
+    const add = (list: readonly { title: string; titleEn: string }[]): void => {
+      for (const node of list) {
+        const key = nodeNameKey(node.title);
+        const english = node.titleEn.trim();
+        if (key !== "" && english !== "" && !dictionary.has(key)) dictionary.set(key, english);
+      }
+    };
+    add(nodes);
+    for (const template of displayedTemplates) add(template.nodes);
+    return dictionary;
+  }, [nodes, displayedTemplates]);
   const pendingCount = items.filter((node) => !isAdded(node)).length;
   /** 取数中的占位 / 失败提示（按当前标签取节点库或模板的加载状态）。 */
-  const listLoading = pickerMode || isNodesTab ? nodesLoading : virtualCurrentTemplate ? false : templatesLoading;
-  const listError = pickerMode || isNodesTab ? nodesError : virtualCurrentTemplate ? null : templatesError;
+  const listLoading = isNodesTab ? nodesLoading : virtualCurrentTemplate ? false : templatesLoading;
+  const listError = isNodesTab ? nodesError : virtualCurrentTemplate ? null : templatesError;
   const listNotice = listLoading
-    ? (pickerMode || isNodesTab ? t("sac.load.nodes") : t("sac.load.templates"))
+    ? (isNodesTab ? t("sac.load.nodes") : t("sac.load.templates"))
     : listError === null
       ? null
-      : (pickerMode || isNodesTab
+      : (isNodesTab
         ? t("sac.err.nodesLoadPrefix", { message: listError })
         : t("sac.err.templatesLoadPrefix", { message: listError }));
   /** 失败时「重试」按钮该重取哪一边。 */
   const retryCurrent = (): void => {
-    if (pickerMode || isNodesTab) {
+    if (isNodesTab) {
       setNodesRetry((count) => count + 1);
       return;
     }
     setTemplatesRetry((count) => count + 1);
   };
   /** 当前标签取数失败了吗（决定出不出重试按钮）。 */
-  const listFailed = pickerMode || isNodesTab ? nodesError !== null : templatesError !== null;
-  const addedCount = pickerMode ? 0 : items.length - pendingCount;
+  const listFailed = isNodesTab ? nodesError !== null : templatesError !== null;
+  const addedCount = items.length - pendingCount;
 
   // 当前标签被服务端刷新带走后回到节点标签，避免停在失效的虚拟模板 id 上。
   useEffect(() => {
@@ -517,54 +544,136 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
     }
   };
 
-  /**
-   * 在可编辑模板里直接加节点（默认个人模版 / 自己创建的模板）：
-   * 虚拟空白个人模版第一次加节点时先落库成真实模板；已落库模板按 PATCH 追加节点。
-   * 只有 canEditTaskTemplate 通过的模板才显示入口，避免给只读的公共模板误加。
-   */
-  const addNodeToTemplate = (template: TemplateItem, node: TemplatePresetNode): void => {
-    if (templateSavingId !== null || !canEditTaskTemplate(permissions, template.createdBy)) {
+  /** 关闭模板内新增节点表单（取消 / 保存成功 / 换阶段）。 */
+  const closeTemplateNodeForm = (): void => {
+    templateFormTranslateSeq.current += 1;
+    setTemplateEditorId(null);
+    setTemplateFormTitle("");
+    setTemplateFormTitleEn("");
+    setTemplateFormTitleEnManual(false);
+    setTemplateFormTranslating(false);
+    setTemplateFormError(null);
+  };
+
+  /** 打开模板内新增节点表单（只对可编辑模板显示入口；同一入口再点一次收起）。 */
+  const openTemplateNodeForm = (template: TemplateItem): void => {
+    if (!canEditTaskTemplate(permissions, template.createdBy)) return;
+    if (templateEditorId === template.id) {
+      closeTemplateNodeForm();
       return;
     }
-    if (template.nodes.some((item) => item.id === node.id)) {
-      setTemplateNotice({ kind: "info", text: t("sac.template.inTemplate") });
-      return;
-    }
-    setTemplateSavingId(template.id);
+    templateFormTranslateSeq.current += 1;
+    setTemplateEditorId(template.id);
+    setTemplateFormTitle("");
+    setTemplateFormTitleEn("");
+    setTemplateFormTitleEnManual(false);
+    setTemplateFormTranslating(false);
+    setTemplateFormError(null);
     setTemplateNotice(null);
+  };
+
+  /**
+   * 模板内新增节点：中文名停顿约 450ms 后自动填充英文名；
+   * 节点库已有同名中英对照优先，未命中再走翻译通道；手动改英文名后不再覆盖。
+   */
+  useEffect(() => {
+    const seq = templateFormTranslateSeq.current + 1;
+    templateFormTranslateSeq.current = seq;
+    if (templateEditorId === null) {
+      setTemplateFormTranslating(false);
+      return;
+    }
+    const title = nodeNameKey(templateFormTitle);
+    if (title === "") {
+      if (!templateFormTitleEnManual) {
+        setTemplateFormTitleEn("");
+      }
+      setTemplateFormTranslating(false);
+      return;
+    }
+    if (templateFormTitleEnManual) {
+      setTemplateFormTranslating(false);
+      return;
+    }
+    if (!/[一-鿿]/.test(title)) {
+      setTemplateFormTranslating(false);
+      return;
+    }
+    const dictionaryEnglish = templateEnglishDictionary.get(title);
+    if (dictionaryEnglish !== undefined) {
+      setTemplateFormTitleEn(dictionaryEnglish);
+      setTemplateFormTranslating(false);
+      return;
+    }
+    const cached = cachedZhTo(title, "en");
+    if (cached !== null) {
+      setTemplateFormTitleEn(cached);
+      setTemplateFormTranslating(false);
+      return;
+    }
+    setTemplateFormTranslating(true);
+    const timer = window.setTimeout(() => {
+      void translateZhTo([title], "en").then((translated) => {
+        if (templateFormTranslateSeq.current !== seq) {
+          return;
+        }
+        const value = translated.get(title);
+        if (value !== undefined) {
+          setTemplateFormTitleEn(value);
+        }
+        setTemplateFormTranslating(false);
+      }).catch(() => {
+        if (templateFormTranslateSeq.current === seq) {
+          setTemplateFormTranslating(false);
+        }
+      });
+    }, 450);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [templateFormTitle, templateFormTitleEnManual, templateEditorId, templateEnglishDictionary]);
+
+  /** 提交模板内新增节点：虚拟个人模版先把模板落库，再挂第一个私有节点；已落库模板直接 POST 私有节点。 */
+  const submitTemplateNodeForm = (): void => {
+    const title = templateFormTitle.trim();
+    if (templateEditorId === null || title === "" || templateFormBusy) {
+      return;
+    }
+    const template = displayedTemplates.find((item) => item.id === templateEditorId);
+    if (template === undefined || !canEditTaskTemplate(permissions, template.createdBy)) {
+      return;
+    }
+    setTemplateFormBusy(true);
+    setTemplateFormError(null);
     void (async () => {
       try {
         if (template.id.startsWith(PERSONAL_DEFAULT_TEMPLATE_ID_PREFIX)) {
-          const name = template.name.trim() === "" ? PERSONAL_DEFAULT_TEMPLATE_NAME : template.name.trim();
-          const created = await createTaskTemplate(stage, name, [node.id], template.visibility);
-          rememberPersonalDefaultTemplate(currentUserId, stage, created.id);
-          setTemplates((previous) => ensurePersonalDefaultTemplate(
-            previous,
+          const createdTemplate = await createTaskTemplate(
             stage,
-            currentUserId,
-          ).map((item) => (item.id === template.id ? created : item)));
-          setActiveTab(created.id);
-          setTemplateEditorId(created.id);
-          setTemplateNotice({ kind: "ok", text: t("sac.template.added", { name: localize(created.name) }) });
+            template.name.trim() === "" ? PERSONAL_DEFAULT_TEMPLATE_NAME : template.name.trim(),
+            template.nodes.map((node) => node.id),
+            template.visibility,
+          );
+          const createdNode = await createTemplateStageNode(createdTemplate.id, title, templateFormTitleEn.trim());
+          rememberPersonalDefaultTemplate(currentUserId, stage, createdTemplate.id);
+          const next: TemplateItem = { ...createdTemplate, nodes: [...createdTemplate.nodes, createdNode] };
+          setTemplates((previous) => ensurePersonalDefaultTemplate(previous, stage, currentUserId).map((item) => (item.id === template.id ? next : item)));
+          setActiveTab(createdTemplate.id);
+          closeTemplateNodeForm();
+          setTemplateNotice({ kind: "ok", text: t("sac.template.added", { name: localize(createdTemplate.name) }) });
         } else {
-          const saved = await updateTaskTemplate(template.id, {
-            nodeIds: [...template.nodes.map((item) => item.id), node.id],
-            version: template.version,
-          });
-          setTemplates((previous) => ensurePersonalDefaultTemplate(
-            previous,
-            stage,
-            currentUserId,
-          ).map((item) => (item.id === template.id ? saved : item)));
-          setTemplateNotice({ kind: "ok", text: t("sac.template.added", { name: localize(saved.name) }) });
+          const createdNode = await createTemplateStageNode(template.id, title, templateFormTitleEn.trim());
+          setTemplates((previous) => ensurePersonalDefaultTemplate(previous, stage, currentUserId).map((item) => (item.id === template.id ? { ...item, nodes: [...item.nodes, createdNode] } : item)));
+          closeTemplateNodeForm();
+          setTemplateNotice({ kind: "ok", text: t("sac.template.added", { name: localize(template.name) }) });
         }
       } catch (error) {
-        const message = error instanceof ApiError
-          ? templateWriteMessage(error)
-          : error instanceof Error ? error.message : t("tpl.err.retryLater");
-        setTemplateNotice({ kind: "error", text: t("sac.template.addFailed", { message }) });
+        const message = error instanceof ApiError && error.code === "NODE_ALREADY_EXISTS"
+          ? t("sac.template.duplicate")
+          : error instanceof ApiError ? nodeWriteMessage(error) : error instanceof Error ? error.message : t("tpl.err.retryLater");
+        setTemplateFormError(t("sac.template.addFailed", { message }));
       } finally {
-        setTemplateSavingId(null);
+        setTemplateFormBusy(false);
       }
     })();
   };
@@ -687,53 +796,32 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
 
       <div className="mt-2 flex shrink-0 items-center justify-between gap-2">
         <span className="min-w-0 truncate text-[11px] text-zinc-500">
-          {pickerMode && currentTemplate !== undefined
-            ? t("sac.template.pickerHint", { name: localize(currentTemplate.name) })
-            : isNodesTab
-              ? ""
-              : t("sac.previewPrefix") + t("sac.added", { n: addedCount })}
+          {isNodesTab ? "" : t("sac.previewPrefix") + t("sac.added", { n: addedCount })}
         </span>
         <div className="flex shrink-0 items-center gap-2">
-          {pickerMode ? (
-            <button
-              type="button"
-              onClick={() => { setTemplateEditorId(null); setTemplateNotice(null); }}
-              className="shrink-0 rounded-md bg-zinc-900 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-zinc-800"
-            >
-              {t("sac.template.done")}
-            </button>
-          ) : (
+          {isNodesTab ? null : (
             <>
-              {isNodesTab ? null : (
-                <>
-                  {canEditCurrentTemplate ? (
-                    <button
-                      type="button"
-                      disabled={templateSavingId !== null}
-                      onClick={() => {
-                        if (currentTemplate === undefined) return;
-                        setTemplateEditorId(currentTemplate.id);
-                        setTemplateNotice(null);
-                      }}
-                      className="shrink-0 rounded-md border border-zinc-300 bg-white/70 px-2 py-0.5 text-[11px] font-medium text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {t("sac.template.add")}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    disabled={pendingCount === 0}
-                    onClick={(event) => { startAdd(items.filter((node) => !isAdded(node)), event.currentTarget); }}
-                    title={t("sac.batch.title")}
-                    className="shrink-0 rounded-md bg-zinc-900 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-white/60 disabled:text-zinc-400"
-                  >
-                    {t("sac.batch", { n: pendingCount })}
-                  </button>
-                </>
-              )}
-              <SequentialToggle checked={sequential} onChange={setSequential} />
+              {canEditCurrentTemplate && !templateFormOpen ? (
+                <button
+                  type="button"
+                  onClick={() => { if (currentTemplate !== undefined) openTemplateNodeForm(currentTemplate); }}
+                  className="shrink-0 rounded-md border border-zinc-300 bg-white/70 px-2 py-0.5 text-[11px] font-medium text-zinc-700 transition hover:bg-white"
+                >
+                  {t("sac.template.add")}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={pendingCount === 0}
+                onClick={(event) => { startAdd(items.filter((node) => !isAdded(node)), event.currentTarget); }}
+                title={t("sac.batch.title")}
+                className="shrink-0 rounded-md bg-zinc-900 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-white/60 disabled:text-zinc-400"
+              >
+                {t("sac.batch", { n: pendingCount })}
+              </button>
             </>
           )}
+          <SequentialToggle checked={sequential} onChange={setSequential} />
         </div>
       </div>
       {templateNotice === null ? null : (
@@ -741,6 +829,66 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
           {templateNotice.text}
         </p>
       )}
+
+      {templateFormOpen && currentTemplate !== undefined ? (
+        <form
+          onSubmit={(event) => { event.preventDefault(); submitTemplateNodeForm(); }}
+          className="mt-2 shrink-0 rounded-xl border border-white/80 bg-white/70 p-3"
+        >
+          <p className="mb-2 text-xs font-medium text-zinc-700">
+            {t("tpl.node.createInTemplate", { name: localize(currentTemplate.name) })}
+          </p>
+          <p className="mb-2 text-[10px] leading-4 text-zinc-500">{t("tpl.node.createInTemplateHint")}</p>
+          <input
+            type="text"
+            value={templateFormTitle}
+            onChange={(event) => { setTemplateFormTitle(event.target.value); setTemplateFormError(null); }}
+            placeholder={t("tpl.node.namePlaceholder")}
+            aria-label={t("tpl.node.nameAria")}
+            maxLength={200}
+            className="mb-2 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 outline-none transition placeholder:text-zinc-400 focus:border-zinc-300"
+          />
+          <input
+            type="text"
+            value={templateFormTitleEn}
+            onChange={(event) => {
+              const value = event.target.value;
+              setTemplateFormTitleEn(value);
+              setTemplateFormTitleEnManual(value.trim() !== "");
+              setTemplateFormTranslating(false);
+            }}
+            placeholder={t("tpl.node.nameEnPlaceholder")}
+            aria-label={t("tpl.node.nameEnAria")}
+            maxLength={200}
+            className="w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 outline-none transition placeholder:text-zinc-400 focus:border-zinc-300"
+          />
+          <p className="mt-1 text-[10px] text-zinc-400">
+            {templateFormTranslating
+              ? t("tpl.node.nameEnTranslating")
+              : templateFormTitleEnManual
+                ? t("tpl.node.nameEnManualHint")
+                : t("tpl.node.nameEnAutoHint")}
+          </p>
+          {templateFormError === null ? null : <p className="mt-1 text-[11px] text-rose-600">{templateFormError}</p>}
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeTemplateNodeForm}
+              disabled={templateFormBusy}
+              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="submit"
+              disabled={templateFormBusy || templateFormTitle.trim() === ""}
+              className="rounded-md bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+            >
+              {templateFormBusy ? t("common.saving") : t("common.save")}
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       {/* Push 207 撤：本卡片原「常驻临时任务入口」整块在此，按业务口径「临时任务不应该存在于阶段里面新建」下架。 */}
 
@@ -759,60 +907,35 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
         </p>
       ) : visibleItems.length === 0 ? (
         <p className="mt-2 rounded-lg border border-dashed border-zinc-200 px-3 py-4 text-center text-xs text-zinc-500">
-          {normalizedQuery !== "" || isNodesTab || pickerMode ? t("tpl.nodes.empty") : t("sac.template.empty")}
+          {normalizedQuery !== "" || isNodesTab ? t("tpl.nodes.empty") : t("sac.template.empty")}
         </p>
       ) : (
       <ul ref={listRef} className="mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
         {visibleItems.map(({ node, index }) => {
-          const alreadyInTemplate = pickerMode && inTemplate(node);
-          const added = !pickerMode && isAdded(node);
-          const rowDisabled = pickerMode ? alreadyInTemplate || templateSavingId !== null : added;
-          const rowLabel = pickerMode
-            ? alreadyInTemplate
-              ? t("sac.template.inTemplate")
-              : templateSavingId === currentTemplate?.id
-                ? t("sac.template.adding")
-                : t("sac.add")
-            : added
-              ? t("sac.addedTag")
-              : t("sac.add");
+          const added = isAdded(node);
           return (
             <li key={node.id}>
               <button
                 type="button"
-                disabled={rowDisabled}
-                onClick={(event) => {
-                  if (pickerMode) {
-                    if (currentTemplate !== undefined) addNodeToTemplate(currentTemplate, node);
-                    return;
-                  }
-                  startAdd([node], event.currentTarget);
-                }}
-                title={
-                  pickerMode
-                    ? alreadyInTemplate
-                      ? t("sac.template.inTemplate")
-                      : t("sac.template.addTitle", { name: currentTemplate === undefined ? "" : localize(currentTemplate.name) })
-                    : added
-                      ? t("sac.addedTitle")
-                      : t("sac.addTitle", { stage: stageText(locale, stage) })
-                }
+                disabled={added}
+                onClick={(event) => { startAdd([node], event.currentTarget); }}
+                title={added ? t("sac.addedTitle") : t("sac.addTitle", { stage: stageText(locale, stage) })}
                 className={
                   "flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition " +
-                  (rowDisabled
+                  (added
                     ? "cursor-default border-white/60 bg-white/40"
                     : "border-white/70 bg-white/70 hover:border-zinc-300 hover:bg-white")
                 }
               >
-                {isNodesTab || pickerMode ? null : (
+                {isNodesTab ? null : (
                   <span className="w-4 shrink-0 text-right text-[10px] tabular-nums text-zinc-400">{index + 1}</span>
                 )}
                 <span className="min-w-0 flex-1">
-                  <span className={"block truncate text-xs " + (rowDisabled ? "text-zinc-400" : "font-medium text-zinc-700")}>{node.title}</span>
+                  <span className={"block truncate text-xs " + (added ? "text-zinc-400" : "font-medium text-zinc-700")}>{node.title}</span>
                   <span className="block truncate text-[10px] text-zinc-400">{node.titleEn}</span>
                 </span>
-                <span className={"shrink-0 text-[11px] " + (rowDisabled ? "text-zinc-400" : "font-medium text-emerald-700")}>
-                  {rowLabel}
+                <span className={"shrink-0 text-[11px] " + (added ? "text-zinc-400" : "font-medium text-emerald-700")}>
+                  {added ? t("sac.addedTag") : t("sac.add")}
                 </span>
               </button>
             </li>

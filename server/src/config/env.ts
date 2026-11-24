@@ -21,8 +21,10 @@ export const EnvSchema = z
     CASDOOR_ORG_NAME: z.string().default(""),
     /** Casdoor 群组 / 用户目录自动同步周期（毫秒）：worker 启动即执行一轮，之后持续轮询；默认 5 分钟。 */
     ORG_SYNC_INTERVAL_MS: z.coerce.number().int().min(60000).max(86400000).default(300000),
-    /** 会话空闲超时（分钟）：接入标准「企业内部系统」档为 30；0 仅测试用（立即超时）。 */
-    SESSION_IDLE_MINUTES: z.coerce.number().int().min(0).default(30),
+    /** 会话空闲超时（分钟）：当前口径 540（9 小时，2026-11-24 业务确认）；0 仅测试用（立即超时）。 */
+    SESSION_IDLE_MINUTES: z.coerce.number().int().min(0).default(540),
+    /** 会话绝对上限（分钟）：自登录起最长有效；当前口径 10080（7 天，2026-11-24 业务确认）。 */
+    SESSION_ABSOLUTE_MINUTES: z.coerce.number().int().min(1).default(10080),
     /** 会话 Cookie Secure 属性：auto = 仅 production 开启（本地 http 调试不受影响）。 */
     SESSION_COOKIE_SECURE: z.enum(["auto", "true", "false"]).default("auto"),
     /** 内部作业接口凭证（请求头 X-Internal-Token；docs/开发者接入注意事项(SSO接入标准).md 第五部分）。 */

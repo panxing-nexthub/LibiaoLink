@@ -13,8 +13,8 @@ export function hashToken(token: string): string {
 }
 
 /**
- * 会话用例：建立 / 校验（空闲超时 + 绝对上限 + 禁用踢线）/ 撤销。
- * 超时口径见 docs/开发者接入注意事项(SSO接入标准).md：应用侧自控，空闲时长取 SESSION_IDLE_MINUTES。
+ * 会话用例：建立 / 校验（空闲超时 + 自登录起绝对上限 + 禁用踢线）/ 撤销。
+ * 超时口径见 docs/开发者接入注意事项(SSO接入标准).md：应用侧自控；空闲时长取 SESSION_IDLE_MINUTES，绝对上限取 SESSION_ABSOLUTE_MINUTES，并受 ID Token exp 约束。
  */
 @Injectable()
 export class SessionService {
@@ -27,9 +27,14 @@ export class SessionService {
     return this.config.env.SESSION_IDLE_MINUTES * 60_000;
   }
 
+  get absoluteMs(): number {
+    return this.config.env.SESSION_ABSOLUTE_MINUTES * 60_000;
+  }
+
   async create(input: { userId: string; idToken: string; expiresAtSeconds: number }): Promise<{ token: string; expiresAt: Date }> {
     const token = randomBytes(32).toString("base64url");
-    const expiresAt = new Date(input.expiresAtSeconds * 1000);
+    const now = Date.now();
+    const expiresAt = new Date(Math.min(input.expiresAtSeconds * 1000, now + this.absoluteMs));
     const row = await this.sessions.insert({
       tokenHash: hashToken(token),
       userId: input.userId,
@@ -52,6 +57,10 @@ export class SessionService {
     if (found.session.expiresAt.getTime() <= now) {
       await this.sessions.revokeById(found.session.id, new Date(now));
       throw new AppError("AUTH_REQUIRED", "会话已过期，请重新登录");
+    }
+    if (now - found.session.createdAt.getTime() >= this.absoluteMs) {
+      await this.sessions.revokeById(found.session.id, new Date(now));
+      throw new AppError("AUTH_REQUIRED", "会话已达最长有效期，请重新登录");
     }
     if (now - found.session.lastSeenAt.getTime() > this.idleMs) {
       await this.sessions.revokeById(found.session.id, new Date(now));

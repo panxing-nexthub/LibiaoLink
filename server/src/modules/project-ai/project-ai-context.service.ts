@@ -33,10 +33,11 @@ const STARTUP_TITLE_EN = "project startup";
 
 type CollectResult<T> = { items: T[]; truncated: boolean };
 
-/** 阶段日期兜底：只兜计划开始 / 计划结束 / 实际结束；实际开始没有可靠来源，保持原值（null）。 */
+/** 阶段日期兜底：计划开始 / 计划结束 / 实际结束沿用任务日期；实际开始按用户确认口径取该阶段任务最早 plannedStart（任务「开始日期」）。 */
 interface StageDateFallback {
   plannedStart: string | null;
   plannedEnd: string | null;
+  actualStart: string | null;
   actualEnd: string | null;
   used: boolean;
 }
@@ -198,7 +199,7 @@ export class ProjectAiContextService {
           status: stage.status,
           plannedStart: stage.plannedStart ?? fallback.plannedStart,
           plannedEnd: stage.plannedEnd ?? fallback.plannedEnd,
-          actualStart: stage.actualStart,
+          actualStart: stage.actualStart ?? fallback.actualStart,
           actualEnd: stage.actualEnd ?? fallback.actualEnd,
           taskDoneCount: stage.tasks.done,
           taskTotalCount: stage.tasks.total,
@@ -390,12 +391,14 @@ export class ProjectAiContextService {
   ): StageDateFallback {
     const plannedStart = minDate(stageTasks.map((task) => task.plannedStart));
     const plannedEnd = maxDate(stageTasks.map((task) => task.plannedEnd));
+    const actualStart = minDate(stageTasks.map((task) => task.plannedStart));
     const actualEnd = maxDate(stageTasks.map((task) => task.actualEnd));
     const used =
       (stage.plannedStart === null && plannedStart !== null) ||
       (stage.plannedEnd === null && plannedEnd !== null) ||
-      (stage.actualEnd === null && actualEnd !== null);
-    return { plannedStart, plannedEnd, actualEnd, used };
+      (stage.actualEnd === null && actualEnd !== null) ||
+      actualStart !== null;
+    return { plannedStart, plannedEnd, actualStart, actualEnd, used };
   }
 
   /** 目录姓名映射：用户量级很小（团队内部系统），按页拉全量即可；取不到姓名返回 null 由上层兜「—」。 */

@@ -10609,7 +10609,7 @@
                   "string",
                   "null"
                 ],
-                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+                "description": "实际开始：阶段表原值；为空时用该阶段任务最早 plannedStart（任务「开始日期」）兜底（用户确认口径 2026-11-24）"
               }
             ]
           },

@@ -48,9 +48,9 @@ CONVERSION_TIMEOUT_SECONDS = 90
 MAX_FILE_MB_DEFAULT = 200
 IMAGE_DPI = 120
 MAX_IMAGE_SIDE = 1600
-EXTRACTION_VERSION = "project-agreement-extraction-v1"
+EXTRACTION_VERSION = "project-agreement-extraction-v3"
 AGREEMENT_DOC_TYPE = "技术协议"
-LAYOUT_WORDS = ("布局图", "平面布置", "平面图", "车间布局", "布局规划", "cad")
+LAYOUT_WORDS = ("布局", "平面布置", "平面图", "车间布局", "布局规划", "cad")
 THREE_D_WORDS = ("三维", "3d", "效果图", "渲染图", "鸟瞰")
 BACKGROUND_WORDS = ("项目背景", "背景需求", "需求概述", "建设目标", "项目概述", "项目需求", "场地信息")
 
@@ -370,16 +370,19 @@ def find_agreement_field(
     page_records: list[dict[str, Any]],
     labels: tuple[str, ...],
 ) -> dict[str, Any]:
-    ordered = pages[:5] + pages[5:]
+    ordered = pages[:8]
     for page in ordered:
         value, evidence = labeled_value(page["text"], labels)
         if value:
             return agreement_field(value, evidence, page["pdfPage"], 0.75)
-    # 扫描件 / 文本层缺失时，退回逐页模型 keyFacts（仍只认原文证据）。
+    # 扫描件 / 文本层缺失时，退回前 5 页逐页模型 keyFacts；字段名必须由目标标签开头，
+    # 避免「大客户销售」被当成客户、团队联系人被当成甲方。
     for record in page_records:
+        if int(record["page"]["pdfPage"]) > 5:
+            continue
         for fact in record["extraction"].get("keyFacts") or []:
             key = str(fact.get("key") or "")
-            if not any(label in key for label in labels):
+            if not any(key.startswith(label) for label in labels):
                 continue
             raw_value = fact.get("value")
             if isinstance(raw_value, list):
@@ -399,8 +402,16 @@ def find_agreement_field(
 def find_agreement_background(pages: list[dict[str, Any]], page_records: list[dict[str, Any]]) -> dict[str, Any]:
     pieces: list[str] = []
     for page, record in zip(pages, page_records):
+        extraction = record["extraction"]
+        combined = " ".join([
+            str(page["text"] or ""),
+            str(extraction.get("documentType") or ""),
+            str(extraction.get("summary") or ""),
+        ])
+        if "目录" in combined:
+            continue
         if any(word in page["text"] for word in BACKGROUND_WORDS):
-            summary = str(record["extraction"].get("summary") or "").strip()
+            summary = str(extraction.get("summary") or "").strip()
             if summary:
                 pieces.append(summary)
     if not pieces:
@@ -700,7 +711,7 @@ def process_run(conn: psycopg.Connection, run: dict[str, Any]) -> None:
                     needs_extraction = is_technical_agreement(row) and not (
                         isinstance(existing_summary, dict)
                         and isinstance(existing_summary.get("extraction"), dict)
-                        and bool(existing_summary.get("extractionVersion"))
+                        and existing_summary.get("extractionVersion") == EXTRACTION_VERSION
                     )
                     if not needs_extraction:
                         succeeded += 1

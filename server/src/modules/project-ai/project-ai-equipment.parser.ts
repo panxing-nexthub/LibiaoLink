@@ -101,7 +101,7 @@ function parseSheet(sheet: ExcelJS.Worksheet): ProjectAiEquipmentCategory[] {
     if (/合计|小计|总计|说明|备注/.test(categoryText + nameText)) continue;
     if (noText !== "" && !/^\d+$/.test(noText)) continue;
     const category = categoryText !== "" ? categoryText : lastCategory;
-    if (category === "" || nameText === "") continue;
+    if (category === "") continue;
     lastCategory = category;
     const modelText = header.model > 0 ? cellText(row.getCell(header.model).value) : "";
     const quantity = quantityOf(
@@ -118,8 +118,9 @@ function parseSheet(sheet: ExcelJS.Worksheet): ProjectAiEquipmentCategory[] {
     if (quantity.value !== null) {
       accumulator.quantities.set(quantity.unit, (accumulator.quantities.get(quantity.unit) ?? 0) + quantity.value);
     }
+    const representativeText = nameText === "" ? category : nameText;
     if (accumulator.items.length < 3) {
-      accumulator.items.push(modelText === "" ? nameText : nameText + "（" + modelText + "）");
+      accumulator.items.push(modelText === "" ? representativeText : representativeText + "（" + modelText + "）");
     }
     accumulators.set(category, accumulator);
   }

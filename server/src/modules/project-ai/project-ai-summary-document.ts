@@ -22,9 +22,11 @@ function periodText(context: ProjectAiContext): string {
 function progressText(context: ProjectAiContext): string {
   const metrics = context.metrics;
   const percent = metrics.percent === null ? UNKNOWN : String(metrics.percent) + "%";
+  const latest = metrics.latestStage ?? (metrics.taskTotal > 0 ? "全部完成" : "暂无已动工任务");
+  const slowest = metrics.slowestStage ?? (metrics.taskTotal > 0 ? "全部完成" : "暂无任务");
   return (
     "已完成 " + String(metrics.taskDone) + " / " + String(metrics.taskTotal) + " 项任务（" + percent + "），" +
-    "最新阶段：" + text(metrics.latestStage) + "，最慢阶段：" + text(metrics.slowestStage) + "。"
+    "最新阶段：" + latest + "，最慢阶段：" + slowest + "。"
   );
 }
 

@@ -151,4 +151,11 @@ describe("总结文档确定性补齐（P4）", () => {
     expect(document.issueTable?.categoryStats).toEqual([{ category: "规划部", count: 1 }]);
     expect(document.personalSummary).toBeUndefined();
   });
+  it("全部完成且最新 / 最慢阶段为空时写全部完成", () => {
+    const input = context();
+    input.metrics = { ...input.metrics, taskDone: input.metrics.taskTotal, percent: 100, latestStage: null, slowestStage: null };
+    const document = buildSummaryDocument(input, report());
+    expect(document.progressDetail?.text).toBe("已完成 2 / 2 项任务（100%），最新阶段：全部完成，最慢阶段：全部完成。");
+  });
+
 });

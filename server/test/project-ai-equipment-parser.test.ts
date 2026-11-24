@@ -46,4 +46,21 @@ describe("设备清单解析（P2）", () => {
       { name: "滑槽", itemCount: 1, quantities: [{ value: 10, unit: "个" }], representativeItems: ["C"] },
     ]);
   });
+  it("物料名称为空但分类与数量存在时仍计入分类", async () => {
+    const bytes = await workbookBytes((sheet) => {
+      sheet.addRow(["No", "分类名称", "物料名称/项目内容", "型号", "数量", "单位"]);
+      sheet.addRow([1, "单层桌子", "650×1300mm", "S12L650", 1, "套"]);
+      sheet.addRow([2, "L型单层桌子", "1300×1950mm", "", 2, "套"]);
+      sheet.addRow([3, "流利条格口滑槽", "", "", 207, "个"]);
+    });
+
+    const categories = await parseEquipmentWorkbook(bytes);
+
+    expect(categories).toEqual([
+      { name: "单层桌子", itemCount: 1, quantities: [{ value: 1, unit: "套" }], representativeItems: ["650×1300mm（S12L650）"] },
+      { name: "L型单层桌子", itemCount: 1, quantities: [{ value: 2, unit: "套" }], representativeItems: ["1300×1950mm"] },
+      { name: "流利条格口滑槽", itemCount: 1, quantities: [{ value: 207, unit: "个" }], representativeItems: ["流利条格口滑槽"] },
+    ]);
+  });
+
 });

@@ -458,7 +458,6 @@ export const ProjectAiSummaryReportSchema = z
       planRange: ProjectAiRangeSchema.default({ from: null, to: null }),
       reportRange: ProjectAiRangeSchema.default({ from: null, to: null }),
     }),
-    timeline: z.array(ProjectAiTimelineItemSchema).max(8).default([]),
     issues: z.object({
       total: z.number().int().min(0),
       done: z.number().int().min(0),
@@ -467,40 +466,6 @@ export const ProjectAiSummaryReportSchema = z
       summary: z.string().max(1000).default(""),
       currentItems: z.array(ProjectAiIssueItemSchema).max(50).default([]),
     }),
-    resultsAndRisks: z.object({
-      text: z.string().max(1500),
-      claims: z.array(ProjectAiClaimSchema).max(20).default([]),
-      risks: z.array(ProjectAiClaimSchema).max(20).default([]),
-    }),
-    handoff: z.object({
-      existing: z
-        .array(
-          z.object({
-            text: z.string().min(1).max(600),
-            owner: z.string().max(100),
-            nextStep: z.string().max(300),
-            type: ProjectAiClaimTypeSchema,
-            sources: z.array(ProjectAiSourceSchema).min(1).max(10),
-          }),
-        )
-        .max(20)
-        .default([]),
-      suggestions: z
-        .array(
-          z.object({
-            text: z.string().min(1).max(600),
-            reason: z.string().max(600),
-            nextStep: z.string().max(300),
-            acceptance: z.string().max(300),
-            type: ProjectAiClaimTypeSchema,
-            needsHumanConfirmation: z.boolean(),
-            sources: z.array(ProjectAiSourceSchema).min(1).max(10),
-          }),
-        )
-        .max(20)
-        .default([]),
-    }),
-    notes: z.array(ProjectAiClaimSchema).max(20).default([]),
   })
   .openapi("ProjectAiSummaryReport");
 

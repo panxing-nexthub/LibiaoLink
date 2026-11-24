@@ -1,8 +1,14 @@
+import io
+import tempfile
 import unittest
 
 import uuid
+from pathlib import Path
 
-from worker import PageSummary, extension_of, file_kind, jsonable, parse_json_content
+import pymupdf as fitz
+from PIL import Image
+
+from worker import PageSummary, extension_of, extract_page_picture, file_kind, jsonable, parse_json_content
 
 
 class WorkerUnitTests(unittest.TestCase):
@@ -46,6 +52,44 @@ class WorkerUnitTests(unittest.TestCase):
     def test_page_summary_rejects_empty_evidence(self):
         with self.assertRaises(Exception):
             PageSummary(documentType="pdf", purpose="test", summary="test", keyFacts=[{"category": "other", "key": "k", "value": 1, "unit": None, "evidence": "", "confidence": 0.9}])
+
+
+class PictureExtractionTests(unittest.TestCase):
+    @staticmethod
+    def _png(width: int, height: int, color: tuple[int, int, int]) -> bytes:
+        buffer = io.BytesIO()
+        Image.new("RGB", (width, height), color).save(buffer, "PNG")
+        return buffer.getvalue()
+
+    def test_extracts_dominant_picture_instead_of_page_render(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "agreement.pdf"
+            doc = fitz.open()
+            page = doc.new_page(width=595, height=842)
+            page.insert_image(fitz.Rect(40, 40, 80, 80), stream=self._png(64, 64, (200, 0, 0)))
+            page.insert_image(fitz.Rect(40, 150, 555, 500), stream=self._png(1200, 800, (10, 120, 200)))
+            doc.save(pdf_path)
+            doc.close()
+
+            doc = fitz.open(pdf_path)
+            page = doc.load_page(0)
+            picture = extract_page_picture(page, Path(tmp), 0)
+            doc.close()
+
+            self.assertIsNotNone(picture)
+            self.assertGreaterEqual(picture["width"], 1000)
+            self.assertGreaterEqual(picture["height"], 600)
+            with Image.open(picture["path"]) as image:
+                self.assertEqual(image.format, "PNG")
+                self.assertEqual((image.width, image.height), (picture["width"], picture["height"]))
+
+    def test_returns_none_when_page_has_no_embedded_picture(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = fitz.open()
+            doc.new_page(width=595, height=842)
+            page = doc.load_page(0)
+            self.assertIsNone(extract_page_picture(page, Path(tmp), 0))
+            doc.close()
 
 
 if __name__ == "__main__":

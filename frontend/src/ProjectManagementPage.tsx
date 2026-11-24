@@ -1176,21 +1176,62 @@ function BlankCell({ label, cellKey }: { label: string; cellKey: string }) {
   return <div aria-label={label} data-project-management-cell={cellKey} className="min-h-11" />;
 }
 
-function ReadOnlyStageCell({ stageName, value, label, cellKey }: { stageName: string; value: string; label: string; cellKey: string }) {
+function StageCell({
+  row,
+  ariaLabel,
+  cellKey,
+  editable,
+  options,
+  onChange,
+  compact = false,
+}: {
+  row: PmRow;
+  ariaLabel: string;
+  cellKey: string;
+  editable: boolean;
+  options: SelectOption[];
+  onChange: (row: PmRow, value: string | null) => void;
+  compact?: boolean;
+}) {
+  const locale = useLocale();
+  const stage = effectiveStageOf(row);
+  const stageName = stage === null ? "" : pmStageNameOf(stage);
+  const label = stageName === "" ? "" : stageText(locale, stageName);
+  const chipClass = compact ? PM_GANTT_TAG_CLASS : PM_TABLE_TAG_CLASS;
+  const display = label === "" ? (
+    <span className={compact ? "text-zinc-400" : "text-zinc-300"}>—</span>
+  ) : (
+    <span className={chipClass + " " + pmStageTagClass(stageName)} title={compact ? label : undefined}>
+      {label}
+    </span>
+  );
+
   return (
     <div
-      aria-label={label}
+      aria-label={editable ? undefined : ariaLabel}
       data-project-management-cell={cellKey}
-      title={value === "" ? undefined : value}
-      className="flex min-h-11 min-w-0 items-center justify-start px-2 py-3 text-left"
+      data-project-management-gantt-editor={compact ? "stage" : undefined}
+      title={editable || label === "" ? undefined : label}
+      className={compact
+        ? "flex h-full min-h-0 w-full min-w-0 items-center"
+        : editable ? "flex min-h-11 items-stretch" : "flex min-h-11 min-w-0 items-center justify-start px-2 py-3 text-left"}
     >
-      {value === "" ? (
-        <span className="text-zinc-300">—</span>
-      ) : (
-        <span className={PM_TABLE_TAG_CLASS + " " + pmStageTagClass(stageName)}>
-          {value}
-        </span>
-      )}
+      {editable ? (
+        <InlineOptionCell
+          value={row.currentStageOverride ?? ""}
+          options={options}
+          ariaLabel={ariaLabel}
+          bare
+          triggerClassName={compact
+            ? "h-full min-h-0 w-full text-[length:var(--pm-gantt-cell-size,10px)] hover:bg-blue-50/40"
+            : "min-h-11 w-full !justify-start px-2 py-3 !text-left text-xs leading-5 text-zinc-600 hover:bg-blue-50/40"}
+          display={display}
+          onPick={(value) => {
+            // 单选阶段再次点击已勾选项 = 取消人工覆盖，回到「自动识别」。
+            onChange(row, value !== "" && value !== row.currentStageOverride ? value : null);
+          }}
+        />
+      ) : display}
     </div>
   );
 }
@@ -2566,6 +2607,8 @@ function PmGanttProjectCells({
   onEngineerChange,
   onEngineerHandedOverToggle,
   onMethodChange,
+  stageOptions,
+  onStageOverrideChange,
   onDateOverrideChange,
 }: {
   row: PmRow;
@@ -2583,10 +2626,11 @@ function PmGanttProjectCells({
   onEngineerChange: (row: PmRow, ids: string[]) => void;
   onEngineerHandedOverToggle: (row: PmRow) => void;
   onMethodChange: (row: PmRow, value: ProjectManagementMethod) => void;
+  stageOptions: SelectOption[];
+  onStageOverrideChange: (row: PmRow, value: string | null) => void;
   onDateOverrideChange: (row: PmRow, field: PmDateOverrideKey, value: string | null) => void;
 }) {
   const t = useT();
-  const locale = useLocale();
   const managerNames = memberDisplayNames(row.managerIds, row.managerNames, directory);
   const engineerNames = memberDisplayNames(
     row.implementationEngineerIds,
@@ -2603,9 +2647,6 @@ function PmGanttProjectCells({
   const rowTitle = row.name.trim() === "" ? row.code.trim() || t("pm.board.untitled") : row.name;
   const method = row.implementationMethod;
   const methodLabel = method === "" ? "" : t(METHOD_META[method].labelKey);
-  const stage = effectiveStageOf(row);
-  const stageName = stage === null ? "" : pmStageNameOf(stage);
-  const stageLabel = stageName === "" ? "" : stageText(locale, stageName);
   const locationLabel =
     row.region === "" || row.region === "未分类" ? "" : dictLabel(dicts, "region", row.region);
   const plannedStart = effectiveDateOf(row, "start");
@@ -2744,20 +2785,17 @@ function PmGanttProjectCells({
             </div>
           );
         } else if (column.key === "stage") {
-          content =
-            stageLabel === "" ? (
-              <span className="text-zinc-400">—</span>
-            ) : (
-              <span
-                className={
-                  PM_GANTT_TAG_CLASS + " " +
-                  pmStageTagClass(stageName)
-                }
-                title={stageLabel}
-              >
-                {stageLabel}
-              </span>
-            );
+          content = (
+            <StageCell
+              row={row}
+              ariaLabel={t("pm.column.stage") + " " + rowTitle}
+              cellKey={String(sequence) + "-stage"}
+              editable={editable}
+              options={stageOptions}
+              onChange={onStageOverrideChange}
+              compact
+            />
+          );
         } else if (column.key === "location") {
           content =
             locationLabel === "" ? (
@@ -2809,6 +2847,8 @@ function PmImplementationGantt({
   onEngineerChange,
   onEngineerHandedOverToggle,
   onMethodChange,
+  stageOptions,
+  onStageOverrideChange,
   onDateOverrideChange,
 }: {
   rows: readonly PmRow[];
@@ -2821,6 +2861,8 @@ function PmImplementationGantt({
   onEngineerChange: (row: PmRow, ids: string[]) => void;
   onEngineerHandedOverToggle: (row: PmRow) => void;
   onMethodChange: (row: PmRow, value: ProjectManagementMethod) => void;
+  stageOptions: SelectOption[];
+  onStageOverrideChange: (row: PmRow, value: string | null) => void;
   onDateOverrideChange: (row: PmRow, field: PmDateOverrideKey, value: string | null) => void;
 }) {
   const t = useT();
@@ -3303,7 +3345,7 @@ function PmImplementationGantt({
     for (let index = 0; index < allColumns.length; index += 1) {
       const entry = allColumns[index];
       const hasMore = index < allColumns.length - 1;
-      const reserve = hasMore ? ganttOverflowWidth : 0;
+      const reserve = hasMore && ganttTableWidth < ganttNaturalWidth ? ganttOverflowWidth : 0;
       if (visible.length > 0 && usedWidth + entry.width + reserve > ganttTableWidth) {
         break;
       }
@@ -3334,7 +3376,7 @@ function PmImplementationGantt({
       hiddenColumnCount,
       overflowWidth: Math.max(ganttMinOverflowWidth, ganttTableWidth - usedWidth),
     };
-  }, [ganttColumnWidths, ganttMinOverflowWidth, ganttOverflowWidth, ganttTableWidth, ganttUiScale]);
+  }, [ganttColumnWidths, ganttMinOverflowWidth, ganttNaturalWidth, ganttOverflowWidth, ganttTableWidth, ganttUiScale]);
 
   const hiddenColumnsLabel = useMemo(() => {
     if (ganttColumnLayout.hiddenColumnCount === 0) {
@@ -4565,6 +4607,8 @@ function PmImplementationGantt({
                           onEngineerChange={onEngineerChange}
                           onEngineerHandedOverToggle={onEngineerHandedOverToggle}
                           onMethodChange={onMethodChange}
+                          stageOptions={stageOptions}
+                          onStageOverrideChange={onStageOverrideChange}
                           onDateOverrideChange={onDateOverrideChange}
                         />
                       </div>
@@ -5911,29 +5955,15 @@ export default function ProjectManagementPage({
                               />
                             );
                           } else if (column.key === "stage") {
-                            const effectiveStage = effectiveStageOf(row);
-                            const stageName = effectiveStage === null ? "" : pmStageNameOf(effectiveStage);
-                            const stageLabel = stageName === "" ? "" : stageText(locale, stageName);
-                            content = rowEditable ? (
-                              <div data-project-management-cell={cellKey} className="flex min-h-11 items-stretch">
-                                <InlineOptionCell
-                                  value={row.currentStageOverride ?? ""}
-                                  options={stageOptions}
-                                  ariaLabel={ariaLabel}
-                                  bare
-                                  triggerClassName="min-h-11 w-full !justify-start px-2 py-3 !text-left text-xs leading-5 text-zinc-600 hover:bg-blue-50/40"
-                                  display={stageLabel === "" ? <span className="text-zinc-300">—</span> : <span className={PM_TABLE_TAG_CLASS + " " + pmStageTagClass(stageName)}>{stageLabel}</span>}
-                                  onPick={(value) => {
-                                    // 单选阶段再次点击已勾选项 = 取消人工覆盖，回到「自动识别」。
-                                    handleStageOverrideChange(
-                                      row,
-                                      value !== "" && value !== row.currentStageOverride ? value : null,
-                                    );
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <ReadOnlyStageCell stageName={stageName} value={stageLabel} label={ariaLabel} cellKey={cellKey} />
+                            content = (
+                              <StageCell
+                                row={row}
+                                ariaLabel={ariaLabel}
+                                cellKey={cellKey}
+                                editable={rowEditable}
+                                options={stageOptions}
+                                onChange={handleStageOverrideChange}
+                              />
                             );
                           } else if (column.key === "startup") {
                             const value = effectiveDateOf(row, "startup");
@@ -6107,6 +6137,8 @@ export default function ProjectManagementPage({
                 onEngineerChange={handleEngineerChange}
                 onEngineerHandedOverToggle={handleEngineerHandedOverToggle}
                 onMethodChange={handleMethodChange}
+                stageOptions={stageOptions}
+                onStageOverrideChange={handleStageOverrideChange}
                 onDateOverrideChange={handleDateOverrideChange}
               />
             </section>

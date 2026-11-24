@@ -49,6 +49,7 @@ type PmColumnKey =
 type PmTextColumnKey = "code" | "name" | "stage";
 type PmMultiColumnKey = "manager" | "engineer" | "location";
 type PmDateColumnKey = "startup" | "arrival" | "start" | "end";
+type PmImplementationDateKey = "start" | "end";
 type PmDateSort = { key: PmDateColumnKey; direction: "asc" | "desc" };
 type PmDateOverrideKey =
   | "startupCompletedAtOverride"
@@ -1046,6 +1047,9 @@ function EditableDateCell({
   cellKey,
   onChange,
   showAuto = false,
+  compact = false,
+  minDate,
+  maxDate,
 }: {
   valueIso: string;
   display: string;
@@ -1053,19 +1057,61 @@ function EditableDateCell({
   cellKey: string;
   onChange: (iso: string) => void;
   showAuto?: boolean;
+  compact?: boolean;
+  minDate?: string;
+  maxDate?: string;
 }) {
   return (
-    <div data-project-management-cell={cellKey} className="flex min-h-11 items-stretch">
+    <div data-project-management-cell={cellKey} className={compact ? "flex h-full shrink-0 items-stretch" : "flex min-h-11 items-stretch"}>
       <InlineDateCell
         valueIso={valueIso}
         ariaLabel={ariaLabel}
         bare
         showAuto={showAuto}
-        triggerClassName="min-h-11 w-full justify-start px-2 py-3 text-left text-xs leading-5 tabular-nums text-zinc-600 hover:bg-blue-50/40"
-        display={display === "" ? <span className="text-zinc-300">—</span> : display}
+        minDate={minDate}
+        maxDate={maxDate}
+        triggerClassName={compact
+          ? "h-full rounded-sm text-[length:var(--pm-gantt-tag-size,9px)] tabular-nums text-sky-700 hover:bg-sky-100"
+          : "min-h-11 w-full justify-start px-2 py-3 text-left text-xs leading-5 tabular-nums text-zinc-600 hover:bg-blue-50/40"}
+        display={display === "" ? <span className="text-zinc-400">—</span> : display}
         onChange={onChange}
       />
     </div>
+  );
+}
+
+function ImplementationDateCell({
+  row,
+  dateKey,
+  ariaLabel,
+  cellKey,
+  onChange,
+  compact = false,
+}: {
+  row: PmRow;
+  dateKey: PmImplementationDateKey;
+  ariaLabel: string;
+  cellKey: string;
+  onChange: (row: PmRow, field: PmDateOverrideKey, value: string | null) => void;
+  compact?: boolean;
+}) {
+  const locale = useLocale();
+  const date = effectiveDateOf(row, dateKey);
+  const isStart = dateKey === "start";
+  const oppositeDate = effectiveDateOf(row, isStart ? "end" : "start") ?? "";
+  const field = isStart ? "plannedStartDateOverride" : "plannedEndDateOverride";
+  return (
+    <EditableDateCell
+      valueIso={date ?? ""}
+      display={compact ? pmGanttShortDate(date) ?? "" : date === null ? "" : fullDateText(locale, date)}
+      ariaLabel={ariaLabel}
+      cellKey={cellKey}
+      compact={compact}
+      showAuto
+      maxDate={isStart ? oppositeDate : undefined}
+      minDate={isStart ? undefined : oppositeDate}
+      onChange={(iso) => onChange(row, field, iso === "" ? null : iso)}
+    />
   );
 }
 
@@ -1984,27 +2030,14 @@ const pmGanttVisibleRangeLabel = (startIso: string, endIso: string): string =>
     ? startIso.slice(5) + " – " + endIso.slice(5)
     : startIso + " – " + endIso;
 
-const pmGanttDateRangeOf = (row: PmRow): {
-  start: string | null;
-  end: string | null;
-  title: string;
-} => {
-  const rawStart = effectiveDateOf(row, "start");
-  const rawEnd = effectiveDateOf(row, "end");
-  const start = rawStart ?? rawEnd;
-  const end = rawEnd ?? rawStart;
-  return {
-    start,
-    end,
-    title: start === null && end === null ? "" : (start ?? "—") + " → " + (end ?? "—"),
-  };
+const pmGanttDateRangeOf = (row: PmRow) => {
+  const start = effectiveDateOf(row, "start");
+  const end = effectiveDateOf(row, "end");
+  return { start: start ?? end, end: end ?? start };
 };
 
 const pmGanttItemOf = (row: PmRow): PmGanttItem => {
-  const rawStart = effectiveDateOf(row, "start");
-  const rawEnd = effectiveDateOf(row, "end");
-  const start = rawStart ?? rawEnd;
-  const end = rawEnd ?? rawStart;
+  const { start, end } = pmGanttDateRangeOf(row);
   return {
     row,
     start,
@@ -2365,6 +2398,7 @@ function PmGanttProjectCells({
   onEngineerChange,
   onEngineerHandedOverToggle,
   onMethodChange,
+  onDateOverrideChange,
 }: {
   row: PmRow;
   sequence: number;
@@ -2381,6 +2415,7 @@ function PmGanttProjectCells({
   onEngineerChange: (row: PmRow, ids: string[]) => void;
   onEngineerHandedOverToggle: (row: PmRow) => void;
   onMethodChange: (row: PmRow, value: ProjectManagementMethod) => void;
+  onDateOverrideChange: (row: PmRow, field: PmDateOverrideKey, value: string | null) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2405,9 +2440,8 @@ function PmGanttProjectCells({
   const stageLabel = stageName === "" ? "" : stageText(locale, stageName);
   const locationLabel =
     row.region === "" || row.region === "未分类" ? "" : dictLabel(dicts, "region", row.region);
-  const dateRange = pmGanttDateRangeOf(row);
-  const dateStartLabel = pmGanttShortDate(dateRange.start);
-  const dateEndLabel = pmGanttShortDate(dateRange.end);
+  const plannedStart = effectiveDateOf(row, "start");
+  const plannedEnd = effectiveDateOf(row, "end");
   const cellClass =
     "flex min-w-0 items-center overflow-hidden whitespace-nowrap border-r border-zinc-200 text-[length:var(--pm-gantt-cell-size,10px)] text-zinc-700";
 
@@ -2503,19 +2537,44 @@ function PmGanttProjectCells({
             </div>
           );
         } else if (column.key === "dates") {
-          content =
-            dateStartLabel === null && dateEndLabel === null ? (
-              <span className="text-zinc-400">—</span>
-            ) : (
-              <span
-                className="flex min-w-0 items-center gap-0.5 overflow-hidden whitespace-nowrap text-[length:var(--pm-gantt-tag-size,9px)] font-normal tabular-nums"
-                title={dateRange.title === "" ? undefined : dateRange.title}
-              >
-                <span className="text-sky-700">{dateStartLabel ?? "—"}</span>
-                <span className="text-zinc-400">→</span>
-                <span className="text-sky-700">{dateEndLabel ?? "—"}</span>
-              </span>
-            );
+          content = (
+            <div
+              data-project-management-gantt-editor="dates"
+              className="flex h-full min-w-0 items-center gap-0.5 text-[length:var(--pm-gantt-tag-size,9px)] tabular-nums"
+              onClick={editable ? pmStopPropagation : undefined}
+              onKeyDown={editable ? pmStopPropagation : undefined}
+            >
+              {editable ? (
+                <ImplementationDateCell
+                  row={row}
+                  dateKey="start"
+                  ariaLabel={t("pm.column.planStart") + " " + rowTitle}
+                  cellKey={String(sequence) + "-start"}
+                  onChange={onDateOverrideChange}
+                  compact
+                />
+              ) : (
+                <span className={plannedStart === null ? "text-zinc-400" : "text-sky-700"} title={plannedStart ?? undefined}>
+                  {pmGanttShortDate(plannedStart) ?? "—"}
+                </span>
+              )}
+              <span aria-hidden="true" className="text-zinc-400">→</span>
+              {editable ? (
+                <ImplementationDateCell
+                  row={row}
+                  dateKey="end"
+                  ariaLabel={t("pm.column.planEnd") + " " + rowTitle}
+                  cellKey={String(sequence) + "-end"}
+                  onChange={onDateOverrideChange}
+                  compact
+                />
+              ) : (
+                <span className={plannedEnd === null ? "text-zinc-400" : "text-sky-700"} title={plannedEnd ?? undefined}>
+                  {pmGanttShortDate(plannedEnd) ?? "—"}
+                </span>
+              )}
+            </div>
+          );
         } else if (column.key === "stage") {
           content =
             stageLabel === "" ? (
@@ -2581,6 +2640,7 @@ function PmImplementationGantt({
   onEngineerChange,
   onEngineerHandedOverToggle,
   onMethodChange,
+  onDateOverrideChange,
 }: {
   rows: readonly PmRow[];
   directory: readonly DirectoryUser[];
@@ -2591,6 +2651,7 @@ function PmImplementationGantt({
   onEngineerChange: (row: PmRow, ids: string[]) => void;
   onEngineerHandedOverToggle: (row: PmRow) => void;
   onMethodChange: (row: PmRow, value: ProjectManagementMethod) => void;
+  onDateOverrideChange: (row: PmRow, field: PmDateOverrideKey, value: string | null) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2699,13 +2760,12 @@ function PmImplementationGantt({
               pmGanttScaledPx(PM_GANTT_CELL_PADDING, ganttUiScale)) +
             pmGanttScaledPx(12, ganttUiScale),
         );
-        const dateRange = pmGanttDateRangeOf(row);
         bump(
           "dates",
           pmGanttTextCellWidth(
-            (pmGanttShortDate(dateRange.start) ?? "—") +
+            (pmGanttShortDate(effectiveDateOf(row, "start")) ?? "—") +
               " → " +
-              (pmGanttShortDate(dateRange.end) ?? "—"),
+              (pmGanttShortDate(effectiveDateOf(row, "end")) ?? "—"),
             textFont,
             ganttUiScale,
           ),
@@ -4326,6 +4386,7 @@ function PmImplementationGantt({
                           onEngineerChange={onEngineerChange}
                           onEngineerHandedOverToggle={onEngineerHandedOverToggle}
                           onMethodChange={onMethodChange}
+                          onDateOverrideChange={onDateOverrideChange}
                         />
                       </div>
                       <div
@@ -4930,6 +4991,18 @@ export default function ProjectManagementPage({
   };
 
   const handleDateOverrideChange = (row: PmRow, field: PmDateOverrideKey, value: string | null): void => {
+    if (field === "plannedStartDateOverride" || field === "plannedEndDateOverride") {
+      const current = rowsRef.current.find((candidate) => candidate.clientId === row.clientId) ?? row;
+      if (current[field] === value) return;
+
+      const next = { ...current, [field]: value };
+      const start = effectiveDateOf(next, "start");
+      const end = effectiveDateOf(next, "end");
+      if (start !== null && end !== null && start > end) {
+        showNotice("error", t("pm.gantt.timeFilter.invalid"));
+        return;
+      }
+    }
     touchRow(row.clientId, { [field]: value });
     persistRow(row.clientId);
   };
@@ -5444,34 +5517,15 @@ export default function ProjectManagementPage({
                             ) : (
                               <ReadOnlyCell value={value === null ? "" : fullDateText(locale, value)} label={ariaLabel} cellKey={cellKey} />
                             );
-                          } else if (column.key === "start") {
-                            const value = effectiveDateOf(row, "start");
+                          } else if (column.key === "start" || column.key === "end") {
+                            const value = effectiveDateOf(row, column.key);
                             content = rowEditable ? (
-                              <EditableDateCell
-                                valueIso={value ?? ""}
-                                display={value === null ? "" : fullDateText(locale, value)}
+                              <ImplementationDateCell
+                                row={row}
+                                dateKey={column.key}
                                 ariaLabel={ariaLabel}
                                 cellKey={cellKey}
-                                showAuto
-                                onChange={(iso) => {
-                                  handleDateOverrideChange(row, "plannedStartDateOverride", iso === "" ? null : iso);
-                                }}
-                              />
-                            ) : (
-                              <ReadOnlyCell value={value === null ? "" : fullDateText(locale, value)} label={ariaLabel} cellKey={cellKey} />
-                            );
-                          } else if (column.key === "end") {
-                            const value = effectiveDateOf(row, "end");
-                            content = rowEditable ? (
-                              <EditableDateCell
-                                valueIso={value ?? ""}
-                                display={value === null ? "" : fullDateText(locale, value)}
-                                ariaLabel={ariaLabel}
-                                cellKey={cellKey}
-                                showAuto
-                                onChange={(iso) => {
-                                  handleDateOverrideChange(row, "plannedEndDateOverride", iso === "" ? null : iso);
-                                }}
+                                onChange={handleDateOverrideChange}
                               />
                             ) : (
                               <ReadOnlyCell value={value === null ? "" : fullDateText(locale, value)} label={ariaLabel} cellKey={cellKey} />
@@ -5601,6 +5655,7 @@ export default function ProjectManagementPage({
                 onEngineerChange={handleEngineerChange}
                 onEngineerHandedOverToggle={handleEngineerHandedOverToggle}
                 onMethodChange={handleMethodChange}
+                onDateOverrideChange={handleDateOverrideChange}
               />
             </section>
           ) : null}

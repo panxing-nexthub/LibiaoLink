@@ -373,6 +373,74 @@ describe("项目管理独立记录服务（2026-11-17）", () => {
     expect(repository.versionChecks).toEqual([{ id: RECORD_ID, version: 0 }]);
   });
 
+  it("实施日期允许只填一端或同一天，拒绝写入逆序日期", async () => {
+    const { service, repository } = makeService();
+    const invalid = { code: "VALIDATION_FAILED", message: "计划实施完成日期不能早于计划实施开始日期" };
+    await expect(service.create({
+      plannedStartDateOverride: "2026-09-20",
+      plannedEndDateOverride: "2026-09-19",
+    })).rejects.toMatchObject(invalid);
+    expect(repository.insertCalls).toHaveLength(0);
+
+    const created = await service.create({ plannedEndDateOverride: "2026-09-20" });
+    expect(created.plannedStartDateOverride).toBeNull();
+    await expect(service.update(RECORD_ID, {
+      version: created.version,
+      plannedStartDateOverride: "2026-09-20",
+    })).resolves.toMatchObject({ plannedStartDateOverride: "2026-09-20", plannedEndDateOverride: "2026-09-20" });
+    await expect(service.update(RECORD_ID, {
+      version: 1,
+      plannedEndDateOverride: "2026-09-19",
+    })).rejects.toMatchObject(invalid);
+  });
+
+  it("实施日期写入和恢复自动时按有效日期校验", async () => {
+    const { service, snapshots } = makeService();
+    const invalid = { code: "VALIDATION_FAILED", message: "计划实施完成日期不能早于计划实施开始日期" };
+    snapshots.snapshots.set("PM-001", {
+      ...EMPTY_PROJECT_MANAGEMENT_PROJECT_SNAPSHOT,
+      plannedStartDate: "2026-09-20",
+      plannedEndDate: "2026-09-25",
+    });
+    await expect(service.create({
+      code: "PM-001",
+      plannedStartDateOverride: "2026-09-26",
+    })).rejects.toMatchObject(invalid);
+    const created = await service.create({
+      code: "PM-001",
+      plannedStartDateOverride: "2026-09-15",
+      plannedEndDateOverride: "2026-09-18",
+    });
+    await expect(service.update(RECORD_ID, {
+      version: created.version,
+      plannedStartDateOverride: null,
+    })).rejects.toMatchObject(invalid);
+    const reopened = await service.update(RECORD_ID, {
+      version: created.version,
+      plannedEndDateOverride: null,
+    });
+    expect(reopened).toMatchObject({ plannedEndDateOverride: null, plannedEndDate: "2026-09-25" });
+    await expect(service.update(RECORD_ID, {
+      version: reopened.version,
+      plannedStartDateOverride: null,
+    })).resolves.toMatchObject({ plannedStartDateOverride: null, plannedStartDate: "2026-09-20" });
+  });
+
+  it("历史逆序日期覆盖值未变时可以保存其它字段", async () => {
+    const { service, repository } = makeService();
+    repository.rows = [makeRow({
+      name: "历史记录",
+      plannedStartDateOverride: "2026-09-20",
+      plannedEndDateOverride: "2026-09-19",
+    })];
+    await expect(service.update(RECORD_ID, {
+      version: 0,
+      name: "历史记录改名",
+      plannedStartDateOverride: "2026-09-20",
+      plannedEndDateOverride: "2026-09-19",
+    })).resolves.toMatchObject({ name: "历史记录改名", version: 1 });
+  });
+
   it("创建 / 列表按 code 附带项目空间只读快照；无匹配项目返回空值", async () => {
     const { service, repository, snapshots } = makeService();
     snapshots.snapshots.set("PM-001", {

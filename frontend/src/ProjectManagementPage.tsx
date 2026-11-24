@@ -17,7 +17,7 @@ import { directoryMemberOptions, type DirectoryUser } from "./directory";
 import { dictLabel, type Dicts } from "./dicts";
 import { fullDateText, stageText, useLocale, useT, type TextKey } from "./i18n";
 import type { ProjectManagerCandidate } from "./projectManagerCandidates";
-import { PROJECT_BASE_HASH } from "./useHashRoute";
+import { PROJECT_BASE_HASH, projectManagementHref, type ProjectManagementView } from "./useHashRoute";
 import { stageNameOf } from "./taskApi";
 import {
   createProjectManagementRecord,
@@ -109,11 +109,10 @@ const pmStageNameOf = (stageKey: string | null): string =>
 const pmStageTagClass = (stageName: string): string =>
   PM_EXTRA_STAGE_TAG_CLASS[stageName] ?? STAGE_TAG_CLASS[stageName] ?? "bg-zinc-200 text-zinc-600";
 
-const PM_VIEW_TABS = [
+const PM_VIEW_TABS: readonly { key: ProjectManagementView; labelKey: TextKey }[] = [
   { key: "table", labelKey: "pm.view.table" },
   { key: "implementationGantt", labelKey: "pm.view.implementationGantt" },
-] as const;
-type PmViewTabKey = (typeof PM_VIEW_TABS)[number]["key"];
+];
 const PM_INLINE_GANTT_TABS_QUERY = "(min-width: 1100px) and (max-height: 800px)";
 
 function focusProjectManagementViewTab(id: string): void {
@@ -552,7 +551,7 @@ const inputOf = (row: PmRow): ProjectManagementWriteInput => ({
 });
 
 
-function PmViewTabIcon({ view }: { view: PmViewTabKey }) {
+function PmViewTabIcon({ view }: { view: ProjectManagementView }) {
   const className = "h-[18px] w-[18px] shrink-0";
   if (view === "table") {
     return (
@@ -4646,6 +4645,7 @@ function PmImplementationGantt({
 
 
 type ProjectManagementPageProps = {
+  activeViewTab: ProjectManagementView;
   me: MeResponse;
   dicts: Dicts;
   directory: DirectoryUser[];
@@ -4706,6 +4706,7 @@ const pmTableMemberCellWidth = (names: readonly string[], font: string = PM_TABL
 };
 
 export default function ProjectManagementPage({
+  activeViewTab,
   me,
   dicts,
   directory,
@@ -4728,7 +4729,7 @@ export default function ProjectManagementPage({
   const [multiFilters, setMultiFilters] = useState<Partial<Record<PmMultiColumnKey, string[]>>>({});
   const [methodFilter, setMethodFilter] = useState<ProjectManagementMethod | "">("");
   const [dateSort, setDateSort] = useState<PmDateSort | null>(null);
-  const [activeViewTab, setActiveViewTab] = useState<PmViewTabKey>("table");
+  const viewTabToFocus = useRef<ProjectManagementView | null>(null);
   const [useInlineGanttTabs, setUseInlineGanttTabs] = useState(
     () => typeof window !== "undefined" && window.matchMedia(PM_INLINE_GANTT_TABS_QUERY).matches,
   );
@@ -4749,10 +4750,19 @@ export default function ProjectManagementPage({
 
   const consumeRowContextMenu = useCallback((): void => setRowContextMenu(null), []);
 
-  const selectViewTab = (key: PmViewTabKey): void => {
+  useLayoutEffect(() => {
+    if (viewTabToFocus.current !== activeViewTab) return;
+    viewTabToFocus.current = null;
+    focusProjectManagementViewTab("pm-view-tab-" + activeViewTab);
+  }, [activeViewTab]);
+
+  const selectViewTab = (key: ProjectManagementView): void => {
     setRowContextMenu(null);
-    setActiveViewTab(key);
-    focusProjectManagementViewTab("pm-view-tab-" + key);
+    viewTabToFocus.current = key === activeViewTab ? null : key;
+    if (key === activeViewTab) focusProjectManagementViewTab("pm-view-tab-" + key);
+
+    const hash = projectManagementHref(key);
+    if (window.location.hash !== hash) window.location.hash = hash;
   };
 
   const rowsRef = useRef<PmRow[]>(rows);
@@ -5543,7 +5553,11 @@ export default function ProjectManagementPage({
   return (
     <div className="min-h-screen">
       <AppHeader me={me} />
-      <main data-project-management-layout="" className="w-full px-4 pb-10 pt-[var(--pm-page-space,1rem)] sm:px-6">
+      <main
+        data-project-management-layout=""
+        data-close-popovers-on-hash-change=""
+        className="w-full px-4 pb-10 pt-[var(--pm-page-space,1rem)] sm:px-6"
+      >
         <div data-project-management-page="" className="w-full space-y-[var(--pm-page-space,1rem)]">
           {loadState === "error" ? (
             <div

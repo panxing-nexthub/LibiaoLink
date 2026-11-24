@@ -23,6 +23,7 @@ export type PopoverPlacement = "below" | "right" | "rightEdge";
 /**
  * 触发器 + 浮层的定位 / 关闭口径（与分类筛选的日期选择器同一套实现）：
  * 浮层 fixed 定位、跟随触发器（窗口缩放 / 滚动时重算）；点触发器与浮层之外、按 Esc 关闭。
+ * 触发器位于 data-close-popovers-on-hash-change 区域内时，hash 导航也会关闭浮层。
  * 浮层内容由调用方用 `createPortal` 挂到 body —— 避免被弹窗的毛玻璃 / overflow 影响定位与裁剪。
  */
 export function usePopover(
@@ -93,11 +94,15 @@ export function usePopover(
         setOpen(false);
       }
     };
+    const closeOnHashChange = Boolean(triggerRef.current?.closest("[data-close-popovers-on-hash-change]"));
+    const handleHashChange = (): void => setOpen(false);
+    if (closeOnHashChange) window.addEventListener("hashchange", handleHashChange);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
+      if (closeOnHashChange) window.removeEventListener("hashchange", handleHashChange);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
       document.removeEventListener("mousedown", handlePointerDown);

@@ -183,7 +183,13 @@ export type ProjectAiExtractedField = {
   confidence: number;
 };
 
-export type ProjectAiAgreementImage = { pageNo: number | null; url: string | null; caption: string | null };
+export type ProjectAiAgreementImage = {
+  id: string;
+  manual: boolean;
+  pageNo: number | null;
+  url: string | null;
+  caption: string | null;
+};
 
 export type ProjectAiAgreement = {
   fileName: string;
@@ -192,8 +198,8 @@ export type ProjectAiAgreement = {
   customer: ProjectAiExtractedField;
   projectAddress: ProjectAiExtractedField;
   background: ProjectAiExtractedField;
-  layout: ProjectAiAgreementImage;
-  threeD: ProjectAiAgreementImage;
+  layout: ProjectAiAgreementImage[];
+  threeD: ProjectAiAgreementImage[];
   extractedAt: string;
 };
 
@@ -403,6 +409,18 @@ export function uploadProjectAiAgreementImage(
   return apiRequest<{ ok: boolean }>(
     "/api/v1/projects/" + encodeURIComponent(projectId) + "/ai-agreement-images/" + kind,
     { method: "POST", body: form },
+  );
+}
+
+/** 移除一张人工布局图 / 三维图；需要 project.export。 */
+export function deleteProjectAiAgreementImage(
+  projectId: string,
+  kind: "layout" | "three_d",
+  imageId: string,
+): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>(
+    "/api/v1/projects/" + encodeURIComponent(projectId) + "/ai-agreement-images/" + kind + "/" + encodeURIComponent(imageId),
+    { method: "DELETE" },
   );
 }
 

@@ -100,8 +100,8 @@ function context(): ProjectAiContext {
       customer: { status: "not_found", value: null, evidence: null, sourcePage: null, confidence: 0 },
       projectAddress: { status: "found", value: "广州市", evidence: "项目地址：广州市", sourcePage: 2, confidence: 0.8 },
       background: { status: "found", value: "背景摘要", evidence: "背景", sourcePage: 2, confidence: 0.6 },
-      layout: { pageNo: 12, url: "/api/v1/projects/" + PROJECT_ID + "/ai-agreement-images/layout", caption: "技术协议第 12 页" },
-      threeD: { pageNo: null, url: null, caption: null },
+      layout: [{ id: "auto-0", manual: false, pageNo: 12, url: "/api/v1/projects/" + PROJECT_ID + "/ai-agreement-images/layout", caption: "技术协议第 12 页" }],
+      threeD: [],
       extractedAt: "2026-01-01T00:00:00.000Z",
     },
     equipment: {

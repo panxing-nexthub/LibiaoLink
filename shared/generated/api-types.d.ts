@@ -14908,11 +14908,13 @@ export interface components {
             customer: components["schemas"]["ProjectAiExtractedField"];
             projectAddress: components["schemas"]["ProjectAiExtractedField"];
             background: components["schemas"]["ProjectAiExtractedField"];
-            layout: components["schemas"]["ProjectAiAgreementImage"];
-            threeD: components["schemas"]["ProjectAiAgreementImage"];
+            layout: components["schemas"]["ProjectAiAgreementImage"][];
+            threeD: components["schemas"]["ProjectAiAgreementImage"][];
             extractedAt: components["schemas"]["DateTime"];
         } | null;
         ProjectAiAgreementImage: {
+            id: string;
+            manual: boolean;
             pageNo: number | null;
             url: string | null;
             caption: string | null;

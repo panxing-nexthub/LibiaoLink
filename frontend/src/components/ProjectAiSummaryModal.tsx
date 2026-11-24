@@ -1,10 +1,28 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "../i18n";
 import { lockBodyScroll } from "../scrollLock";
 import { formatDateTime } from "../projectApi";
-import { enqueueProjectDocumentAnalysis, fetchProjectAiSummary, fetchProjectDocumentAnalysis, generateProjectAiSummary, type ProjectAiClaim, type ProjectAiSummary, type ProjectAiSummaryReport } from "../projectAiApi";
+import {
+  enqueueProjectDocumentAnalysis,
+  fetchProjectAiContext,
+  fetchProjectAiSummary,
+  fetchProjectAiSummaryIssues,
+  fetchProjectAiSummaryReports,
+  fetchProjectDocumentAnalysis,
+  generateProjectAiSummary,
+  uploadProjectAiAgreementImage,
+  type ProjectAiClaim,
+  type ProjectAiContext,
+  type ProjectAiSummary,
+  type ProjectAiSummaryIssue,
+  type ProjectAiSummaryReport,
+  type ProjectAiSummaryReportEntry,
+} from "../projectAiApi";
+import { buildProjectSummaryView, type SummaryView } from "../projectSummaryView";
+import { exportProjectSummaryPdf } from "../projectSummaryPdf";
 import { ProjectAiIcon } from "./ProjectAiIcon";
+import { ProjectSummaryDocument } from "./ProjectSummaryDocument";
 import { useFocusTrap } from "./useFocusTrap";
 
 type ProjectAiSummaryModalProps = {
@@ -68,7 +86,7 @@ function ReportBody({ report }: { report: ProjectAiSummaryReport }) {
   const resultSources = mergeSources(report.resultsAndRisks.claims.concat(report.resultsAndRisks.risks));
   return (
     <>
-      <h2 data-ai-report-title="true" className="text-xl font-semibold tracking-tight text-zinc-900">{report.title}</h2>
+      <h2 className="text-xl font-semibold tracking-tight text-zinc-900">{report.title}</h2>
 
       <div className="mt-2 rounded-xl bg-zinc-50/80 p-3.5 text-[13px] leading-6 text-zinc-700">
         <p className="whitespace-pre-wrap">{report.summary.text}</p>
@@ -252,6 +270,8 @@ function ReportBody({ report }: { report: ProjectAiSummaryReport }) {
 export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModalProps) {
   const t = useT();
   const trapRef = useFocusTrap<HTMLDivElement>();
+  /** 缩略图大图预览开着时，Esc 先关预览，不关总结弹窗。 */
+  const previewOpenRef = useRef(false);
   const [summary, setSummary] = useState<ProjectAiSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -261,12 +281,19 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
   const [error, setError] = useState<string | null>(null);
   const [errorKind, setErrorKind] = useState<"load" | "generate" | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [extras, setExtras] = useState<{
+    context: ProjectAiContext | null;
+    reports: ProjectAiSummaryReportEntry[];
+    issues: ProjectAiSummaryIssue[];
+  }>({ context: null, reports: [], issues: [] });
 
   useEffect(() => lockBodyScroll(), []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape" && !previewOpenRef.current) onClose();
     };
     document.addEventListener("keydown", onKey, true);
     return () => { document.removeEventListener("keydown", onKey, true); };
@@ -285,6 +312,22 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
     // t 随语言切换变化，但这里只在打开 / 重试时取一次；语言切换不影响已取到的报告。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id, reloadTick]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetchProjectAiContext(project.id).catch(() => null),
+      fetchProjectAiSummaryReports(project.id).catch(() => [] as ProjectAiSummaryReportEntry[]),
+      fetchProjectAiSummaryIssues(project.id).catch(() => [] as ProjectAiSummaryIssue[]),
+    ]).then(([context, reports, issues]) => {
+      if (!cancelled) setExtras({ context, reports, issues });
+    });
+    return () => { cancelled = true; };
+  }, [project.id, reloadTick, summary?.generatedAt]);
+
+  const documentView: SummaryView | null = summary === null
+    ? null
+    : buildProjectSummaryView({ context: extras.context, summary, reports: extras.reports, issues: extras.issues });
 
   const generate = async (force: boolean) => {
     if (generating) return;
@@ -330,6 +373,31 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
     }
   };
 
+  const replaceAgreementImage = async (kind: "layout" | "three_d", file: File) => {
+    await uploadProjectAiAgreementImage(project.id, kind, file);
+    // 重新拉取上下文：人工图 URL 带版本参数，刷新后立即可见。
+    setReloadTick((tick) => tick + 1);
+  };
+
+  const exportPdf = async () => {
+    if (exporting) return;
+    const root = scrollRef.current?.querySelector<HTMLElement>("[data-ai-summary-document]");
+    if (root === null || root === undefined) return;
+    setExporting(true);
+    setError(null);
+    setErrorKind(null);
+    try {
+      const code = summary?.report.overview.projectCode ?? project.code;
+      const name = summary?.report.overview.projectName ?? project.description;
+      await exportProjectSummaryPdf(root, "[" + code + "] " + name + " 项目总结");
+    } catch {
+      setError(t("ai.export.failed"));
+      setErrorKind("generate");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const busy = loading || generating;
   return createPortal(
     <div
@@ -357,6 +425,17 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
             {summary === null || busy ? null : (
               <button
                 type="button"
+                data-ai-export-pdf="true"
+                disabled={exporting}
+                onClick={() => { void exportPdf(); }}
+                className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {exporting ? t("ai.export.running") : t("ai.export.pdf")}
+              </button>
+            )}
+            {summary === null || busy ? null : (
+              <button
+                type="button"
                 data-ai-regenerate="true"
                 onClick={() => { void generate(true); }}
                 className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 transition hover:bg-zinc-50"
@@ -379,7 +458,7 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {loading ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-zinc-400">
               <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6 animate-spin" aria-hidden="true">
@@ -447,7 +526,19 @@ export function ProjectAiSummaryModal({ project, onClose }: ProjectAiSummaryModa
                   </button>
                 </div>
               ) : null}
-              <ReportBody report={summary.report} />
+              {documentView === null ? null : (
+                <ProjectSummaryDocument
+                  view={documentView}
+                  onPreviewOpenChange={(open) => { previewOpenRef.current = open; }}
+                  onReplaceImage={extras.context?.agreement == null ? undefined : replaceAgreementImage}
+                />
+              )}
+              <details data-ai-extra="true" className="mt-5 rounded-xl border border-zinc-100 bg-zinc-50/40 px-3 py-2">
+                <summary className="cursor-pointer select-none text-[12px] font-medium text-zinc-500">{t("ai.doc.extra")}</summary>
+                <div className="mt-3">
+                  <ReportBody report={summary.report} />
+                </div>
+              </details>
               <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-zinc-100 pt-3 text-[11px] text-zinc-400">
                 <span>{t("ai.generatedAt", { time: formatDateTime(summary.generatedAt) })}</span>
                 {summary.generatedByName === null ? null : <span>{t("ai.generatedBy", { name: summary.generatedByName })}</span>}

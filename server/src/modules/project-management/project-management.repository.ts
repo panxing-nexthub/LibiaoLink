@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { users } from "../../db/schema/identity.js";
@@ -153,25 +153,4 @@ export class ProjectManagementRepository {
     return rows;
   }
 
-  async listActiveUsersByIds(ids: readonly string[]): Promise<ProjectManagementUserSnapshot[]> {
-    if (ids.length === 0) {
-      return [];
-    }
-    return this.database.db
-      .select({
-        userId: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        status: users.status,
-        removedAt: users.removedAt,
-      })
-      .from(users)
-      .where(
-        and(
-          inArray(users.id, Array.from(new Set(ids))),
-          eq(users.status, "active"),
-          isNull(users.removedAt),
-        ),
-      );
-  }
 }

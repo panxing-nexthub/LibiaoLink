@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Member } from "../data/members";
 import { usePopover } from "./usePopover";
@@ -99,16 +99,19 @@ type SearchListProps = {
   onPick: (item: SearchSelectItem) => void;
   ariaLabel: string;
   footer: string;
+  initialActiveIndex?: number;
   /** 顶部常驻状态按钮（显示在搜索框上方，不随搜索结果变化）。 */
   topStatusButton?: SearchListStatusButton;
 };
 
 /** 搜索列表（搜索框 + 选项 + 页脚，无触发器）：人员下拉 / 行内编辑 / 通用搜索下拉共用。 */
-function SearchList({ items, isSelected, onPick, ariaLabel, footer, topStatusButton }: SearchListProps) {
+function SearchList({ items, isSelected, onPick, ariaLabel, footer, initialActiveIndex, topStatusButton }: SearchListProps) {
   const t = useT();
   const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(initialActiveIndex ?? 0);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const optionsRef = useRef<HTMLDivElement | null>(null);
+  const keepActiveVisible = initialActiveIndex !== undefined;
 
   useEffect(() => {
     const raf = window.requestAnimationFrame(() => {
@@ -126,6 +129,21 @@ function SearchList({ items, isSelected, onPick, ariaLabel, footer, topStatusBut
     }
     return items.filter((item) => itemMatches(item, keyword));
   }, [items, query]);
+
+  useLayoutEffect(() => {
+    if (!keepActiveVisible) return;
+    const list = optionsRef.current;
+    const row = list?.children.item(activeIndex);
+    if (!list || !row) return;
+
+    const listBounds = list.getBoundingClientRect();
+    const rowBounds = row.getBoundingClientRect();
+    if (rowBounds.top < listBounds.top) {
+      list.scrollTop += rowBounds.top - listBounds.top;
+    } else if (rowBounds.bottom > listBounds.bottom) {
+      list.scrollTop += rowBounds.bottom - listBounds.bottom;
+    }
+  }, [activeIndex, filtered, keepActiveVisible]);
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {
@@ -192,7 +210,7 @@ function SearchList({ items, isSelected, onPick, ariaLabel, footer, topStatusBut
           className="w-full rounded-lg bg-zinc-100 px-2.5 py-1.5 text-xs text-zinc-700 outline-none transition placeholder:text-zinc-400 focus:bg-white focus:ring-1 focus:ring-zinc-300"
         />
       </div>
-      <div className="max-h-[200px] overflow-y-auto p-1">
+      <div ref={optionsRef} className="max-h-[200px] overflow-y-auto p-1">
         {filtered.length === 0 ? (
           <p className="px-3 py-4 text-center text-xs text-zinc-400">{t("ms.noMatch")}</p>
         ) : (
@@ -225,19 +243,31 @@ type MemberSearchListProps = {
   selectedIds?: readonly string[];
   onPick: (member: Member) => void;
   ariaLabel: string;
+  locateSelectedOnOpen?: boolean;
   /** 顶部常驻状态按钮（可选，显示在搜索框上方）。 */
   topStatusButton?: SearchListStatusButton;
 };
 
 /** 成员搜索列表（搜索框 + 选项 + 页脚）：人员下拉与任务表行内编辑共用。 */
-export function MemberSearchList({ options, value, onPick, ariaLabel, selectedIds, topStatusButton }: MemberSearchListProps) {
+export function MemberSearchList({
+  options,
+  value,
+  onPick,
+  ariaLabel,
+  selectedIds,
+  locateSelectedOnOpen,
+  topStatusButton,
+}: MemberSearchListProps) {
   const t = useT();
   const items = useMemo<SearchSelectItem[]>(() => options.map((member): SearchSelectItem => ({ kind: "member", value: member.id, member })), [options]);
+  const isSelected = (item: SearchSelectItem) =>
+    selectedIds === undefined ? item.value === value : selectedIds.includes(item.value);
   return (
     <SearchList
       items={items}
       ariaLabel={ariaLabel}
-      isSelected={(item) => (selectedIds === undefined ? item.value === value : selectedIds.includes(item.value))}
+      isSelected={isSelected}
+      initialActiveIndex={locateSelectedOnOpen ? Math.max(0, items.findIndex(isSelected)) : undefined}
       onPick={(item) => {
         if (item.kind === "member") {
           onPick(item.member);

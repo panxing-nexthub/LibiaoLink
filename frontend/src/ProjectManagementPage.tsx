@@ -12,7 +12,7 @@ import type { SelectOption } from "./components/SelectMenu";
 import { Toast, ToastConfirm, type ToastKind } from "./components/Toast";
 import { tableGridTemplate, tableMinWidth } from "./components/TaskBoard";
 import { usePopover } from "./components/usePopover";
-import type { Member } from "./data/members";
+import { memberOptionsWithExisting, type Member } from "./data/members";
 import { directoryMemberOptions, type DirectoryUser } from "./directory";
 import { dictLabel, type Dicts } from "./dicts";
 import { fullDateText, stageText, useLocale, useT, type TextKey } from "./i18n";
@@ -471,6 +471,19 @@ const displayNamesOf = (
 ): string[] =>
   namesOf(ids, current, directory).filter((name): name is string => name !== null && name !== "—" && name.trim() !== "");
 
+const memberOptionsForRow = (
+  candidates: readonly Member[],
+  ids: readonly string[],
+  names: ReadonlyArray<string | null>,
+  directory: readonly DirectoryUser[],
+): Member[] => {
+  const existing = ids.map((id, index) => {
+    const user = directory.find((entry) => entry.id === id);
+    return { id, name: names[index] ?? user?.displayName ?? id, handle: user?.username ?? "" };
+  });
+  return memberOptionsWithExisting(candidates, ids, existing);
+};
+
 const joinedNames = (
   ids: readonly string[],
   names: ReadonlyArray<string | null>,
@@ -846,6 +859,7 @@ function MemberCell({
                 value=""
                 selectedIds={selectedIds}
                 ariaLabel={ariaLabel}
+                locateSelectedOnOpen
                 topStatusButton={
                   topStatusButton === undefined
                     ? undefined
@@ -2347,7 +2361,6 @@ function PmGanttProjectCells({
   cellPaddingX,
   editable,
   managerOptions,
-  engineerOptions,
   onManagerChange,
   onEngineerChange,
   onEngineerHandedOverToggle,
@@ -2364,7 +2377,6 @@ function PmGanttProjectCells({
   cellPaddingX: number;
   editable: boolean;
   managerOptions: readonly Member[];
-  engineerOptions: readonly Member[];
   onManagerChange: (row: PmRow, ids: string[]) => void;
   onEngineerChange: (row: PmRow, ids: string[]) => void;
   onEngineerHandedOverToggle: (row: PmRow) => void;
@@ -2433,7 +2445,7 @@ function PmGanttProjectCells({
                 placeholder={t("pm.manager.placeholder")}
                 ariaLabel={t("pm.column.manager") + " " + rowTitle}
                 disabled={!editable}
-                options={managerOptions}
+                options={memberOptionsForRow(managerOptions, row.managerIds, row.managerNames, directory)}
                 selectedIds={row.managerIds}
                 multiple
                 cellKey={String(sequence) + "-manager"}
@@ -2456,7 +2468,7 @@ function PmGanttProjectCells({
                 placeholder={t("pm.engineer.placeholder")}
                 ariaLabel={t("pm.column.engineer") + " " + rowTitle}
                 disabled={!editable}
-                options={engineerOptions}
+                options={memberOptionsForRow(managerOptions, row.implementationEngineerIds, row.implementationEngineerNames, directory)}
                 selectedIds={row.implementationEngineerIds}
                 multiple
                 cellKey={String(sequence) + "-engineer"}
@@ -2565,7 +2577,6 @@ function PmImplementationGantt({
   dicts,
   editable,
   managerOptions,
-  engineerOptions,
   onManagerChange,
   onEngineerChange,
   onEngineerHandedOverToggle,
@@ -2576,7 +2587,6 @@ function PmImplementationGantt({
   dicts: Dicts;
   editable: boolean;
   managerOptions: readonly Member[];
-  engineerOptions: readonly Member[];
   onManagerChange: (row: PmRow, ids: string[]) => void;
   onEngineerChange: (row: PmRow, ids: string[]) => void;
   onEngineerHandedOverToggle: (row: PmRow) => void;
@@ -4312,7 +4322,6 @@ function PmImplementationGantt({
                           cellPaddingX={ganttMetrics.cellPaddingX}
                           editable={editable}
                           managerOptions={managerOptions}
-                          engineerOptions={engineerOptions}
                           onManagerChange={onManagerChange}
                           onEngineerChange={onEngineerChange}
                           onEngineerHandedOverToggle={onEngineerHandedOverToggle}
@@ -4484,7 +4493,6 @@ export default function ProjectManagementPage({
   const saveTimers = useRef<Map<string, number>>(new Map());
 
   const managerOptions = useMemo(() => directoryMemberOptions(managerCandidates), [managerCandidates]);
-  const engineerOptions = useMemo(() => directoryMemberOptions(directory), [directory]);
   const stageOptions = useMemo<SelectOption[]>(
     () => [
       { value: "", label: <span className="text-zinc-500">{t("pm.field.auto")}</span> },
@@ -4894,7 +4902,11 @@ export default function ProjectManagementPage({
   const handleManagerChange = (row: PmRow, ids: string[]): void => {
     touchRow(row.clientId, {
       managerIds: ids,
-      managerNames: namesOf(ids, [], directory),
+      managerNames: namesOf(
+        ids,
+        ids.map((id) => row.managerNames[row.managerIds.indexOf(id)] ?? null),
+        directory,
+      ),
     });
     persistRow(row.clientId);
   };
@@ -4902,7 +4914,11 @@ export default function ProjectManagementPage({
   const handleEngineerChange = (row: PmRow, ids: string[]): void => {
     touchRow(row.clientId, {
       implementationEngineerIds: ids,
-      implementationEngineerNames: namesOf(ids, [], directory),
+      implementationEngineerNames: namesOf(
+        ids,
+        ids.map((id) => row.implementationEngineerNames[row.implementationEngineerIds.indexOf(id)] ?? null),
+        directory,
+      ),
       ...(ids.length > 0 ? { implementationHandedOver: false } : {}),
     });
     persistRow(row.clientId);
@@ -5319,7 +5335,7 @@ export default function ProjectManagementPage({
                                 placeholder={t("pm.manager.placeholder")}
                                 ariaLabel={ariaLabel}
                                 disabled={!rowEditable}
-                                options={managerOptions}
+                                options={memberOptionsForRow(managerOptions, row.managerIds, row.managerNames, directory)}
                                 selectedIds={row.managerIds}
                                 multiple
                                 cellKey={cellKey}
@@ -5340,7 +5356,7 @@ export default function ProjectManagementPage({
                                 placeholder={t("pm.engineer.placeholder")}
                                 ariaLabel={ariaLabel}
                                 disabled={!rowEditable}
-                                options={engineerOptions}
+                                options={memberOptionsForRow(managerOptions, row.implementationEngineerIds, row.implementationEngineerNames, directory)}
                                 selectedIds={row.implementationEngineerIds}
                                 multiple
                                 cellKey={cellKey}
@@ -5581,7 +5597,6 @@ export default function ProjectManagementPage({
                 dicts={dicts}
                 editable={loadState === "ready"}
                 managerOptions={managerOptions}
-                engineerOptions={engineerOptions}
                 onManagerChange={handleManagerChange}
                 onEngineerChange={handleEngineerChange}
                 onEngineerHandedOverToggle={handleEngineerHandedOverToggle}

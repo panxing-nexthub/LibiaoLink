@@ -14,9 +14,8 @@ function rangeText(from: string | null, to: string | null): string {
 function periodText(context: ProjectAiContext): string {
   const period = context.project.period;
   if (period === null || period === undefined) return UNKNOWN;
-  const plan = "计划 " + rangeText(period.planFrom, period.planTo);
-  const actual = "实际 " + (period.actualFrom ?? UNKNOWN) + " ~ " + (period.actualOngoing ? "进行中" : (period.actualTo ?? UNKNOWN));
-  return plan + " / " + actual;
+  // 业务口径（2026-11-24）：项目周期只展示实际区间。
+  return (period.actualFrom ?? UNKNOWN) + " ~ " + (period.actualOngoing ? "进行中" : (period.actualTo ?? UNKNOWN));
 }
 
 function progressText(context: ProjectAiContext): string {

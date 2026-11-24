@@ -104,6 +104,13 @@ function agreementField(field: { status: string; value: string | null } | undefi
   return field !== undefined && field.status === "found" ? clean(field.value) : null;
 }
 
+function actualPeriodText(value: string | null): string | null {
+  if (value === null) return null;
+  const marker = value.lastIndexOf("实际 ");
+  if (marker < 0) return value;
+  return value.slice(marker + 3).trim();
+}
+
 function unique(values: readonly string[]): string[] {
   return Array.from(new Set(values.map((value) => value.trim()).filter((value) => value !== "")));
 }
@@ -357,7 +364,7 @@ export function buildProjectSummaryView(input: {
   const basic: SummaryBasicInfo = {
     code,
     name,
-    periodText: reportBasic?.periodText ?? null,
+    periodText: actualPeriodText(reportBasic?.periodText ?? null),
     period,
     partyA: partyA === null || partyA.trim() === "" ? null : partyA,
     customer: customer === null || customer.trim() === "" ? null : customer,

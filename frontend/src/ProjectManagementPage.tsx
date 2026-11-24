@@ -175,17 +175,15 @@ const METHOD_META: Record<ProjectManagementMethod, { labelKey: TextKey; chipClas
   },
 };
 
-const PM_PARALLEL_METHODS: ReadonlySet<ProjectManagementMethod> = new Set([
-  "remote_guidance",
-  "remote_installation_guidance",
-]);
-
 type PmGanttResourceMode = "blocking" | "parallel";
 
-const pmGanttResourceModeOf = (row: PmRow): PmGanttResourceMode =>
-  row.implementationMethod !== "" && PM_PARALLEL_METHODS.has(row.implementationMethod)
-    ? "parallel"
-    : "blocking";
+const PM_GANTT_RESOURCE_MODES: Record<ProjectManagementMethod, PmGanttResourceMode> = {
+  installation_delivery: "blocking",
+  onsite_guidance: "blocking",
+  onsite_installation_guidance: "blocking",
+  remote_guidance: "parallel",
+  remote_installation_guidance: "parallel",
+};
 
 type RowSaveState = "idle" | "dirty" | "saving" | "error";
 
@@ -1567,18 +1565,16 @@ type PmGanttItem = {
   start: string | null;
   end: string | null;
   days: number | null;
-  resourceMode: PmGanttResourceMode;
+  resourceMode: PmGanttResourceMode | null;
 };
 
 type PmGanttGroupKind = "person" | "handedOver" | "unassigned";
-
-type PmGanttRole = "manager" | "engineer";
 
 type PmGanttGroup = {
   key: string;
   label: string;
   kind: PmGanttGroupKind;
-  roles: PmGanttRole[];
+  personId: string | null;
   items: PmGanttItem[];
 };
 
@@ -2000,7 +1996,7 @@ const pmGanttItemOf = (row: PmRow): PmGanttItem => {
     start,
     end,
     days: start === null || end === null ? effectiveDaysOf(row) : inclusiveDaysBetween(start, end),
-    resourceMode: pmGanttResourceModeOf(row),
+    resourceMode: row.implementationMethod === "" ? null : PM_GANTT_RESOURCE_MODES[row.implementationMethod],
   };
 };
 
@@ -2046,7 +2042,7 @@ const pmGanttDailyCountsOf = (
 };
 
 const pmGanttOccupancyOf = (
-  items: readonly PmGanttItem[],
+  group: PmGanttGroup,
   timelineStartIso: string,
   dayCount: number,
   conflictStartIndex: number,
@@ -2065,8 +2061,11 @@ const pmGanttOccupancyOf = (
   const futureStartIndex = Math.max(0, Math.min(dayCount, conflictStartIndex));
   const blockingRanges: Array<{ itemIndex: number; startIndex: number; endIndex: number }> = [];
   const parallelRanges: Array<{ itemIndex: number; startIndex: number; endIndex: number }> = [];
-  items.forEach((item, itemIndex) => {
-    if (item.start === null || item.end === null) {
+  group.items.forEach((item, itemIndex) => {
+    if (item.start === null || item.end === null || item.resourceMode === null) {
+      return;
+    }
+    if (group.personId !== null && !item.row.implementationEngineerIds.includes(group.personId)) {
       return;
     }
     const rawStart = Math.round((pmGanttTimeOf(item.start) - rangeStart) / PM_GANTT_DAY_MS);
@@ -2175,7 +2174,7 @@ const buildPmGanttGroups = (
     key: "pm-gantt-handed-over",
     label: handedOverLabel,
     kind: "handedOver",
-    roles: [],
+    personId: null,
     items: [],
     seen: new Set<string>(),
   };
@@ -2183,7 +2182,7 @@ const buildPmGanttGroups = (
     key: "pm-gantt-unassigned",
     label: unassignedLabel,
     kind: "unassigned",
-    roles: [],
+    personId: null,
     items: [],
     seen: new Set<string>(),
   };
@@ -2194,21 +2193,18 @@ const buildPmGanttGroups = (
     bucket.seen.add(item.row.clientId);
     bucket.items.push(item);
   };
-  const bucketFor = (id: string, label: string, role: PmGanttRole): PmGanttBucket => {
+  const bucketFor = (id: string, label: string): PmGanttBucket => {
     let bucket = people.get(id);
     if (bucket === undefined) {
       bucket = {
         key: "pm-gantt-person-" + id,
         label,
         kind: "person",
-        roles: [],
+        personId: id,
         items: [],
         seen: new Set<string>(),
       };
       people.set(id, bucket);
-    }
-    if (!bucket.roles.includes(role)) {
-      bucket.roles.push(role);
     }
     return bucket;
   };
@@ -2230,7 +2226,7 @@ const buildPmGanttGroups = (
         return;
       }
       seenManagers.add(id);
-      addItem(bucketFor(id, managerNames[index] ?? id, "manager"), item);
+      addItem(bucketFor(id, managerNames[index] ?? id), item);
     });
     if (row.implementationHandedOver) {
       addItem(handedOver, item);
@@ -2241,7 +2237,7 @@ const buildPmGanttGroups = (
         return;
       }
       seenEngineers.add(id);
-      addItem(bucketFor(id, engineerNames[index] ?? id, "engineer"), item);
+      addItem(bucketFor(id, engineerNames[index] ?? id), item);
     });
     if (
       row.managerIds.length === 0 &&
@@ -2257,7 +2253,7 @@ const buildPmGanttGroups = (
       key: bucket.key,
       label: bucket.label,
       kind: bucket.kind,
-      roles: bucket.roles,
+      personId: bucket.personId,
       items: bucket.items,
     }))
     .sort((left, right) => left.label.localeCompare(right.label, locale));
@@ -2267,7 +2263,7 @@ const buildPmGanttGroups = (
       key: bucket.key,
       label: bucket.label,
       kind: bucket.kind,
-      roles: bucket.roles,
+      personId: bucket.personId,
       items: bucket.items,
     }));
   return [...personGroups, ...specialGroups];
@@ -3522,7 +3518,7 @@ function PmImplementationGantt({
         }
       });
       const occupancy = pmGanttOccupancyOf(
-        group.items,
+        group,
         timeline.startIso,
         timeline.days.length,
         conflictStartIndex,

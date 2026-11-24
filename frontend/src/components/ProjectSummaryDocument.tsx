@@ -293,12 +293,11 @@ export function ProjectSummaryDocument({ view, onPreviewOpenChange, onReplaceIma
             <div className="mt-3"><Missing /></div>
           ) : (
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[760px] border-collapse text-[12px]">
+              <table className="w-full min-w-[680px] border-collapse text-[12px]">
                 <thead>
                   <tr className="bg-zinc-50 text-left text-[11px] text-zinc-500">
                     <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.stage")}</th>
                     <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.stageStatus")}</th>
-                    <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.plannedRange")}</th>
                     <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.actualRange")}</th>
                     <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.taskDone")}</th>
                     <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.completion")}</th>
@@ -309,7 +308,6 @@ export function ProjectSummaryDocument({ view, onPreviewOpenChange, onReplaceIma
                     <tr key={row.stage + "#" + String(index)} className="text-zinc-700">
                       <td className="border border-zinc-100 px-2 py-1.5 font-medium">{row.stage}</td>
                       <td className="border border-zinc-100 px-2 py-1.5">{row.status === "done" ? t("ai.doc.stageDone") : row.status === "active" ? t("ai.doc.stageActive") : t("ai.doc.stagePending")}</td>
-                      <td className="border border-zinc-100 px-2 py-1.5">{row.planText}</td>
                       <td className="border border-zinc-100 px-2 py-1.5">{row.actualText}</td>
                       <td className="border border-zinc-100 px-2 py-1.5">{row.done} / {row.total}</td>
                       <td className="border border-zinc-100 px-2 py-1.5">{row.percent === null ? "—" : String(row.percent) + "%"}</td>

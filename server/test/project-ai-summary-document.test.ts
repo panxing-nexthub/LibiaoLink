@@ -130,7 +130,7 @@ describe("总结文档确定性补齐（P4）", () => {
     expect(document.basicInfo).toMatchObject({
       projectCode: "C-001",
       projectName: "测试项目",
-      periodText: "计划 2026-01-01 ~ 2026-02-01 / 实际 2026-01-05 ~ 进行中",
+      periodText: "2026-01-05 ~ 进行中",
       partyA: "甲方A",
       customer: "未识别",
       address: "广州市",

@@ -30,7 +30,11 @@ class FakePermissionService {
   constructor(
     private readonly allowed: boolean,
     private readonly readOnly = false,
+    private readonly isAdmin = false,
   ) {}
+  async groupAccessOf(): Promise<{ admin: boolean }> {
+    return { admin: this.isAdmin };
+  }
   async assertWritable(actorId: string): Promise<void> {
     this.writableCalls.push(actorId);
     if (this.readOnly) {
@@ -45,13 +49,13 @@ class FakePermissionService {
   }
 }
 
-function makeController(allowed: boolean, readOnly = false): {
+function makeController(allowed: boolean, readOnly = false, isAdmin = false): {
   controller: DictsController;
   dicts: FakeDictService;
   permission: FakePermissionService;
 } {
   const dicts = new FakeDictService();
-  const permission = new FakePermissionService(allowed, readOnly);
+  const permission = new FakePermissionService(allowed, readOnly, isAdmin);
   const controller = new DictsController(
     dicts as unknown as DictService,
     permission as unknown as PermissionService,
@@ -96,6 +100,16 @@ describe("字典新增按类型分权（C9-02 修订）", () => {
       expect(permission.calls).toEqual([]);
       expect(dicts.calls).toEqual([]);
     }
+  });
+
+  it("公共成果字典即使拥有 dict.manage，也需要系统管理员身份", async () => {
+    const ordinaryEditor = makeController(true);
+    await expect(ordinaryEditor.controller.createItem("deliverableType", REGION_BODY, ACTOR_ID)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(ordinaryEditor.dicts.calls).toEqual([]);
+
+    const administrator = makeController(true, false, true);
+    await administrator.controller.createItem("deliverableType", REGION_BODY, ACTOR_ID);
+    expect(administrator.dicts.calls).toHaveLength(1);
   });
 
   it("未知类型：非管理员先撞 403（不泄漏类型是否存在），管理员才走到服务层 404", async () => {

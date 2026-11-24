@@ -29,7 +29,7 @@ import { ZodValidationPipe } from "../../common/http/zod-validation.pipe.js";
 import { CsrfGuard, CurrentActorId, SessionGuard } from "../identity/index.js";
 import { DictService } from "../admin/index.js";
 import { AllowDeletedProjectAccess, CurrentProjectAccess, ProjectAccess, ProjectAccessGuard, ProjectManagerEligibilityService, ProjectScope, RequirePermission, isProjectEditor } from "../permission/index.js";
-import type { ProjectManagerCandidateList } from "@libiaolink/contracts";
+import type { ProjectDeliverableTypeCreateResponse, ProjectManagerCandidateList } from "@libiaolink/contracts";
 import { TranslateService } from "../translate/index.js";
 import type { ProjectAccessContext, ProjectScopeFilter } from "../permission/index.js";
 import { ProjectGroupService } from "./project-group.service.js";
@@ -163,22 +163,23 @@ export class ProjectsController {
     return project;
   }
 
-  /**
-   * 新增全站自定义成果文件类型（2026-11-06）：项目编辑者（部门 / 个人规则 edit，或系统管理员）。
-   * 新增后写入 deliverableType 全局字典，所有项目 / 任务 / 文件库立即可选；响应 = 更新后的整个字典。
-   */
-  @Post(":id/deliverable-types")
+  /** 新增成果文件下拉选项。本项目经理仅可新增个人选项，系统管理员可选公共或个人。 */
+  @Post(":id/deliverable-types/scoped")
   @RequirePermission("project.update")
   async createDeliverableType(
     @Param("id", uuidParam) id: string,
     @Body(new ZodValidationPipe(ProjectDeliverableTypeCreateBodySchema)) body: ProjectDeliverableTypeCreateBody,
     @CurrentProjectAccess() access: ProjectAccessContext,
     @CurrentActorId() actorId: string,
-  ) {
-    if (!isProjectEditor(access)) {
-      throw new AppError("FORBIDDEN", "仅项目编辑者可新增自定义成果文件类型");
+  ): Promise<ProjectDeliverableTypeCreateResponse> {
+    if (!isProjectEditor(access) || (access.admin !== true && !access.projectManager)) {
+      throw new AppError("FORBIDDEN", "仅本项目经理或系统管理员可新增成果文件选项");
     }
-    return this.dicts.createCustomDeliverableType(body.name, actorId);
+    if (body.visibility === "public") {
+      if (access.admin !== true) throw new AppError("FORBIDDEN", "仅系统管理员可新增公共成果文件选项");
+      return { visibility: "public", dictionary: await this.dicts.createCustomDeliverableType(body.name, actorId) };
+    }
+    return { visibility: "private", item: await this.dicts.createPersonalDeliverableType(body.name, actorId) };
   }
 
   /** 移入项目回收站（2026-10-19）：If-Match 回传当前 version 防误删；返回 deleted_at 已置位的项目。需 project.delete。 */

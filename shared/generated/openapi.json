@@ -4281,7 +4281,7 @@
         "minLength": 1,
         "maxLength": 50,
         "pattern": "^[^,\\r\\n]+$",
-        "description": "自定义成果文件类型名称（1–50 字，不含英文逗号 / 换行；新增后全站共享）"
+        "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
       },
       "Dict": {
         "type": "object",
@@ -4381,7 +4381,7 @@
           "code",
           "name"
         ],
-        "description": "新增字典条目：region 任何登录用户可增（全站共享；重复码 409）；projectType 仅管理员 dict.manage；deliverableType 的自定义成果由项目编辑者走 POST /projects/{id}/deliverable-types（本通用端点仍仅 dict.manage）；变更写审计留痕（C9-02）；响应为更新后的整个字典"
+        "description": "新增字典条目：region 任何登录用户可增（全站共享；重复码 409）；projectType 仅管理员 dict.manage；deliverableType 公共成果仅系统管理员可新增；项目内新增走 POST /projects/{id}/deliverable-types/scoped；变更写审计留痕（C9-02）；响应为更新后的整个字典"
       },
       "DictItemUpdateBody": {
         "type": "object",
@@ -4419,7 +4419,7 @@
         "required": [
           "items"
         ],
-        "description": "全量字典：region / projectType / deliverableType 全站自定义成果文件类型"
+        "description": "公共字典：region / projectType / deliverableType 全站自定义成果文件类型"
       },
       "DictType": {
         "type": "string",
@@ -9051,6 +9051,36 @@
         ],
         "description": "当前用户授权画像（未登录 401）"
       },
+      "PersonalDeliverableType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "name": {
+            "$ref": "#/components/schemas/DeliverableType"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "description": "仅创建账号可读取的成果文件下拉选项"
+      },
+      "PersonalDeliverableTypeList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonalDeliverableType"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
       "PlanBoardBg": {
         "type": "string",
         "enum": [
@@ -11464,14 +11494,7 @@
           "deliverableTypes": {
             "type": "array",
             "items": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/DeliverableType"
-                },
-                {
-                  "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
-                }
-              ]
+              "$ref": "#/components/schemas/DeliverableType"
             }
           },
           "onTime": {
@@ -12111,12 +12134,60 @@
         "properties": {
           "name": {
             "$ref": "#/components/schemas/DeliverableType"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "private"
+            ]
           }
         },
         "required": [
-          "name"
+          "name",
+          "visibility"
         ],
-        "description": "仅当前项目的项目编辑者（管理员、所管本项目的项目经理或部门 / 个人规则 edit）可新增；条目进入全站 deliverableType 字典，所有账号与项目可见"
+        "description": "系统管理员可新增公共或个人下拉选项；本项目项目经理仅可新增个人选项。个人选项只有创建人可在自定义候选中看到；选入任务后沿用任务的可见范围。必须显式指定 visibility。"
+      },
+      "ProjectDeliverableTypeCreateResponse": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "visibility": {
+                "type": "string",
+                "enum": [
+                  "public"
+                ]
+              },
+              "dictionary": {
+                "$ref": "#/components/schemas/Dict"
+              }
+            },
+            "required": [
+              "visibility",
+              "dictionary"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "visibility": {
+                "type": "string",
+                "enum": [
+                  "private"
+                ]
+              },
+              "item": {
+                "$ref": "#/components/schemas/PersonalDeliverableType"
+              }
+            },
+            "required": [
+              "visibility",
+              "item"
+            ]
+          }
+        ]
       },
       "ProjectDetail": {
         "allOf": [
@@ -15502,14 +15573,7 @@
           "deliverableTypes": {
             "type": "array",
             "items": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/DeliverableType"
-                },
-                {
-                  "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
-                }
-              ]
+              "$ref": "#/components/schemas/DeliverableType"
             },
             "description": "要求输出成果文件（ADR-024 多选，Push 143）：内置十类 + 全站自定义类型（deliverableType 字典）；服务端去空、按首次出现去重；**空数组 = 不要求**；常规编辑开放"
           },
@@ -16102,14 +16166,7 @@
           "deliverableTypes": {
             "type": "array",
             "items": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/DeliverableType"
-                },
-                {
-                  "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
-                }
-              ]
+              "$ref": "#/components/schemas/DeliverableType"
             },
             "maxItems": 20,
             "description": "要求输出成果文件（ADR-024 多选，≤ 20 项；含全站自定义）：去重（首次出现保序）；缺省 / 空数组 = 不要求"
@@ -16315,8 +16372,7 @@
                 "type": [
                   "string",
                   "null"
-                ],
-                "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
+                ]
               }
             ]
           }
@@ -16375,14 +16431,7 @@
         "type": "object",
         "properties": {
           "docType": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/DeliverableType"
-              },
-              {
-                "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
-              }
-            ]
+            "$ref": "#/components/schemas/DeliverableType"
           },
           "required": {
             "type": "integer",
@@ -16410,14 +16459,7 @@
             ]
           },
           "docType": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/DeliverableType"
-              },
-              {
-                "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
-              }
-            ]
+            "$ref": "#/components/schemas/DeliverableType"
           },
           "count": {
             "type": "integer",
@@ -16534,14 +16576,7 @@
           "deliverableTypes": {
             "type": "array",
             "items": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/DeliverableType"
-                },
-                {
-                  "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
-                }
-              ]
+              "$ref": "#/components/schemas/DeliverableType"
             },
             "maxItems": 20,
             "description": "要求输出成果文件（锁定项，≤ 20 项，含全站自定义；多选去重、首次出现保序）：修正后即刻成为完成门禁依据（有节点任务仍以节点 node_requirements 为准，本字段只作无节点任务兜底）"
@@ -17450,14 +17485,7 @@
           "deliverableTypes": {
             "type": "array",
             "items": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/DeliverableType"
-                },
-                {
-                  "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
-                }
-              ]
+              "$ref": "#/components/schemas/DeliverableType"
             },
             "maxItems": 20,
             "description": "要求输出成果文件（2026-10-08 业务口径「文件输出成果也要可以选择」）：常规编辑开放 —— 传数组 = 整体替换（≤ 20 项，含全站自定义；去重、首次出现保序）；显式 [] = 不要求；缺省 = 不改"
@@ -17680,14 +17708,7 @@
                 "$ref": "#/components/schemas/Sha256"
               },
               "docType": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/DeliverableType"
-                  },
-                  {
-                    "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
-                  }
-                ]
+                "$ref": "#/components/schemas/DeliverableType"
               },
               "nodeId": {
                 "$ref": "#/components/schemas/Uuid"
@@ -17744,14 +17765,7 @@
                 "$ref": "#/components/schemas/Sha256"
               },
               "docType": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/DeliverableType"
-                  },
-                  {
-                    "description": "输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享"
-                  }
-                ]
+                "$ref": "#/components/schemas/DeliverableType"
               },
               "nodeId": {
                 "$ref": "#/components/schemas/Uuid"
@@ -20583,12 +20597,12 @@
         }
       }
     },
-    "/api/v1/projects/{id}/deliverable-types": {
+    "/api/v1/projects/{id}/deliverable-types/scoped": {
       "post": {
         "tags": [
           "projects"
         ],
-        "summary": "新增全站自定义成果文件类型（仅当前项目编辑者；写入 deliverableType 全局字典，所有项目共享）",
+        "summary": "新增成果文件下拉选项（本项目经理仅个人；系统管理员可新增公共或个人）",
         "parameters": [
           {
             "schema": {
@@ -20611,17 +20625,27 @@
         },
         "responses": {
           "201": {
-            "description": "创建成功（更新后的 deliverableType 字典）",
+            "description": "公共选项返回公共字典；个人选项仅返回创建人自己的条目",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Dict"
+                  "$ref": "#/components/schemas/ProjectDeliverableTypeCreateResponse"
                 }
               }
             }
           },
           "400": {
             "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证（AUTH_REQUIRED）",
             "content": {
               "application/json": {
                 "schema": {
@@ -24120,6 +24144,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DictListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证（AUTH_REQUIRED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dicts/deliverableType/personal": {
+      "get": {
+        "tags": [
+          "dicts"
+        ],
+        "summary": "获取当前账号的个人成果文件下拉选项",
+        "responses": {
+          "200": {
+            "description": "仅当前账号创建的个人选项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalDeliverableTypeList"
                 }
               }
             }

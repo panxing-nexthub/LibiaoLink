@@ -1338,7 +1338,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{id}/deliverable-types": {
+    "/api/v1/projects/{id}/deliverable-types/scoped": {
         parameters: {
             query?: never;
             header?: never;
@@ -1347,7 +1347,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 新增全站自定义成果文件类型（仅当前项目编辑者；写入 deliverableType 全局字典，所有项目共享） */
+        /** 新增成果文件下拉选项（本项目经理仅个人；系统管理员可新增公共或个人） */
         post: {
             parameters: {
                 query?: never;
@@ -1364,17 +1364,26 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description 创建成功（更新后的 deliverableType 字典） */
+                /** @description 公共选项返回公共字典；个人选项仅返回创建人自己的条目 */
                 201: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["Dict"];
+                        "application/json": components["schemas"]["ProjectDeliverableTypeCreateResponse"];
                     };
                 };
                 /** @description 契约校验失败（VALIDATION_FAILED） */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 未认证（AUTH_REQUIRED） */
+                401: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -4596,6 +4605,51 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["DictListResponse"];
+                    };
+                };
+                /** @description 未认证（AUTH_REQUIRED） */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dicts/deliverableType/personal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取当前账号的个人成果文件下拉选项 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 仅当前账号创建的个人选项 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PersonalDeliverableTypeList"];
                     };
                 };
                 /** @description 未认证（AUTH_REQUIRED） */
@@ -13488,7 +13542,7 @@ export interface components {
          * @description ISO8601 时间戳（UTC 存储，前端按 Asia/Shanghai 展示）
          */
         DateTime: string;
-        /** @description 自定义成果文件类型名称（1–50 字，不含英文逗号 / 换行；新增后全站共享） */
+        /** @description 输出成果文件类型名称：内置十类（DOC_TYPES）+ 全站自定义类型（1–50 字，不含英文逗号 / 换行）；自定义值存于 deliverableType 字典，所有项目与任务共享 */
         DeliverableType: string;
         /** @description 单个字典（含元数据）；响应带 ETag，前端启动拉一次、登出清缓存 */
         Dict: {
@@ -13512,7 +13566,7 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        /** @description 新增字典条目：region 任何登录用户可增（全站共享；重复码 409）；projectType 仅管理员 dict.manage；deliverableType 的自定义成果由项目编辑者走 POST /projects/{id}/deliverable-types（本通用端点仍仅 dict.manage）；变更写审计留痕（C9-02）；响应为更新后的整个字典 */
+        /** @description 新增字典条目：region 任何登录用户可增（全站共享；重复码 409）；projectType 仅管理员 dict.manage；deliverableType 公共成果仅系统管理员可新增；项目内新增走 POST /projects/{id}/deliverable-types/scoped；变更写审计留痕（C9-02）；响应为更新后的整个字典 */
         DictItemCreateBody: {
             /** @description 字典码：同类型内唯一；重复返回 409 DICT_ITEM_EXISTS */
             code: string;
@@ -13546,7 +13600,7 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        /** @description 全量字典：region / projectType / deliverableType 全站自定义成果文件类型 */
+        /** @description 公共字典：region / projectType / deliverableType 全站自定义成果文件类型 */
         DictListResponse: {
             items: components["schemas"]["Dict"][];
         };
@@ -14780,6 +14834,14 @@ export interface components {
         PermissionMeResponse: {
             permissions: components["schemas"]["ActorPermissions"];
         };
+        /** @description 仅创建账号可读取的成果文件下拉选项 */
+        PersonalDeliverableType: {
+            id: components["schemas"]["Uuid"];
+            name: components["schemas"]["DeliverableType"];
+        };
+        PersonalDeliverableTypeList: {
+            items: components["schemas"]["PersonalDeliverableType"][];
+        };
         /**
          * @description 背景色（Push 271）：读侧白名单外 / 缺省一律收敛为 white（与前端 myPlan.ts 同口径）
          * @enum {string}
@@ -15301,7 +15363,7 @@ export interface components {
             estimatedDays: number | null;
             headcount: number | null;
             priority: components["schemas"]["Priority"];
-            deliverableTypes: (components["schemas"]["DeliverableType"] & unknown)[];
+            deliverableTypes: components["schemas"]["DeliverableType"][];
             onTime: boolean | null;
             finalizedAt: components["schemas"]["DateTime"] & (string | null);
             changeLinks: components["schemas"]["ProjectAiTaskChangeLink"][];
@@ -15473,9 +15535,20 @@ export interface components {
             /** @description 导入的蓝图版本；缺省 = 当前已发布版本 */
             blueprintVersion?: number;
         };
-        /** @description 仅当前项目的项目编辑者（管理员、所管本项目的项目经理或部门 / 个人规则 edit）可新增；条目进入全站 deliverableType 字典，所有账号与项目可见 */
+        /** @description 系统管理员可新增公共或个人下拉选项；本项目项目经理仅可新增个人选项。个人选项只有创建人可在自定义候选中看到；选入任务后沿用任务的可见范围。必须显式指定 visibility。 */
         ProjectDeliverableTypeCreateBody: {
             name: components["schemas"]["DeliverableType"];
+            /** @enum {string} */
+            visibility: "public" | "private";
+        };
+        ProjectDeliverableTypeCreateResponse: {
+            /** @enum {string} */
+            visibility: "public";
+            dictionary: components["schemas"]["Dict"];
+        } | {
+            /** @enum {string} */
+            visibility: "private";
+            item: components["schemas"]["PersonalDeliverableType"];
         };
         /** @description 项目（v0.2 §2.3 projects） */
         ProjectDetail: components["schemas"]["Project"] & {
@@ -16294,7 +16367,7 @@ export interface components {
             headcount: number | null;
             priority: components["schemas"]["Priority"];
             /** @description 要求输出成果文件（ADR-024 多选，Push 143）：内置十类 + 全站自定义类型（deliverableType 字典）；服务端去空、按首次出现去重；**空数组 = 不要求**；常规编辑开放 */
-            deliverableTypes: (components["schemas"]["DeliverableType"] & unknown)[];
+            deliverableTypes: components["schemas"]["DeliverableType"][];
             note: string | null;
             /** @description 是否按时交付（服务端读时派生，A14 · Push 70）：完成且实际完成不晚于预计完成 → true；完成但晚于预计完成，或已完成未填完成日期且预计完成已过 → false；未完成且已过预计完成 → false（配 displayStatus=overdue 即「逾期未交付」）；未完成未到期 / 无预计完成日期 → 派生不出 → 回落迁移导入的存储值，仍无则 null（前端显示「—」）。前端标签「逾期未交付 / 逾期已交付」由本字段 + displayStatus 渲染，不再本地派生 */
             onTime: boolean | null;
@@ -16440,7 +16513,7 @@ export interface components {
             headcount?: number | null;
             priority?: components["schemas"]["Priority"];
             /** @description 要求输出成果文件（ADR-024 多选，≤ 20 项；含全站自定义）：去重（首次出现保序）；缺省 / 空数组 = 不要求 */
-            deliverableTypes?: (components["schemas"]["DeliverableType"] & unknown)[];
+            deliverableTypes?: components["schemas"]["DeliverableType"][];
             note?: string | null;
         };
         /** @description 从任务模板生成任务（批量；同一节点在项目里只留一份） */
@@ -16510,7 +16583,7 @@ export interface components {
         };
         /** @description 缺件明细：required / present 按已配置的成果类型逐类给出；未配置成果类型时不产生缺件 */
         TaskGateMissing: {
-            docType: components["schemas"]["DeliverableType"] & unknown;
+            docType: components["schemas"]["DeliverableType"];
             required: number;
             present: number;
         };
@@ -16518,7 +16591,7 @@ export interface components {
         TaskGateWarning: {
             /** @enum {string} */
             code: "draft_doc_present";
-            docType: components["schemas"]["DeliverableType"] & unknown;
+            docType: components["schemas"]["DeliverableType"];
             count: number;
         };
         /** @description 任务（v0.2 §2.3 tasks；展示态与是否按时交付的派生规则见 §2.4、A12~A14）；阶段与负责人可空、组内位次 sort_index 见 A15 / A18 / A19（Push 124） */
@@ -16547,7 +16620,7 @@ export interface components {
             /** @description 任务描述（英文；锁定项；null = 清空） */
             titleEn?: string | null;
             /** @description 要求输出成果文件（锁定项，≤ 20 项，含全站自定义；多选去重、首次出现保序）：修正后即刻成为完成门禁依据（有节点任务仍以节点 node_requirements 为准，本字段只作无节点任务兜底） */
-            deliverableTypes?: (components["schemas"]["DeliverableType"] & unknown)[];
+            deliverableTypes?: components["schemas"]["DeliverableType"][];
         };
         /** @description 任务节点库条目（任务模板的节点来源；stageKey 可为九阶段或入库审核） */
         TaskNode: {
@@ -16798,7 +16871,7 @@ export interface components {
             headcount?: number | null;
             priority?: components["schemas"]["Priority"];
             /** @description 要求输出成果文件（2026-10-08 业务口径「文件输出成果也要可以选择」）：常规编辑开放 —— 传数组 = 整体替换（≤ 20 项，含全站自定义；去重、首次出现保序）；显式 [] = 不要求；缺省 = 不改 */
-            deliverableTypes?: (components["schemas"]["DeliverableType"] & unknown)[];
+            deliverableTypes?: components["schemas"]["DeliverableType"][];
             note?: string | null;
             version: components["schemas"]["Version"];
         };
@@ -16863,7 +16936,7 @@ export interface components {
             sizeBytes: number;
             mime?: string;
             contentHash?: components["schemas"]["Sha256"];
-            docType?: components["schemas"]["DeliverableType"] & unknown;
+            docType?: components["schemas"]["DeliverableType"];
             nodeId?: components["schemas"]["Uuid"];
             taskId?: components["schemas"]["Uuid"];
             /** @enum {string} */
@@ -16877,7 +16950,7 @@ export interface components {
             sizeBytes: number;
             mime?: string;
             contentHash?: components["schemas"]["Sha256"];
-            docType?: components["schemas"]["DeliverableType"] & unknown;
+            docType?: components["schemas"]["DeliverableType"];
             nodeId?: components["schemas"]["Uuid"];
             taskId?: components["schemas"]["Uuid"];
             /** @enum {string} */

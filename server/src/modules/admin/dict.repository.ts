@@ -2,7 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
-import { dictItems, dictTypes } from "../../db/schema/admin.js";
+import { dictItems, dictTypes, personalDeliverableTypes } from "../../db/schema/admin.js";
+import type { PersonalDeliverableType } from "@libiaolink/contracts";
 import { projects } from "../../db/schema/projects.js";
 
 /** dict_types 行（字典类型注册表）。 */
@@ -65,6 +66,23 @@ const ITEM_COLUMNS = {
 @Injectable()
 export class DictRepository {
   constructor(private readonly database: DatabaseService) {}
+
+  async listPersonalDeliverableTypes(ownerId: string): Promise<PersonalDeliverableType[]> {
+    return this.database.db
+      .select({ id: personalDeliverableTypes.id, name: personalDeliverableTypes.name })
+      .from(personalDeliverableTypes)
+      .where(eq(personalDeliverableTypes.ownerId, ownerId))
+      .orderBy(asc(personalDeliverableTypes.createdAt), asc(personalDeliverableTypes.id));
+  }
+
+  async insertPersonalDeliverableType(ownerId: string, name: string, client: DbClient): Promise<PersonalDeliverableType | null> {
+    const [item] = await client
+      .insert(personalDeliverableTypes)
+      .values({ ownerId, name })
+      .onConflictDoNothing({ target: [personalDeliverableTypes.ownerId, personalDeliverableTypes.name] })
+      .returning({ id: personalDeliverableTypes.id, name: personalDeliverableTypes.name });
+    return item ?? null;
+  }
 
   async findType(type: string, client: DbClient = this.database.db): Promise<DictTypeRow | null> {
     const rows = await client.select(TYPE_COLUMNS).from(dictTypes).where(eq(dictTypes.code, type)).limit(1);

@@ -1,3 +1,5 @@
+> **2026-11-24 成果文件下拉选项可见范围**。`POST /api/v1/projects/{id}/deliverable-types/scoped` 必须传 `{ name, visibility }`。本项目经理只能创建 `private`，系统管理员可选择 `public` 或 `private`。公共选项返回 `{visibility,dictionary}`，个人选项返回 `{visibility,item}`。旧 `/deliverable-types` 写入口退役，混合版本升级时刷新客户端；新客户端对旧服务发送的新路径不会误写公共字典。将选项选入任务后由既有任务权限控制可见性。
+
 # project 模块（h2 · S6·project + h3 · S6·blueprint/node：项目 CRUD / 列表 facets / 成员名册 / 流程快照与阶段）
 
 > **2026-11-13 蓝图项目总览读面**：新增 `GET /api/v1/projects/map-overview`，返回全部未删除项目的最少概况字段 `id / code / name / region / projectType / status` 与当前账号逐项目 `accessLevel`。具备项目浏览权（管理员、限制关闭、任一项目数据范围，或有效项目关系）即可读取全部概况；`accessLevel=null` 仅表示不可进入详情，详情接口仍由 `resolveProjectAccess` 按项目可见集返回 404。响应不含客户、经理、描述、任务或其他明细字段。无 DDL / 迁移。

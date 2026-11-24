@@ -32,6 +32,18 @@ class FakeDictRepository {
     { id: UUID_ACTOR, typeCode: "region", code: "华东旧", name: "华东（停用）", sort: 20, enabled: false, metadata: {}, updatedAt: AT },
   ];
   touched: string[] = [];
+  personalItems: Array<{ id: string; name: string; ownerId: string }> = [];
+
+  async listPersonalDeliverableTypes(ownerId: string) {
+    return this.personalItems.filter((item) => item.ownerId === ownerId).map(({ id, name }) => ({ id, name }));
+  }
+
+  async insertPersonalDeliverableType(ownerId: string, name: string) {
+    if (this.personalItems.some((item) => item.ownerId === ownerId && item.name === name)) return null;
+    const item = { id: ownerId, name };
+    this.personalItems.push({ ...item, ownerId });
+    return item;
+  }
 
   async findType(type: string): Promise<DictTypeRow | null> {
     return this.types.find((row) => row.code === type) ?? null;
@@ -261,6 +273,22 @@ describe("DictService（字典 C9）", () => {
     expect(audit.inserted[0]).toMatchObject({ action: "create", objectId: "deliverableType:现场签证单" });
     const all = await service.list(false);
     expect(all.items.find((item) => item.type === "deliverableType")?.items.map((item) => item.code)).toEqual(["竣工图", "现场签证单"]);
+  });
+
+  it("个人成果选项按账号隔离且名称不进入公共字典或审计", async () => {
+    const { service, dicts, audit } = makeDictService();
+    dicts.types.push({ code: "deliverableType", name: "成果文件类型", sort: 30, enabled: true, updatedAt: AT });
+    const first = await service.createPersonalDeliverableType("内部核对清单 A", UUID_ACTOR);
+    expect(await service.listPersonalDeliverableTypes(UUID_PROJECT)).toEqual({ items: [] });
+    const second = await service.createPersonalDeliverableType("内部核对清单 A", UUID_PROJECT);
+    expect(await service.listPersonalDeliverableTypes(UUID_ACTOR)).toEqual({ items: [first] });
+    expect(await service.listPersonalDeliverableTypes(UUID_PROJECT)).toEqual({ items: [second] });
+    await expectAppErrorAsync(() => service.createPersonalDeliverableType("内部核对清单 A", UUID_ACTOR), "DICT_ITEM_EXISTS");
+    expect((await service.get("deliverableType", true)).items).toEqual([]);
+    expect(JSON.stringify(await service.list(false))).not.toContain("内部核对清单 A");
+    expect(dicts.touched).toEqual([]);
+    expect(audit.inserted).toHaveLength(2);
+    expect(JSON.stringify(audit.inserted)).not.toContain("内部核对清单 A");
   });
 
   it("自定义成果类型：内置十类与已存在名称均 409，不落库、不写审计", async () => {

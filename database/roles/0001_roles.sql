@@ -66,3 +66,12 @@ begin
     grant select on table public.audit_logs to libiaolink_readonly;
   end if;
 end $$;
+
+-- 个人成果下拉选项仅由应用按账号读取和新增；重放角色基线时收回全表默认授权。
+do $$
+begin
+  if to_regclass('public.personal_deliverable_types') is not null then
+    revoke update, delete on table public.personal_deliverable_types from libiaolink_api;
+    revoke all on table public.personal_deliverable_types from libiaolink_readonly;
+  end if;
+end $$;

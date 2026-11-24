@@ -1,11 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import {
+  CUSTOM_DELIVERABLE_DICT_TYPE,
   DictItemCreateBodySchema,
   DictItemUpdateBodySchema,
   DictReadQuerySchema,
   z,
 } from "@libiaolink/contracts";
-import type { Dict, DictItemCreateBody, DictItemUpdateBody, DictListResponse, DictReadQuery } from "@libiaolink/contracts";
+import type { Dict, DictItemCreateBody, DictItemUpdateBody, DictListResponse, DictReadQuery, PersonalDeliverableTypeList } from "@libiaolink/contracts";
+import { AppError } from "../../common/errors/app-error.js";
 import { ZodValidationPipe } from "../../common/http/zod-validation.pipe.js";
 import { CsrfGuard, CurrentActorId, SessionGuard } from "../identity/index.js";
 import { PermissionService, ProjectAccessGuard, RequirePermission } from "../permission/index.js";
@@ -42,6 +44,12 @@ export class DictsController {
     return this.dicts.list(includeDisabled);
   }
 
+  @Get("deliverableType/personal")
+  @Header("Cache-Control", "private, no-store")
+  listPersonalDeliverableTypes(@CurrentActorId() actorId: string): Promise<PersonalDeliverableTypeList> {
+    return this.dicts.listPersonalDeliverableTypes(actorId);
+  }
+
   /** 单个字典：未知类型 404 NOT_FOUND。 */
   @Get(":type")
   async get(
@@ -71,6 +79,9 @@ export class DictsController {
     await this.permission.assertWritable(actorId, "当前部门为只读，不能新增字典条目");
     if (type !== "region") {
       await this.permission.assertCan(actorId, "dict.manage", undefined, "新增该字典条目需要 dict.manage");
+    }
+    if (type === CUSTOM_DELIVERABLE_DICT_TYPE && !(await this.permission.groupAccessOf(actorId)).admin) {
+      throw new AppError("FORBIDDEN", "仅系统管理员可新增公共成果文件选项");
     }
     return this.dicts.createItem(type, body, actorId);
   }

@@ -12,6 +12,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { users } from "./identity.js";
 import { AUDIT_ACTION_KEYS, AUDIT_ENTRY_KEYS, AUDIT_RESULT_KEYS, sqlValueList } from "./literals.js";
 
 /** 审计字段级变更条目（changes 列元素形状：谁、何时、从什么改成什么 —— C7-02）。 */
@@ -63,6 +64,21 @@ export const dictItems = pgTable(
     check("ck_dict_items_sort", sql`${table.sort} >= 0`),
     check("ck_dict_items_metadata", sql`jsonb_typeof(${table.metadata}) = 'object'`),
     index("ix_dict_items_type_sort").on(table.typeCode, table.sort, table.code),
+  ],
+);
+
+/** 个人成果文件下拉选项，与全站字典独立保存。 */
+export const personalDeliverableTypes = pgTable(
+  "personal_deliverable_types",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("uq_personal_deliverable_types_owner_name").on(table.ownerId, table.name),
+    check("ck_personal_deliverable_types_name", sql`char_length(btrim(${table.name})) between 1 and 50`),
   ],
 );
 

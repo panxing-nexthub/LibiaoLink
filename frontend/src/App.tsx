@@ -33,7 +33,11 @@ import {
   deleteDictItem,
   EMPTY_DICTS,
   loadDicts,
+  loadPersonalDeliverableTypes,
   nextDictSort,
+  type CustomDeliverableTypes,
+  type PersonalDeliverableType,
+  type ProjectDeliverableTypeCreator,
   type DictTypeCode,
   type DictTypeResult,
   type Dicts,
@@ -228,6 +232,8 @@ export default function App() {
   const [state, setState] = useState<ViewState>({ kind: "loading" });
   // 参考数据：字典（地区 / 项目类型 + 主题色）、用户目录（项目经理）与本人偏好（常用筛选）；失败不阻塞登录，页面用兜底值
   const [dicts, setDicts] = useState<Dicts>(EMPTY_DICTS);
+  const [personalDeliverableTypes, setPersonalDeliverableTypes] = useState<{ actorId: string; items: PersonalDeliverableType[] } | null>(null);
+  const personalDeliverableActor = useRef<string | null>(null);
   const [directory, setDirectory] = useState<DirectoryUser[]>([]);
   /** 项目经理候选（有效项目部成员 ∪ 系统管理员）：只用于项目经理选择器。 */
   const [managerCandidates, setManagerCandidates] = useState<ProjectManagerCandidate[]>([]);
@@ -269,6 +275,11 @@ export default function App() {
   const deleteConfirmTrapRef = useFocusTrap<HTMLDivElement>(pendingDelete !== null);
   const route = useHashRoute();
   const signedIn = state.kind === "signed-in";
+  const deliverableTypes: CustomDeliverableTypes = {
+    publicNames: dicts.deliverableType.map((item) => item.name),
+    personal: signedIn && personalDeliverableTypes !== null && personalDeliverableTypes.actorId === state.me.user.id
+      ? personalDeliverableTypes.items : [],
+  };
   /** 站内信红点（Push 352）：登录后先按读面补拉一次角标（SSE 未连上也有数），随后由 unread 快照驱动；
    *  open（含自动重连；服务端重连不补发）再补拉一次对齐；notification 只推进弹窗补拉版本号。 */
   useEffect(() => {
@@ -344,6 +355,8 @@ export default function App() {
           return;
         }
         if (response.status === 401) {
+          personalDeliverableActor.current = null;
+          setPersonalDeliverableTypes(null);
           setState({ kind: "signed-out" });
           return;
         }
@@ -355,13 +368,18 @@ export default function App() {
           return;
         }
         rememberCsrfToken(me.csrfToken);
+        if (personalDeliverableActor.current !== me.user.id) {
+          personalDeliverableActor.current = me.user.id;
+          setPersonalDeliverableTypes(null);
+        }
         setState({ kind: "signed-in", me });
-        const [dictResult, directoryResult, prefsResult, , managerResult] = await Promise.allSettled([
+        const [dictResult, directoryResult, prefsResult, , managerResult, personalResult] = await Promise.allSettled([
           loadDicts(),
           loadDirectory(),
           loadMyPreferencesWithLegacyMigration(),
           loadMyPermissions(),
           loadProjectManagerCandidates(),
+          loadPersonalDeliverableTypes(),
         ]);
         if (cancelled) {
           return;
@@ -369,6 +387,15 @@ export default function App() {
         setPermissionsSettled(true);
         if (dictResult.status === "fulfilled") {
           setDicts(dictResult.value);
+        }
+        if (personalResult.status === "fulfilled" && me.user.id !== null) {
+          const actorId = me.user.id;
+          setPersonalDeliverableTypes((previous) => {
+            if (personalDeliverableActor.current !== actorId) return previous;
+            const loadedIds = new Set(personalResult.value.map((item) => item.id));
+            const added = previous?.actorId === actorId ? previous.items.filter((item) => !loadedIds.has(item.id)) : [];
+            return { actorId, items: [...personalResult.value, ...added] };
+          });
         }
         if (directoryResult.status === "fulfilled") {
           setDirectory(directoryResult.value);
@@ -403,6 +430,7 @@ export default function App() {
     void load();
     return () => {
       cancelled = true;
+      personalDeliverableActor.current = null;
     };
   }, []);
 
@@ -520,14 +548,23 @@ export default function App() {
     }
   };
 
-  /**
-   * 输出成果文件「自定义」新增（2026-11-06）：只由项目详情 / 工作台抽屉里的项目经理触发，
-   * 服务端按当前项目再次裁决（manager_ids 或名册 project_manager）；成功后把全站字典缓存整类替换。
-   * 返回 null = 成功；返回文案 = 面板内联提示。
-   */
-  const handleCreateDeliverableType = async (projectId: string, name: string): Promise<string | null> => {
+  /** 公开候选更新字典；私有候选只放入当前登录账号的下拉。 */
+  const handleCreateDeliverableType: ProjectDeliverableTypeCreator = async (projectId, name, visibility) => {
+    const actorId = personalDeliverableActor.current;
+    if (state.kind !== "signed-in" || actorId === null || actorId !== state.me.user.id) return t("app.fail.addDeliverableType");
     try {
-      applyDictType("deliverableType", await createProjectDeliverableType(projectId, name));
+      const result = await createProjectDeliverableType(projectId, name, visibility);
+      if (personalDeliverableActor.current !== actorId) return t("app.fail.addDeliverableType");
+      if (result.visibility === "public") {
+        applyDictType("deliverableType", result.dictionary);
+      } else {
+        setPersonalDeliverableTypes((previous) => {
+          if (personalDeliverableActor.current !== actorId) return previous;
+          const items = previous?.actorId === actorId ? previous.items : [];
+          const next = items.some((item) => item.id === result.item.id) ? items : [...items, result.item];
+          return { actorId, items: next };
+        });
+      }
       return null;
     } catch (error: unknown) {
       return errorMessageOf(error, t("app.fail.addDeliverableType"));
@@ -967,7 +1004,7 @@ export default function App() {
       <>
         <WorkspacePage
           me={state.me}
-          customDeliverableTypes={dicts.deliverableType.map((item) => item.name)}
+          customDeliverableTypes={deliverableTypes}
           onCreateDeliverableType={handleCreateDeliverableType}
           members={directoryMemberOptions(directory)}
           managerMembers={directoryMemberOptions(managerCandidates)}
@@ -1047,7 +1084,7 @@ export default function App() {
           focus={route.focus}
           onClearFocus={clearProjectFocus}
           onClearDailyDate={() => { clearProjectDate(route.id); }}
-          customDeliverableTypes={dicts.deliverableType.map((item) => item.name)}
+          customDeliverableTypes={deliverableTypes}
           onCreateDeliverableType={handleCreateDeliverableType}
           members={directoryMemberOptions(directory)}
           managerMembers={directoryMemberOptions(managerCandidates)}

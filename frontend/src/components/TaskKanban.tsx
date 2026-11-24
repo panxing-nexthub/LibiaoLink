@@ -1,3 +1,4 @@
+import type { CustomDeliverableTypes, DeliverableTypeCreator } from "../dicts";
 import { Fragment, useEffect, useRef, useState, type Dispatch, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type SetStateAction } from "react";
 import type { Member } from "../data/members";
 import { PROJECT_STAGES } from "../data/projects";
@@ -226,10 +227,10 @@ type TaskKanbanProps = {
   canEditManagers?: boolean;
   /** 卡片拖拽会改负责人 / 状态 / 排序，仅项目编辑者启用。 */
   canDragTasks?: boolean;
-  /** 全站自定义成果类型（字典 deliverableType）。 */
-  customDeliverableTypes?: readonly string[];
-  /** 仅当前项目项目经理可新增；不传 = 选择器入口置灰。 */
-  onCreateDeliverableType?: (name: string) => Promise<string | null>;
+  /** 当前账号可选的公开和个人自定义成果类型。 */
+  customDeliverableTypes?: CustomDeliverableTypes;
+  /** 本项目的项目经理或系统管理员可以新增。 */
+  onCreateDeliverableType?: DeliverableTypeCreator;
   /**
    * 列底「添加 → 临时任务」：标题由用户自己填（英文名可空）；负责人 / 状态按所在列给、阶段留空。
    * 返回 = 新建任务的 id（失败 = null）—— Push 196 起建完由看板直接打开它的任务详情抽屉，补时间等细节。
@@ -810,7 +811,7 @@ function KanbanColumn({
   );
 }
 
-export function TaskKanban({ mode, tasks, focusTaskId = null, onFocusClosed, canFinalizeTask, canEditManagers = false, canDragTasks = false, customDeliverableTypes = [], onCreateDeliverableType, members, managerMembers, onAddTask, onAddStageTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onSetStatus, onSetActualEnd, onReorderTask, onSetProgress, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, projectId }: TaskKanbanProps) {
+export function TaskKanban({ mode, tasks, focusTaskId = null, onFocusClosed, canFinalizeTask, canEditManagers = false, canDragTasks = false, customDeliverableTypes, onCreateDeliverableType, members, managerMembers, onAddTask, onAddStageTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onSetStatus, onSetActualEnd, onReorderTask, onSetProgress, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, projectId }: TaskKanbanProps) {
   const t = useT();
   /**
    * 任务详情抽屉选中的任务 id（Push 196 由对象改存 id）：点卡片与「建完临时任务」都先落 id，抽屉按 id 从最新列表取行 ——

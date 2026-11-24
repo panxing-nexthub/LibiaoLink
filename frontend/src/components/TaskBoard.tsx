@@ -1,3 +1,4 @@
+import type { CustomDeliverableTypes, DeliverableTypeCreator } from "../dicts";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { mediumCardBorderOf, mediumCardTintOf, vividCardBorderOf, vividCardTintOf, type TintedTier } from "../backgroundTier";
 import { PROJECT_STAGES } from "../data/projects";
@@ -325,10 +326,10 @@ type TaskBoardProps = {
   members: readonly Member[];
   /** 项目经理候选（有效项目部成员 ∪ 系统管理员）：项目经理列 / 抽屉项目经理字段专用。 */
   managerMembers: readonly Member[];
-  /** 全站自定义成果类型（字典 deliverableType）：所有任务共用。 */
-  customDeliverableTypes?: readonly string[];
-  /** 只有当前项目项目经理拿到新增回调；不传 = 选择器入口置灰。 */
-  onCreateDeliverableType?: (name: string) => Promise<string | null>;
+  /** 当前账号可选的公开和个人自定义成果类型。 */
+  customDeliverableTypes?: CustomDeliverableTypes;
+  /** 本项目的项目经理或系统管理员可以新增。 */
+  onCreateDeliverableType?: DeliverableTypeCreator;
   visibleColumns?: VisibleColumns;
   scrollRef?: RefObject<HTMLDivElement | null>;
   collapsed: Record<string, boolean>;
@@ -427,7 +428,7 @@ function Chevron({ collapsed }: { collapsed: boolean }) {
  *  （onSetStatus）/ 紧急重要度与成果文件与进展描述（onPatch）/ 「文件」列下拉（onUploadFiles + onDeleteFile）/
  *  三段日期与人数（onPatch）；天数不单开编辑（随日期联动写回，与项目页同口径）。点行 = onSelect（开抽屉）；**onSelect 不传 = 整行不可点**（不出「点击查看任务详情」提示、不出 pointer 光标、不占键盘 Tab 焦点；行内各列仍按回调照常只读 / 可编辑 —— 甘特图「画不出时间轴」的兜底列表这样用，Push 294）。
  *  subtitle 缺省 = 英文名小行（项目页口径）；工作台传「阶段 / 临时任务 · 英文名」保持自己那张表的副行。 */
-export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelete, canFinalize = false, members, managerMembers = members, customDeliverableTypes = [], onCreateDeliverableType, onSetStatus, onSetActualEnd, onChangeManagers, canEditManagers, allowScheduleShift = false, onPatch, onUploadFiles, onDeleteFile, files, tierTint, subtitle }: { task: ProjectTask; columns: ColumnDef[]; selected: boolean; onSelect?: () => void; onProgress?: (progress: number) => void; onDelete?: () => void; canFinalize?: boolean; members: readonly Member[]; managerMembers?: readonly Member[]; customDeliverableTypes?: readonly string[]; onCreateDeliverableType?: (name: string) => Promise<string | null>; onSetStatus?: (status: TaskStatus) => void; onSetActualEnd?: (iso: string) => void; onChangeManagers?: (taskId: string, managerIds: string[]) => void; canEditManagers?: boolean; allowScheduleShift?: boolean; onPatch?: (patch: TaskPatch) => void; onUploadFiles?: (taskId: string, files: File[], onProgress?: (done: number, total: number) => void, finalize?: boolean) => Promise<void>; onDeleteFile?: (fileId: string) => Promise<void>; files?: readonly TaskFileRef[]; tierTint?: TintedTier | false; subtitle?: string }) {
+export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelete, canFinalize = false, members, managerMembers = members, customDeliverableTypes, onCreateDeliverableType, onSetStatus, onSetActualEnd, onChangeManagers, canEditManagers, allowScheduleShift = false, onPatch, onUploadFiles, onDeleteFile, files, tierTint, subtitle }: { task: ProjectTask; columns: ColumnDef[]; selected: boolean; onSelect?: () => void; onProgress?: (progress: number) => void; onDelete?: () => void; canFinalize?: boolean; members: readonly Member[]; managerMembers?: readonly Member[]; customDeliverableTypes?: CustomDeliverableTypes; onCreateDeliverableType?: DeliverableTypeCreator; onSetStatus?: (status: TaskStatus) => void; onSetActualEnd?: (iso: string) => void; onChangeManagers?: (taskId: string, managerIds: string[]) => void; canEditManagers?: boolean; allowScheduleShift?: boolean; onPatch?: (patch: TaskPatch) => void; onUploadFiles?: (taskId: string, files: File[], onProgress?: (done: number, total: number) => void, finalize?: boolean) => Promise<void>; onDeleteFile?: (fileId: string) => Promise<void>; files?: readonly TaskFileRef[]; tierTint?: TintedTier | false; subtitle?: string }) {
   const locale = useLocale();
   const t = useT();
   /** 手打内容机翻显示（业务口径 2026-10-13「因为页面有些内容是手打的 我建议是提前后台机翻」）：
@@ -943,7 +944,7 @@ export function ProjectSummary({ summary }: { summary: ApiProjectSummary | null 
   );
 }
 
-export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes = [], onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, onAddNode, onAddNodes, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, filesByTask, projectId, tierTint }: TaskBoardProps) {
+export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes, onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, onAddNode, onAddNodes, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, filesByTask, projectId, tierTint }: TaskBoardProps) {
   const t = useT();
   const locale = useLocale();
   /**

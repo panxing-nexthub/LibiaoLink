@@ -18,6 +18,8 @@ import {
 } from "../src/modules/project-management/project-management-snapshot.repository.js";
 
 const RECORD_ID = "11111111-1111-4111-8111-111111111111";
+const SECOND_RECORD_ID = "77777777-7777-4777-8777-777777777777";
+const THIRD_RECORD_ID = "88888888-8888-4888-8888-888888888888";
 const MANAGER_ID = "22222222-2222-4222-8222-222222222222";
 const ENGINEER_ID = "33333333-3333-4333-8333-333333333333";
 const ENGINEER_2_ID = "55555555-5555-4555-8555-555555555555";
@@ -30,8 +32,20 @@ class FakeProjectManagementRepository {
   insertCalls: unknown[] = [];
   versionChecks: Array<{ id: string; version: number }> = [];
 
+  orderWrites: string[][] = [];
+
   async list(): Promise<ProjectManagementRecordRow[]> {
-    return this.rows;
+    return this.rows
+      .filter((row) => !isBlankProjectManagementFields(row))
+      .sort((a, b) => (a.sortOrder ?? Infinity) - (b.sortOrder ?? Infinity));
+  }
+
+  async lockOrder(): Promise<void> {}
+
+  async writeOrder(ids: string[]): Promise<void> {
+    this.orderWrites.push(ids);
+    const positions = new Map(ids.map((id, index) => [id, index + 1]));
+    this.rows = this.rows.map((row) => ({ ...row, sortOrder: positions.get(row.id) ?? row.sortOrder }));
   }
 
   async findById(id: string): Promise<ProjectManagementRecordRow | null> {
@@ -128,6 +142,7 @@ function makeRow(overrides: Partial<ProjectManagementRecordRow> = {}): ProjectMa
     plannedStartDate: null,
     plannedEndDate: null,
     implementationDays: null,
+    sortOrder: null,
     version: 0,
     createdAt: new Date("2026-11-17T01:00:00.000Z"),
     updatedAt: new Date("2026-11-17T01:00:00.000Z"),
@@ -177,6 +192,74 @@ describe("项目管理阶段契约（2026-11-20）", () => {
     for (const currentStageOverride of ["not_started", "archived", "terminated"] as const) {
       expect(ProjectManagementRecordCreateBodySchema.parse({ currentStageOverride }).currentStageOverride).toBe(currentStageOverride);
     }
+  });
+});
+
+describe("项目管理记录顺序", () => {
+  it("移动可见记录并保持字段版本与时间戳", async () => {
+    const { service, repository, audits } = makeService();
+    const first = makeRow({ id: SECOND_RECORD_ID, name: "先创建", version: 2 });
+    const second = makeRow({ id: THIRD_RECORD_ID, name: "后创建", version: 5 });
+    repository.rows = [first, second];
+    await expect(service.move(second.id, { beforeId: first.id })).resolves.toEqual({ id: second.id });
+    expect((await service.list()).items.map(({ id, version, updatedAt }) => ({ id, version, updatedAt }))).toEqual([
+      { id: second.id, version: 5, updatedAt: second.updatedAt.toISOString() },
+      { id: first.id, version: 2, updatedAt: first.updatedAt.toISOString() },
+    ]);
+    await service.move(second.id, { beforeId: first.id });
+    expect(repository.orderWrites).toHaveLength(1);
+    expect(audits.records).toHaveLength(1);
+    await service.move(second.id, { beforeId: null });
+    expect((await service.list()).items.map((row) => row.id)).toEqual([first.id, second.id]);
+  });
+
+  it("相对插入和移动只接受可见锚点，空草稿和不合资格人员不能创建", async () => {
+    const { service, repository } = makeService();
+    const first = makeRow({ id: SECOND_RECORD_ID, name: "已有记录" });
+    const hidden = makeRow({ id: THIRD_RECORD_ID });
+    repository.rows = [first, hidden];
+    const missing = { code: "NOT_FOUND" };
+    await expect(service.move(first.id, { beforeId: hidden.id })).rejects.toMatchObject(missing);
+    await expect(service.move(hidden.id, { beforeId: first.id })).rejects.toMatchObject(missing);
+    await expect(service.create({ name: "没有锚点", beforeId: hidden.id })).rejects.toMatchObject(missing);
+    await expect(service.create({ beforeId: first.id })).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+    await expect(service.create({
+      name: "复制历史工程师",
+      beforeId: first.id,
+      implementationEngineerIds: [OUTSIDE_ID],
+    })).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+    expect(repository.insertCalls).toHaveLength(0);
+    expect(repository.orderWrites).toHaveLength(0);
+  });
+
+  it("有锚点的创建只写可编辑字段，并按编号解析自动快照", async () => {
+    const { service, repository, snapshots } = makeService();
+    const target = makeRow({ id: SECOND_RECORD_ID, code: "PM-LINK", name: "原记录", version: 7 });
+    repository.rows = [target];
+    snapshots.snapshots.set("PM-LINK", {
+      ...EMPTY_PROJECT_MANAGEMENT_PROJECT_SNAPSHOT,
+      projectId: THIRD_RECORD_ID,
+      plannedStartDate: "2026-10-01",
+    });
+    const created = await service.create({
+      beforeId: target.id,
+      code: "PM-LINK",
+      name: "原记录",
+      implementationHandedOver: true,
+      plannedEndDateOverride: "2026-10-08",
+    });
+    expect(created).toMatchObject({
+      id: RECORD_ID,
+      version: 0,
+      projectId: THIRD_RECORD_ID,
+      plannedStartDate: "2026-10-01",
+      plannedEndDateOverride: "2026-10-08",
+      implementationHandedOver: true,
+    });
+    expect(repository.insertCalls[0]).not.toHaveProperty("beforeId");
+    expect(repository.insertCalls[0]).not.toHaveProperty("projectId");
+    expect(repository.rows[0]).toMatchObject({ id: target.id, name: "原记录", version: 7 });
+    expect((await service.list()).items.map((row) => row.id)).toEqual([created.id, target.id]);
   });
 });
 

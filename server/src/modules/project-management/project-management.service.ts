@@ -3,6 +3,8 @@ import {
   type ProjectManagementRecord,
   type ProjectManagementRecordCreateBody,
   type ProjectManagementRecordList,
+  type ProjectManagementRecordMoveBody,
+  type ProjectManagementRecordMoveResponse,
   type ProjectManagementRecordUpdateBody,
   type ProjectManagementRecordDeleteResponse,
 } from "@libiaolink/contracts";
@@ -25,6 +27,15 @@ import {
 } from "./project-management-snapshot.repository.js";
 
 const DEFAULT_REGION = "未分类";
+
+function placementIndex(ids: readonly string[], beforeId: string | null): number {
+  if (beforeId === null) return ids.length;
+  const index = ids.indexOf(beforeId);
+  if (index === -1) {
+    throw new AppError("NOT_FOUND", "目标位置的记录已不存在，请刷新后重试");
+  }
+  return index;
+}
 
 /**
  * 项目管理接口：独立准备记录，不调用 ProjectService / ProjectRepository，
@@ -88,7 +99,17 @@ export class ProjectManagementService {
 
     const at = new Date();
     const row = await this.database.db.transaction(async (tx) => {
+      let placement: { ids: string[]; index: number } | null = null;
+      if (body.beforeId !== undefined) {
+        await this.records.lockOrder(tx);
+        const ids = (await this.records.list(tx)).map((record) => record.id);
+        placement = { ids, index: placementIndex(ids, body.beforeId) };
+      }
       const inserted = await this.records.insert(values, at, tx);
+      if (placement !== null) {
+        placement.ids.splice(placement.index, 0, inserted.id);
+        await this.records.writeOrder(placement.ids, tx);
+      }
       await this.audits.record(tx, {
         actorId,
         action: "create",
@@ -211,6 +232,40 @@ export class ProjectManagementService {
       dateSnapshots ?? this.projectSnapshots.loadByCodes([row.code]),
     ]);
     return this.toContract(row, names, snapshotOf(snapshots, row.code));
+  }
+
+  async move(
+    id: string,
+    body: ProjectManagementRecordMoveBody,
+    actorId: string | null = null,
+  ): Promise<ProjectManagementRecordMoveResponse> {
+    await this.database.db.transaction(async (tx) => {
+      await this.records.lockOrder(tx);
+      const rows = await this.records.list(tx);
+      const row = rows.find((record) => record.id === id);
+      if (row === undefined) {
+        throw new AppError("NOT_FOUND", "项目管理记录不存在：" + id);
+      }
+      const currentIndex = rows.indexOf(row);
+      if (body.beforeId === id || (rows[currentIndex + 1]?.id ?? null) === body.beforeId) {
+        return;
+      }
+      const ids = rows.filter((record) => record.id !== id).map((record) => record.id);
+      ids.splice(placementIndex(ids, body.beforeId), 0, id);
+      await this.records.writeOrder(ids, tx);
+      await this.audits.record(tx, {
+        actorId,
+        action: "update",
+        objectType: "project_management_record",
+        objectId: id,
+        projectCode: auditProjectCodeOf(row),
+        projectName: auditProjectNameOf(row),
+        summary: "调整项目管理记录顺序" + auditRecordSuffix(row),
+        changes: null,
+        metadata: { source: "project_management", beforeId: body.beforeId },
+      });
+    });
+    return { id };
   }
 
   async remove(id: string, version: number, actorId: string | null = null): Promise<ProjectManagementRecordDeleteResponse> {

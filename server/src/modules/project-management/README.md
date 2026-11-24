@@ -38,9 +38,10 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/v1/project-management-records` | 全部记录，按创建时间正序，并附带项目空间只读快照 |
-| POST | `/api/v1/project-management-records` | 首笔输入即创建；字段允许空串 / 空数组 |
+| GET | `/api/v1/project-management-records` | 全部可见记录，按默认行顺序，并附带项目空间只读快照 |
+| POST | `/api/v1/project-management-records` | 首笔输入即创建；可用 `beforeId` 插到指定可见记录之前，省略时追加 |
 | PATCH | `/api/v1/project-management-records/{id}` | 局部更新 + `version` 乐观锁 |
+| PATCH | `/api/v1/project-management-records/{id}/order` | 移至 `beforeId` 对应记录前，`null` 表示移至末尾；缺少可见记录时返回 404 |
 | DELETE | `/api/v1/project-management-records/{id}` | 物理删除；`If-Match: <version>` |
 
 所有接口要求登录 + CSRF，并叠加项目管理首批上线白名单守卫；非白名单账号返回 403。记录不进入项目回收站。
@@ -58,12 +59,13 @@
 - `currentStageOverride`：项目管理十二阶段 = `not_started` + 项目空间九阶段 + `archived` / `terminated`；新增三种仅用于项目管理人工标注，不写回项目空间。
 - `startupCompletedAtOverride` / `arrivalDateOverride` / `plannedStartDateOverride` / `plannedEndDateOverride` / `implementationDaysOverride`：人工覆盖值；null = 使用自动识别 / 自动计算值。
 - `projectId` / `currentStage` / `startupCompletedAt` / `arrivalDate` / `plannedStartDate` / `plannedEndDate` / `implementationDays`：项目空间只读派生快照，不接收客户端写入；前端按「覆盖值 ?? 自动值」展示，`projectId` 用于项目详情跳转。
-- `version` / `createdAt` / `updatedAt`：乐观锁与时间戳。
+- `version` / `createdAt` / `updatedAt`：乐观锁与时间戳。迁移 `0116_project_management_record_order.sql` 增加内部排序列 `sort_order`。未调整的旧记录与普通新增记录按 `created_at, id` 追加；调整顺序不会改变字段版本和时间戳。
 
 ## 前端交互
 
 - 文本输入停顿约 450ms 自动 PATCH / POST；失焦立即冲刷待保存内容。
 - 人员、实施方式、地点选择后立即保存。
+- 在项目总览可拖动行号换位，或通过行号菜单复制、粘贴、插入空行和上移 / 下移。整行粘贴复用新增校验。插入的空行只在有有效输入时写入，记录后方第一条已保存数据作为插入锚点。筛选或日期排序时，换位和相对插入禁用，粘贴追加。
 - 每行保存队列串行执行，避免同一行请求乱序；冲突返回 409 `VERSION_CONFLICT`。
 - 项目编号 / 名称在 `projectId` 非空时显示为项目详情链接；单击或 Enter 打开项目，双击或 F2 进入原有文本编辑。
 - 项目当前阶段 / 启动时间 / 到货日期 / 计划实施日期 / 实施天数均可点击编辑：阶段走项目管理十二阶段下拉（含「自动识别」），日期走日历（清除即恢复自动），天数走数字编辑（「恢复自动」清除覆盖）。项目编号变化后先清空旧自动快照，保存成功立即回填；人工覆盖值不因编号变化自动清空。

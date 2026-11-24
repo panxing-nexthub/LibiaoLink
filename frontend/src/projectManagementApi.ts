@@ -65,8 +65,19 @@ export async function fetchProjectManagementRecords(): Promise<ProjectManagement
   return payload.items;
 }
 
-export function createProjectManagementRecord(input: ProjectManagementWriteInput): Promise<ProjectManagementRecord> {
-  return apiSend<ProjectManagementRecord>("/api/v1/project-management-records", "POST", input);
+export function createProjectManagementRecord(
+  input: ProjectManagementWriteInput,
+  beforeId?: string,
+): Promise<ProjectManagementRecord> {
+  return apiSend<ProjectManagementRecord>(
+    "/api/v1/project-management-records", "POST", beforeId === undefined ? input : { ...input, beforeId },
+  );
+}
+
+export function moveProjectManagementRecord(id: string, beforeId: string | null): Promise<{ id: string }> {
+  return apiSend<{ id: string }>(
+    "/api/v1/project-management-records/" + encodeURIComponent(id) + "/order", "PATCH", { beforeId },
+  );
 }
 
 export function updateProjectManagementRecord(

@@ -100,11 +100,12 @@ export const ProjectManagementRecordListSchema = z
     items: z.array(ProjectManagementRecordSchema),
   })
   .openapi("ProjectManagementRecordList", {
-    description: "项目管理记录清单（按创建时间正序，无分页；表格逐格保存后即回显）",
+    description: "项目管理记录清单（默认按已保存的行顺序，未调整的记录按创建时间追加；无分页）",
   });
 
 export const ProjectManagementRecordCreateBodySchema = z
   .object({
+    beforeId: UuidSchema.optional().openapi({ description: "插入到此记录前；省略时追加到末尾" }),
     code: z.string().max(PROJECT_MANAGEMENT_CODE_MAX).optional(),
     name: z.string().max(PROJECT_MANAGEMENT_NAME_MAX).optional(),
     managerIds: z.array(UuidSchema).max(PROJECT_MANAGEMENT_MANAGER_LIMIT).optional(),
@@ -145,6 +146,19 @@ export const ProjectManagementRecordUpdateBodySchema = z
   .openapi("ProjectManagementRecordUpdateBody", {
     description: "局部更新（必须带上 version）；全空结果返回 400，请改用 DELETE；项目经理 / 实施工程师变更时由服务端校验账号资格；已移交优先清空工程师，工程师非空则自动取消已移交",
   });
+
+export const ProjectManagementRecordMoveBodySchema = z
+  .object({
+    beforeId: UuidSchema.nullable().openapi({ description: "移动到此记录前；null 表示移动到末尾" }),
+  })
+  .openapi("ProjectManagementRecordMoveBody");
+
+export const ProjectManagementRecordMoveResponseSchema = z
+  .object({ id: UuidSchema })
+  .openapi("ProjectManagementRecordMoveResponse");
+
+export type ProjectManagementRecordMoveBody = z.infer<typeof ProjectManagementRecordMoveBodySchema>;
+export type ProjectManagementRecordMoveResponse = z.infer<typeof ProjectManagementRecordMoveResponseSchema>;
 
 export const ProjectManagementRecordDeleteResponseSchema = z
   .object({

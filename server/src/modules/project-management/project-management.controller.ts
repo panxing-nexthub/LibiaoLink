@@ -1,6 +1,8 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import {
   ProjectManagementRecordCreateBodySchema,
+  ProjectManagementRecordMoveBodySchema,
+  type ProjectManagementRecordMoveBody,
   ProjectManagementRecordUpdateBodySchema,
   UuidSchema,
   z,
@@ -55,6 +57,15 @@ export class ProjectManagementController {
     @CurrentActorId() actorId: string,
   ) {
     return this.records.update(id, body, actorId);
+  }
+
+  @Patch(":id/order")
+  move(
+    @Param("id", uuidParam) id: string,
+    @Body(new ZodValidationPipe(ProjectManagementRecordMoveBodySchema)) body: ProjectManagementRecordMoveBody,
+    @CurrentActorId() actorId: string,
+  ) {
+    return this.records.move(id, body, actorId);
   }
 
   @Delete(":id")

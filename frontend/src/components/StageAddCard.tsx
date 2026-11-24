@@ -838,7 +838,6 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
           <p className="mb-2 text-xs font-medium text-zinc-700">
             {t("tpl.node.createInTemplate", { name: localize(currentTemplate.name) })}
           </p>
-          <p className="mb-2 text-[10px] leading-4 text-zinc-500">{t("tpl.node.createInTemplateHint")}</p>
           <input
             type="text"
             value={templateFormTitle}

@@ -1,7 +1,10 @@
-import { useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "../i18n";
-import type { SummaryPhoto, SummaryView } from "../projectSummaryView";
+import type { SummaryPhoto, SummaryProgressRow, SummaryView } from "../projectSummaryView";
+import { ImageZoomViewer } from "./ImageZoomViewer";
 import { PhotoStrip } from "./ReportIssuePanel";
+import { useFocusTrap } from "./useFocusTrap";
 
 type ProjectSummaryDocumentProps = {
   view: SummaryView;
@@ -39,6 +42,65 @@ function Missing({ note }: { note?: string }) {
   );
 }
 
+function StageFlow({ rows }: { rows: readonly SummaryProgressRow[] }) {
+  const t = useT();
+  const unidentified = t("ai.doc.unrecognized");
+  const dateText = (from: string | null, to: string | null): string =>
+    from === null && to === null
+      ? unidentified
+      : (from ?? unidentified) + " ~ " + (to ?? unidentified);
+  return (
+    <div className="mt-4">
+      <p className="text-[11px] font-medium text-zinc-500">{t("ai.doc.stageFlow")}</p>
+      <ol className="relative ml-1 mt-2 border-l border-zinc-200">
+        {rows.map((row, index) => {
+          const isDone = row.status === "done";
+          const isActive = row.status === "active";
+          const statusLabel = isDone ? t("ai.doc.stageDone") : isActive ? t("ai.doc.stageActive") : t("ai.doc.stagePending");
+          const dot = isDone ? "bg-[#FF8F6B]" : isActive ? "bg-sky-400" : "bg-zinc-300";
+          const badge = isDone
+            ? "bg-[#FFF1EB] text-[#B4431F] ring-1 ring-[#FFD7C8]"
+            : isActive
+              ? "bg-sky-50 text-sky-700 ring-1 ring-sky-100"
+              : "bg-zinc-100 text-zinc-500";
+          const percentText = row.percent === null ? unidentified : String(row.percent) + "%";
+          const actual = dateText(row.actualFrom, row.actualTo);
+          const duration = row.durationDays === null ? null : t("ai.doc.stageDuration", { days: String(row.durationDays) });
+          const tasks = row.total === 0
+            ? t("ai.doc.stageNoTask")
+            : t("ai.doc.stageTasks", { done: String(row.done), total: String(row.total), percent: percentText });
+          return (
+            <li key={row.stage + "#" + String(index)} className="relative pb-4 pl-4 last:pb-0">
+              <span className={"absolute -left-[4.5px] top-[6px] h-2 w-2 rounded-full ring-4 ring-white " + dot} />
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="font-mono text-[11px] text-zinc-400">{actual}</span>
+                <span className="text-[13px] font-semibold text-zinc-800">{row.stage}</span>
+                <span className={"rounded px-1.5 py-0.5 text-[10px] font-medium " + badge}>{statusLabel}</span>
+                <span className="ml-auto flex flex-wrap items-center gap-x-2 text-[11px] tabular-nums text-zinc-500">
+                  {duration === null ? null : (
+                    <>
+                      <span>{duration}</span>
+                      <span className="text-zinc-300">·</span>
+                    </>
+                  )}
+                  <span>{tasks}</span>
+                </span>
+              </div>
+              <p className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-zinc-400">
+                <span>{t("ai.sources")}</span>
+                <span className="rounded bg-zinc-50 px-1.5 py-0.5 text-zinc-500 ring-1 ring-zinc-100">
+                  {t("ai.doc.taskRecord")}
+                  {row.sourceDate === null ? "" : " " + row.sourceDate}
+                </span>
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 function dateOnly(value: string | null): string {
   if (value === null || value === "") return "—";
   return value.length >= 10 ? value.slice(0, 10) : value;
@@ -70,6 +132,40 @@ function Gauge({ percent }: { percent: number | null }) {
   );
 }
 
+/** 布局图 / 三维图的大图预览：平台内浮层（portal + 缩放查看器），不再新开浏览器标签。 */
+function LayoutPreview({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+  const t = useT();
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => { document.removeEventListener("keydown", onKey, true); };
+  }, [onClose]);
+  const trapRef = useFocusTrap<HTMLDivElement>();
+  return createPortal(
+    <div
+      ref={trapRef}
+      data-layout-preview="true"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("ai.doc.preview", { name })}
+      onClick={(event) => { event.stopPropagation(); onClose(); }}
+      onPointerDown={(event) => { event.stopPropagation(); }}
+      className="fixed inset-0 z-[85] flex items-center justify-center bg-zinc-900/60 p-6"
+    >
+      <figure className="flex max-h-full max-w-full flex-col items-center">
+        <ImageZoomViewer src={url} alt={name} />
+        <figcaption className="relative z-10 mt-2 rounded-md bg-zinc-900/35 px-2 py-1 text-center text-xs text-white/80 backdrop-blur-sm">{name}</figcaption>
+      </figure>
+    </div>,
+    document.body,
+  );
+}
+
 function LayoutSlot({ label, kind, photo, onPreviewOpenChange, onReplace }: {
   label: string;
   kind: "layout" | "three_d";
@@ -81,6 +177,11 @@ function LayoutSlot({ label, kind, photo, onPreviewOpenChange, onReplace }: {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const closePreview = () => {
+    setPreviewOpen(false);
+    onPreviewOpenChange?.(false);
+  };
   const pick = () => inputRef.current?.click();
   const onFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -135,15 +236,23 @@ function LayoutSlot({ label, kind, photo, onPreviewOpenChange, onReplace }: {
             onPreviewOpenChange={onPreviewOpenChange}
           />
         ) : (
-          <a
-            href={photo.url ?? undefined}
-            target="_blank"
-            rel="noreferrer"
-            className="block overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50/60"
-            title={photo.name}
-          >
-            <img src={photo.url ?? undefined} alt={label} className="h-28 w-full object-contain" />
-          </a>
+          <>
+            <button
+              type="button"
+              data-layout-preview-open="true"
+              onClick={() => {
+                setPreviewOpen(true);
+                onPreviewOpenChange?.(true);
+              }}
+              className="block w-full overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50/60 transition hover:border-zinc-200"
+              title={photo.name}
+            >
+              <img src={photo.url ?? undefined} alt={label} className="h-28 w-full object-contain" />
+            </button>
+            {previewOpen && photo.url !== null ? (
+              <LayoutPreview url={photo.url} name={photo.name} onClose={closePreview} />
+            ) : null}
+          </>
         )}
       </div>
       {photo === null ? null : <p className="mt-1 truncate text-[10px] text-zinc-400" title={photo.name}>{photo.name}</p>}
@@ -248,23 +357,19 @@ export function ProjectSummaryDocument({ view, onPreviewOpenChange, onReplaceIma
         {view.equipment.rows.length === 0 ? (
           <Missing />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-[12px]">
+          <div className="overflow-hidden rounded-xl border border-zinc-100">
+            <table className="w-full border-collapse text-[12px]">
               <thead>
                 <tr className="bg-zinc-50 text-left text-[11px] text-zinc-500">
-                  <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.category")}</th>
-                  <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.itemCount")}</th>
-                  <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.quantity")}</th>
-                  <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.representative")}</th>
+                  <th className="border-b border-zinc-100 px-3 py-1.5 font-medium">{t("ai.doc.category")}</th>
+                  <th className="w-[42%] border-b border-l border-zinc-100 px-3 py-1.5 font-medium">{t("ai.doc.quantity")}</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-zinc-100">
                 {view.equipment.rows.map((row, index) => (
                   <tr key={row.category + "#" + String(index)} className="text-zinc-700">
-                    <td className="border border-zinc-100 px-2 py-1.5 font-medium">{row.category}</td>
-                    <td className="border border-zinc-100 px-2 py-1.5">{row.itemCount}</td>
-                    <td className="border border-zinc-100 px-2 py-1.5">{row.quantityText === "" ? "—" : row.quantityText}</td>
-                    <td className="border border-zinc-100 px-2 py-1.5">{row.representative === "" ? "—" : row.representative}</td>
+                    <td className="px-3 py-1.5 font-medium">{row.category}</td>
+                    <td className="border-l border-zinc-100 px-3 py-1.5">{row.quantityText === "" ? "—" : row.quantityText}</td>
                   </tr>
                 ))}
               </tbody>
@@ -289,30 +394,7 @@ export function ProjectSummaryDocument({ view, onPreviewOpenChange, onReplaceIma
           {view.progress.rows.length === 0 ? (
             <div className="mt-3"><Missing /></div>
           ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[680px] border-collapse text-[12px]">
-                <thead>
-                  <tr className="bg-zinc-50 text-left text-[11px] text-zinc-500">
-                    <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.stage")}</th>
-                    <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.stageStatus")}</th>
-                    <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.actualRange")}</th>
-                    <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.taskDone")}</th>
-                    <th className="border border-zinc-100 px-2 py-1.5 font-medium">{t("ai.doc.completion")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {view.progress.rows.map((row, index) => (
-                    <tr key={row.stage + "#" + String(index)} className="text-zinc-700">
-                      <td className="border border-zinc-100 px-2 py-1.5 font-medium">{row.stage}</td>
-                      <td className="border border-zinc-100 px-2 py-1.5">{row.status === "done" ? t("ai.doc.stageDone") : row.status === "active" ? t("ai.doc.stageActive") : t("ai.doc.stagePending")}</td>
-                      <td className="border border-zinc-100 px-2 py-1.5">{row.actualText}</td>
-                      <td className="border border-zinc-100 px-2 py-1.5">{row.done} / {row.total}</td>
-                      <td className="border border-zinc-100 px-2 py-1.5">{row.percent === null ? "—" : String(row.percent) + "%"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <StageFlow rows={view.progress.rows} />
           )}
         </div>
         <SourceLine sources={["系统任务与阶段记录"]} />

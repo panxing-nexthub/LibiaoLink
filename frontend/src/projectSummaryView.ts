@@ -45,6 +45,14 @@ export type SummaryProgressRow = {
   status: string;
   planText: string;
   actualText: string;
+  planFrom: string | null;
+  planTo: string | null;
+  actualFrom: string | null;
+  actualTo: string | null;
+  /** 阶段来源日期：优先实际结束、其次计划结束，用于「任务记录 YYYY-MM-DD」来源标签。 */
+  sourceDate: string | null;
+  /** 本阶段历时天数（含首尾）：优先实际起止，缺失回退计划起止。 */
+  durationDays: number | null;
   done: number;
   total: number;
   percent: number | null;
@@ -129,6 +137,19 @@ function maxDate(values: ReadonlyArray<string | null | undefined>): string | nul
 
 function rangeText(from: string | null, to: string | null): string {
   return (from ?? "未识别") + " ~ " + (to ?? "未识别");
+}
+
+function datesIn(text: string): string[] {
+  return text.match(/\d{4}-\d{2}-\d{2}/g) ?? [];
+}
+
+/** 含首尾天数，与任务工期口径一致；区间不完整或倒挂时返回 null。 */
+function inclusiveDays(from: string | null, to: string | null): number | null {
+  if (from === null || to === null) return null;
+  const start = Date.parse(from + "T00:00:00Z");
+  const end = Date.parse(to + "T00:00:00Z");
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return null;
+  return Math.round((end - start) / 86400000) + 1;
 }
 
 function agreementAnalyses(context: ProjectAiContext | null): ProjectAiFileAnalysis[] {
@@ -402,16 +423,37 @@ export function buildProjectSummaryView(input: {
   };
 
   const progressRows: SummaryProgressRow[] =
-    report.progressDetail?.table ??
-    (context?.stages ?? []).map((stage) => ({
-      stage: stage.name,
-      status: stage.status,
-      planText: rangeText(stage.plannedStart, stage.plannedEnd),
-      actualText: rangeText(stage.actualStart, stage.actualEnd),
-      done: stage.taskDoneCount,
-      total: stage.taskTotalCount,
-      percent: stage.taskTotalCount > 0 ? Math.round((stage.taskDoneCount / stage.taskTotalCount) * 100) : null,
-    }));
+    report.progressDetail?.table !== undefined
+      ? report.progressDetail.table.map((row) => {
+          const planDates = datesIn(row.planText);
+          const actualDates = datesIn(row.actualText);
+          return {
+            ...row,
+            planFrom: planDates[0] ?? null,
+            planTo: planDates.length > 1 ? planDates[planDates.length - 1] : null,
+            actualFrom: actualDates[0] ?? null,
+            actualTo: actualDates.length > 1 ? actualDates[actualDates.length - 1] : null,
+            sourceDate: actualDates[actualDates.length - 1] ?? planDates[planDates.length - 1] ?? null,
+            durationDays:
+              inclusiveDays(actualDates[0] ?? null, actualDates.length > 1 ? actualDates[actualDates.length - 1] : null) ??
+              inclusiveDays(planDates[0] ?? null, planDates.length > 1 ? planDates[planDates.length - 1] : null),
+          };
+        })
+      : (context?.stages ?? []).map((stage) => ({
+          stage: stage.name,
+          status: stage.status,
+          planText: rangeText(stage.plannedStart, stage.plannedEnd),
+          actualText: rangeText(stage.actualStart, stage.actualEnd),
+          planFrom: stage.plannedStart,
+          planTo: stage.plannedEnd,
+          actualFrom: stage.actualStart,
+          actualTo: stage.actualEnd,
+          sourceDate: stage.actualEnd ?? stage.plannedEnd ?? stage.actualStart ?? stage.plannedStart ?? null,
+          durationDays: inclusiveDays(stage.actualStart, stage.actualEnd) ?? inclusiveDays(stage.plannedStart, stage.plannedEnd),
+          done: stage.taskDoneCount,
+          total: stage.taskTotalCount,
+          percent: stage.taskTotalCount > 0 ? Math.round((stage.taskDoneCount / stage.taskTotalCount) * 100) : null,
+        }));
 
   const progress = {
     text: report.progressDetail?.text ?? null,

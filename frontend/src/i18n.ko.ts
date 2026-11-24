@@ -1721,6 +1721,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "tpl.readonly": "읽기 전용",
   "tpl.creator": "작성자: {name}",
   "tpl.creatorSystem": "贾海洋",
+  "tpl.personalDefault.emptySave": "개인 템플릿에 아직 노드가 없습니다. 왼쪽에서 노드를 추가한 뒤 저장하세요.",
   "tpl.dup": "이 노드는 이미 오른쪽에 있어 중복 추가되지 않습니다",
   "tpl.discard.title": "변경 사항을 취소하면 편집 전 버전으로 되돌아갑니다",
   "tpl.discard.titleDeleted": "변경 사항을 취소하면 편집 전 버전으로 되돌아갑니다(이 템플릿은 다른 곳에서 삭제됨: 취소하면 페이지에서 저장되지 않은 내용이 제거됩니다)",

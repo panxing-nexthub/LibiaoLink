@@ -1721,6 +1721,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "tpl.readonly": "読み取り専用",
   "tpl.creator": "作成者：{name}",
   "tpl.creatorSystem": "贾海洋",
+  "tpl.personalDefault.emptySave": "個人テンプレートにノードがまだありません。左側からノードを追加してから保存してください。",
   "tpl.dup": "このノードはすでに右側にあるため、重複して追加されません",
   "tpl.discard.title": "変更を破棄すると、編集前のバージョンに戻ります",
   "tpl.discard.titleDeleted": "変更を破棄すると、編集前のバージョンに戻ります（このテンプレートは別の場所で削除されています。破棄すると未保存の内容がページから削除されます）",

@@ -10,6 +10,7 @@ import { TaskNodeCard } from "./components/TaskNodeCard";
 import { SelectMenu } from "./components/SelectMenu";
 import { PROJECT_STAGES } from "./data/projects";
 import { ApiError } from "./api";
+import { useMyPermissions } from "./permissions";
 import {
   approveTaskNodeRequest,
   createStageNode,
@@ -207,6 +208,105 @@ const REVIEW_NOTIFY_MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => {
 type TemplateNode = TaskNodeItem;
 
 /**
+ * 每个阶段默认「个人模版」：初始名称为「个人模版」、初始仅个人使用、填写人按当前账号显示。
+ * 未填节点前只存在于界面，第一次保存时才创建为真实模板；之后可改名 / 改范围 / 删除。
+ */
+const PERSONAL_DEFAULT_TEMPLATE_NAME = "个人模版";
+const PERSONAL_DEFAULT_TEMPLATE_ID_PREFIX = "personal-default:";
+
+/**
+ * 默认「个人模版」改名后仍要认出它：按账号 + 阶段在本地记住真实模板 id，名称只作首次兜底。
+ * 只影响界面的默认身份（识别默认模板、避免重复补面板），不改库内任何字段。
+ */
+const PERSONAL_DEFAULT_MARKERS_KEY = "libiaolink.personalDefaultTemplateIds.v1";
+
+function personalDefaultMarkerKey(userId: string | null, stage: string): string {
+  return (userId ?? "anonymous") + "\n" + stage;
+}
+
+function readPersonalDefaultMarkers(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(PERSONAL_DEFAULT_MARKERS_KEY);
+    if (raw === null) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return {};
+    const markers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "string") markers[key] = value;
+    }
+    return markers;
+  } catch {
+    return {};
+  }
+}
+
+function personalDefaultTemplateId(userId: string | null, stage: string): string | null {
+  return readPersonalDefaultMarkers()[personalDefaultMarkerKey(userId, stage)] ?? null;
+}
+
+function rememberPersonalDefaultTemplate(userId: string | null, stage: string, templateId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const markers = readPersonalDefaultMarkers();
+    markers[personalDefaultMarkerKey(userId, stage)] = templateId;
+    window.localStorage.setItem(PERSONAL_DEFAULT_MARKERS_KEY, JSON.stringify(markers));
+  } catch {
+    // localStorage 不可用时只丢跨刷新识别；本次会话仍靠草稿上的 personalDefault 标记生效。
+  }
+}
+
+/** 删掉默认模板后清掉本地 id 标记，避免它继续指着一个已删除的模板。 */
+function forgetPersonalDefaultTemplate(userId: string | null, stage: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const markers = readPersonalDefaultMarkers();
+    const key = personalDefaultMarkerKey(userId, stage);
+    if (markers[key] !== undefined) {
+      delete markers[key];
+      window.localStorage.setItem(PERSONAL_DEFAULT_MARKERS_KEY, JSON.stringify(markers));
+    }
+  } catch {
+    // 忽略本地存储失败；本次会话已靠 dismissal 隐藏。
+  }
+}
+
+/** 用户主动删掉默认「个人模版」后，本浏览器不再自动补回（按账号 + 阶段记住）。 */
+const PERSONAL_DEFAULT_DISMISSED_KEY = "libiaolink.personalDefaultDismissed.v1";
+const inMemoryDismissedPersonalDefaults = new Set<string>();
+
+function readDismissedPersonalDefaults(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(PERSONAL_DEFAULT_DISMISSED_KEY);
+    if (raw === null) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value): value is string => typeof value === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function isPersonalDefaultDismissed(userId: string | null, stage: string): boolean {
+  const key = personalDefaultMarkerKey(userId, stage);
+  return inMemoryDismissedPersonalDefaults.has(key) || readDismissedPersonalDefaults().has(key);
+}
+
+function dismissPersonalDefault(userId: string | null, stage: string): void {
+  const key = personalDefaultMarkerKey(userId, stage);
+  inMemoryDismissedPersonalDefaults.add(key);
+  if (typeof window === "undefined") return;
+  try {
+    const dismissed = readDismissedPersonalDefaults();
+    dismissed.add(key);
+    window.localStorage.setItem(PERSONAL_DEFAULT_DISMISSED_KEY, JSON.stringify([...dismissed]));
+  } catch {
+    // 忽略本地存储失败；本次会话里模板已从列表移除。
+  }
+}
+
+/**
  * 右侧一块模板面板 = 一份模板草稿（Push 182 起 = 模板接口的本地副本）：
  * 服务端下发的 `name` / `visibility` / `nodes` / `version` 是基线，「保存」= PATCH 全量回传（改名 + 可见范围 + 节点顺序 + version）。
  */
@@ -232,6 +332,10 @@ type TemplateDraft = {
    * 缺省 = 没有冲突；本地改动一直保留到「保存」成功或「放弃改动」。
    */
   conflict?: "updated" | "deleted";
+  /** 默认「个人模版」虚拟面板（未落库）：仅当前账号可见；第一次保存时才 POST 成真实私有模板。 */
+  virtualPersonalDefault?: true;
+  /** 这份草稿是当前账号的默认「个人模版」：用于识别默认身份、避免重复补面板；改名 / 改范围 / 删除均允许。 */
+  personalDefault?: true;
 };
 
 /** 服务端基线（「放弃改动」的回退目标）：名字 + 可见范围 + 节点（含顺序）+ 当时的乐观锁版本。 */
@@ -277,6 +381,7 @@ function mergeStageTemplates(
   previous: Record<string, TemplateDraft[]>,
   stage: string,
   items: TemplateItem[],
+  userId: string | null,
 ): Record<string, TemplateDraft[]> {
   const local = previous[stage] ?? EMPTY_TEMPLATE_LIST;
   const localById = new Map(local.map((draft) => [draft.id, draft]));
@@ -288,11 +393,78 @@ function mergeStageTemplates(
     return { ...draft, conflict: item.version === draft.version ? undefined : "updated" };
   });
   for (const draft of local) {
-    if (isDirty(draft) && !items.some((item) => item.id === draft.id)) {
+    if (draft.virtualPersonalDefault !== true && isDirty(draft) && !items.some((item) => item.id === draft.id)) {
       merged.push({ ...draft, conflict: "deleted" });
     }
   }
-  return { ...previous, [stage]: merged };
+  return { ...previous, [stage]: ensurePersonalDefaultTemplate(merged, stage, userId) };
+}
+
+/**
+ * 一份已落库模板是否是当前账号的默认「个人模版」：优先认本地记住的模板 id（改名 / 改范围后仍有效），
+ * 其次按「名称 + 私有 + 归属」兜底；本次会话刚保存的草稿还带 personalDefault 标记。
+ */
+function isPersistedPersonalDefault(
+  template: Pick<TemplateDraft, "id" | "name" | "visibility" | "createdBy" | "virtualPersonalDefault" | "personalDefault">,
+  userId: string | null,
+  stage: string,
+): boolean {
+  if (template.virtualPersonalDefault === true) return false;
+  if (template.personalDefault === true) return true;
+  if (userId !== null && template.createdBy !== userId) return false;
+  const markedId = personalDefaultTemplateId(userId, stage);
+  if (markedId !== null) return template.id === markedId;
+  return template.visibility === "private" && template.name.trim() === PERSONAL_DEFAULT_TEMPLATE_NAME;
+}
+
+/** 虚拟默认面板：id 带阶段前缀，确保每个阶段各一份；version 0 只用于本地，不参与 PATCH。 */
+function virtualPersonalDefaultDraft(stage: string, userId: string | null): TemplateDraft {
+  const name = PERSONAL_DEFAULT_TEMPLATE_NAME;
+  const visibility: TemplateVisibility = "private";
+  const nodes: TemplateNode[] = [];
+  return {
+    id: PERSONAL_DEFAULT_TEMPLATE_ID_PREFIX + stage,
+    name,
+    visibility,
+    nodes,
+    createdBy: userId,
+    createdByName: null,
+    saved: snapshotOf({ name, visibility, nodes }),
+    version: 0,
+    baseline: { name, visibility, nodes, version: 0 },
+    virtualPersonalDefault: true,
+    personalDefault: true,
+  };
+}
+
+/**
+ * 保证每个阶段的模板面板里都有且先显示一份「个人模版」；真实默认模板存在时不再注入虚拟面板。
+ * 真实模板优先按本地记住的模板 id 识别（改名后仍有效），首次按「名称 + 仅个人使用 + 当前账号」兜底。
+ */
+function ensurePersonalDefaultTemplate(list: TemplateDraft[], stage: string, userId: string | null): TemplateDraft[] {
+  const persisted = list.filter((template) => isPersistedPersonalDefault(template, userId, stage));
+  if (persisted.length > 0) {
+    const markedId = personalDefaultTemplateId(userId, stage);
+    const first = markedId === null ? persisted[0] : persisted.find((template) => template.id === markedId) ?? persisted[0];
+    if (userId !== null && first.createdBy !== null && first.id !== markedId) {
+      // 名称兜底识别到默认模板时补记 id：之后改名 / 改可见范围、刷新仍能继续认出；本地标记过期时也顺手纠正。
+      rememberPersonalDefaultTemplate(userId, stage, first.id);
+    }
+    const rest = list.filter((template) => template !== first && template.virtualPersonalDefault !== true);
+    return list[0] === first && rest.length === list.length - 1 ? list : [first, ...rest];
+  }
+  if (isPersonalDefaultDismissed(userId, stage)) {
+    const withoutVirtual = list.filter((template) => template.virtualPersonalDefault !== true);
+    return withoutVirtual.length === list.length ? list : withoutVirtual;
+  }
+  const virtualIndex = list.findIndex((template) => template.virtualPersonalDefault === true);
+  if (virtualIndex >= 0) {
+    const virtual = list[virtualIndex];
+    const next = virtual.createdBy === userId ? virtual : virtualPersonalDefaultDraft(stage, userId);
+    const rest = list.filter((template, index) => index !== virtualIndex && template.virtualPersonalDefault !== true);
+    return virtualIndex === 0 && next === virtual ? list : [next, ...rest];
+  }
+  return [virtualPersonalDefaultDraft(stage, userId), ...list];
 }
 
 /** 「未保存」状态行的一句话（冲突 / 已从库中删除各一套口径；完整说明在悬停 title 里）。 */
@@ -437,6 +609,11 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   const t = useT();
   const locale = useLocale();
   const localize = useLocalizedTranslator();
+  /** 当前账号的用户 id（默认「个人模版」的归属与展示口径都用它）。 */
+  const permissions = useMyPermissions();
+  const currentUserId = permissions?.userId ?? null;
+  /** 虚拟默认面板还没落库时没有服务端填写的姓名，先用当前登录账号的显示名。 */
+  const currentUserName = me.user.displayName ?? me.user.name ?? me.user.email ?? "";
   /** 当前板块：URL 是唯一来源（点标签栏 = 换地址；`?section=` 取 ASCII slug，兼容旧链接的中文板块名），缺省 / 不认识的值回落到第一个板块。 */
   const activeSection = templateSectionFromParam(section) ?? TEMPLATE_SECTIONS[0] ?? "";
 
@@ -465,7 +642,10 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   /** 模板名展示态（Push 301 追订）：未聚焦 = 英文界面出机翻译文；聚焦 = 回原文供编辑（保存回写原文，译文不落库）。 */
   const [nameFocusedId, setNameFocusedId] = useState<string | null>(null);
   /** 当前阶段的模板面板。 */
-  const templates = templatesByStage[activeSection] ?? EMPTY_TEMPLATE_LIST;
+  const templates = useMemo(
+    () => ensurePersonalDefaultTemplate(templatesByStage[activeSection] ?? EMPTY_TEMPLATE_LIST, activeSection, currentUserId),
+    [templatesByStage, activeSection, currentUserId],
+  );
   /**
    * 正在拖的节点（Push 116）：`source` 区分「左侧节点池 → 复制一份」与「模板面板里 → 同面板调顺序」，
    * `fromTemplateId` 是后者的来源面板、`width` 给跟着鼠标走的那块拖动卡片对齐宽度。
@@ -589,7 +769,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       setNodesError(null);
       setTemplatesError(null);
       setTemplatesByStage((previous) => {
-        const merged = mergeStageTemplates(previous, activeSection, templates);
+        const merged = mergeStageTemplates(previous, activeSection, templates, currentUserId);
         return { ...merged, [activeSection]: keepLiveOrder(previous[activeSection] ?? [], merged[activeSection] ?? []) };
       });
     };
@@ -767,7 +947,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   }, [nodeRequestsSectionActive, pendingRequests, myRequests, canReviewNodes]);
 
   useEffect(() => {
-    prefetchLocalizedText(Object.values(templatesByStage).flat().map((item) => item.name));
+    prefetchLocalizedText([...Object.values(templatesByStage).flat().map((item) => item.name), PERSONAL_DEFAULT_TEMPLATE_NAME]);
   }, [templatesByStage, locale]);
 
   // 模板取数（换板块 / 重取）：服务端是模板内容的真相 —— 逐面板合并（见 mergeStageTemplates）：
@@ -784,7 +964,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         const items = await fetchStageTemplates(activeSection);
         if (alive) {
           prefetchLocalizedText(items.map((item) => item.name));
-          setTemplatesByStage((previous) => mergeStageTemplates(previous, activeSection, items));
+          setTemplatesByStage((previous) => mergeStageTemplates(previous, activeSection, items, currentUserId));
         }
       } catch (error) {
         if (alive) {
@@ -847,7 +1027,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
   const updateTemplates = (updater: (list: TemplateDraft[]) => TemplateDraft[]): void => {
     setTemplatesByStage((previous) => ({
       ...previous,
-      [activeSection]: updater(previous[activeSection] ?? EMPTY_TEMPLATE_LIST),
+      [activeSection]: updater(ensurePersonalDefaultTemplate(previous[activeSection] ?? EMPTY_TEMPLATE_LIST, activeSection, currentUserId)),
     }));
   };
 
@@ -867,7 +1047,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         return found;
       }
     }
-    return null;
+    return templates.find((template) => template.id === templateId) ?? null;
   }
 
   /** 退出某份模板的编辑态；收起它专属的新增节点表单，并取消正在进行的拖动。 */
@@ -1030,6 +1210,39 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     if (draft === undefined || savingTemplateId !== null) {
       return;
     }
+    /** 默认「个人模版」未落库：改了名或放了节点就 POST 成真实私有模板；仍用默认名且为空时留在界面上。 */
+    if (draft.virtualPersonalDefault === true) {
+      const nodeIds = draft.nodes.map((node) => node.id);
+      const name = draft.name.trim() === "" ? PERSONAL_DEFAULT_TEMPLATE_NAME : draft.name.trim();
+      if (nodeIds.length === 0 && name === PERSONAL_DEFAULT_TEMPLATE_NAME) {
+        setTemplateNotice({ kind: "info", text: t("tpl.personalDefault.emptySave") });
+        if (exitEditing) {
+          finishTemplateEditing(templateId);
+        }
+        return;
+      }
+      setSavingTemplateId(templateId);
+      setTemplateNotice(null);
+      void (async () => {
+        try {
+          const created = await createTaskTemplate(activeSection, name, nodeIds, draft.visibility);
+          const next: TemplateDraft = { ...toTemplateDraft(created), personalDefault: true };
+          rememberPersonalDefaultTemplate(currentUserId, activeSection, created.id);
+          updateTemplates((previous) => previous.map((item) => (item.id === templateId ? next : item)));
+          if (exitEditing) {
+            finishTemplateEditing(templateId);
+          }
+        } catch (error) {
+          setTemplateNotice({
+            kind: "error",
+            text: t("tpl.err.save", { name: draft.name, message: templateErrorMessage(error, t("tpl.err.retryLater")) }),
+          });
+        } finally {
+          setSavingTemplateId(null);
+        }
+      })();
+      return;
+    }
     const name = draft.name.trim() === "" ? t("tpl.unnamed") : draft.name.trim();
     setSavingTemplateId(templateId);
     setTemplateNotice(null);
@@ -1041,7 +1254,11 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
           nodeIds: draft.nodes.map((node) => node.id),
           version: draft.version,
         });
-        const next = toTemplateDraft(saved);
+        const keepPersonalDefault = draft.personalDefault === true || isPersistedPersonalDefault(draft, currentUserId, activeSection);
+        const next: TemplateDraft = keepPersonalDefault ? { ...toTemplateDraft(saved), personalDefault: true } : toTemplateDraft(saved);
+        if (keepPersonalDefault) {
+          rememberPersonalDefaultTemplate(currentUserId, activeSection, saved.id);
+        }
         updateTemplates((previous) => previous.map((item) => (item.id === templateId ? next : item)));
         if (exitEditing) {
           finishTemplateEditing(templateId);
@@ -1080,9 +1297,23 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       return;
     }
     setPendingDeleteTemplate(null);
+    const deletingPersonalDefault = draft.virtualPersonalDefault === true || draft.personalDefault === true || isPersistedPersonalDefault(draft, currentUserId, activeSection);
+    if (draft.virtualPersonalDefault === true) {
+      dismissPersonalDefault(currentUserId, activeSection);
+      forgetPersonalDefaultTemplate(currentUserId, activeSection);
+      updateTemplates((previous) => previous.filter((item) => item.id !== draft.id));
+      if (editingTemplateId === draft.id) {
+        finishTemplateEditing(draft.id);
+      }
+      return;
+    }
     void (async () => {
       try {
         await deleteTaskTemplate(draft.id, draft.version);
+        if (deletingPersonalDefault) {
+          dismissPersonalDefault(currentUserId, activeSection);
+          forgetPersonalDefaultTemplate(currentUserId, activeSection);
+        }
         updateTemplates((previous) => previous.filter((item) => item.id !== draft.id));
         if (editingTemplateId === draft.id) {
           finishTemplateEditing(draft.id);
@@ -1096,6 +1327,10 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
             t("tpl.err.delete", { name: draft.name, message: templateErrorMessage(error, t("tpl.err.retryLater")) }) +
             (gone ? t("tpl.err.deleteGone") : ""),
         });
+        if (gone && deletingPersonalDefault) {
+          dismissPersonalDefault(currentUserId, activeSection);
+          forgetPersonalDefaultTemplate(currentUserId, activeSection);
+        }
         if (gone || conflict) {
           setTemplatesVersion((version) => version + 1);
         }
@@ -1336,14 +1571,37 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       try {
         if (form.mode === "create" && form.templateId !== null) {
           // 模板内新增 = 模板私有节点：只追加到当前模板草稿，不重取公共节点库。
-          const created = await createTemplateStageNode(form.templateId, title, formTitleEn.trim());
-          updateTemplates((previous) =>
-            previous.map((entry) =>
-              entry.id === form.templateId && !entry.nodes.some((node) => node.id === created.id)
-                ? { ...entry, nodes: [...entry.nodes, created] }
-                : entry,
-            ),
-          );
+          const target = templates.find((entry) => entry.id === form.templateId);
+          if (target?.virtualPersonalDefault === true) {
+            // 默认「个人模版」还没落库：先把当前草稿连同已有节点创建成真实私有模板，再挂新节点。
+            const createdTemplate = await createTaskTemplate(
+              activeSection,
+              target.name.trim() === "" ? PERSONAL_DEFAULT_TEMPLATE_NAME : target.name.trim(),
+              target.nodes.map((node) => node.id),
+              target.visibility,
+            );
+            const createdNode = await createTemplateStageNode(createdTemplate.id, title, formTitleEn.trim());
+            const base = toTemplateDraft(createdTemplate);
+            const nodes = [...base.nodes, createdNode];
+            const next: TemplateDraft = {
+              ...base,
+              personalDefault: true,
+              nodes,
+              saved: snapshotOf({ name: base.name, visibility: base.visibility, nodes }),
+              baseline: { name: base.name, visibility: base.visibility, nodes: nodes.slice(), version: base.version },
+            };
+            rememberPersonalDefaultTemplate(currentUserId, activeSection, createdTemplate.id);
+            updateTemplates((previous) => previous.map((entry) => (entry.id === form.templateId ? next : entry)));
+          } else {
+            const created = await createTemplateStageNode(form.templateId, title, formTitleEn.trim());
+            updateTemplates((previous) =>
+              previous.map((entry) =>
+                entry.id === form.templateId && !entry.nodes.some((node) => node.id === created.id)
+                  ? { ...entry, nodes: [...entry.nodes, created] }
+                  : entry,
+              ),
+            );
+          }
         } else if (form.mode === "create") {
           await createStageNode(activeSection, title, formTitleEn.trim());
         } else {
@@ -2587,12 +2845,16 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                   const canManageThisTemplate = canManageTemplate(template.createdBy);
                   /** 只有这块面板处于唯一「编辑中」状态时才允许改名 / 调可见范围 / 增删节点 / 拖拽排序。 */
                   const isEditing = canManageThisTemplate && editingTemplateId === template.id;
+                  const isPersonalDefault = template.virtualPersonalDefault === true || isPersistedPersonalDefault(template, currentUserId, activeSection);
+                  const creatorName = template.createdByName ?? (isPersonalDefault ? currentUserName : t("tpl.creatorSystem"));
                   return (
                     <section
                       key={template.id}
                       data-template-panel={template.id}
                       data-template-status={isEditing ? "editing" : "saved"}
                       data-template-editing={isEditing ? "true" : undefined}
+                      data-template-personal-default={isPersonalDefault ? "true" : undefined}
+                      data-template-virtual-personal={template.virtualPersonalDefault === true ? "true" : undefined}
                       aria-label={t("tpl.panel.aria", { name: localize(template.name) })}
                       className={
                         "group/panel flex min-h-0 max-h-[calc(100dvh-190px)] w-full flex-col overflow-hidden rounded-2xl border bg-[linear-gradient(to_bottom,rgba(255,255,255,0.62),rgba(255,255,255,0.32))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_8px_32px_rgba(15,23,42,0.14)] backdrop-blur-2xl backdrop-saturate-150 transition lg:w-[370px] lg:shrink-0 " +
@@ -2640,9 +2902,9 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                         >
                           <span
                             className="min-w-0 truncate"
-                            title={t("tpl.creator", { name: template.createdByName ?? t("tpl.creatorSystem") })}
+                            title={t("tpl.creator", { name: creatorName })}
                           >
-                            {t("tpl.creator", { name: template.createdByName ?? t("tpl.creatorSystem") })}
+                            {t("tpl.creator", { name: creatorName })}
                           </span>
                           <span aria-hidden="true" className="shrink-0 text-zinc-300">·</span>
                           {canChangeTemplateVisibility(template.createdBy) && isEditing ? (

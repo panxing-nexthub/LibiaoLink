@@ -1,3 +1,5 @@
+> **2026-11-24 · AI 项目总结布局图人工替换（0115）**：新增 `0115_project_ai_manual_images.sql`，`project_ai_manual_images` 以 `(project_id, kind)` 为主键保存布局图 / 三维图的人工替换对象键、MIME、大小、操作人与更新时间；`kind` 限 `layout` / `three_d`，外键级联项目、操作人可为空。读取时人工值优先于技术协议自动判页；对象写 `projects/{projectId}/ai-extraction/manual/...`。回滚：确认无需保留人工图后 `drop table if exists project_ai_manual_images`。测试机 / 正式机尚未执行。
+
 > **2026-11-23 · 项目内批量仅浏览授权（0114）**：新增 `0114_project_view_grants.sql`，以 `(project_id, user_id)` 为主键保存项目经理或系统管理员在项目内添加的独立仅浏览授权；外键级联到项目 / 用户，另建用户索引。测试机与正式机均按该文件名和 checksum `819dc6e3…` 执行。回滚：在确认无业务数据后删除 `project_view_grants`。
 
 > **2026-11-23 · 项目文件 AI 分析（0113）**：新增 `0113_project_document_analyses.sql`。`project_document_analysis_runs` 记录项目级 run（queued / running / succeeded / failed，file / succeeded / failed / skipped 计数；同一项目仅允许一个 queued / running 活跃 run）；`project_file_analyses` 按 `(file_version_id, prompt_version)` 唯一缓存每文件摘要，只接受 pdf / image / word / excel，保留 content_hash、file_name、status、summary_json、model_id、error 与生成时间。显式授权 `libiaolink_api` 读写和 `libiaolink_readonly` 只读。回滚：先删 `project_file_analyses`，再删 `project_document_analysis_runs`。无既有表变更。 测试机 / 正式机均已按该文件名执行。项目内仅浏览授权独立使用 `0114_project_view_grants.sql`。

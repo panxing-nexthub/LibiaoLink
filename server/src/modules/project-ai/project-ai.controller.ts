@@ -1,4 +1,7 @@
-import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Headers, HttpCode, NotFoundException, Param, Post, Req, Res, StreamableFile, UseGuards } from "@nestjs/common";
+import type { Request, Response } from "express";
+import { readFile } from "node:fs/promises";
+import { readMultipartFile } from "../../common/http/multipart.js";
 import {
   ProjectAiSummaryGenerateBodySchema,
   UuidSchema,
@@ -9,6 +12,7 @@ import {
 import { ZodValidationPipe } from "../../common/http/zod-validation.pipe.js";
 import { CsrfGuard, CurrentActorId, SessionGuard } from "../identity/index.js";
 import { ProjectAccessGuard, RequirePermission } from "../permission/index.js";
+import { ProjectAiAgreementService } from "./project-ai-agreement.service.js";
 import { ProjectAiContextService } from "./project-ai-context.service.js";
 import { ProjectAiSummaryService } from "./project-ai-summary.service.js";
 
@@ -27,6 +31,7 @@ export class ProjectAiContextController {
   constructor(
     private readonly contexts: ProjectAiContextService,
     private readonly summaries: ProjectAiSummaryService,
+    private readonly agreements: ProjectAiAgreementService,
   ) {}
 
   /** 项目 AI 上下文：项目 / 阶段 / 任务当前快照 / 变更 / 日报 / 问题（只取数，不调模型）。 */
@@ -36,6 +41,53 @@ export class ProjectAiContextController {
     @CurrentActorId() actorId: string,
   ): Promise<ProjectAiContext> {
     return this.contexts.build(id, actorId);
+  }
+
+  /**
+   * 技术协议抽取页图（P1）：只读、受项目可见性保护；字节由服务端从对象存储读取，
+   * 不向浏览器暴露对象键或预签名地址。
+   */
+  @Get(":id/ai-agreement-images/:kind")
+  async agreementImage(
+    @Param("id", uuidParam) id: string,
+    @Param("kind") kind: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    if (kind !== "layout" && kind !== "three_d") {
+      throw new BadRequestException("图片类型仅支持 layout / three_d");
+    }
+    const image = await this.agreements.image(id, kind);
+    if (image === null) throw new NotFoundException("图片不存在");
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Content-Disposition", "inline");
+    return new StreamableFile(image.bytes, { type: image.contentType, length: image.bytes.byteLength });
+  }
+
+  /** 人工替换设备布局图 / 三维图（multipart 字段 file；PNG / JPEG / WebP，≤ 10 MB）。 */
+  @Post(":id/ai-agreement-images/:kind")
+  @HttpCode(200)
+  @RequirePermission("project.export")
+  async replaceAgreementImage(
+    @Param("id", uuidParam) id: string,
+    @Param("kind") kind: string,
+    @CurrentActorId() actorId: string,
+    @Req() request: Request,
+    @Headers("content-type") contentType: string | undefined,
+  ): Promise<{ ok: boolean }> {
+    if (kind !== "layout" && kind !== "three_d") {
+      throw new BadRequestException("图片类型仅支持 layout / three_d");
+    }
+    const upload = await readMultipartFile(request, contentType ?? null, "file", 10 * 1024 * 1024);
+    if (upload === null) throw new BadRequestException("缺少上传文件（multipart 字段 file）");
+    try {
+      const body = await readFile(upload.path);
+      const bytes = upload.offset === 0 ? body : body.subarray(upload.offset, upload.offset + upload.sizeBytes);
+      await this.agreements.replace(id, kind, actorId, bytes, upload.contentType ?? "application/octet-stream");
+      return { ok: true };
+    } finally {
+      await upload.cleanup();
+    }
   }
 
   /** 最近一次 AI 总结（不调模型）；未生成过返回 404，stale=true 表示数据已变化。 */

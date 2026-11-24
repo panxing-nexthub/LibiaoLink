@@ -5732,6 +5732,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/ai-agreement-images/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 技术协议抽取 / 人工替换的布局图或三维图（受项目可见性保护；no-store） */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                    kind: "layout" | "three_d";
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 布局图 / 三维图图片 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "image/png": string;
+                        "image/jpeg": string;
+                        "image/webp": string;
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** 人工替换布局图 / 三维图（multipart 字段 file；PNG / JPEG / WebP，≤ 10 MB；需 project.export） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                    kind: "layout" | "three_d";
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "multipart/form-data": {
+                        /** Format: binary */
+                        file: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description 替换成功 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            ok: boolean;
+                        };
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{id}/document-analysis": {
         parameters: {
             query?: never;
@@ -14710,6 +14821,23 @@ export interface components {
             deletedAt: components["schemas"]["DateTime"] & (string | null);
             deletedBy: components["schemas"]["Uuid"] & (string | null);
         };
+        /** @description 最新版技术协议定向抽取结果；字段不是 found 时前端显示「未识别」 */
+        ProjectAiAgreement: {
+            fileName: string;
+            fileVersionId: components["schemas"]["Uuid"];
+            partyA: components["schemas"]["ProjectAiExtractedField"];
+            customer: components["schemas"]["ProjectAiExtractedField"];
+            projectAddress: components["schemas"]["ProjectAiExtractedField"];
+            background: components["schemas"]["ProjectAiExtractedField"];
+            layout: components["schemas"]["ProjectAiAgreementImage"];
+            threeD: components["schemas"]["ProjectAiAgreementImage"];
+            extractedAt: components["schemas"]["DateTime"];
+        } | null;
+        ProjectAiAgreementImage: {
+            pageNo: number | null;
+            url: string | null;
+            caption: string | null;
+        };
         ProjectAiChange: {
             changeId: components["schemas"]["Uuid"];
             stageKey: components["schemas"]["StageKey"] & (string | null);
@@ -14743,6 +14871,10 @@ export interface components {
             changes: components["schemas"]["ProjectAiChange"][];
             reports: components["schemas"]["ProjectAiReport"][];
             issues: components["schemas"]["ProjectAiIssue"][];
+            agreement?: components["schemas"]["ProjectAiAgreement"];
+            equipment?: components["schemas"]["ProjectAiEquipment"];
+            reportPhotos?: components["schemas"]["ProjectAiPhotoRef"][];
+            issueCategoryStats?: components["schemas"]["ProjectAiIssueCategoryStat"][];
             /**
              * @description 项目文件 AI 分析摘要（仅当前文件版本的成功分析；日报 / 问题图片不进入）
              * @default []
@@ -14752,6 +14884,30 @@ export interface components {
             /** @description true = 任务 / 日报 / 问题 / 变更任一集合超出读取上限被截断 */
             truncated: boolean;
         };
+        /** @description 设备清单 Excel 按「分类名称」聚合结果 */
+        ProjectAiEquipment: {
+            sourceFileName: string | null;
+            categories: components["schemas"]["ProjectAiEquipmentCategory"][];
+        } | null;
+        ProjectAiEquipmentCategory: {
+            name: string;
+            itemCount: number;
+            quantities: components["schemas"]["ProjectAiEquipmentQuantity"][];
+            representativeItems: string[];
+        };
+        ProjectAiEquipmentQuantity: {
+            value: number;
+            unit: string;
+        };
+        ProjectAiExtractedField: {
+            status: components["schemas"]["ProjectAiExtractionStatus"];
+            value: string | null;
+            evidence: string | null;
+            sourcePage: number | null;
+            confidence: number;
+        };
+        /** @enum {string} */
+        ProjectAiExtractionStatus: "found" | "not_found" | "conflict" | "failed";
         ProjectAiIssue: {
             issueId: components["schemas"]["Uuid"];
             /** @description 问题描述 */
@@ -14768,6 +14924,16 @@ export interface components {
             taskId: components["schemas"]["Uuid"] & (string | null);
             /** @description 问题附图数量（不识别图片内容） */
             photoCount: number;
+            /** @description 问题附图引用（P3 扩展；只用于总结表内缩略图，不识别图片内容） */
+            photos?: {
+                fileId: components["schemas"]["Uuid"];
+                name: string | null;
+            }[];
+        };
+        /** @description 问题归类统计（全部问题，多分类各计一次） */
+        ProjectAiIssueCategoryStat: {
+            category: string;
+            count: number;
         };
         ProjectAiIssueItem: {
             text: string;
@@ -14779,6 +14945,12 @@ export interface components {
             nextStep: string;
             type: components["schemas"]["ProjectAiClaimType"];
             sources: components["schemas"]["ProjectAiSource"][];
+        };
+        /** @description 项目组成员 = 项目经理 ∪ 任务负责人（不使用项目成员名册） */
+        ProjectAiMember: {
+            name: string;
+            /** @enum {string} */
+            role: "manager" | "task_owner";
         };
         ProjectAiMetrics: {
             taskDone: number;
@@ -14801,6 +14973,21 @@ export interface components {
             issueOpen: number;
             changeTotal: number;
         };
+        /** @description 项目周期：计划区间 + 实际区间；实际未完成时 actualOngoing=true */
+        ProjectAiPeriod: {
+            planFrom: components["schemas"]["DateOnly"] & (string | null);
+            planTo: components["schemas"]["DateOnly"] & (string | null);
+            actualFrom: components["schemas"]["DateOnly"] & (string | null);
+            actualTo: components["schemas"]["DateOnly"] & (string | null);
+            actualOngoing: boolean;
+        } | null;
+        /** @description 总结用现场附图引用（日报现场图，按日期分层抽样） */
+        ProjectAiPhotoRef: {
+            fileId: components["schemas"]["Uuid"];
+            name: string;
+            date: components["schemas"]["DateOnly"] & unknown;
+            authorName: string | null;
+        };
         ProjectAiProject: {
             id: components["schemas"]["Uuid"];
             /** @description 项目编号 */
@@ -14815,6 +15002,16 @@ export interface components {
             /** @description 项目经理姓名（与 managerIds 同下标） */
             managerNames: (string | null)[];
             startedAt: components["schemas"]["DateOnly"] & (string | null);
+            /** @description 客户（项目主数据；与技术协议客户分开） */
+            customer?: string | null;
+            /** @description 项目备注（背景描述补充来源） */
+            description?: string | null;
+            /** @description 甲方（技术协议抽取；null = 未识别） */
+            partyA?: string | null;
+            /** @description 项目地址（技术协议抽取；null = 未识别） */
+            projectAddress?: string | null;
+            period?: components["schemas"]["ProjectAiPeriod"];
+            members?: components["schemas"]["ProjectAiMember"][];
         };
         /**
          * @default {
@@ -14888,6 +15085,84 @@ export interface components {
         /** @description 结构化正式报告（REPORT_SCHEMA v2） */
         ProjectAiSummaryReport: {
             title: string;
+            basicInfo?: {
+                projectCode: string;
+                projectName: string;
+                periodText: string;
+                partyA: string;
+                customer: string;
+                address: string;
+                members: string;
+                sources: string[];
+            };
+            equipmentLayout?: {
+                cadImage: {
+                    fileId: string | null;
+                    url: string | null;
+                    caption: string;
+                };
+                threeDImage: {
+                    fileId: string | null;
+                    url: string | null;
+                    caption: string;
+                };
+            };
+            background?: {
+                text: string;
+            };
+            equipmentList?: {
+                rows: {
+                    category: string;
+                    itemCount: number;
+                    quantityText: string;
+                    representative: string;
+                }[];
+            };
+            progressDetail?: {
+                text: string;
+                table: {
+                    stage: string;
+                    status: string;
+                    planText: string;
+                    actualText: string;
+                    done: number;
+                    total: number;
+                    percent: number | null;
+                }[];
+                percent: number | null;
+            };
+            sitePhotos?: {
+                fileId: components["schemas"]["Uuid"];
+                caption: string;
+            }[];
+            issueTable?: {
+                rows: {
+                    index: number;
+                    title: string;
+                    categories: string[];
+                    state: string;
+                    owner: string;
+                    raisedAt: string;
+                    solution: string;
+                    closedAt: string;
+                    photos: {
+                        fileId: components["schemas"]["Uuid"];
+                        name: string | null;
+                    }[];
+                }[];
+                summary: string;
+                categoryStats: {
+                    category: string;
+                    count: number;
+                }[];
+            };
+            personalSummary?: string;
+            sourceAppendix?: {
+                fileName: string;
+                docType: string;
+                version: string;
+                date: string;
+            }[];
             summary: {
                 /** @description 250～400 字项目摘要 */
                 text: string;

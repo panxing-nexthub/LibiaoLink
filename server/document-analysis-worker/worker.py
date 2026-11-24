@@ -48,6 +48,11 @@ CONVERSION_TIMEOUT_SECONDS = 90
 MAX_FILE_MB_DEFAULT = 200
 IMAGE_DPI = 120
 MAX_IMAGE_SIDE = 1600
+EXTRACTION_VERSION = "project-agreement-extraction-v1"
+AGREEMENT_DOC_TYPE = "技术协议"
+LAYOUT_WORDS = ("布局图", "平面布置", "平面图", "车间布局", "布局规划", "cad")
+THREE_D_WORDS = ("三维", "3d", "效果图", "渲染图", "鸟瞰")
+BACKGROUND_WORDS = ("项目背景", "背景需求", "需求概述", "建设目标", "项目概述", "项目需求", "场地信息")
 
 WORD_EXT = {"doc", "docx"}
 EXCEL_EXT = {"xls", "xlsx"}
@@ -316,6 +321,175 @@ def convert_to_pdf(source: Path, temp_dir: Path) -> Path:
     return output
 
 
+def image_coverage(page: fitz.Page) -> float:
+    rect = page.rect
+    if rect.width <= 0 or rect.height <= 0:
+        return 0.0
+    area = 0.0
+    try:
+        for info in page.get_images(full=True):
+            xref = info[0]
+            try:
+                for image_rect in page.get_image_rects(xref):
+                    area += max(0.0, image_rect.width) * max(0.0, image_rect.height)
+            except Exception:
+                continue
+    except Exception:
+        return 0.0
+    return min(1.0, area / (rect.width * rect.height))
+
+
+def is_technical_agreement(row: dict[str, Any]) -> bool:
+    doc_type = str(row.get("doc_type") or "")
+    name = str(row.get("name") or "")
+    return doc_type == AGREEMENT_DOC_TYPE or "技术协议" in name or "技术规格书" in name
+
+
+def normalize_space(value: str) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def labeled_value(text: str, labels: tuple[str, ...]) -> tuple[str | None, str | None]:
+    for label in labels:
+        for match in re.finditer(rf"{label}\s*[:：]\s*([^\n\r]{{1,120}})", text):
+            value = normalize_space(match.group(1))
+            value = re.split(r"[；;]", value)[0].strip()
+            if value:
+                return value, normalize_space(match.group(0))[:600]
+    return None, None
+
+
+def agreement_field(value: str | None, evidence: str | None, page_no: int | None, confidence: float) -> dict[str, Any]:
+    if value:
+        return {"status": "found", "value": value, "evidence": evidence, "sourcePage": page_no, "confidence": confidence}
+    return {"status": "not_found", "value": None, "evidence": None, "sourcePage": None, "confidence": 0.0}
+
+
+def find_agreement_field(
+    pages: list[dict[str, Any]],
+    page_records: list[dict[str, Any]],
+    labels: tuple[str, ...],
+) -> dict[str, Any]:
+    ordered = pages[:5] + pages[5:]
+    for page in ordered:
+        value, evidence = labeled_value(page["text"], labels)
+        if value:
+            return agreement_field(value, evidence, page["pdfPage"], 0.75)
+    # 扫描件 / 文本层缺失时，退回逐页模型 keyFacts（仍只认原文证据）。
+    for record in page_records:
+        for fact in record["extraction"].get("keyFacts") or []:
+            key = str(fact.get("key") or "")
+            if not any(label in key for label in labels):
+                continue
+            raw_value = fact.get("value")
+            if isinstance(raw_value, list):
+                raw_value = "、".join(str(item) for item in raw_value)
+            value = normalize_space(str(raw_value or ""))
+            if value:
+                page_no = record["page"]["pdfPage"]
+                return agreement_field(
+                    value,
+                    str(fact.get("evidence") or "")[:600],
+                    page_no,
+                    float(fact.get("confidence") or 0.5),
+                )
+    return agreement_field(None, None, None, 0.0)
+
+
+def find_agreement_background(pages: list[dict[str, Any]], page_records: list[dict[str, Any]]) -> dict[str, Any]:
+    pieces: list[str] = []
+    for page, record in zip(pages, page_records):
+        if any(word in page["text"] for word in BACKGROUND_WORDS):
+            summary = str(record["extraction"].get("summary") or "").strip()
+            if summary:
+                pieces.append(summary)
+    if not pieces:
+        for record in page_records[1:5]:
+            summary = str(record["extraction"].get("summary") or "").strip()
+            if summary:
+                pieces.append(summary)
+    value = "\n".join(pieces).strip()
+    if len(value) > 1200:
+        value = value[:1200] + "…"
+    if value:
+        return agreement_field(value, value[:200], None, 0.6)
+    return agreement_field(None, None, None, 0.0)
+
+
+def select_agreement_page(
+    pages: list[dict[str, Any]],
+    page_records: list[dict[str, Any]],
+    words: tuple[str, ...],
+    exclude_page: int | None = None,
+) -> dict[str, Any] | None:
+    best: dict[str, Any] | None = None
+    best_score = 0.0
+    for page, record in zip(pages, page_records):
+        if len(pages) > 1 and page["pdfPage"] == 1:
+            continue
+        if exclude_page is not None and page["pdfPage"] == exclude_page:
+            continue
+        extraction = record["extraction"]
+        combined = " ".join([
+            str(page["text"] or ""),
+            str(extraction.get("documentType") or ""),
+            str(extraction.get("purpose") or ""),
+            str(extraction.get("summary") or ""),
+        ]).lower()
+        score = (5.0 if any(word in combined for word in words) else 0.0) + float(page.get("imageCoverage") or 0.0) * 3.0
+        if score > best_score:
+            best = page
+            best_score = score
+    if best is None or best_score < 3.0:
+        return None
+    return best
+
+
+def upload_extraction_image(s3, project_id: str, row: dict[str, Any], kind: str, page: dict[str, Any]) -> dict[str, Any]:
+    body = Path(page["imagePath"]).read_bytes()
+    digest = str(page["imageSha256"])[:12]
+    object_key = f"projects/{project_id}/ai-extraction/{row['file_id']}/{kind}-{digest}.png"
+    s3.put_object(
+        Bucket=os.environ.get("S3_BUCKET", "libiaolink"),
+        Key=object_key,
+        Body=body,
+        ContentType="image/png",
+        CacheControl="no-store",
+    )
+    return {"pageNo": page["pdfPage"], "objectKey": object_key, "byteSize": len(body)}
+
+
+def build_agreement_extraction(
+    s3,
+    project_id: str,
+    row: dict[str, Any],
+    pages: list[dict[str, Any]],
+    page_records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    party_a = find_agreement_field(pages, page_records, ("甲方名称", "甲方", "委托方", "买方", "发包方"))
+    customer = find_agreement_field(pages, page_records, ("客户名称", "最终用户", "使用单位", "业主", "客户"))
+    address = find_agreement_field(pages, page_records, ("项目地址", "实施地点", "建设地点", "场地地址"))
+    background = find_agreement_background(pages, page_records)
+    layout_page = select_agreement_page(pages, page_records, LAYOUT_WORDS)
+    three_d_page = select_agreement_page(
+        pages,
+        page_records,
+        THREE_D_WORDS,
+        exclude_page=layout_page["pdfPage"] if layout_page is not None else None,
+    )
+    empty_image = {"pageNo": None, "objectKey": None, "byteSize": 0}
+    return {
+        "fileName": str(row["name"]),
+        "fileVersionId": str(row["file_version_id"]),
+        "partyA": party_a,
+        "customer": customer,
+        "projectAddress": address,
+        "background": background,
+        "layout": upload_extraction_image(s3, project_id, row, "layout", layout_page) if layout_page is not None else empty_image,
+        "threeD": upload_extraction_image(s3, project_id, row, "three_d", three_d_page) if three_d_page is not None else empty_image,
+    }
+
+
 def render_document_pages(source_bytes: bytes, display_name: str, kind: str, temp_dir: Path) -> tuple[list[dict[str, Any]], int]:
     ext = extension_of(display_name)
     pages: list[dict[str, Any]] = []
@@ -328,7 +502,7 @@ def render_document_pages(source_bytes: bytes, display_name: str, kind: str, tem
             image.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE), Image.Resampling.LANCZOS)
             page_path = temp_dir / "page-001.png"
             image.save(page_path, "PNG", optimize=True)
-        pages.append({"pdfPage": 1, "printedPageLabel": None, "imagePath": page_path, "text": "", "imageSha256": sha256_bytes(page_path.read_bytes()), "textSha256": sha256_bytes(b"")})
+        pages.append({"pdfPage": 1, "printedPageLabel": None, "imagePath": page_path, "text": "", "imageCoverage": 1.0, "imageSha256": sha256_bytes(page_path.read_bytes()), "textSha256": sha256_bytes(b"")})
         return pages, 1
 
     source_path = temp_dir / ("source." + ext)
@@ -352,6 +526,7 @@ def render_document_pages(source_bytes: bytes, display_name: str, kind: str, tem
                 "printedPageLabel": printed_label,
                 "imagePath": page_path,
                 "text": text,
+                "imageCoverage": image_coverage(page),
                 "imageSha256": sha256_bytes(page_path.read_bytes()),
                 "textSha256": sha256_bytes(text.encode("utf-8")),
             })
@@ -360,7 +535,7 @@ def render_document_pages(source_bytes: bytes, display_name: str, kind: str, tem
         doc.close()
 
 
-def analyze_file(conn: psycopg.Connection, model: dict[str, Any], s3, row: dict[str, Any]) -> dict[str, Any]:
+def analyze_file(conn: psycopg.Connection, model: dict[str, Any], s3, project_id: str, row: dict[str, Any]) -> dict[str, Any]:
     name = str(row["name"])
     kind = file_kind(name)
     if kind is None:
@@ -406,7 +581,7 @@ def analyze_file(conn: psycopg.Connection, model: dict[str, Any], s3, row: dict[
             decisions.extend(extraction["decisions"])
             warnings.extend(extraction["warnings"])
             missing.extend(extraction["missing"])
-        return {
+        summary = {
             "file": {"name": name, "kind": kind},
             "selection": {"taskId": str(row.get("task_id")) if row.get("task_id") else None, "changeFile": bool(row.get("change_file")), "reportIssueImage": bool(row.get("report_issue_link"))},
             "pageCount": total_pages,
@@ -424,6 +599,18 @@ def analyze_file(conn: psycopg.Connection, model: dict[str, Any], s3, row: dict[
                 "missing": missing[:15],
             },
         }
+        if is_technical_agreement(row):
+            try:
+                summary["extractionVersion"] = EXTRACTION_VERSION
+                summary["extraction"] = build_agreement_extraction(s3, project_id, row, pages, page_records)
+            except Exception as error:  # noqa: BLE001 - 抽取失败不能拖垮整份文件分析
+                logger.warning(
+                    "agreement extraction failed project=%s file=%s: %s",
+                    project_id,
+                    name,
+                    str(error)[:500],
+                )
+        return summary
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -437,7 +624,7 @@ def select_project_files(conn: psycopg.Connection, project_id: str) -> list[dict
           join change_requests c on c.id = v.change_request_id
           where c.project_id = %s
         )
-        select f.id as file_id, f.name, f.status, f.task_id, f.current_version_id as file_version_id,
+        select f.id as file_id, f.name, f.status, f.task_id, f.doc_type, f.current_version_id as file_version_id,
                fv.content_hash, fv.object_key, fv.mime, fv.size_bytes,
                (cf.file_id is not null) as change_file,
                exists(select 1 from file_links fl where fl.file_id = f.id and fl.object_type in ('report', 'issue')) as report_issue_link
@@ -446,7 +633,13 @@ def select_project_files(conn: psycopg.Connection, project_id: str) -> list[dict
         left join change_files cf on cf.file_id = f.id
         where f.project_id = %s
           and f.status in ('draft', 'final', 'changed', 'archived')
-          and (f.task_id is not null or cf.file_id is not null)
+          and (
+            f.task_id is not null
+            or cf.file_id is not null
+            or f.doc_type = '技术协议'
+            or f.name like '%技术协议%'
+            or f.name like '%技术规格书%'
+          )
         order by f.updated_at desc, f.name
         """,
         (project_id, project_id),
@@ -503,11 +696,18 @@ def process_run(conn: psycopg.Connection, run: dict[str, Any]) -> None:
                     (row["file_version_id"], PROMPT_VERSION),
                 ).fetchone()
                 if existing is not None:
-                    succeeded += 1
-                    logger.info("reuse analysis project=%s file=%s", project_code, row["name"])
-                    continue
+                    existing_summary = existing.get("summary_json")
+                    needs_extraction = is_technical_agreement(row) and not (
+                        isinstance(existing_summary, dict)
+                        and isinstance(existing_summary.get("extraction"), dict)
+                        and bool(existing_summary.get("extractionVersion"))
+                    )
+                    if not needs_extraction:
+                        succeeded += 1
+                        logger.info("reuse analysis project=%s file=%s", project_code, row["name"])
+                        continue
                 logger.info("analyze project=%s file=%s kind=%s bytes=%s", project_code, row["name"], kind, row["size_bytes"])
-                summary = analyze_file(conn, model, s3, row)
+                summary = analyze_file(conn, model, s3, project_id, row)
                 upsert_analysis(conn, run_id, project_id, row, kind, "succeeded", summary, model["model_id"], None)
                 succeeded += 1
             except Exception as error:  # noqa: BLE001 - one bad file must not stop the project run

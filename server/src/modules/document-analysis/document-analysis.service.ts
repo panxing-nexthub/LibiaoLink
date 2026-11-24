@@ -90,6 +90,28 @@ export class DocumentAnalysisService {
     return asRunView(row);
   }
 
+  /**
+   * 技术协议定向抽取（P1）：worker 把抽取结果写在 summary_json.extraction，
+   * 这里只取当前文件版本、最新生成的一条；没有返回 null。
+   */
+  async extractionForProject(projectId: string): Promise<{
+    fileName: string;
+    fileVersionId: string;
+    extraction: unknown;
+    generatedAt: Date | null;
+  } | null> {
+    const rows = await this.repository.listCurrentAnalyses(projectId);
+    for (const row of rows) {
+      const raw = row.summaryJson as Record<string, unknown> | null;
+      if (raw === null) continue;
+      const version = raw["extractionVersion"];
+      const extraction = raw["extraction"];
+      if (typeof version !== "string" || extraction === null || extraction === undefined) continue;
+      return { fileName: row.fileName, fileVersionId: row.fileVersionId, extraction, generatedAt: row.generatedAt };
+    }
+    return null;
+  }
+
   /** 供 AI 项目总结读面消费；只返回当前文件版本的成功摘要。 */
   async forAi(projectId: string): Promise<ProjectFileAiSummary[]> {
     const rows = await this.repository.listCurrentAnalyses(projectId);

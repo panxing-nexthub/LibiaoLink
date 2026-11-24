@@ -1,9 +1,15 @@
 import { Injectable } from "@nestjs/common";
 import type {
+  ProjectAiAgreement,
   ProjectAiChange,
   ProjectAiContext,
+  ProjectAiEquipment,
   ProjectAiIssue,
+  ProjectAiIssueCategoryStat,
+  ProjectAiMember,
   ProjectAiMetrics,
+  ProjectAiPeriod,
+  ProjectAiPhotoRef,
   ProjectAiReport,
   ProjectAiStage,
   ProjectAiTask,
@@ -14,6 +20,8 @@ import { FlowService, ProjectService } from "../project/index.js";
 import { IssueService, ReportService } from "../report-issue/index.js";
 import { TaskService } from "../task/index.js";
 import { DocumentAnalysisService } from "../document-analysis/index.js";
+import { ProjectAiAgreementService } from "./project-ai-agreement.service.js";
+import { ProjectAiEquipmentService } from "./project-ai-equipment.service.js";
 
 /** 单页读取条数：与导出批次同量级，避免一次拉全表。 */
 const PAGE_LIMIT = 200;
@@ -48,6 +56,46 @@ function minDate(values: readonly (string | null)[]): string | null {
   return result;
 }
 
+function unique(values: readonly string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter((value) => value !== "")));
+}
+
+/** 现场附图按有图日报日期分层轮流抽样，去重，最多 12 张；与前端抽样口径一致。 */
+function sampleReportPhotos(
+  reports: readonly {
+    date: string;
+    authorName: string | null;
+    photos: readonly { fileId: string; name: string }[];
+  }[],
+): ProjectAiPhotoRef[] {
+  const byDate = new Map<string, ProjectAiPhotoRef[]>();
+  for (const report of reports) {
+    if (report.photos.length === 0) continue;
+    const list = byDate.get(report.date) ?? [];
+    for (const photo of report.photos) {
+      list.push({ fileId: photo.fileId, name: photo.name, date: report.date, authorName: report.authorName });
+    }
+    byDate.set(report.date, list);
+  }
+  const dates = Array.from(byDate.keys()).sort();
+  const picked: ProjectAiPhotoRef[] = [];
+  const seen = new Set<string>();
+  for (let round = 0; round < 12; round += 1) {
+    let added = false;
+    for (const date of dates) {
+      const item = (byDate.get(date) ?? [])[round];
+      if (item === undefined) continue;
+      added = true;
+      if (seen.has(item.fileId)) continue;
+      seen.add(item.fileId);
+      picked.push(item);
+      if (picked.length >= 12) return picked;
+    }
+    if (!added) break;
+  }
+  return picked;
+}
+
 function maxDate(values: readonly (string | null)[]): string | null {
   let result: string | null = null;
   for (const value of values) {
@@ -75,19 +123,23 @@ export class ProjectAiContextService {
     private readonly issues: IssueService,
     private readonly users: UserService,
     private readonly documentAnalyses: DocumentAnalysisService,
+    private readonly agreements: ProjectAiAgreementService,
+    private readonly equipment: ProjectAiEquipmentService,
   ) {}
 
   async build(projectId: string, actorId: string): Promise<ProjectAiContext> {
     // 记录级可见性由 ProjectAccessGuard 先判；这里再取一次项目视图（同时兜 404）。
     const project = await this.projects.getProject(projectId, actorId);
 
-    const [stageList, taskResult, changeResult, reportResult, issueResult, fileAnalyses] = await Promise.all([
+    const [stageList, taskResult, changeResult, reportResult, issueResult, fileAnalyses, agreement, equipment] = await Promise.all([
       this.flow.listStages(projectId),
       this.collect((page, limit) => this.tasks.listForExport(projectId, { page, limit })),
       this.collect((page, limit) => this.changes.listProjectChangesForExport(projectId, { page, limit })),
       this.collect((page, limit) => this.reports.listForExport(projectId, { page, limit })),
       this.collect((page, limit) => this.issues.listForExport(projectId, { page, limit })),
       this.documentAnalyses.forAi(projectId),
+      this.agreements.load(projectId),
+      this.equipment.load(projectId),
     ]);
 
     const tasks = taskResult.items.map((item): ProjectAiTask => ({
@@ -207,8 +259,27 @@ export class ProjectAiContextService {
         sourceReportId: issue.sourceReportId,
         taskId: issue.taskId,
         photoCount: issue.photos.length,
+        photos: issue.photos.map((photo) => ({ fileId: photo.fileId, name: photo.name })),
       }))
       .sort((a, b) => a.raisedAt.localeCompare(b.raisedAt) || a.issueId.localeCompare(b.issueId));
+
+    const managerNames = unique(project.managerNames.filter((name): name is string => name !== null));
+    const taskOwnerNames = unique(tasks.flatMap((task) => task.ownerNames).filter((name): name is string => name !== null))
+      .filter((name) => !managerNames.includes(name));
+    const members: ProjectAiMember[] = [
+      ...managerNames.map((name) => ({ name, role: "manager" as const })),
+      ...taskOwnerNames.map((name) => ({ name, role: "task_owner" as const })),
+    ];
+    const reportPhotos = sampleReportPhotos(reportResult.items);
+    const categoryCounts = new Map<string, number>();
+    for (const issue of issues) {
+      for (const category of new Set(issue.categories)) {
+        categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
+      }
+    }
+    const issueCategoryStats: ProjectAiIssueCategoryStat[] = Array.from(categoryCounts.entries())
+      .map(([category, count]) => ({ category, count }))
+      .sort((a, b) => (b.count === a.count ? a.category.localeCompare(b.category) : b.count - a.count));
 
     // 采集器预先算好的统计：模型只引用、不重算（提示词硬约束）。
     const taskTotal = tasks.length;
@@ -238,6 +309,18 @@ export class ProjectAiContextService {
       changeTotal: changes.length,
     };
 
+    const actualFrom = minDate(stages.map((stage) => stage.actualStart)) ?? minDate(tasks.filter(isStartupTask).map((task) => task.plannedStart));
+    const actualTo = maxDate(stages.map((stage) => stage.actualEnd));
+    const period: ProjectAiPeriod = {
+      planFrom: metrics.planStart,
+      planTo: metrics.planEnd,
+      actualFrom,
+      actualTo,
+      actualOngoing: taskTotal > 0 && taskDone < taskTotal,
+    };
+    const agreementText = (field: ProjectAiAgreement["partyA"] | undefined): string | null =>
+      field !== undefined && field.status === "found" && field.value !== null && field.value.trim() !== "" ? field.value : null;
+
     return {
       metrics,
       project: {
@@ -249,6 +332,12 @@ export class ProjectAiContextService {
         status: project.status,
         managerNames: project.managerNames,
         startedAt: minDate(tasks.filter(isStartupTask).map((task) => task.plannedStart)),
+        customer: project.customer,
+        description: project.description,
+        partyA: agreement === null ? null : agreementText(agreement.partyA),
+        projectAddress: agreement === null ? null : agreementText(agreement.projectAddress),
+        period,
+        members,
       },
       stages,
       ungroupedTasks: {
@@ -260,6 +349,10 @@ export class ProjectAiContextService {
       reports,
       issues,
       fileAnalyses,
+      agreement,
+      equipment,
+      reportPhotos,
+      issueCategoryStats,
       generatedAt: new Date().toISOString(),
       truncated:
         taskResult.truncated ||

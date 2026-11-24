@@ -11,6 +11,8 @@ import type { FlowService, ProjectService } from "../src/modules/project/index.j
 import type { IssueService, ReportService } from "../src/modules/report-issue/index.js";
 import type { TaskService } from "../src/modules/task/index.js";
 import { ProjectAiContextService } from "../src/modules/project-ai/project-ai-context.service.js";
+import type { ProjectAiAgreementService } from "../src/modules/project-ai/project-ai-agreement.service.js";
+import type { ProjectAiEquipmentService } from "../src/modules/project-ai/project-ai-equipment.service.js";
 import type { DocumentAnalysisService } from "../src/modules/document-analysis/index.js";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
@@ -135,7 +137,7 @@ describe("ProjectAiContextService", () => {
         suggestion: null,
         stageKeys: ["presale"],
         stageNames: ["售前规划"],
-        photos: [{ fileId: "a1", name: "1.jpg" }, { fileId: "a2", name: "2.jpg" }],
+        photos: [{ fileId: "a1000000-0000-4000-8000-000000000001", name: "1.jpg" }, { fileId: "a2000000-0000-4000-8000-000000000002", name: "2.jpg" }],
         issuePhotos: [],
         issueDrafts: [],
         submittedAt: "2026-01-12T10:00:00.000Z",
@@ -162,9 +164,9 @@ describe("ProjectAiContextService", () => {
         raisedAt: "2026-01-12",
         solution: null,
         photos: [
-          { fileId: "b1", name: "1.jpg" },
-          { fileId: "b2", name: "2.jpg" },
-          { fileId: "b3", name: "3.jpg" },
+          { fileId: "b1000000-0000-4000-8000-000000000001", name: "1.jpg" },
+          { fileId: "b2000000-0000-4000-8000-000000000002", name: "2.jpg" },
+          { fileId: "b3000000-0000-4000-8000-000000000003", name: "3.jpg" },
         ],
         closedBy: null,
         closedAt: null,
@@ -262,6 +264,8 @@ describe("ProjectAiContextService", () => {
       issueService as unknown as IssueService,
       userService as unknown as UserService,
       documentAnalyses as unknown as DocumentAnalysisService,
+      { async load() { return null; } } as unknown as ProjectAiAgreementService,
+      { async load() { return null; } } as unknown as ProjectAiEquipmentService,
     );
 
     const context = await service.build(PROJECT_ID, MANAGER_ID);
@@ -351,6 +355,8 @@ describe("ProjectAiContextService", () => {
       empty as unknown as IssueService,
       users as unknown as UserService,
       { async forAi() { return []; } } as unknown as DocumentAnalysisService,
+      { async load() { return null; } } as unknown as ProjectAiAgreementService,
+      { async load() { return null; } } as unknown as ProjectAiEquipmentService,
     );
 
     const context = await service.build(PROJECT_ID, MANAGER_ID);

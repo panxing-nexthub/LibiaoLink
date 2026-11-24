@@ -34,8 +34,11 @@ const SYSTEM_PROMPT = [
   "",
   "<PROJECT_FACTS>",
   "由采集器提供的项目事实与统计指标，包含：",
-  "- project：项目编号、项目名称、地区、项目类型、状态、项目经理、项目启动时间",
+  "- project：项目编号、项目名称、地区、项目类型、状态、项目经理、项目启动时间、项目组成员、项目周期",
   "- metrics：任务完成数 / 任务总数 / 完成百分比、最新阶段、最慢阶段、任务计划日期范围、日报日期范围、问题计数、变更计数",
+  "- agreement：技术协议抽取的甲方、客户、项目地址、背景描述（缺失时不出现）",
+  "- equipment：设备清单按分类聚合的条目数、数量与代表物料（缺失时不出现）",
+  "- issueCategoryStats：问题归类统计（全部问题，按数量降序）",
   "- stages：阶段名称、阶段顺序、阶段状态、计划开始 / 计划结束 / 实际开始 / 实际结束、该阶段任务完成数与总数",
   "</PROJECT_FACTS>",
   "",
@@ -81,6 +84,8 @@ const SYSTEM_PROMPT = [
   "- 项目摘要控制在 250～400 字。",
   "- 项目过程只选 5～8 个关键节点，按日期升序，不逐篇复述日报。",
   "- 问题部分必须覆盖所有未解决和处理中的问题；已完成问题可按主题合并概述。",
+  "- 问题总结只聚焦 issueCategoryStats 中数量最多的前两个分类；分类名称和数量只引用 issueCategoryStats，不自行统计。",
+  "- 不要输出 basicInfo / equipmentLayout / background / equipmentList / progressDetail / sitePhotos / issueTable / personalSummary / sourceAppendix；这些字段由采集器确定性补齐。",
   "- 项目结果只使用已有数据；没有验收、财务、质保或客户确认数据时，不写相关结论。",
   "- 交接建议必须写清“事项、依据、建议下一步、建议验收标准”，每条标记 needsHumanConfirmation。",
   "- 没有交接事项时 existing 为空数组，并在 notes 写“暂无交接事项”。",
@@ -175,6 +180,25 @@ function buildPromptInput(context: ProjectAiContext): { facts: unknown; records:
       managers: context.project.managerNames.filter((name): name is string => name !== null),
       startedAt: context.project.startedAt ?? "未记录",
     },
+    agreement: {
+      partyA: context.agreement?.partyA.value ?? null,
+      customer: context.agreement?.customer.value ?? null,
+      projectAddress: context.agreement?.projectAddress.value ?? null,
+      background: context.agreement?.background.value ?? null,
+    },
+    equipment:
+      context.equipment === null || context.equipment === undefined
+        ? null
+        : {
+            sourceFileName: context.equipment.sourceFileName,
+            categories: context.equipment.categories.map((category) => ({
+              name: category.name,
+              itemCount: category.itemCount,
+              quantities: category.quantities,
+              representativeItems: category.representativeItems,
+            })),
+          },
+    issueCategoryStats: context.issueCategoryStats ?? [],
     metrics: {
       taskDone: context.metrics.taskDone,
       taskTotal: context.metrics.taskTotal,

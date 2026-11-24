@@ -10,8 +10,10 @@ export type DateRange = {
 
 type DateRangePickerProps = {
   value: DateRange | null;
-  onChange: (value: DateRange | null) => void;
+  onChange: (value: DateRange | null, shiftFollowing?: boolean) => void;
   hintDate?: string;
+  latestStart?: string;
+  allowScheduleShift?: boolean;
   /** 未选日期时触发器上的文案（默认「全部时间」，分类筛选用；任务编辑表单传业务文案）。 */
   placeholder?: string;
   /** 触发器的无障碍名称（默认「选择日期范围」）。 */
@@ -42,7 +44,7 @@ const toDate = (key: string) => {
 
 const formatKey = (key: string) => key.replace(/-/g, "/");
 
-export function DateRangePicker({ value, onChange, hintDate, placeholder, ariaLabel, triggerClassName, mode = "range" }: DateRangePickerProps) {
+export function DateRangePicker({ value, onChange, hintDate, latestStart = "", allowScheduleShift = false, placeholder, ariaLabel, triggerClassName, mode = "range" }: DateRangePickerProps) {
   const locale = useLocale();
   const t = useT();
   const placeholderText = placeholder ?? t("picker.allTime");
@@ -51,6 +53,9 @@ export function DateRangePicker({ value, onChange, hintDate, placeholder, ariaLa
   const single = mode === "single";
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DateRange | null>(value);
+  const [shiftFollowing, setShiftFollowing] = useState(false);
+  const showShift = allowScheduleShift && value !== null;
+  const invalidStart = draft !== null && latestStart !== "" && draft.from > latestStart;
   const [view, setView] = useState(() => {
     const fallback = hintDate === undefined || hintDate === "" ? new Date() : toDate(hintDate);
     const base = value === null ? fallback : toDate(value.from);
@@ -72,7 +77,7 @@ export function DateRangePicker({ value, onChange, hintDate, placeholder, ariaLa
       }
       const rect = trigger.getBoundingClientRect();
       const width = 264;
-      const height = 348;
+      const height = showShift || latestStart !== "" ? 400 : 348;
       const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8));
       const below = rect.bottom + 8;
       const top = below + height > window.innerHeight - 8 ? Math.max(8, rect.top - height - 8) : below;
@@ -102,7 +107,7 @@ export function DateRangePicker({ value, onChange, hintDate, placeholder, ariaLa
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, value]);
+  }, [open, value, showShift, latestStart]);
 
   const cells = useMemo(() => {
     const year = view.getFullYear();
@@ -136,6 +141,7 @@ export function DateRangePicker({ value, onChange, hintDate, placeholder, ariaLa
         aria-expanded={open}
         aria-label={ariaText}
         onClick={() => {
+          setShiftFollowing(false);
           setOpen((previous) => !previous);
         }}
         className={
@@ -191,6 +197,13 @@ export function DateRangePicker({ value, onChange, hintDate, placeholder, ariaLa
             })}
           </div>
 
+          {showShift ? (
+            <label className="mt-2 flex items-center gap-2 px-1 text-xs text-zinc-700">
+              <input type="checkbox" checked={shiftFollowing} onChange={(event) => setShiftFollowing(event.target.checked)} />
+              {t("task.schedule.shiftFollowing")}
+            </label>
+          ) : null}
+          {invalidStart ? <p role="status" className="mt-2 text-xs text-amber-800">{t("task.schedule.startAfterActual")}</p> : null}
           <div className="mt-3 flex items-center justify-between border-t border-zinc-100 pt-2">
             <button
               type="button"
@@ -205,11 +218,12 @@ export function DateRangePicker({ value, onChange, hintDate, placeholder, ariaLa
             </button>
             <button
               type="button"
+              disabled={invalidStart}
               onClick={() => {
-                onChange(draft);
+                onChange(draft, showShift && shiftFollowing);
                 setOpen(false);
               }}
-              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800"
+              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:opacity-40"
             >
               {t("picker.ok")}
             </button>

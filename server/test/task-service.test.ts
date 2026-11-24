@@ -166,7 +166,14 @@ class FakeTaskRepository {
         };
   }
   group: { id: string; sortIndex: number }[] = [];
+  relatedTasks: TaskRow[] = [];
   groupSize = 0;
+
+  async lockStageTasks(_tx: DbClient, projectId: string, stageKey: string): Promise<TaskRow[]> {
+    return [this.task, ...this.relatedTasks]
+      .filter((task): task is TaskRow => task !== null && task.projectId === projectId && task.stageKey === stageKey && task.deletedAt === null)
+      .sort((a, b) => a.sortIndex - b.sortIndex || a.id.localeCompare(b.id));
+  }
   shifted: { from: number; to: number | null; delta: number }[] = [];
 
   async insert(input: TaskInsertInput): Promise<TaskRow> {
@@ -174,8 +181,8 @@ class FakeTaskRepository {
     this.inserted = row;
     return row;
   }
-  async updateWithVersion(_taskId: string, expectedVersion: number, patch: TaskUpdatePatch, at: Date): Promise<TaskRow | null> {
-    const current = this.task;
+  async updateWithVersion(taskId: string, expectedVersion: number, patch: TaskUpdatePatch, at: Date): Promise<TaskRow | null> {
+    const current = this.task?.id === taskId ? this.task : this.relatedTasks.find((task) => task.id === taskId) ?? null;
     if (current === null || current.version !== expectedVersion) return null;
     const next: TaskRow = {
       ...current,
@@ -200,7 +207,11 @@ class FakeTaskRepository {
       updatedAt: at,
       version: current.version + 1,
     };
-    this.task = next;
+    if (this.task?.id === taskId) {
+      this.task = next;
+    } else {
+      this.relatedTasks = this.relatedTasks.map((task) => task.id === taskId ? next : task);
+    }
     return next;
   }
   async insertEvents(_tx: DbClient, events: readonly TaskEventInput[]): Promise<void> {
@@ -792,6 +803,71 @@ describe("TaskService.update（A12 状态联动 + 乐观锁 + 留痕）", () => 
     repo.task = makeRow({ deliverableTypes: ["验收单", "竣工图"] });
     const updated = await makeService(repo).update(PROJECT, TASK, { deliverableTypes: [], version: 3 }, ACTOR);
     expect(updated.deliverableTypes).toEqual([]);
+  });
+});
+
+describe("阶段内任务改期与日期校验", () => {
+  it("按预计完成的差值平移同项目同阶段后续任务，保留实际完成及空日期", async () => {
+    const repo = new FakeTaskRepository();
+    repo.task = makeRow({ sortIndex: 1, plannedStart: "2026-09-01", plannedEnd: "2026-09-04" });
+    const later = makeRow({
+      id: "later", sortIndex: 2, plannedStart: "2026-09-06", plannedEnd: "2026-09-10",
+      actualEnd: "2026-09-13", status: "done", progress: "1", estimatedDays: 5,
+    });
+    const partial = makeRow({ id: "partial", sortIndex: 3, plannedEnd: "2026-09-11" });
+    const earlier = makeRow({ id: "earlier", sortIndex: 0, plannedStart: "2026-09-01" });
+    const otherStage = makeRow({ id: "otherStage", stageKey: "presale", sortIndex: 4, plannedStart: "2026-09-02" });
+    const otherProject = makeRow({ id: "otherProject", projectId: "other", sortIndex: 5, plannedStart: "2026-09-04" });
+    repo.relatedTasks = [earlier, later, partial, otherStage, otherProject];
+    const updated = await makeService(repo).update(PROJECT, TASK, {
+      version: 3, plannedStart: "2026-09-02", plannedEnd: "2026-09-07", shiftFollowing: true,
+    }, ACTOR);
+
+    expect(updated).toMatchObject({ plannedStart: "2026-09-02", plannedEnd: "2026-09-07", version: 4 });
+    expect(repo.relatedTasks).toEqual([
+      earlier,
+      expect.objectContaining({ id: "later", plannedStart: "2026-09-09", plannedEnd: "2026-09-13", actualEnd: "2026-09-13", estimatedDays: 5, version: 4 }),
+      expect.objectContaining({ id: "partial", plannedStart: null, plannedEnd: "2026-09-14", version: 4 }),
+      otherStage,
+      otherProject,
+    ]);
+    expect(repo.events.filter((event) => event.eventType === "date_change")).toHaveLength(3);
+  });
+
+  it("冲突时报告任务名称并拦截全部写入，取消顺延后可以单独改当前任务", async () => {
+    const repo = new FakeTaskRepository();
+    const anchor = makeRow({ plannedStart: "2026-09-01", plannedEnd: "2026-09-04" });
+    const valid = makeRow({ id: "valid", sortIndex: 1, plannedStart: "2026-09-04" });
+    const conflict = makeRow({ id: "conflict", title: "已完成任务", sortIndex: 2, plannedStart: "2026-09-05", actualEnd: "2026-09-06" });
+    repo.task = anchor;
+    repo.relatedTasks = [valid, conflict];
+    const service = makeService(repo);
+    const edit = { version: 3, plannedEnd: "2026-09-07" };
+    await expect(service.update(PROJECT, TASK, { ...edit, shiftFollowing: true }, ACTOR))
+      .rejects.toMatchObject({ code: "VALIDATION_FAILED", message: expect.stringContaining("已完成任务") });
+    expect(repo.task).toEqual(anchor);
+    expect(repo.relatedTasks).toEqual([valid, conflict]);
+    expect(repo.events).toEqual([]);
+    await expect(service.update(PROJECT, TASK, edit, ACTOR)).resolves.toMatchObject({ plannedEnd: "2026-09-07" });
+    expect(repo.relatedTasks).toEqual([valid, conflict]);
+  });
+
+  it("校验预计和实际完成日期，允许与开始日期及上海业务今天同日", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-23T16:30:00Z"));
+    const repo = new FakeTaskRepository();
+    repo.task = makeRow({ plannedStart: "2026-11-24" });
+    const service = makeService(repo);
+    await expect(service.update(PROJECT, TASK, { version: 3, plannedEnd: "2026-11-23" }, ACTOR))
+      .rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+    await expect(service.updateProgress(PROJECT, TASK, { version: 3, progress: 1, actualEnd: "2026-11-23" }, ACTOR))
+      .rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+    await expect(service.complete(PROJECT, TASK, { version: 3, actualEnd: "2026-11-25" }, ACTOR))
+      .rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+    await expect(service.update(PROJECT, TASK, { version: 3, plannedEnd: "2026-11-24" }, ACTOR))
+      .resolves.toMatchObject({ plannedEnd: "2026-11-24", version: 4 });
+    await expect(service.updateProgress(PROJECT, TASK, { version: 4, progress: 1, actualEnd: "2026-11-24" }, ACTOR))
+      .resolves.toMatchObject({ actualEnd: "2026-11-24" });
   });
 });
 

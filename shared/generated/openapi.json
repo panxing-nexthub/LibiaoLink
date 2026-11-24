@@ -16698,6 +16698,10 @@
       "TaskUpdateBody": {
         "type": "object",
         "properties": {
+          "shiftFollowing": {
+            "type": "boolean",
+            "description": "项目编辑者可选。为 true 时按改期的自然日差值在同一事务中移动同阶段后续任务的开始和预计完成日期。两个日期均有差值时以预计完成日期为准，实际完成日期保留原值"
+          },
           "title": {
             "type": "string",
             "minLength": 1,

@@ -16455,6 +16455,8 @@ export interface components {
         };
         /** @description 编辑任务（乐观锁 version 必传；阶段不在本接口；status 支持五态并联动进度与完成日期，进度 / 完成日期仍走 /progress；ownerIds 显式 [] = 待分配、传数组 = 整体替换，sortIndex = 组内重排）；title / titleEn（Push 196）仅**未归入阶段**的临时任务可改，阶段任务 / 节点 / 模板生成的任务仍锁定（带字段请求 400）；deliverableTypes（2026-10-08 起）常规编辑开放，原「生成后锁定 / 仅管理员例外调整」下架 */
         TaskUpdateBody: {
+            /** @description 项目编辑者可选。为 true 时按改期的自然日差值在同一事务中移动同阶段后续任务的开始和预计完成日期。两个日期均有差值时以预计完成日期为准，实际完成日期保留原值 */
+            shiftFollowing?: boolean;
             /** @description 任务描述（中文；Push 196）：仅**无来源节点**的任务可改（看板「添加 → 临时任务」手工创建）；节点 / 模板生成的任务按 A1-17 锁定，带该字段请求 400 */
             title?: string;
             /** @description 任务描述（英文；Push 196）：与 title 同一门禁；null = 清空 */

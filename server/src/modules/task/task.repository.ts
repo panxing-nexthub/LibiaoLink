@@ -527,6 +527,16 @@ export class TaskRepository {
     return rows.length > 0;
   }
 
+  /** 改期顺延按组内位次统一锁定任务，与重排的锁定顺序一致。 */
+  async lockStageTasks(client: DbClient, projectId: string, stageKey: string): Promise<TaskRow[]> {
+    return client
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.stageKey, stageKey), isNull(tasks.deletedAt)))
+      .orderBy(asc(tasks.sortIndex), asc(tasks.id))
+      .for("update");
+  }
+
   async lockTask(client: DbClient, taskId: string): Promise<TaskRow | null> {
     const rows = await client.select().from(tasks).where(and(eq(tasks.id, taskId), isNull(tasks.deletedAt))).for("update");
     return rows[0] ?? null;

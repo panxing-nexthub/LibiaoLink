@@ -354,16 +354,24 @@ export function InlineDateCell({
   triggerClassName,
   bare = false,
   showAuto = false,
+  minDate = "",
+  maxDate = "",
+  todayIso,
+  allowScheduleShift = false,
   disabled = false,
   disabledHint,
 }: {
   valueIso: string;
   display: ReactNode;
   ariaLabel: string;
-  onChange: (iso: string) => void;
+  onChange: (iso: string, shiftFollowing?: boolean) => void;
   triggerClassName?: string;
   bare?: boolean;
   showAuto?: boolean;
+  minDate?: string;
+  maxDate?: string;
+  todayIso?: string;
+  allowScheduleShift?: boolean;
   /** 锁定入口（Push 264 · P1-1 定档锁定）：透传 InlineCell —— 定档任务的行内入口不弹编辑浮层，点击改弹站点同款顶部 Toast。 */
   disabled?: boolean;
   /** 锁定说明文案（定档口径同 409 TASK_FINALIZED 提示文案；悬停 title 与点击 Toast 共用）。 */
@@ -375,7 +383,7 @@ export function InlineDateCell({
       ariaLabel={ariaLabel}
       title={t("ie.pickDate")}
       width={264}
-      height={336}
+      height={allowScheduleShift && valueIso !== "" ? 370 : 336}
       disabled={disabled}
       disabledHint={disabledHint}
       bare={bare}
@@ -385,8 +393,12 @@ export function InlineDateCell({
         <MiniCalendar
           value={valueIso}
           showAuto={showAuto}
-          onChange={(iso) => {
-            onChange(iso);
+          minDate={minDate}
+          maxDate={maxDate}
+          todayIso={todayIso}
+          allowScheduleShift={allowScheduleShift && valueIso !== ""}
+          onChange={(iso, shiftFollowing) => {
+            onChange(iso, shiftFollowing);
             close();
           }}
         />
@@ -395,11 +407,30 @@ export function InlineDateCell({
   );
 }
 
-function MiniCalendar({ value, onChange, showAuto = false }: { value: string; onChange: (iso: string) => void; showAuto?: boolean }) {
+function MiniCalendar({
+  value,
+  onChange,
+  showAuto,
+  minDate,
+  maxDate,
+  todayIso = toKey(new Date()),
+  allowScheduleShift,
+}: {
+  value: string;
+  onChange: (iso: string, shiftFollowing?: boolean) => void;
+  showAuto: boolean;
+  minDate: string;
+  maxDate: string;
+  todayIso?: string;
+  allowScheduleShift: boolean;
+}) {
   const t = useT();
   const locale = useLocale();
+  const [shiftFollowing, setShiftFollowing] = useState(false);
+  const isAllowed = (iso: string) => (minDate === "" || iso >= minDate) && (maxDate === "" || iso <= maxDate);
+  const pick = (iso: string) => onChange(iso, shiftFollowing && iso !== value);
   const [view, setView] = useState(() => {
-    const base = value === "" ? new Date() : toDate(value);
+    const base = toDate(value === "" ? todayIso : value);
     return new Date(base.getFullYear(), base.getMonth(), 1);
   });
 
@@ -422,6 +453,13 @@ function MiniCalendar({ value, onChange, showAuto = false }: { value: string; on
         nextLabel={t("ie.nextMonth")}
       />
 
+      {allowScheduleShift ? (
+        <label className="mt-2 flex items-center gap-2 px-1 text-xs text-zinc-700">
+          <input type="checkbox" checked={shiftFollowing} onChange={(event) => setShiftFollowing(event.target.checked)} />
+          {t("task.schedule.shiftFollowing")}
+        </label>
+      ) : null}
+
       <div className="mt-2 grid grid-cols-7 gap-y-1 text-center text-[11px] text-zinc-400">
         {(locale === "ja" ? WEEKDAYS_JA : locale === "ko" ? WEEKDAYS_KO : locale === "en" ? WEEKDAYS_EN : WEEKDAYS_ZH).map((day) => (
           <span key={day}>{day}</span>
@@ -430,21 +468,19 @@ function MiniCalendar({ value, onChange, showAuto = false }: { value: string; on
 
       <div className="mt-1 grid grid-cols-7 gap-y-1">
         {cells.map((cell) => {
-          const selected = cell.key === value;
+          const selectable = cell.inMonth && isAllowed(cell.key);
           const base = "flex h-8 w-full items-center justify-center rounded-lg text-xs transition ";
-          const tone = selected
-            ? "bg-zinc-900 font-semibold text-white "
-            : cell.inMonth
-              ? "text-zinc-600 hover:bg-zinc-100 "
-              : "text-zinc-300 ";
+          const tone = !selectable
+            ? "text-zinc-300 "
+            : cell.key === value
+              ? "bg-zinc-900 font-semibold text-white "
+              : "text-zinc-600 hover:bg-zinc-100 ";
           return (
             <button
               key={cell.key}
               type="button"
-              disabled={!cell.inMonth}
-              onClick={() => {
-                onChange(cell.key);
-              }}
+              disabled={!selectable}
+              onClick={() => pick(cell.key)}
               className={base + tone}
             >
               {cell.day}
@@ -478,10 +514,9 @@ function MiniCalendar({ value, onChange, showAuto = false }: { value: string; on
         </div>
         <button
           type="button"
-          onClick={() => {
-            onChange(toKey(new Date()));
-          }}
-          className="rounded-lg px-2.5 py-1.5 text-xs text-zinc-600 transition hover:bg-zinc-100"
+          disabled={!isAllowed(todayIso)}
+          onClick={() => pick(todayIso)}
+          className="rounded-lg px-2.5 py-1.5 text-xs text-zinc-600 transition hover:bg-zinc-100 disabled:text-zinc-300 disabled:hover:bg-transparent"
         >
           {t("ie.today")}
         </button>

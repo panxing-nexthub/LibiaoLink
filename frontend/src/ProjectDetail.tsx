@@ -708,9 +708,16 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
     try {
       const updated = await updateTask(projectId, taskId, body);
       replaceRow(updated);
+      if (body.shiftFollowing === true) reloadAll();
       void afterWrite();
       return updated.version;
     } catch (error) {
+      if (
+        body.shiftFollowing === true && version !== undefined && error instanceof ApiError &&
+        (error.code === "VALIDATION_FAILED" || error.code === "TASK_FINALIZED")
+      ) {
+        throw error;
+      }
       reportWriteError(error);
       return null;
     }
@@ -726,6 +733,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
       ownerIds: values.ownerIds,
       startDate: values.startDate,
       dueDate: values.dueDate,
+      shiftFollowing: values.shiftFollowing,
       days: values.days,
       headcount: values.headcount,
       priority: values.priority,

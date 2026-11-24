@@ -308,6 +308,7 @@ export type TaskUpdateInput = {
   managerIds?: string[];
   sortIndex?: number;
   status?: string;
+  shiftFollowing?: boolean;
   plannedStart?: string | null;
   plannedEnd?: string | null;
   estimatedDays?: number | null;

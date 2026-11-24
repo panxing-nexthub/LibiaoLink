@@ -613,6 +613,7 @@ export function GanttChart({ tasks, members, tierTint = false, onPatchTask, onSe
   const [drag, setDrag] = useState<GanttDrag | null>(null);
   /** 任务条编辑锁：默认锁上，防止误拖改期 / 工期 / 进度；滚动、筛选、定位等浏览操作不受影响。 */
   const [barsLocked, setBarsLocked] = useState(true);
+  const [shiftFollowing, setShiftFollowing] = useState(false);
   /** 「回到今天」把今天并进时间轴范围（今天本来就在范围里 = 无影响）；清空筛选时收回。 */
   const [includeToday, setIncludeToday] = useState(false);
   /** 刚点「回到今天」但当时今天不在范围里：等范围延出来（todayLeft 有值）再居中一次。 */
@@ -838,6 +839,7 @@ export function GanttChart({ tasks, members, tierTint = false, onPatchTask, onSe
     if (!barsLocked) {
       setDrag(null);
       dragPointerRef.current = null;
+      setShiftFollowing(false);
     }
     setBarsLocked((previous) => !previous);
   };
@@ -995,7 +997,10 @@ export function GanttChart({ tasks, members, tierTint = false, onPatchTask, onSe
       return;
     }
     justDraggedRef.current = true;
-    onPatchTask?.(session.taskId, rangePatch(session.start, session.end));
+    const task = tasks.find((row) => row.id === session.taskId);
+    const canShift = task !== undefined && task.stageKey !== null && taskCapabilitiesOf(task).source === "project_edit";
+    setShiftFollowing(false);
+    onPatchTask?.(session.taskId, { ...rangePatch(session.start, session.end), shiftFollowing: shiftFollowing && canShift });
   };
 
   /** 拖左表右边线改左表宽度（官方 frame.verticalSplitLineMoveable）；双击复位默认宽。 */
@@ -1305,6 +1310,7 @@ export function GanttChart({ tasks, members, tierTint = false, onPatchTask, onSe
                                 onSetProgress(task.id, progress);
                               }
                         }
+                        allowScheduleShift
                         onPatch={
                           onPatchTask === undefined
                             ? undefined
@@ -1481,6 +1487,14 @@ export function GanttChart({ tasks, members, tierTint = false, onPatchTask, onSe
           <span className="whitespace-nowrap">{t("gantt.help.pan")}</span>
           <span className="whitespace-nowrap">{t("gantt.help.pick")}</span>
           <span className="whitespace-nowrap">{t("gantt.help.splitter")}</span>
+          {!barsLocked && onPatchTask !== undefined && visibleTasks.some((task) =>
+            task.stageKey !== null && task.finalizedAt === null && taskCapabilitiesOf(task).source === "project_edit"
+          ) ? (
+            <label className="inline-flex items-center gap-1.5 text-xs text-zinc-700">
+              <input type="checkbox" checked={shiftFollowing} onChange={(event) => setShiftFollowing(event.target.checked)} />
+              {t("task.schedule.shiftFollowing")}
+            </label>
+          ) : null}
         </div>
         <button
           type="button"

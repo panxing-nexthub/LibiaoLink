@@ -22,7 +22,7 @@ import {
 } from "../data/tasks";
 import { applyFileChange, ensurePreviewOutcome, fetchChangeRequest, fetchDownloadUrl, fetchFileVersions, finalizeFile, previewKindOf, recordPreviewView, triggerDownload, usePhotoUrl, type ChangeRequestDetail, type MaterialReissueResult, type FilePreviewKind, type FileVersionBrief, type PreviewViewerConfig } from "../fileApi";
 import { lockBodyScroll } from "../scrollLock";
-import { fetchTaskDetail, toUiTask, stageKeyOfName, stageNameOf, type TaskFileBrief } from "../taskApi";
+import { fetchTaskDetail, toUiTask, stageKeyOfName, stageNameOf, taskWriteMessage, type TaskFileBrief } from "../taskApi";
 import { fieldText, isLocalizedLocale, mdText, priorityText, progressLabelOf, stageText, statusText, translationTargetOf, useLocale, useLocalizedText, useT } from "../i18n";
 import { cachedZhTo, translateZhTo } from "../translateApi";
 import { DateRangePicker, type DateRange } from "./DateRangePicker";
@@ -193,10 +193,11 @@ export type TaskEditSubmit = {
   managerChanged: boolean;
   /** 任务负责人 id（多位，契约 ownerIds）：空数组 = 待分配。 */
   ownerIds: string[];
-  /** 开始 / 预计完成日期（ISO，YYYY-MM-DD；空串 = 未填）。 */
-  startDate: string;
-  dueDate: string;
-  days: number;
+  /** 开始 / 预计完成日期（ISO，YYYY-MM-DD；空串 = 清空，省略 = 未编辑日期）。 */
+  startDate?: string;
+  dueDate?: string;
+  shiftFollowing?: boolean;
+  days?: number;
   headcount: number;
   priority: TaskPriority;
   /** 输出成果文件（2026-10-08 · 业务口径「文件输出成果也要可以选择」：常规编辑开放）。 */
@@ -244,6 +245,7 @@ type TaskDrawerProps = {
   allowFileChanges?: boolean;
   /** 仅本项目经理和系统管理员可变更经理字段。 */
   canEditManagers?: boolean;
+  allowScheduleShift?: boolean;
   task: ProjectTask | null;
   /** 抽屉内直接改字段后的即时保存；不传 = 抽屉只读（不渲染可编辑控件）。 */
   onSubmit?: (values: TaskEditSubmit) => Promise<number | null>;
@@ -323,7 +325,7 @@ type TaskDrawerProps = {
  * 任务名称（中文 / 英文）自 Push 196 起对「临时任务」开放（**Push 197 收窄：仅未归入阶段的临时任务** —— 业务口径 2026-09-28「这个不是临时任务 不能修改」；失焦即存，中文名必填），
  * 阶段任务与节点 / 模板生成的任务仍锁定（抽屉里不出这一行，服务端同口径 400 兜底）。
  */
-export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEditManagers = false, allowFileChanges = true, members, managerMembers, customDeliverableTypes = [], onCreateDeliverableType, onSubmit, onRename, onProgress, onSetStatus, onSetActualEnd, onFinalize, onUnfinalize, onChanged, actorName, onUploadFiles, onDeleteFile, onRenameFile, projectId, onClose }: TaskDrawerProps) {
+export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEditManagers = false, allowScheduleShift = false, allowFileChanges = true, members, managerMembers, customDeliverableTypes = [], onCreateDeliverableType, onSubmit, onRename, onProgress, onSetStatus, onSetActualEnd, onFinalize, onUnfinalize, onChanged, actorName, onUploadFiles, onDeleteFile, onRenameFile, projectId, onClose }: TaskDrawerProps) {
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
   const taskId = task === null ? null : task.id;
@@ -334,6 +336,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
   const saveChain = useRef<Promise<void>>(Promise.resolve());
   const saveFailed = useRef(false);
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [scheduleNote, setScheduleNote] = useState<string | null>(null);
   const [latestDraft, setLatestDraft] = useState<{ version: number; draft: Draft } | null>(null);
   const identityRef = useRef(taskId);
   identityRef.current = taskId;
@@ -494,6 +497,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
     setUnavailable(false);
     saveFailed.current = false;
     setSaveNote(null);
+    setScheduleNote(null);
     setLatestDraft(null);
     setDraft(initial);
     // 换任务时把草稿重置成新任务的字段；同一个任务上父级刷新不重置，避免打断正在输入的内容
@@ -703,12 +707,13 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
 
   /** 即时保存：把草稿与改动合成一份完整保存值（字段口径同任务表行内编辑）。 */
   const commit = useCallback(
-    (patch: Partial<Draft>) => {
+    (patch: Partial<Draft>, shiftFollowing = false) => {
       const current = task;
       if (current === null || onSubmit === undefined || unavailable) {
         return;
       }
       const next = updateDraft(patch);
+      const editingDates = patch.range !== undefined;
       saveChain.current = saveChain.current.then(async () => {
         if (identityRef.current !== current.id || saveFailed.current) return;
         const headcountText = next.headcount.trim();
@@ -719,9 +724,12 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
           managerIds: next.managerIds,
           managerChanged: next.managerIds.length !== baseDraft.current.managerIds.length || next.managerIds.some((id, index) => id !== baseDraft.current.managerIds[index]),
           ownerIds: next.ownerIds,
-          startDate: next.range === null ? "" : next.range.from,
-          dueDate: next.range === null ? "" : next.range.to,
-          days: next.range === null ? 0 : daysBetweenInclusive(next.range.from, next.range.to),
+          ...(editingDates ? {
+            startDate: next.range?.from ?? "",
+            dueDate: next.range?.to ?? "",
+            shiftFollowing,
+            days: next.range === null ? 0 : daysBetweenInclusive(next.range.from, next.range.to),
+          } : {}),
           headcount: headcountText === "" || Number.isNaN(headcountValue) ? 0 : Math.floor(headcountValue),
           priority: next.priority,
           deliverableTypes: next.deliverableTypes,
@@ -734,16 +742,23 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
           return;
         }
         baseVersion.current = version;
-        baseDraft.current = next;
+        baseDraft.current = editingDates ? next : { ...next, range: baseDraft.current.range };
+        if (editingDates) setScheduleNote(null);
         setSavedTick(Date.now());
         setSaveNote(null);
-      }).catch(() => {
+      }).catch((error: unknown) => {
         if (identityRef.current !== current.id) return;
+        if (shiftFollowing && error instanceof ApiError && (error.code === "VALIDATION_FAILED" || error.code === "TASK_FINALIZED")) {
+          // 业务冲突没有写入。恢复上次保存的日期，让用户直接改期或取消勾选后重试。
+          if (draftRef.current.range === next.range) updateDraft({ range: baseDraft.current.range });
+          setScheduleNote(taskWriteMessage(locale, error));
+          return;
+        }
         saveFailed.current = true;
         setSaveNote(t("drawer.save.failed"));
       });
     },
-    [onSubmit, task, updateDraft, unavailable],
+    [onSubmit, task, updateDraft, unavailable, locale, t],
   );
 
   if (task === null) {
@@ -764,6 +779,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
   const titleEditable = editable && onRename !== undefined && task.stage === "" && task.nodeId === null && task.sourceNodeId === null;
   const canEditStatus = onSetStatus !== undefined && capabilities.canEditFields && !taskFinalized && !unavailable;
   const canEditActualEnd = onSetActualEnd !== undefined && capabilities.canComplete && !taskFinalized && !unavailable;
+  const actualToday = dateOnlyText(new Date().toISOString());
   const canEditProgress = onProgress !== undefined && capabilities.canUpdateProgress && !taskFinalized && !unavailable;
   const managerEditable = editable && canEditManagers;
   const managerChoices = memberOptionsWithExisting(managerMembers, draft.managerIds, members);
@@ -1503,14 +1519,17 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
         <>
           <DateRangePicker
             value={draft.range}
-            onChange={(next) => {
-              commit({ range: next });
+            latestStart={task.doneDate}
+            allowScheduleShift={allowScheduleShift && task.stageKey !== null && capabilities.source === "project_edit"}
+            onChange={(next, shiftFollowing) => {
+              commit({ range: next }, shiftFollowing);
             }}
             hintDate={task.startDate}
             placeholder={t("drawer.dates.placeholder")}
             ariaLabel={t("drawer.dates.aria")}
           />
           <span className={CAPTION_CLASS}>{t("drawer.dates.caption")}</span>
+          {scheduleNote === null ? null : <p role="alert" className="mt-1 text-xs text-amber-800">{scheduleNote}</p>}
         </>
       ) : task.startDate === "" && task.dueDate === "" ? (
         dash
@@ -1559,6 +1578,9 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
         <>
           <InlineDateCell
             valueIso={task.doneDate}
+            minDate={task.startDate}
+            maxDate={actualToday}
+            todayIso={actualToday}
             ariaLabel={t("drawer.actual.aria")}
             display={
               task.doneDate !== "" ? <span className="text-zinc-600">{mdText(locale, task.doneDate)}</span> : <span className="text-zinc-400">—</span>
@@ -2318,11 +2340,13 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
               <>
                 <details className="mt-2"><summary>{t("drawer.save.latestFields")}</summary><p className="whitespace-pre-wrap">{t("drawer.save.latestOwner")}{latestDraft.draft.ownerIds.map((id) => memberNameOf(members, id) ?? id).join("、")}{t("drawer.save.latestHeadcount")}{latestDraft.draft.headcount || "0"}{t("drawer.save.latestDates")}{t("drawer.save.latestRange", { from: latestDraft.draft.range?.from ?? "—", to: latestDraft.draft.range?.to ?? "—" })}{t("drawer.save.latestPriority")}{priorityText(locale, latestDraft.draft.priority)}{t("drawer.save.latestDeliverables")}{latestDraft.draft.deliverableTypes.join("、")}<br />{t("drawer.save.latestNote")}{latestDraft.draft.note}</p></details>
                 <button type="button" disabled={unavailable} className="mt-2 underline disabled:opacity-50" onClick={() => {
+                  const range = draftRef.current.range;
+                  const datesChanged = JSON.stringify(range) !== JSON.stringify(latestDraft.draft.range);
                   baseVersion.current = latestDraft.version;
                   baseDraft.current = latestDraft.draft;
                   saveFailed.current = false;
                   setLatestDraft(null);
-                  commit({});
+                  commit(datesChanged ? { range } : {});
                 }}>{t("drawer.save.retryDraft")}</button>
               </>
             )}

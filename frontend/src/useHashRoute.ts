@@ -118,6 +118,9 @@ export type ProjectFocus =
   | { kind: "issue"; id: string }
   | { kind: "issueLocate"; id: string };
 
+/** 项目管理的两个视图使用各自的地址。 */
+export type ProjectManagementView = "table" | "implementationGantt";
+
 export type Route =
   | { kind: "hub"; view: HubView | null }
   | { kind: "workspace"; tab: WorkspaceTab; sub: WorkspaceIssueView }
@@ -130,7 +133,7 @@ export type Route =
   | { kind: "settings" }
   | { kind: "model-settings" }
   | { kind: "files"; query: FilesQueryState }
-  | { kind: "project-management" };
+  | { kind: "project-management"; view: ProjectManagementView };
 
 /** 任务模板页地址：当前板块（标签栏选中的阶段）也走 URL —— 与列表页筛选态同一口径，地址即状态。 */
 export const TEMPLATE_BASE_HASH = "#/templates";
@@ -138,8 +141,13 @@ export const TEMPLATE_BASE_HASH = "#/templates";
 /** 列表页地址：蓝图页（Hub · Push 285 前叫「入口页 / 首页」）占用 #/，项目空间列表移到 #/projects。 */
 export const LIST_BASE_HASH = "#/projects";
 
-/** 「项目管理」页地址：项目新建前准备表，当前只提供页面骨架与新建项目入口。 */
+/** 「项目管理」入口默认打开项目总览；甘特-实施有独立地址。 */
 export const PROJECT_MANAGEMENT_HASH = "#/project-management";
+const PROJECT_MANAGEMENT_GANTT_HASH = PROJECT_MANAGEMENT_HASH + "/gantt";
+
+export function projectManagementHref(view: ProjectManagementView): string {
+  return view === "implementationGantt" ? PROJECT_MANAGEMENT_GANTT_HASH : PROJECT_MANAGEMENT_HASH;
+}
 
 /**
  * 蓝图页地址（顶层）：详情 / 列表 / 占位页的「上一层」最终都落到这里。
@@ -663,8 +671,11 @@ export function parseHash(hash: string): Route {
     // 刷新 / 分享 / 撤回不丢；视图走 `?view=dashboard`（Push 332 · 缺省 = 地图，不带参数时落账号记忆的常驻视图）。
     return { kind: "hub", view: parseHubView(search) };
   }
-  if (path === "/project-management") {
-    return { kind: "project-management" };
+  if (path === PROJECT_MANAGEMENT_HASH.slice(1)) {
+    return { kind: "project-management", view: "table" };
+  }
+  if (path === PROJECT_MANAGEMENT_GANTT_HASH.slice(1)) {
+    return { kind: "project-management", view: "implementationGantt" };
   }
   if (path === "/templates") {
     return { kind: "placeholder", page: "templates", section: parseSectionValue(search) };

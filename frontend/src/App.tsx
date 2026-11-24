@@ -990,6 +990,7 @@ export default function App() {
     return (
       <>
         <ProjectManagementPage
+          activeViewTab={route.view}
           me={state.me}
           dicts={dicts}
           directory={directory}

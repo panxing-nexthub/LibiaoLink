@@ -4401,6 +4401,119 @@ body {
 }
 
 
+/* 项目管理吸顶位置跟随现有应用顶栏与页内标签栏。 */
+[data-project-management-layout] {
+  --pm-view-tabs-top: calc(var(--app-header-height) + env(safe-area-inset-top));
+  --pm-view-tabs-height: 52px;
+  --pm-content-sticky-top: calc(var(--pm-view-tabs-top) + var(--pm-view-tabs-height));
+}
+
+@media (max-height: 800px), (max-width: 639.98px) {
+  [data-project-management-layout] {
+    --pm-page-space: 6px;
+    --pm-view-tabs-height: 32px;
+    --pm-view-tabs-pad-y: 2px;
+    --pm-view-tab-height: 26px;
+    --pm-gantt-control-height: 24px;
+    --pm-gantt-control-font-limit: 14px;
+    --pm-gantt-scale-min-width: 30px;
+    --pm-gantt-time-trigger-width: 96px;
+    --pm-gantt-toolbar-pad-x: 10px;
+    --pm-gantt-toolbar-pad-y: 2px;
+    --pm-gantt-toolbar-gap: 6px;
+    --pm-gantt-toolbar-inner-gap: 6px;
+  }
+
+  [data-project-management-layout] [data-project-management-view-tabs] {
+    padding-inline: 8px;
+    border-radius: 8px;
+  }
+
+  [data-project-management-layout] [data-project-management-view-tab] {
+    padding-inline: 8px;
+    border-radius: 6px;
+  }
+
+  [data-project-management-layout] [data-project-management-gantt-toolbar] {
+    border-start-start-radius: 8px;
+    border-start-end-radius: 8px;
+  }
+
+  [data-project-management-layout] :is([data-project-management-gantt-window-nav], [data-project-management-gantt-scale-controls]) {
+    border-radius: 6px;
+  }
+
+  [data-project-management-layout] [data-project-management-gantt-toolbar] button:is(
+    [data-project-management-gantt-time-filter-trigger],
+    [data-project-management-gantt-only-in-progress],
+    [data-project-management-gantt-toggle-all],
+    [data-project-management-gantt-today-button],
+    [data-project-management-gantt-scale-option]
+  ) {
+    padding-inline: 6px;
+    border-radius: 4px;
+  }
+
+  [data-project-management-layout] :is([data-project-management-gantt-period-previous], [data-project-management-gantt-period-next]) {
+    border-radius: 4px;
+  }
+}
+
+/* 短屏的甘特标签和工具共用一条吸顶控制区，表头在同一个吸顶容器内接着排。 */
+[data-project-management-layout] [data-project-management-gantt-controls="inline"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  border: 1px solid var(--color-zinc-200);
+  border-radius: 8px 8px 0 0;
+  background: white;
+}
+
+[data-project-management-layout] [data-project-management-gantt-controls="inline"] [data-project-management-view-tabs] {
+  position: static;
+  flex: 0 0 auto;
+  min-height: 0;
+  max-width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-project-management-layout] [data-project-management-gantt-controls="inline"] [data-project-management-gantt-toolbar] {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+@media (max-width: 639.98px) {
+  [data-project-management-layout] {
+    --pm-view-tabs-height: 34px;
+    --pm-view-tab-height: 28px;
+    --pm-gantt-control-height: 28px;
+  }
+
+  [data-project-management-layout] [data-project-management-gantt-window-nav] {
+    max-width: 100%;
+  }
+
+  [data-project-management-layout] :is([data-project-management-gantt-period-previous], [data-project-management-gantt-period-next]) {
+    flex-shrink: 0;
+  }
+
+  [data-project-management-layout] [data-project-management-gantt-time-filter-trigger] {
+    white-space: normal;
+    line-height: 1;
+  }
+
+  [data-project-management-layout] [data-project-management-gantt-time-filter-popover] {
+    /* 往前跨过上一期按钮，对齐日期导航组左边缘。 */
+    left: calc(-3px - var(--pm-gantt-control-height));
+    max-width: calc(100vw - 3.5rem);
+  }
+}
+
 /* 项目管理：可编辑格默认单行省略；仅当前聚焦格浮层展开全文。 */
 [data-project-management-grid-editor] [contenteditable] {
   overflow: hidden;

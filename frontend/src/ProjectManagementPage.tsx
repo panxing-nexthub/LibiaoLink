@@ -113,6 +113,13 @@ const PM_VIEW_TABS = [
   { key: "implementationGantt", labelKey: "pm.view.implementationGantt" },
 ] as const;
 type PmViewTabKey = (typeof PM_VIEW_TABS)[number]["key"];
+const PM_INLINE_GANTT_TABS_QUERY = "(min-width: 1100px) and (max-height: 800px)";
+
+function focusProjectManagementViewTab(id: string): void {
+  window.requestAnimationFrame(() => {
+    document.getElementById(id)?.focus({ preventScroll: true });
+  });
+}
 
 const COLUMNS: readonly PmColumn[] = [
   { key: "code", labelKey: "pm.column.code", width: CODE_MIN_WIDTH + "px", min: CODE_MIN_WIDTH },
@@ -2634,6 +2641,7 @@ function PmImplementationGantt({
   rows,
   directory,
   dicts,
+  inlineViewTabs,
   editable,
   managerOptions,
   onManagerChange,
@@ -2645,6 +2653,7 @@ function PmImplementationGantt({
   rows: readonly PmRow[];
   directory: readonly DirectoryUser[];
   dicts: Dicts;
+  inlineViewTabs?: ReactNode;
   editable: boolean;
   managerOptions: readonly Member[];
   onManagerChange: (row: PmRow, ids: string[]) => void;
@@ -2684,6 +2693,8 @@ function PmImplementationGantt({
     pmGanttStableScaleWidth(ganttViewportWidth),
   );
   const ganttMetrics = pmGanttVisualMetricsOf(ganttUiScale);
+  const toolbarControlHeight = `var(--pm-gantt-control-height, ${ganttMetrics.toolbarControlHeight}px)`;
+  const toolbarIconSize = `calc(${toolbarControlHeight} / 2)`;
   const ganttCssVariables = {
     "--pm-gantt-cell-size": `${ganttMetrics.cellSize}px`,
     "--pm-gantt-tag-size": `${ganttMetrics.tagSize}px`,
@@ -2702,7 +2713,7 @@ function PmImplementationGantt({
     "--pm-gantt-chip-gap": `${ganttMetrics.chipGap}px`,
     "--pm-gantt-group-label-max-width": `${ganttMetrics.groupLabelMaxWidth}px`,
     "--pm-gantt-toolbar-title-size": `${ganttMetrics.toolbarTitleSize}px`,
-    "--pm-gantt-toolbar-control-size": `${ganttMetrics.toolbarControlSize}px`,
+    "--pm-gantt-toolbar-control-size": `min(${ganttMetrics.toolbarControlSize}px, var(--pm-gantt-control-font-limit, ${ganttMetrics.toolbarControlSize}px))`,
   } as CSSProperties;
   const ganttColumnWidths = useMemo(() => {
     const scaledMinWidth = (column: PmGanttColumn): number =>
@@ -3659,16 +3670,21 @@ function PmImplementationGantt({
       className="min-w-0"
       style={ganttCssVariables}
     >
-      <div className="sticky top-[116px] z-[25] w-full min-w-0">
+      <div
+        className={"sticky z-[25] w-full min-w-0 " +
+          (inlineViewTabs ? "top-[var(--pm-view-tabs-top)]" : "top-[var(--pm-content-sticky-top)]")}
+      >
+      <div data-project-management-gantt-controls={inlineViewTabs ? "inline" : undefined}>
+      {inlineViewTabs}
       <div
         data-project-management-gantt-toolbar="true"
         className="flex flex-wrap items-center justify-between rounded-t-xl border border-zinc-200 bg-white"
         style={{
-          gap: ganttMetrics.toolbarGap,
-          padding: `${ganttMetrics.toolbarPaddingY}px ${ganttMetrics.toolbarPaddingX}px`,
+          gap: `var(--pm-gantt-toolbar-gap, ${ganttMetrics.toolbarGap}px)`,
+          padding: `var(--pm-gantt-toolbar-pad-y, ${ganttMetrics.toolbarPaddingY}px) var(--pm-gantt-toolbar-pad-x, ${ganttMetrics.toolbarPaddingX}px)`,
         }}
       >
-        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-[var(--pm-gantt-toolbar-inner-gap,0.625rem)]">
           <div
             role="group"
             aria-label={ganttVisibleRangeAriaLabel}
@@ -3683,18 +3699,18 @@ function PmImplementationGantt({
               disabled={ganttTimeFilter === null}
               onClick={() => shiftGanttTimeFilter(-1)}
               className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
-              style={{ width: ganttMetrics.toolbarControlHeight, height: ganttMetrics.toolbarControlHeight }}
+              style={{ width: toolbarControlHeight, height: toolbarControlHeight }}
             >
               <svg
                 viewBox="0 0 16 16"
                 fill="none"
                 aria-hidden="true"
-                style={{ width: ganttMetrics.toolbarControlHeight / 2, height: ganttMetrics.toolbarControlHeight / 2 }}
+                style={{ width: toolbarIconSize, height: toolbarIconSize }}
               >
                 <path d="m10 4-4 4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            <div ref={ganttTimeFilterPopoverRef} className="relative flex">
+            <div ref={ganttTimeFilterPopoverRef} className="relative flex min-w-0">
               <span data-project-management-gantt-visible-range="true" className="sr-only" aria-live="polite">
                 {ganttVisibleRangeText}
               </span>
@@ -3706,12 +3722,12 @@ function PmImplementationGantt({
                 aria-label={ganttTimeFilterAriaLabel}
                 onClick={openGanttTimeFilter}
                 className={
-                  "flex min-w-[132px] items-center justify-center gap-1 whitespace-nowrap rounded-md px-2 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " +
+                  "flex min-w-[var(--pm-gantt-time-trigger-width,132px)] items-center justify-center gap-1 whitespace-nowrap rounded-md px-2 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 " +
                   (ganttTimeFilter === null
                     ? "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
                     : "bg-blue-50 text-blue-700")
                 }
-                style={{ height: ganttMetrics.toolbarControlHeight }}
+                style={{ height: toolbarControlHeight }}
               >
                 <span>{ganttTimeFilterText}</span>
                 <svg
@@ -3782,13 +3798,13 @@ function PmImplementationGantt({
               disabled={ganttTimeFilter === null}
               onClick={() => shiftGanttTimeFilter(1)}
               className="flex items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
-              style={{ width: ganttMetrics.toolbarControlHeight, height: ganttMetrics.toolbarControlHeight }}
+              style={{ width: toolbarControlHeight, height: toolbarControlHeight }}
             >
               <svg
                 viewBox="0 0 16 16"
                 fill="none"
                 aria-hidden="true"
-                style={{ width: ganttMetrics.toolbarControlHeight / 2, height: ganttMetrics.toolbarControlHeight / 2 }}
+                style={{ width: toolbarIconSize, height: toolbarIconSize }}
               >
                 <path d="m6 4 4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -3805,7 +3821,7 @@ function PmImplementationGantt({
                 ? "border-blue-200 bg-blue-50 text-blue-700"
                 : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900")
             }
-            style={{ height: ganttMetrics.toolbarControlHeight }}
+            style={{ height: toolbarControlHeight }}
           >
             {t("pm.gantt.onlyInProgress")}
           </button>
@@ -3819,25 +3835,26 @@ function PmImplementationGantt({
               );
             }}
             className="rounded-md border border-zinc-200 bg-white px-2.5 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-            style={{ height: ganttMetrics.toolbarControlHeight }}
+            style={{ height: toolbarControlHeight }}
           >
             {allGanttGroupsCollapsed ? t("pm.gantt.expandAll") : t("pm.gantt.collapseAll")}
           </button>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2.5">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-[var(--pm-gantt-toolbar-inner-gap,0.625rem)]">
           <button
             type="button"
             data-project-management-gantt-today-button="true"
             data-project-management-gantt-back-to-current="true"
             onClick={goToGanttCurrent}
             className="rounded-md border border-zinc-200 bg-white px-2.5 text-[length:var(--pm-gantt-toolbar-control-size,12px)] font-medium text-zinc-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-            style={{ height: ganttMetrics.toolbarControlHeight }}
+            style={{ height: toolbarControlHeight }}
           >
             {t("pm.gantt.today")}
           </button>
           <div
             role="group"
             aria-label={t("pm.gantt.scale.aria")}
+            data-project-management-gantt-scale-controls=""
             className="flex items-center rounded-lg bg-zinc-100 p-0.5"
           >
             {PM_GANTT_SCALE_KEYS.map((scaleKey) => {
@@ -3857,8 +3874,8 @@ function PmImplementationGantt({
                       : "text-zinc-500 hover:text-zinc-800")
                   }
                   style={{
-                    height: ganttMetrics.toolbarControlHeight,
-                    minWidth: ganttMetrics.toolbarScaleButtonMinWidth,
+                    height: toolbarControlHeight,
+                    minWidth: `var(--pm-gantt-scale-min-width, ${ganttMetrics.toolbarScaleButtonMinWidth}px)`,
                   }}
                 >
                   {label}
@@ -3867,6 +3884,7 @@ function PmImplementationGantt({
             })}
           </div>
         </div>
+      </div>
       </div>
         <div className="border-x border-b border-zinc-200 bg-white">
           <div className="flex w-full min-w-0" style={{ height: ganttMetrics.headerHeight }}>
@@ -4545,6 +4563,28 @@ export default function ProjectManagementPage({
   const [methodFilter, setMethodFilter] = useState<ProjectManagementMethod | "">("");
   const [dateSort, setDateSort] = useState<PmDateSort | null>(null);
   const [activeViewTab, setActiveViewTab] = useState<PmViewTabKey>("table");
+  const [useInlineGanttTabs, setUseInlineGanttTabs] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(PM_INLINE_GANTT_TABS_QUERY).matches,
+  );
+  const inlineGanttTabs = activeViewTab === "implementationGantt" && useInlineGanttTabs;
+
+  useEffect(() => {
+    const query = window.matchMedia(PM_INLINE_GANTT_TABS_QUERY);
+    const update = (): void => {
+      const activeTab = document.activeElement;
+      setUseInlineGanttTabs(query.matches);
+      if (activeTab instanceof HTMLElement && activeTab.hasAttribute("data-project-management-view-tab")) {
+        focusProjectManagementViewTab(activeTab.id);
+      }
+    };
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  const selectViewTab = (key: PmViewTabKey): void => {
+    setActiveViewTab(key);
+    focusProjectManagementViewTab("pm-view-tab-" + key);
+  };
 
   const rowsRef = useRef<PmRow[]>(rows);
   const aliveRef = useRef(true);
@@ -5145,12 +5185,58 @@ export default function ProjectManagementPage({
   });
   const gridTemplate = ROW_NUMBER_WIDTH + "px " + tableGridTemplate(columns);
   const minWidth = ROW_NUMBER_WIDTH + tableMinWidth(columns);
+  const viewTabs = (
+    <div
+      role="tablist"
+      aria-label={t("pm.view.tabsAria")}
+      data-project-management-view-tabs=""
+      className="sticky top-[var(--pm-view-tabs-top)] z-30 flex min-h-[var(--pm-view-tabs-height)] items-center gap-1 overflow-x-auto rounded-xl border border-zinc-200 bg-white px-2.5 py-[var(--pm-view-tabs-pad-y,0.375rem)]"
+    >
+      {PM_VIEW_TABS.map((tab) => {
+        const active = tab.key === activeViewTab;
+        return (
+          <button
+            key={tab.key}
+            id={"pm-view-tab-" + tab.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            aria-controls={"pm-view-panel-" + tab.key}
+            tabIndex={active ? 0 : -1}
+            data-project-management-view-tab={tab.key}
+            onClick={() => selectViewTab(tab.key)}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+                return;
+              }
+              event.preventDefault();
+              const currentIndex = PM_VIEW_TABS.findIndex((item) => item.key === tab.key);
+              const offset = event.key === "ArrowRight" ? 1 : -1;
+              const nextTab = PM_VIEW_TABS[(currentIndex + offset + PM_VIEW_TABS.length) % PM_VIEW_TABS.length];
+              if (nextTab === undefined) {
+                return;
+              }
+              selectViewTab(nextTab.key);
+            }}
+            className={
+              "inline-flex h-[var(--pm-view-tab-height,2.25rem)] shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-zinc-400/70 " +
+              (active ? "bg-zinc-100 text-zinc-900" : "text-zinc-600 hover:bg-zinc-100/70 hover:text-zinc-900")
+            }
+          >
+            <PmViewTabIcon view={tab.key} />
+            <span className="whitespace-nowrap">{t(tab.labelKey)}</span>
+          </button>
+        );
+      })}
+      <span aria-hidden="true" className="mx-1 h-6 w-px shrink-0 bg-zinc-200" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen">
       <AppHeader me={me} />
-      <main className="w-full px-4 pb-10 pt-4 sm:px-6">
-        <div data-project-management-page="" className="w-full space-y-4">
+      <main data-project-management-layout="" className="w-full px-4 pb-10 pt-[var(--pm-page-space,1rem)] sm:px-6">
+        <div data-project-management-page="" className="w-full space-y-[var(--pm-page-space,1rem)]">
           {loadState === "error" ? (
             <div
               data-project-management-load-error=""
@@ -5170,55 +5256,7 @@ export default function ProjectManagementPage({
             </div>
           ) : null}
 
-          <div
-            role="tablist"
-            aria-label={t("pm.view.tabsAria")}
-            data-project-management-view-tabs=""
-            className="sticky top-16 z-30 flex min-h-[52px] items-center gap-1 overflow-x-auto rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5"
-          >
-            {PM_VIEW_TABS.map((tab) => {
-              const active = tab.key === activeViewTab;
-              return (
-                <button
-                  key={tab.key}
-                  id={"pm-view-tab-" + tab.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  aria-controls={"pm-view-panel-" + tab.key}
-                  tabIndex={active ? 0 : -1}
-                  data-project-management-view-tab={tab.key}
-                  onClick={() => {
-                    setActiveViewTab(tab.key);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
-                      return;
-                    }
-                    event.preventDefault();
-                    const currentIndex = PM_VIEW_TABS.findIndex((item) => item.key === tab.key);
-                    const offset = event.key === "ArrowRight" ? 1 : -1;
-                    const nextTab = PM_VIEW_TABS[(currentIndex + offset + PM_VIEW_TABS.length) % PM_VIEW_TABS.length];
-                    if (nextTab === undefined) {
-                      return;
-                    }
-                    setActiveViewTab(nextTab.key);
-                    window.requestAnimationFrame(() => {
-                      document.getElementById("pm-view-tab-" + nextTab.key)?.focus();
-                    });
-                  }}
-                  className={
-                    "inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-zinc-400/70 " +
-                    (active ? "bg-zinc-100 text-zinc-900" : "text-zinc-600 hover:bg-zinc-100/70 hover:text-zinc-900")
-                  }
-                >
-                  <PmViewTabIcon view={tab.key} />
-                  <span className="whitespace-nowrap">{t(tab.labelKey)}</span>
-                </button>
-              );
-            })}
-            <span aria-hidden="true" className="mx-1 h-6 w-px shrink-0 bg-zinc-200" />
-          </div>
+          {inlineGanttTabs ? null : viewTabs}
 
           <section
             data-project-management-table=""
@@ -5232,7 +5270,7 @@ export default function ProjectManagementPage({
               <div
                 ref={tableHeaderScrollRef}
                 data-project-management-head-scroll=""
-                className="sticky top-[116px] z-20 overflow-x-hidden bg-white"
+                className="sticky top-[var(--pm-content-sticky-top)] z-20 overflow-x-hidden bg-white"
               >
                 <div style={{ minWidth }}>
                   <div role="rowgroup" className="contents">
@@ -5649,6 +5687,7 @@ export default function ProjectManagementPage({
                 rows={rows}
                 directory={directory}
                 dicts={dicts}
+                inlineViewTabs={inlineGanttTabs ? viewTabs : undefined}
                 editable={loadState === "ready"}
                 managerOptions={managerOptions}
                 onManagerChange={handleManagerChange}

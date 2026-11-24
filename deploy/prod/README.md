@@ -1,3 +1,7 @@
+> **2026-11-24 14:30–14:32 AI 项目总结进度表隐藏计划起止（测试机 + 正式机 frontend-only · test/prod-20261124-1430-ai-summary-no-plan）**：按业务口径「计划起止不需要，只要实际的」，前端总结文档的「实施进度汇总」表格删除「计划起止」列，仅保留阶段 / 状态 / 实际起止 / 任务完成数 / 完成率；PDF 导出同步。实际起止仍按任务「开始日期」最早值 ~ 任务完成日期最晚值展示。
+> **发布件 / 安装**：frontend-dist-no-plan.tar.gz 22,646,990 B / f4f3b5f5…；两台停 web 后原子替换 frontend dist，再重建 web；线上主包 assets/index-BfyruaW6.js。
+> **验证 / 备份 / 清单**：两台 /、/healthz、/readyz 均 200，web healthy；测试机备份 /srv/data/backups/before-test-20261124-1430-ai-summary-no-plan、正式机备份 /srv/data/backups/before-prod-20261124-1430-ai-summary-no-plan（frontend dist + 原 manifest + SHA256SUMS）。
+> **边界 / 回滚**：仅两台 frontend dist；无 server / shared / API / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变化。回滚：恢复各自备份中的 frontend-dist-before.tar.gz 与 RELEASE_MANIFEST.json.before，再重建 web。
 > **2026-11-24 13:40–14:14 阶段实际开始按任务开始日期兜底（正式机 · prod-20261124-1350-ai-summary-actual-start）**：代码来源 main @84962637（PR [#1067](https://github.com/panxing-nexthub/LibiaoLink/pull/1067)）。previousRelease / previousManifestRelease = prod-20261124-1325-ai-summary-truncation-fix。
 > **口径 / 修正**：用户确认「实际开始时间就是开始时间」。阶段表 `actual_start` 为空时，用该阶段任务最早 `plannedStart`（任务「开始日期」）兜底；阶段表实际结束仍取该阶段任务最晚 `actualEnd`。
 > **正式机复测**：NIKE 项目进度表实际起止已从「未识别 ~ 日期」变为完整区间：售前规划 2026-05-15 ~ 2026-05-20、设计开发 2026-05-15 ~ 2026-05-20、加工采购 2026-05-21 ~ 2026-06-19、组装发货 2026-06-23 ~ 2026-10-28、硬件实施 2026-10-24 ~ 2026-11-05、软件部署 2026-11-12 ~ 2026-11-10、试运行 2026-11-16 ~ 2026-11-12、验收 2026-11-19 ~ 2026-11-12；投产阶段 0 任务仍为未识别。

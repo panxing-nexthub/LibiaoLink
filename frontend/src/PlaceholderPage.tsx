@@ -84,14 +84,15 @@ const PRODUCT_NAME_TERMS: ReadonlyArray<{ readonly zh: string; readonly en: stri
 /** 机翻 / 库内旧英文里的产品名统一回官方写法（AirRobot / Air Robot / Flying Box → AirRob）。 */
 function normalizeProductTermEnglish(text: string): string {
   return text
-    .replace(/AirRobot/gi, "AirRob")
-    .replace(/Air Robot/gi, "AirRob")
-    .replace(/Flying Box/gi, "AirRob")
-    .replace(/T-Sort/gi, "T-Sort")
-    .replace(/T Sort/gi, "T-Sort")
-    .replace(/TSort/gi, "T-Sort")
-    .replace(/3D Sorting/gi, "3D Sorting")
-    .replace(/3D Sorter/gi, "3D Sorting");
+    .replace(/AirRobot(?![A-Za-z])/gi, "AirRob")
+    .replace(/Air Robot(?![A-Za-z])/gi, "AirRob")
+    .replace(/AirRob(?![A-Za-z])/gi, "AirRob")
+    .replace(/Flying Box(?![A-Za-z])/gi, "AirRob")
+    .replace(/T-Sort(?![A-Za-z])/gi, "T-Sort")
+    .replace(/T Sort(?![A-Za-z])/gi, "T-Sort")
+    .replace(/TSort(?![A-Za-z])/gi, "T-Sort")
+    .replace(/3D Sorting(?![A-Za-z])/gi, "3D Sorting")
+    .replace(/3D Sorter(?![A-Za-z])/gi, "3D Sorting");
 }
 
 /** 中文节点名按节点库词条切段（长词优先）；没有任何词条命中返回 null。 */

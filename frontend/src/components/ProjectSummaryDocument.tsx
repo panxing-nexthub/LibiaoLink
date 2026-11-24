@@ -175,10 +175,7 @@ export function ProjectSummaryDocument({ view, onPreviewOpenChange, onReplaceIma
     ? view.basic.periodText
     : view.basic.period === null
       ? unidentified
-      : t("ai.doc.plan") + " " +
-        (view.basic.period.planFrom ?? unidentified) + " ~ " + (view.basic.period.planTo ?? unidentified) + " / " +
-        t("ai.doc.actual") + " " +
-        (view.basic.period.actualFrom ?? unidentified) + " ~ " +
+      : (view.basic.period.actualFrom ?? unidentified) + " ~ " +
         (view.basic.period.ongoing ? t("ai.doc.ongoing") : (view.basic.period.actualTo ?? unidentified));
 
   const memberText = view.basic.members.length === 0

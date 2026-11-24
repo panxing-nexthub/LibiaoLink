@@ -1,3 +1,6 @@
+> **2026-11-24 14:36–14:40 项目周期只显示实际区间（测试机 + 正式机 · test/prod-20261124-1440-ai-summary-actual-period）**：按业务口径「这个也按实际的来」，AI 项目总结「基本信息 → 项目周期」只显示实际区间。前端对旧缓存文本自动截取实际部分；服务端新生成总结也只写实际区间。
+> **发布件 / 安装**：frontend-dist-no-plan-v2.tar.gz 22,646,998 B / 47d51c78…；server-summary-period-fix.tar.gz 3,793 B / ff0626cc…（project-ai-summary-document.js + map）；两台停 web / api 后原子替换前端 dist 与服务端单个文件，再重建 web / api；线上主包 assets/index-je1fBjJ4.js。
+> **验证 / 备份 / 清单**：两台 /、/healthz、/readyz 均 200，web / api healthy；前端旧 dist 保留为 dist.prev-20261124-period-actual；无 server 全量 / shared / API 契约 / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变化。回滚：恢复各机 `frontend/dist.prev-20261124-period-actual` 与 server 旧文件，再重建 web / api。
 > **2026-11-24 14:30–14:32 AI 项目总结进度表隐藏计划起止（测试机 + 正式机 frontend-only · test/prod-20261124-1430-ai-summary-no-plan）**：按业务口径「计划起止不需要，只要实际的」，前端总结文档的「实施进度汇总」表格删除「计划起止」列，仅保留阶段 / 状态 / 实际起止 / 任务完成数 / 完成率；PDF 导出同步。实际起止仍按任务「开始日期」最早值 ~ 任务完成日期最晚值展示。
 > **发布件 / 安装**：frontend-dist-no-plan.tar.gz 22,646,990 B / f4f3b5f5…；两台停 web 后原子替换 frontend dist，再重建 web；线上主包 assets/index-BfyruaW6.js。
 > **验证 / 备份 / 清单**：两台 /、/healthz、/readyz 均 200，web healthy；测试机备份 /srv/data/backups/before-test-20261124-1430-ai-summary-no-plan、正式机备份 /srv/data/backups/before-prod-20261124-1430-ai-summary-no-plan（frontend dist + 原 manifest + SHA256SUMS）。

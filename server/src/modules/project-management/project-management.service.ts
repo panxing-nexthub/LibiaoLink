@@ -79,6 +79,13 @@ export class ProjectManagementService {
       throw new AppError("VALIDATION_FAILED", "空记录不创建；请至少填写一项项目准备信息");
     }
 
+    const dateSnapshots = values.plannedStartDateOverride !== null || values.plannedEndDateOverride !== null
+      ? await this.projectSnapshots.loadByCodes([values.code])
+      : null;
+    if (dateSnapshots !== null) {
+      assertImplementationDateRange(values, snapshotOf(dateSnapshots, values.code));
+    }
+
     const at = new Date();
     const row = await this.database.db.transaction(async (tx) => {
       const inserted = await this.records.insert(values, at, tx);
@@ -97,7 +104,7 @@ export class ProjectManagementService {
     });
     const [names, snapshots] = await Promise.all([
       this.namesOf([...managerIds, ...implementationEngineerIds]),
-      this.projectSnapshots.loadByCodes([row.code]),
+      dateSnapshots ?? this.projectSnapshots.loadByCodes([row.code]),
     ]);
     return this.toContract(row, names, snapshotOf(snapshots, row.code));
   }
@@ -148,8 +155,17 @@ export class ProjectManagementService {
     if (body.plannedEndDateOverride !== undefined) patch.plannedEndDateOverride = body.plannedEndDateOverride;
     if (body.implementationDaysOverride !== undefined) patch.implementationDaysOverride = body.implementationDaysOverride;
 
-    if (isBlankProjectManagementFields({ ...current, ...patch })) {
+    const next = { ...current, ...patch };
+    if (isBlankProjectManagementFields(next)) {
       throw new AppError("VALIDATION_FAILED", "清空后的空记录请使用 DELETE 删除，不能保存为空记录");
+    }
+
+    const dateChanged =
+      next.plannedStartDateOverride !== current.plannedStartDateOverride ||
+      next.plannedEndDateOverride !== current.plannedEndDateOverride;
+    const dateSnapshots = dateChanged ? await this.projectSnapshots.loadByCodes([next.code]) : null;
+    if (dateSnapshots !== null) {
+      assertImplementationDateRange(next, snapshotOf(dateSnapshots, next.code));
     }
 
     const auditNames = await this.namesOf(
@@ -192,7 +208,7 @@ export class ProjectManagementService {
     }
     const [names, snapshots] = await Promise.all([
       this.namesOf([...row.managerIds, ...row.implementationEngineerIds]),
-      this.projectSnapshots.loadByCodes([row.code]),
+      dateSnapshots ?? this.projectSnapshots.loadByCodes([row.code]),
     ]);
     return this.toContract(row, names, snapshotOf(snapshots, row.code));
   }
@@ -301,6 +317,17 @@ function normalizeRegion(value: string | undefined): string {
 
 function uniqueIds(ids: readonly string[]): string[] {
   return Array.from(new Set(ids));
+}
+
+function assertImplementationDateRange(
+  overrides: Pick<ProjectManagementRecordRow, "plannedStartDateOverride" | "plannedEndDateOverride">,
+  snapshot: ProjectManagementProjectSnapshot,
+): void {
+  const start = overrides.plannedStartDateOverride ?? snapshot.plannedStartDate;
+  const end = overrides.plannedEndDateOverride ?? snapshot.plannedEndDate;
+  if (start !== null && end !== null && start > end) {
+    throw new AppError("VALIDATION_FAILED", "计划实施完成日期不能早于计划实施开始日期");
+  }
 }
 
 function snapshotOf(

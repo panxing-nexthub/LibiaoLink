@@ -30,6 +30,7 @@
 | `implementationDays` | 上两字段 | 计划实施开始至计划实施完成的**含首尾**天数（与任务表「预计所需天数」同口径）；任一为空 = null |
 
 - 派生字段不进入创建 / 更新请求体的同名字段；`currentStage` 等仍为只读快照，客户端的人工值写入独立的 `currentStageOverride` / `startupCompletedAtOverride` / `arrivalDateOverride` / `plannedStartDateOverride` / `plannedEndDateOverride` / `implementationDaysOverride`，不写回 0102 预留列。
+- 写入或清空计划实施起止覆盖值时，各端先取人工值，再取关联项目的自动快照。两端均有日期时，开始不得晚于完成。允许同一天以及只填一端。起止覆盖值均未变时，历史逆序记录可以继续编辑其它字段。
 - 每次 GET 均重新查询项目空间；POST / PATCH 的响应也返回该编号的最新快照。前端在页面加载、窗口重新聚焦、标签页重新可见及每 30 秒静默刷新派生字段，只合并自动快照，不覆盖人工覆盖值或正在编辑的记录文本。
 - 人工覆盖值随记录持久化；日期覆盖后，前端的「实施天数」按有效起止日期重新计算，除非另有 `implementationDaysOverride`。
 

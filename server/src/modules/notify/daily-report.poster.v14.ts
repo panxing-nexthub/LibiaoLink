@@ -565,15 +565,35 @@ function drawTaskPanel(
   });
 }
 
-function galleryHeight(count: number): number {
+const SINGLE_PHOTO_MAX_HEIGHT = 620;
+const DEFAULT_PHOTO_ASPECT = 4 / 3;
+
+interface PhotoBox {
+  width: number;
+  height: number;
+}
+
+function photoAspect(image: CanvasImage | undefined): number {
+  if (image === undefined || image.width <= 0 || image.height <= 0) return DEFAULT_PHOTO_ASPECT;
+  return image.width / image.height;
+}
+
+/** 单图按原始比例完整展示：先顶到最大高度，再按比例收窄宽度，绝不裁切。 */
+function singlePhotoBox(image: CanvasImage | undefined, maxWidth: number): PhotoBox {
+  const aspect = photoAspect(image);
+  const width = Math.min(maxWidth, Math.round(SINGLE_PHOTO_MAX_HEIGHT * aspect));
+  return { width, height: Math.round(width / aspect) };
+}
+
+function galleryHeight(count: number, singleHeight = 282): number {
   if (count === 0) return 220;
-  if (count === 1) return PHOTO_CAPTION_HEIGHT + 282;
+  if (count === 1) return PHOTO_CAPTION_HEIGHT + singleHeight;
   if (count === 2) return PHOTO_CAPTION_HEIGHT + 282;
   const rows = Math.ceil(count / 2);
   return rows * (PHOTO_CAPTION_HEIGHT + 280) + Math.max(0, rows - 1) * 16;
 }
-function photosPanelHeight(count: number): number {
-  return 13 + 42 + 10 + galleryHeight(count) + 15;
+function photosPanelHeight(count: number, singleHeight = 282): number {
+  return 13 + 42 + 10 + galleryHeight(count, singleHeight) + 15;
 }
 
 function drawPhotoLabel(ctx: SKRSContext2D, x: number, y: number, label: string): void {
@@ -592,6 +612,21 @@ function drawImageCover(ctx: SKRSContext2D, image: CanvasImage, x: number, y: nu
   const sourceX = Math.max(0, (image.width - sourceWidth) / 2);
   const sourceY = Math.max(0, (image.height - sourceHeight) / 2);
   ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+}
+
+/** 单图两侧留白只用纯色底，不叠加模糊 / 阴影。 */
+function drawSinglePhotoFrame(
+  ctx: SKRSContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): void {
+  ctx.fillStyle = COLORS.soft;
+  ctx.fillRect(x, y, width, height);
+  ctx.strokeStyle = COLORS.lineStrong;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
 }
 
 function drawPhoto(
@@ -632,8 +667,9 @@ function drawPhotosPanel(
   photos: readonly DailyReportPosterPhoto[],
   images: ReadonlyMap<string, CanvasImage>,
   y: number,
+  singlePhoto?: PhotoBox,
 ): number {
-  const height = photosPanelHeight(photos.length);
+  const height = photosPanelHeight(photos.length, singlePhoto?.height);
   roundedPath(ctx, CONTENT_X, y, CONTENT_WIDTH, height, PANEL_RADIUS);
   ctx.fillStyle = COLORS.white;
   ctx.fill();
@@ -666,7 +702,11 @@ function drawPhotosPanel(
   }
 
   if (photos.length === 1) {
-    drawPhoto(ctx, images.get(photos[0]?.fileId ?? ""), innerX, galleryY, PHOTO_INNER_WIDTH, 282, "PHOTO 01");
+    const image = images.get(photos[0]?.fileId ?? "");
+    const box = singlePhoto ?? singlePhotoBox(image, PHOTO_INNER_WIDTH);
+    const photoX = innerX + Math.round((PHOTO_INNER_WIDTH - box.width) / 2);
+    drawSinglePhotoFrame(ctx, innerX, galleryY, PHOTO_INNER_WIDTH, box.height);
+    drawPhoto(ctx, image, photoX, galleryY, box.width, box.height, "PHOTO 01");
     return height;
   }
 
@@ -740,7 +780,11 @@ export async function renderDailyReportPosterV14(
   const doneLayout = layoutTaskPanel(measure, doneItems);
   const planLayout = layoutTaskPanel(measure, planItems);
   const tasksHeight = Math.max(doneLayout.height, planLayout.height);
-  const panelHeight = photosPanelHeight(data.photos.length);
+  const decoded = await preparePhotoImages(canvasApi, data.photos, images);
+  const singlePhoto = data.photos.length === 1
+    ? singlePhotoBox(decoded.get(data.photos[0]?.fileId ?? ""), PHOTO_INNER_WIDTH)
+    : undefined;
+  const panelHeight = photosPanelHeight(data.photos.length, singlePhoto?.height);
 
   const posterHeight =
     header.height +
@@ -795,8 +839,7 @@ export async function renderDailyReportPosterV14(
   drawTaskPanel(ctx, CONTENT_X + TASK_PANEL_WIDTH + TASK_GAP, y, tasksHeight, "02", "明日计划", { ...planLayout, height: tasksHeight });
   y += tasksHeight + 16;
 
-  const decoded = await preparePhotoImages(canvasApi, data.photos, images);
-  y += drawPhotosPanel(ctx, data.photos, decoded, y) + 10;
+  y += drawPhotosPanel(ctx, data.photos, decoded, y, singlePhoto) + 10;
 
   const posterBottom = POSTER_Y + posterHeight;
   drawFooter(ctx, posterBottom);

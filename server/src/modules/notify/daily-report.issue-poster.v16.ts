@@ -287,6 +287,26 @@ function drawPhotoIcon(ctx: SKRSContext2D, cx: number, cy: number, color: string
   ctx.restore();
 }
 
+const V16_SINGLE_PHOTO_MAX_HEIGHT = 340;
+const V16_DEFAULT_PHOTO_ASPECT = 4 / 3;
+
+interface V16PhotoBox {
+  width: number;
+  height: number;
+}
+
+function v16PhotoAspect(image: CanvasImage | undefined): number {
+  if (image === undefined || image.width <= 0 || image.height <= 0) return V16_DEFAULT_PHOTO_ASPECT;
+  return image.width / image.height;
+}
+
+/** 单图按原始比例完整展示：先顶到最大高度，再按比例收窄宽度，绝不裁切。 */
+function v16SinglePhotoBox(image: CanvasImage | undefined, maxWidth: number): V16PhotoBox {
+  const aspect = v16PhotoAspect(image);
+  const width = Math.min(maxWidth, Math.round(V16_SINGLE_PHOTO_MAX_HEIGHT * aspect));
+  return { width, height: Math.round(width / aspect) };
+}
+
 function drawImageCover(ctx: SKRSContext2D, image: CanvasImage, x: number, y: number, width: number, height: number): void {
   const scale = Math.max(width / image.width, height / image.height);
   const sourceWidth = width / scale;
@@ -294,6 +314,21 @@ function drawImageCover(ctx: SKRSContext2D, image: CanvasImage, x: number, y: nu
   const sourceX = Math.max(0, (image.width - sourceWidth) / 2);
   const sourceY = Math.max(0, (image.height - sourceHeight) / 2);
   ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+}
+
+/** 单图两侧留白只用纯色底，不叠加模糊 / 阴影。 */
+function drawV16SinglePhotoFrame(
+  ctx: SKRSContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): void {
+  ctx.fillStyle = V16.soft;
+  ctx.fillRect(x, y, width, height);
+  ctx.strokeStyle = "#d8e3f0";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
 }
 
 async function prepareIssueImages(
@@ -373,6 +408,7 @@ interface V16IssueLayout {
   photoWidth: number;
   photoHeight: number;
   photoColumns: number;
+  photoOffsetX: number;
   photoRows: number;
   photoGridHeight: number;
   problemBlockHeight: number;
@@ -430,7 +466,12 @@ function layoutV16Meta(ctx: SKRSContext2D, data: DailyReportPosterData): V16Meta
   };
 }
 
-function layoutV16Issue(ctx: SKRSContext2D, issue: DailyReportPosterIssue, cardWidth: number): V16IssueLayout {
+function layoutV16Issue(
+  ctx: SKRSContext2D,
+  issue: DailyReportPosterIssue,
+  cardWidth: number,
+  decoded?: ReadonlyMap<string, CanvasImage>,
+): V16IssueLayout {
   const innerWidth = cardWidth - V16_CARD_PAD * 2;
   const category = issue.categories.length > 0 ? issue.categories.join(" / ") : "未归类";
   const ownerName = issue.ownerName ?? "待分派";
@@ -465,10 +506,14 @@ function layoutV16Issue(ctx: SKRSContext2D, issue: DailyReportPosterIssue, cardW
     : 54;
 
   const photoColumns = issue.photos.length === 1 ? 1 : 2;
+  const singlePhoto = issue.photos.length === 1
+    ? v16SinglePhotoBox(decoded?.get(issue.photos[0]?.fileId ?? ""), rightWidth)
+    : undefined;
   const photoWidth = hasPhotos
-    ? (rightWidth - V16_PHOTO_GAP * (photoColumns - 1)) / photoColumns
+    ? singlePhoto?.width ?? (rightWidth - V16_PHOTO_GAP * (photoColumns - 1)) / photoColumns
     : 0;
-  const photoHeight = issue.photos.length === 1 ? 230 : V16_PHOTO_HEIGHT;
+  const photoHeight = singlePhoto?.height ?? V16_PHOTO_HEIGHT;
+  const photoOffsetX = singlePhoto === undefined ? 0 : Math.round((rightWidth - singlePhoto.width) / 2);
   const photoRows = hasPhotos ? Math.ceil(issue.photos.length / photoColumns) : 0;
   const photoGridHeight = hasPhotos
     ? photoRows * (photoHeight + V16_PHOTO_CAPTION_HEIGHT) + Math.max(0, photoRows - 1) * V16_PHOTO_GAP
@@ -491,6 +536,7 @@ function layoutV16Issue(ctx: SKRSContext2D, issue: DailyReportPosterIssue, cardW
     photoWidth,
     photoHeight,
     photoColumns,
+    photoOffsetX,
     photoRows,
     photoGridHeight,
     problemBlockHeight,
@@ -915,7 +961,10 @@ function drawV16IssueCard(
     issue.photos.forEach((photo, photoIndex) => {
       const column = photoIndex % layout.photoColumns;
       const row = Math.floor(photoIndex / layout.photoColumns);
-      const photoX = rightX + column * (layout.photoWidth + V16_PHOTO_GAP);
+      if (layout.photoColumns === 1 && issue.photos.length === 1) {
+        drawV16SinglePhotoFrame(ctx, rightX, bodyTop, layout.rightWidth, layout.photoHeight);
+      }
+      const photoX = rightX + layout.photoOffsetX + column * (layout.photoWidth + V16_PHOTO_GAP);
       const photoY = bodyTop + row * (layout.photoHeight + V16_PHOTO_CAPTION_HEIGHT + V16_PHOTO_GAP);
       drawV16Photo(ctx, decoded.get(photo.fileId), photoX, photoY, layout.photoWidth, layout.photoHeight, photoIndex);
     });
@@ -951,7 +1000,8 @@ export async function renderDailyReportIssuePosterV16(
 
   const measure = canvasApi.createCanvas(WIDTH, 1).getContext("2d");
   const meta = layoutV16Meta(measure, data);
-  const issueLayouts = data.issues.map((issue) => layoutV16Issue(measure, issue, CONTENT_WIDTH));
+  const decoded = await prepareIssueImages(canvasApi, data.issues, images);
+  const issueLayouts = data.issues.map((issue) => layoutV16Issue(measure, issue, CONTENT_WIDTH, decoded));
   const issuesHeight = data.issues.length === 0
     ? 188
     : issueLayouts.reduce((sum, layout) => sum + layout.cardHeight, 0) + Math.max(0, issueLayouts.length - 1) * V16_ISSUE_GAP;
@@ -1019,7 +1069,6 @@ export async function renderDailyReportIssuePosterV16(
   drawV16Facts(ctx, data, factsY);
   drawV16Stage(ctx, data, stageY);
 
-  const decoded = await prepareIssueImages(canvasApi, data.issues, images);
   let cursor = cardsY;
   if (data.issues.length === 0) {
     drawV16EmptyIssueCard(ctx, CONTENT_X, cursor, CONTENT_WIDTH);

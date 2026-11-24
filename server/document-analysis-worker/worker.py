@@ -48,7 +48,10 @@ CONVERSION_TIMEOUT_SECONDS = 90
 MAX_FILE_MB_DEFAULT = 200
 IMAGE_DPI = 120
 MAX_IMAGE_SIDE = 1600
-EXTRACTION_VERSION = "project-agreement-extraction-v4"
+EXTRACTION_VERSION = "project-agreement-extraction-v5"
+MIN_PICTURE_PAGE_RATIO = 0.05
+MIN_PICTURE_SIDE = 80
+MAX_PICTURE_PIXELS = 60_000_000
 AGREEMENT_DOC_TYPE = "技术协议"
 LAYOUT_WORDS = ("布局", "平面布置", "平面图", "车间布局", "布局规划", "cad")
 THREE_D_WORDS = ("三维图", "三维效果", "三维模型", "3d图", "3d效果", "3d模型", "效果图", "渲染图", "鸟瞰")
@@ -382,6 +385,62 @@ def image_coverage(page: fitz.Page) -> float:
     return min(1.0, area / (rect.width * rect.height))
 
 
+def extract_page_picture(page: fitz.Page, temp_dir: Path, page_index: int) -> dict[str, Any] | None:
+    """提取页面里占幅最大的内嵌位图，作为布局图 / 三维图的代表图。
+
+    总结文档要的是 CAD 图 / 三维渲染本身，不是整页 Word 截图；因此优先取页面内嵌
+    图片（按显示面积排序，忽略小于页面 5% 的图标 / 水印，1-bit 蒙版排在彩色图之后），
+    统一转 PNG 并限制长边。页面没有可用内嵌图片时返回 None，调用方仍回退整页渲染。
+    """
+    page_area = page.rect.width * page.rect.height
+    if page_area <= 0:
+        return None
+    candidates: list[tuple[int, float, int, bytes]] = []
+    for info in page.get_images(full=True):
+        xref = int(info[0])
+        bpc = int(info[4]) if len(info) > 4 and info[4] is not None else 8
+        try:
+            rects = page.get_image_rects(xref)
+        except Exception:
+            rects = []
+        if not rects:
+            continue
+        displayed = max(max(0.0, rect.width) * max(0.0, rect.height) for rect in rects)
+        if displayed < page_area * MIN_PICTURE_PAGE_RATIO:
+            continue
+        try:
+            extracted = page.parent.extract_image(xref)
+        except Exception:
+            continue
+        data = extracted.get("image")
+        width = int(extracted.get("width") or 0)
+        height = int(extracted.get("height") or 0)
+        if not isinstance(data, (bytes, bytearray)):
+            continue
+        if width < MIN_PICTURE_SIDE or height < MIN_PICTURE_SIDE or width * height > MAX_PICTURE_PIXELS:
+            continue
+        candidates.append((0 if bpc <= 1 else 1, displayed, width * height, bytes(data)))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
+    try:
+        with Image.open(io.BytesIO(candidates[0][3])) as opened:
+            image = ImageOps.exif_transpose(opened)
+            if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
+                rgba = image.convert("RGBA")
+                image = Image.new("RGB", rgba.size, (255, 255, 255))
+                image.paste(rgba, mask=rgba.split()[-1])
+            else:
+                image = image.convert("RGB")
+            image.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE), Image.Resampling.LANCZOS)
+            path = temp_dir / ("picture-" + str(page_index + 1).zfill(3) + ".png")
+            image.save(path, "PNG", optimize=True)
+            width, height = image.size
+    except Exception:
+        return None
+    return {"path": path, "sha256": sha256_bytes(path.read_bytes()), "width": width, "height": height}
+
+
 def is_technical_agreement(row: dict[str, Any]) -> bool:
     doc_type = str(row.get("doc_type") or "")
     name = str(row.get("name") or "")
@@ -500,8 +559,9 @@ def select_agreement_page(
 
 
 def upload_extraction_image(s3, project_id: str, row: dict[str, Any], kind: str, page: dict[str, Any]) -> dict[str, Any]:
-    body = Path(page["imagePath"]).read_bytes()
-    digest = str(page["imageSha256"])[:12]
+    picture_path = page.get("picturePath")
+    body = Path(picture_path).read_bytes() if picture_path else Path(page["imagePath"]).read_bytes()
+    digest = str(page.get("pictureSha256") or page["imageSha256"])[:12]
     object_key = f"projects/{project_id}/ai-extraction/{row['file_id']}/{kind}-{digest}.png"
     s3.put_object(
         Bucket=os.environ.get("S3_BUCKET", "libiaolink"),
@@ -544,7 +604,13 @@ def build_agreement_extraction(
     }
 
 
-def render_document_pages(source_bytes: bytes, display_name: str, kind: str, temp_dir: Path) -> tuple[list[dict[str, Any]], int]:
+def render_document_pages(
+    source_bytes: bytes,
+    display_name: str,
+    kind: str,
+    temp_dir: Path,
+    extract_pictures: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
     ext = extension_of(display_name)
     pages: list[dict[str, Any]] = []
     if kind == "image":
@@ -575,6 +641,7 @@ def render_document_pages(source_bytes: bytes, display_name: str, kind: str, tem
             pixmap.save(page_path.as_posix())
             match = re.search(r"第\s*(\d+)\s*页\s*共\s*(\d+)\s*页", text)
             printed_label = f"第{match.group(1)}页共{match.group(2)}页" if match else None
+            picture = extract_page_picture(page, temp_dir, index) if extract_pictures else None
             pages.append({
                 "pdfPage": index + 1,
                 "printedPageLabel": printed_label,
@@ -583,6 +650,8 @@ def render_document_pages(source_bytes: bytes, display_name: str, kind: str, tem
                 "imageCoverage": image_coverage(page),
                 "imageSha256": sha256_bytes(page_path.read_bytes()),
                 "textSha256": sha256_bytes(text.encode("utf-8")),
+                "picturePath": picture["path"] if picture is not None else None,
+                "pictureSha256": picture["sha256"] if picture is not None else None,
             })
         return pages, total_pages
     finally:
@@ -603,7 +672,13 @@ def analyze_file(conn: psycopg.Connection, model: dict[str, Any], s3, project_id
         raise RuntimeError("downloaded file exceeds size limit")
     temp_dir = Path(tempfile.mkdtemp(prefix="libiaolink-doc-analysis-"))
     try:
-        pages, total_pages = render_document_pages(source_bytes, name, kind, temp_dir)
+        pages, total_pages = render_document_pages(
+            source_bytes,
+            name,
+            kind,
+            temp_dir,
+            extract_pictures=is_technical_agreement(row),
+        )
         page_records: list[dict[str, Any]] = []
         agreement_compact = is_technical_agreement(row)
         for page in pages:

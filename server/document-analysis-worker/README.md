@@ -18,10 +18,11 @@ LibiaoLink 项目文件 AI 读取 worker。独立容器运行，避免把 LibreO
 1. 从 files / file_versions 查询当前版本。
 2. 从对象存储下载原始文件。
 3. PDF 用 PyMuPDF 拆页；Word / Excel 用 LibreOffice 转 PDF；图片规范化为 PNG。
-4. 每页发送图片 + 页面文本给当前启用模型。
-5. 只提炼摘要型事实，最多 8 条，不逐行抄录长表。
-6. 按 file_version_id + prompt_version 缓存到 project_file_analyses。
-7. run 汇总 succeeded / failed / skipped 数量。
+4. 技术协议额外提取布局图 / 三维图：取选中页占幅最大的内嵌位图（忽略 <5% 页面的图标 / 水印；无内嵌图时回退整页渲染），写入对象存储供总结文档使用。
+5. 每页发送图片 + 页面文本给当前启用模型。
+6. 只提炼摘要型事实，最多 8 条，不逐行抄录长表。
+7. 按 file_version_id + prompt_version 缓存到 project_file_analyses。
+8. run 汇总 succeeded / failed / skipped 数量。
 
 ## 环境变量
 

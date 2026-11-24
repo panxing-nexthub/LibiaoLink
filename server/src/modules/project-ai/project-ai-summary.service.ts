@@ -8,9 +8,10 @@ import { UserService } from "../identity/index.js";
 import { ProjectAiContextService } from "./project-ai-context.service.js";
 import { ProjectAiModelClient } from "./project-ai.model.js";
 import { ProjectAiSummaryRepository, type ProjectAiSummaryRow } from "./project-ai-summary.repository.js";
+import { buildSummaryDocument } from "./project-ai-summary-document.js";
 
 /** prompt 结构变更时递增：旧版本的缓存自动不再命中，不会被复用。 */
-export const PROJECT_AI_PROMPT_VERSION = "v3";
+export const PROJECT_AI_PROMPT_VERSION = "v4";
 
 /** 上下文指纹：去掉每次请求都会变的 generatedAt，其余字段按固定顺序序列化（构建时已排序）。 */
 export function hashProjectAiContext(context: ProjectAiContext): string {
@@ -77,13 +78,15 @@ export class ProjectAiSummaryService {
     sourceHash: string,
   ): Promise<ProjectAiSummary> {
     const generated = await this.model.summarize(context);
+    // P4：模型结果只保留文字部分；文档字段由采集器确定性补齐，避免模型改数 / 编造表格与图片。
+    const report = { ...generated.report, ...buildSummaryDocument(context, generated.report) };
     const row = await this.repository.upsert({
       projectId,
       sourceHash,
       promptVersion: PROJECT_AI_PROMPT_VERSION,
       modelId: generated.modelId,
-      summaryText: generated.report.summary.text,
-      summaryJson: generated.report as unknown as Record<string, unknown>,
+      summaryText: report.summary.text,
+      summaryJson: report as unknown as Record<string, unknown>,
       generatedBy: actorId,
     });
     await this.audit.record(this.database.db, {

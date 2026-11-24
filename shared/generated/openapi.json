@@ -9455,6 +9455,82 @@
         ],
         "description": "项目（v0.2 §2.3 projects）"
       },
+      "ProjectAiAgreement": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "fileName": {
+            "type": "string"
+          },
+          "fileVersionId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "partyA": {
+            "$ref": "#/components/schemas/ProjectAiExtractedField"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/ProjectAiExtractedField"
+          },
+          "projectAddress": {
+            "$ref": "#/components/schemas/ProjectAiExtractedField"
+          },
+          "background": {
+            "$ref": "#/components/schemas/ProjectAiExtractedField"
+          },
+          "layout": {
+            "$ref": "#/components/schemas/ProjectAiAgreementImage"
+          },
+          "threeD": {
+            "$ref": "#/components/schemas/ProjectAiAgreementImage"
+          },
+          "extractedAt": {
+            "$ref": "#/components/schemas/DateTime"
+          }
+        },
+        "required": [
+          "fileName",
+          "fileVersionId",
+          "partyA",
+          "customer",
+          "projectAddress",
+          "background",
+          "layout",
+          "threeD",
+          "extractedAt"
+        ],
+        "description": "最新版技术协议定向抽取结果；字段不是 found 时前端显示「未识别」"
+      },
+      "ProjectAiAgreementImage": {
+        "type": "object",
+        "properties": {
+          "pageNo": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "exclusiveMinimum": 0
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "caption": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "pageNo",
+          "url",
+          "caption"
+        ]
+      },
       "ProjectAiChange": {
         "type": "object",
         "properties": {
@@ -9609,6 +9685,24 @@
               "$ref": "#/components/schemas/ProjectAiIssue"
             }
           },
+          "agreement": {
+            "$ref": "#/components/schemas/ProjectAiAgreement"
+          },
+          "equipment": {
+            "$ref": "#/components/schemas/ProjectAiEquipment"
+          },
+          "reportPhotos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiPhotoRef"
+            }
+          },
+          "issueCategoryStats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiIssueCategoryStat"
+            }
+          },
           "fileAnalyses": {
             "type": "array",
             "items": {
@@ -9638,6 +9732,124 @@
           "truncated"
         ],
         "description": "AI 项目总结读面（只读聚合；不触发任何模型调用）"
+      },
+      "ProjectAiEquipment": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "sourceFileName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiEquipmentCategory"
+            }
+          }
+        },
+        "required": [
+          "sourceFileName",
+          "categories"
+        ],
+        "description": "设备清单 Excel 按「分类名称」聚合结果"
+      },
+      "ProjectAiEquipmentCategory": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "itemCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "quantities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiEquipmentQuantity"
+            }
+          },
+          "representativeItems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "itemCount",
+          "quantities",
+          "representativeItems"
+        ]
+      },
+      "ProjectAiEquipmentQuantity": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "unit"
+        ]
+      },
+      "ProjectAiExtractedField": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ProjectAiExtractionStatus"
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourcePage": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "exclusiveMinimum": 0
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "status",
+          "value",
+          "evidence",
+          "sourcePage",
+          "confidence"
+        ]
+      },
+      "ProjectAiExtractionStatus": {
+        "type": "string",
+        "enum": [
+          "found",
+          "not_found",
+          "conflict",
+          "failed"
+        ]
       },
       "ProjectAiIssue": {
         "type": "object",
@@ -9732,6 +9944,28 @@
             "type": "integer",
             "minimum": 0,
             "description": "问题附图数量（不识别图片内容）"
+          },
+          "photos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fileId": {
+                  "$ref": "#/components/schemas/Uuid"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "fileId",
+                "name"
+              ]
+            },
+            "description": "问题附图引用（P3 扩展；只用于总结表内缩略图，不识别图片内容）"
           }
         },
         "required": [
@@ -9749,6 +9983,23 @@
           "taskId",
           "photoCount"
         ]
+      },
+      "ProjectAiIssueCategoryStat": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "category",
+          "count"
+        ],
+        "description": "问题归类统计（全部问题，多分类各计一次）"
       },
       "ProjectAiIssueItem": {
         "type": "object",
@@ -9793,6 +10044,26 @@
           "type",
           "sources"
         ]
+      },
+      "ProjectAiMember": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "manager",
+              "task_owner"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "role"
+        ],
+        "description": "项目组成员 = 项目经理 ∪ 任务负责人（不使用项目成员名册）"
       },
       "ProjectAiMetrics": {
         "type": "object",
@@ -9952,6 +10223,115 @@
           "changeTotal"
         ]
       },
+      "ProjectAiPeriod": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "planFrom": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "planTo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "actualFrom": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "actualTo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "actualOngoing": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "planFrom",
+          "planTo",
+          "actualFrom",
+          "actualTo",
+          "actualOngoing"
+        ],
+        "description": "项目周期：计划区间 + 实际区间；实际未完成时 actualOngoing=true"
+      },
+      "ProjectAiPhotoRef": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "date": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DateOnly"
+              },
+              {
+                "description": "业务日期 YYYY-MM-DD（不携带时区）"
+              }
+            ]
+          },
+          "authorName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "fileId",
+          "name",
+          "date",
+          "authorName"
+        ],
+        "description": "总结用现场附图引用（日报现场图，按日期分层抽样）"
+      },
       "ProjectAiProject": {
         "type": "object",
         "properties": {
@@ -10014,6 +10394,43 @@
                 "description": "项目启动时间：任务名 = 「项目启动」或 titleEn = 「Project Startup」的任务最早 plannedStart（用户确认口径 = 实际开始）；找不到为 null，不回落 projects.createdAt"
               }
             ]
+          },
+          "customer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "客户（项目主数据；与技术协议客户分开）"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "项目备注（背景描述补充来源）"
+          },
+          "partyA": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "甲方（技术协议抽取；null = 未识别）"
+          },
+          "projectAddress": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "项目地址（技术协议抽取；null = 未识别）"
+          },
+          "period": {
+            "$ref": "#/components/schemas/ProjectAiPeriod"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAiMember"
+            }
           }
         },
         "required": [
@@ -10378,6 +10795,366 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
+          },
+          "basicInfo": {
+            "type": "object",
+            "properties": {
+              "projectCode": {
+                "type": "string"
+              },
+              "projectName": {
+                "type": "string"
+              },
+              "periodText": {
+                "type": "string"
+              },
+              "partyA": {
+                "type": "string"
+              },
+              "customer": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              },
+              "members": {
+                "type": "string"
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "projectCode",
+              "projectName",
+              "periodText",
+              "partyA",
+              "customer",
+              "address",
+              "members",
+              "sources"
+            ]
+          },
+          "equipmentLayout": {
+            "type": "object",
+            "properties": {
+              "cadImage": {
+                "type": "object",
+                "properties": {
+                  "fileId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "caption": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "fileId",
+                  "url",
+                  "caption"
+                ]
+              },
+              "threeDImage": {
+                "type": "object",
+                "properties": {
+                  "fileId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "caption": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "fileId",
+                  "url",
+                  "caption"
+                ]
+              }
+            },
+            "required": [
+              "cadImage",
+              "threeDImage"
+            ]
+          },
+          "background": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          },
+          "equipmentList": {
+            "type": "object",
+            "properties": {
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "category": {
+                      "type": "string"
+                    },
+                    "itemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "quantityText": {
+                      "type": "string"
+                    },
+                    "representative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "category",
+                    "itemCount",
+                    "quantityText",
+                    "representative"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "rows"
+            ]
+          },
+          "progressDetail": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "table": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "stage": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "planText": {
+                      "type": "string"
+                    },
+                    "actualText": {
+                      "type": "string"
+                    },
+                    "done": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "percent": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "maximum": 100
+                    }
+                  },
+                  "required": [
+                    "stage",
+                    "status",
+                    "planText",
+                    "actualText",
+                    "done",
+                    "total",
+                    "percent"
+                  ]
+                }
+              },
+              "percent": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "text",
+              "table",
+              "percent"
+            ]
+          },
+          "sitePhotos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fileId": {
+                  "$ref": "#/components/schemas/Uuid"
+                },
+                "caption": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "fileId",
+                "caption"
+              ]
+            }
+          },
+          "issueTable": {
+            "type": "object",
+            "properties": {
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "index": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "categories": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "owner": {
+                      "type": "string"
+                    },
+                    "raisedAt": {
+                      "type": "string"
+                    },
+                    "solution": {
+                      "type": "string"
+                    },
+                    "closedAt": {
+                      "type": "string"
+                    },
+                    "photos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "fileId": {
+                            "$ref": "#/components/schemas/Uuid"
+                          },
+                          "name": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "fileId",
+                          "name"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "index",
+                    "title",
+                    "categories",
+                    "state",
+                    "owner",
+                    "raisedAt",
+                    "solution",
+                    "closedAt",
+                    "photos"
+                  ]
+                }
+              },
+              "summary": {
+                "type": "string"
+              },
+              "categoryStats": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "category": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "category",
+                    "count"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "rows",
+              "summary",
+              "categoryStats"
+            ]
+          },
+          "personalSummary": {
+            "type": "string"
+          },
+          "sourceAppendix": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fileName": {
+                  "type": "string"
+                },
+                "docType": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "fileName",
+                "docType",
+                "version",
+                "date"
+              ]
+            }
           },
           "summary": {
             "type": "object",
@@ -24739,6 +25516,169 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProjectAiSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{id}/ai-agreement-images/{kind}": {
+      "get": {
+        "tags": [
+          "project-ai"
+        ],
+        "summary": "技术协议抽取 / 人工替换的布局图或三维图（受项目可见性保护；no-store）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "layout",
+                "three_d"
+              ]
+            },
+            "required": true,
+            "name": "kind",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "布局图 / 三维图图片",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "project-ai"
+        ],
+        "summary": "人工替换布局图 / 三维图（multipart 字段 file；PNG / JPEG / WebP，≤ 10 MB；需 project.export）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "layout",
+                "three_d"
+              ]
+            },
+            "required": true,
+            "name": "kind",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "替换成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
                 }
               }
             }

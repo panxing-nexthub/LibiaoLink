@@ -8,8 +8,10 @@ import { PermissionModule } from "../permission/index.js";
 import { ProjectModule } from "../project/index.js";
 import { ReportIssueModule } from "../report-issue/index.js";
 import { TaskModule } from "../task/index.js";
+import { ProjectAiAgreementService } from "./project-ai-agreement.service.js";
 import { ProjectAiContextController } from "./project-ai.controller.js";
 import { ProjectAiContextService } from "./project-ai-context.service.js";
+import { ProjectAiEquipmentService } from "./project-ai-equipment.service.js";
 import { ProjectAiModelClient } from "./project-ai.model.js";
 import { ProjectAiSummaryRepository } from "./project-ai-summary.repository.js";
 import { ProjectAiSummaryService } from "./project-ai-summary.service.js";
@@ -33,7 +35,14 @@ import { ProjectAiSummaryService } from "./project-ai-summary.service.js";
     DocumentAnalysisModule,
   ],
   controllers: [ProjectAiContextController],
-  providers: [ProjectAiContextService, ProjectAiSummaryRepository, ProjectAiModelClient, ProjectAiSummaryService],
+  providers: [
+    ProjectAiContextService,
+    ProjectAiAgreementService,
+    ProjectAiEquipmentService,
+    ProjectAiSummaryRepository,
+    ProjectAiModelClient,
+    ProjectAiSummaryService,
+  ],
   exports: [ProjectAiContextService, ProjectAiSummaryService],
 })
 export class ProjectAiModule {}

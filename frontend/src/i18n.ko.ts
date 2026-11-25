@@ -1589,6 +1589,8 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "pd.material.shipmentTitle": "발송 등록",
   "pd.material.shipmentImage": "이미지(선택)",
   "pd.material.pasteImage": "이미지 붙여넣기",
+  "pd.material.clipboardNoImage": "클립보드에 이미지가 없습니다.",
+  "pd.material.clipboardReadFailed": "클립보드를 직접 읽을 수 없습니다. \"이미지 선택\"을 사용하세요.",
   "pd.material.chooseImage": "이미지 선택",
   "pd.material.shipmentStatus": "상태",
   "pd.material.shipmentEta": "도착 예정일",

@@ -1589,6 +1589,8 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "pd.material.shipmentTitle": "発送登録",
   "pd.material.shipmentImage": "画像（任意）",
   "pd.material.pasteImage": "画像を貼り付け",
+  "pd.material.clipboardNoImage": "クリップボードに画像がありません。",
+  "pd.material.clipboardReadFailed": "クリップボードを直接読み取れません。「画像を選択」を使用してください。",
   "pd.material.chooseImage": "画像を選択",
   "pd.material.shipmentStatus": "状態",
   "pd.material.shipmentEta": "到着予定日",

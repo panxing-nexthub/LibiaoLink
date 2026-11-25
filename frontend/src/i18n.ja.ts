@@ -1569,7 +1569,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "pd.material.items": "資材 {n} 件",
   "pd.material.tracking": "再発注追跡",
   "pd.material.allMaterials": "全再発注",
-  "pd.material.allSummary": "全再発注 {total} 件 · 登録済み {shipped} 件",
+  "pd.material.allSummary": "再発注 {total} 件 · 登録済み {shipped} 件",
   "pd.material.trackingSummary": "再発注追跡 {n} 件",
   "pd.material.col.source": "発生元",
   "pd.material.col.status": "状態",

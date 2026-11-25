@@ -1543,6 +1543,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "sh.delete.aria": "이해관계자 삭제 확인",
   "sh.delete.text": "이해관계자({name})를 삭제할까요? 디렉터리와 이 프로젝트의 연락처 목록에서 제거되며, 되돌릴 수 없습니다.",
   "pd.files.title": "프로젝트 파일",
+  "pd.files.tabsAria": "프로젝트 파일 보기 전환",
   "pd.files.summary": "단계 파일 {stage} · 변경 파일 {changed}",
   "pd.files.count": "파일 {n}개",
   "pd.files.search": "파일명 / 작업명 검색",

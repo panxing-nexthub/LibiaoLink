@@ -1543,6 +1543,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "sh.delete.aria": "関係者の削除確認",
   "sh.delete.text": "関係者（{name}）を削除しますか？ディレクトリとこのプロジェクトの連絡先一覧から削除されます。この操作は元に戻せません。",
   "pd.files.title": "プロジェクトファイル",
+  "pd.files.tabsAria": "プロジェクトファイル表示切替",
   "pd.files.summary": "段階ファイル {stage} · 変更ファイル {changed}",
   "pd.files.count": "{n} ファイル",
   "pd.files.search": "ファイル名 / タスク名で検索",

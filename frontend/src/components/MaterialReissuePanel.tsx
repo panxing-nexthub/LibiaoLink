@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ApiError } from "../api";
 import { mediumCardBorderOf, mediumCardTintOf, vividCardBorderOf, vividCardTintOf, type TintedTier } from "../backgroundTier";
 import {
@@ -316,6 +316,7 @@ export function MaterialReissuePanel({
   tierTint = false,
   view,
   onChangeView,
+  tabs,
 }: {
   projectId: string;
   tasks: readonly ProjectTask[];
@@ -334,6 +335,8 @@ export function MaterialReissuePanel({
   view?: MaterialReissueView;
   /** 切换页内子视图（写回地址）。 */
   onChangeView?: (view: MaterialReissueView) => void;
+  /** 嵌入「项目文件」页时的内部切换控件（标题右侧）。 */
+  tabs?: ReactNode;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -843,8 +846,9 @@ export function MaterialReissuePanel({
     // 小屏时随容器收窄，表格自身横向滚动兜底（2026-11-25 口径「整体表格长度缩减」）。
     <section data-project-material-reissue="" className={"mx-auto w-full space-y-4 " + (activeView === "tracking" ? "max-w-[1680px]" : "max-w-[1140px]")}>
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-zinc-900">{t("pd.material.title")}</h2>
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <h2 className="text-lg font-semibold text-zinc-900">{tabs === undefined ? t("pd.material.title") : t("pd.files.title")}</h2>
+          {tabs}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
           <span data-project-material-reissue-summary="">{summaryText}</span>

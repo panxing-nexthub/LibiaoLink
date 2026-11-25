@@ -314,6 +314,8 @@ export function MaterialReissuePanel({
   canMark = false,
   canMarkAll = false,
   tierTint = false,
+  view,
+  onChangeView,
 }: {
   projectId: string;
   tasks: readonly ProjectTask[];
@@ -328,13 +330,22 @@ export function MaterialReissuePanel({
   canMarkAll?: boolean;
   /** 背景档位铺色档：simple = false；适中 / 炫彩 = 行铺色。 */
   tierTint?: TintedTier | false;
+  /** 当前页内子视图（由地址 `?view=material-reissue&sub=` 控制）；缺省 all。 */
+  view?: MaterialReissueView;
+  /** 切换页内子视图（写回地址）。 */
+  onChangeView?: (view: MaterialReissueView) => void;
 }) {
   const t = useT();
   const locale = useLocale();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [reloadTick, setReloadTick] = useState(0);
   const [keyword, setKeyword] = useState("");
-  const [activeView, setActiveView] = useState<MaterialReissueView>("all");
+  const [internalView, setInternalView] = useState<MaterialReissueView>("all");
+  const activeView = view ?? internalView;
+  const changeActiveView = (next: MaterialReissueView): void => {
+    setInternalView(next);
+    onChangeView?.(next);
+  };
   const [detailId, setDetailId] = useState<string | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const [shipmentOpen, setShipmentOpen] = useState(false);
@@ -764,7 +775,7 @@ export function MaterialReissuePanel({
       setShipmentOpen(false);
       setSelectedKeys(new Set());
       resetShipmentForm();
-      setActiveView("tracking");
+      changeActiveView("tracking");
       setNotice({ kind: "ok", text: t("pd.material.shipmentSuccess", { n: count }) });
       setReloadTick((tick) => tick + 1);
     } catch (error) {
@@ -870,7 +881,7 @@ export function MaterialReissuePanel({
                 data-material-reissue-view={view}
                 aria-pressed={active}
                 onClick={() => {
-                  setActiveView(view);
+                  changeActiveView(view);
                 }}
                 className={
                   "rounded-lg border px-3 py-1.5 text-xs font-medium transition " +

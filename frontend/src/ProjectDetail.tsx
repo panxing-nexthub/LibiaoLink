@@ -140,8 +140,8 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   /** 任务级写入口即使项目只读也要下传，由每条任务的 capabilities 再逐项裁决。 */
   const taskWritable = !readOnly;
   const createDeliverableType: DeliverableTypeCreator | undefined =
-    projectEditable && project?.canManageProjectManagers === true && onCreateDeliverableType !== undefined
-      ? (name, visibility) => onCreateDeliverableType(project.id, name, visibility)
+    canEditManagers && projectId !== null && onCreateDeliverableType !== undefined
+      ? (name, visibility) => onCreateDeliverableType(projectId, name, visibility)
       : undefined;
   /** 定档 / 取消定档：服务端任务能力投影 canFinalize 且任务已设定输出成果文件；未配置成果类型的任务不展示定档入口。 */
   const canFinalizeTask = (task: ProjectTask): boolean => taskWritable && taskCapabilitiesOf(task).canFinalize && hasOutputDeliverables(task);

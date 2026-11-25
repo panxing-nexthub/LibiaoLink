@@ -19,9 +19,6 @@ export const DOC_TYPE_OPTIONS = [
 /** 自定义成果类型名称上限（与服务端 DeliverableTypeSchema 同口径）。 */
 export const DOC_TYPE_NAME_MAX = 50;
 
-/** 单个任务最多选择的成果类型数（与 TaskCreateBody / TaskUpdateBody 同口径）。 */
-export const DOC_TYPE_SELECTION_MAX = 20;
-
 /** 自定义名称不含英文逗号（文件库筛选以逗号分隔多值）或换行；与 DeliverableTypeSchema 同口径。 */
 export const DOC_TYPE_NAME_PATTERN = /^[^,\r\n]+$/;
 

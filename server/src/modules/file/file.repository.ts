@@ -89,7 +89,7 @@ export interface ChangeRequestJoinedRow {
   stageKey: string | null;
   changeType: string;
   materialReissue: MaterialReissueSnapshot | null;
-  /** 物料补发发货登记（0116）；普通变更为空数组。 */
+  /** 物料补发发货登记（0122）；普通变更为空数组。 */
   materialReissueTracking: MaterialReissueTrackingEntry[];
   reason: string;
   beforeSummary: string | null;

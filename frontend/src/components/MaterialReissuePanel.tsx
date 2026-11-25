@@ -880,9 +880,8 @@ export function MaterialReissuePanel({
                             <col className="w-[170px]" />
                             <col className="w-[80px]" />
                             <col className="w-[72px]" />
-                            <col className="w-[220px]" />
-                            <col className="w-[104px]" />
                             <col />
+                            <col className="w-[104px]" />
                           </colgroup>
                           <thead className="bg-zinc-50 text-zinc-500">
                             <tr>
@@ -897,13 +896,12 @@ export function MaterialReissuePanel({
                               <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">{fieldText(locale, "单位")}</th>
                               <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "备注")}</th>
                               <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">{t("pd.material.col.status")}</th>
-                              <th scope="col" className="border-b border-zinc-200" aria-hidden="true" />
                             </tr>
                           </thead>
                           <tbody>
                             {material.materials.length === 0 ? (
                               <tr>
-                                <td colSpan={10} className="border-b border-zinc-100 px-4 py-10 text-center text-sm text-zinc-400">—</td>
+                                <td colSpan={9} className="border-b border-zinc-100 px-4 py-10 text-center text-sm text-zinc-400">—</td>
                               </tr>
                             ) : (
                               material.materials.map((line, index) => {
@@ -944,7 +942,6 @@ export function MaterialReissuePanel({
                                         {rowStatus === "pending" ? t("pd.material.status.pending") : statusLabel(rowStatus)}
                                       </span>
                                     </td>
-                                    <td className="border-b border-zinc-100" aria-hidden="true" />
                                   </tr>
                                 );
                               })

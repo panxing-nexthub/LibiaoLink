@@ -3,7 +3,7 @@ import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, lt, lte, 
 import type { DbClient, DbTransaction } from "../../db/db-client.js";
 import { DatabaseService } from "../../db/database.service.js";
 import { changeRequests } from "../../db/schema/change.js";
-import type { MaterialReissueSnapshot } from "@libiaolink/contracts";
+import type { MaterialReissueSnapshot, MaterialReissueTrackingEntry } from "@libiaolink/contracts";
 import { fileLinks, files, fileVersions, uploadSessions } from "../../db/schema/files.js";
 import { projectNodes } from "../../db/schema/flow.js";
 import { users } from "../../db/schema/identity.js";
@@ -89,6 +89,8 @@ export interface ChangeRequestJoinedRow {
   stageKey: string | null;
   changeType: string;
   materialReissue: MaterialReissueSnapshot | null;
+  /** 物料补发发货登记（0116）；普通变更为空数组。 */
+  materialReissueTracking: MaterialReissueTrackingEntry[];
   reason: string;
   beforeSummary: string | null;
   afterSummary: string | null;
@@ -923,6 +925,31 @@ export class FileRepository {
     return rows[0] ?? null;
   }
 
+  /** 物料补发发货登记：事务内锁变更行，避免同一物料行并发重复登记。 */
+  async lockChangeRequest(changeRequestId: string, tx: DbTransaction): Promise<ChangeRequestRow | null> {
+    const rows = await tx
+      .select()
+      .from(changeRequests)
+      .where(eq(changeRequests.id, changeRequestId))
+      .limit(1)
+      .for("update");
+    return rows[0] ?? null;
+  }
+
+  /** 物料补发发货登记：整组覆盖该变更的 tracking 数组（服务层已在事务内锁行并合并）。 */
+  async updateChangeRequestTracking(
+    changeRequestId: string,
+    tracking: MaterialReissueTrackingEntry[],
+    tx: DbTransaction,
+  ): Promise<ChangeRequestRow | null> {
+    const rows = await tx
+      .update(changeRequests)
+      .set({ materialReissueTracking: tracking })
+      .where(eq(changeRequests.id, changeRequestId))
+      .returning();
+    return rows[0] ?? null;
+  }
+
   /** 文件 → 关联（双向跳转读面；供日报 / 问题 / 变更模块与内部核对使用）。 */
   async listFileLinks(fileId: string, client: DbClient = this.database.db): Promise<FileLinkRow[]> {
     return client
@@ -968,6 +995,7 @@ const CHANGE_REQUEST_SELECT = {
   stageKey: changeRequests.stageKey,
   changeType: changeRequests.changeType,
   materialReissue: changeRequests.materialReissue,
+  materialReissueTracking: changeRequests.materialReissueTracking,
   reason: changeRequests.reason,
   beforeSummary: changeRequests.beforeSummary,
   afterSummary: changeRequests.afterSummary,

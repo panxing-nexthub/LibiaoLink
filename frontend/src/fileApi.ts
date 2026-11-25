@@ -494,6 +494,30 @@ export type MaterialReissueSnapshot = Omit<MaterialReissueInput, "emailTitle" | 
   applicantName: string;
 };
 
+export type MaterialReissueTrackingStatus = "shipped" | "received";
+export type MaterialReissueTrackingEntry = {
+  changeRequestId: string;
+  /** 补发清单行下标（0 起）。 */
+  lineIndex: number;
+  status: MaterialReissueTrackingStatus;
+  trackingNo: string | null;
+  estimatedArrivalDate: string | null;
+  note: string | null;
+  imageFileId: string | null;
+  shippedBy: string;
+  shippedAt: string;
+  updatedAt: string;
+};
+export type MaterialReissueTrackingSelection = { changeRequestId: string; lineIndex: number };
+export type CreateMaterialReissueTrackingInput = {
+  items: MaterialReissueTrackingSelection[];
+  status: MaterialReissueTrackingStatus;
+  trackingNo?: string;
+  estimatedArrivalDate?: string;
+  note?: string;
+  imageFileId?: string;
+};
+
 
 /** 变更记录详情（契约 ChangeRequestDetail · M4-04 读面 A4-15）：变更本体 + 变更后文件 + 变更后版本（本文件只需用到的字段）；
  *  Push 319：导入表导入变更暂无变更后文件（源文件在微盘）→ fileId / versionId / versionSeq / file / version 可为 null。 */
@@ -504,6 +528,7 @@ export type ChangeRequestDetail = {
   stageKey: string | null;
   changeType: "file_change" | "material_reissue";
   materialReissue: MaterialReissueSnapshot | null;
+  materialReissueTracking: MaterialReissueTrackingEntry[];
   reason: string;
   beforeSummary: string | null;
   afterSummary: string | null;
@@ -537,6 +562,7 @@ export type ApiChangeRequest = {
   readonly stageKey: string | null;
   readonly changeType: "file_change" | "material_reissue";
   readonly materialReissue: MaterialReissueSnapshot | null;
+  readonly materialReissueTracking: readonly MaterialReissueTrackingEntry[];
   readonly reason: string;
   readonly beforeSummary: string | null;
   readonly afterSummary: string | null;
@@ -562,6 +588,18 @@ export function createMaterialReissue(
     ...input,
     taskId,
   });
+}
+
+/** 物料补发批量发货登记（2026-11-25）：跨申请单勾选物料行，一次写入状态 / 快递单号 / 预计到货 / 备注 / 凭证图片。 */
+export function createMaterialReissueTracking(
+  projectId: string,
+  input: CreateMaterialReissueTrackingInput,
+): Promise<{ items: MaterialReissueTrackingEntry[] }> {
+  return apiSend(
+    "/api/v1/projects/" + encodeURIComponent(projectId) + "/change-requests/material-reissue/tracking",
+    "POST",
+    input,
+  );
 }
 
 /** 项目变更记录列表（M4-04 读面 · Push 353 仪表盘「词频图」取数）：GET /projects/{id}/change-requests 翻页取满。 */

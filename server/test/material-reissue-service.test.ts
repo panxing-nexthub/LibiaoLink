@@ -47,6 +47,7 @@ class FakeRepository {
       stageKey: input.stageKey,
       changeType: input.changeType,
       materialReissue: input.materialReissue,
+      materialReissueTracking: [],
       reason: input.reason,
       beforeSummary: input.beforeSummary,
       afterSummary: input.afterSummary,

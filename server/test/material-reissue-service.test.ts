@@ -29,13 +29,19 @@ class FakeRepository {
   links: FileLinkInsertInput[] = [];
   changeRefs: Array<{ taskIds: string[]; changeRequestId: string }> = [];
   createdFile: FileRow | null = null;
+  projectStatus = "active";
+  ownerIds: string[] = [];
+  deletedBeforeWrite = false;
 
   async findProjectReissueBrief(): Promise<unknown> {
-    return { id: PROJECT, code: "LBGN23171-G1", name: "虹迪广州NIKE分拣改造项目", customer: "NIKE", status: "active", deletedAt: null };
+    return { id: PROJECT, code: "LBGN23171-G1", name: "虹迪广州NIKE分拣改造项目", customer: "NIKE", status: this.projectStatus, deletedAt: null };
   }
 
-  async findTaskReissueBrief(): Promise<unknown> {
-    return { id: TASK, projectId: PROJECT, stageKey: "assembly", nodeId: NODE, title: "分拣线安装", deletedAt: null };
+  async findTaskReissueBrief(_taskId: string, _client?: unknown, lock = false): Promise<unknown> {
+    return {
+      id: TASK, projectId: PROJECT, stageKey: "assembly", nodeId: NODE, title: "分拣线安装",
+      ownerIds: this.ownerIds, deletedAt: lock && this.deletedBeforeWrite ? NOW : null,
+    };
   }
 
   async insertChangeRequest(input: ChangeRequestInsertInput): Promise<ChangeRequestRow> {
@@ -128,8 +134,9 @@ class FakeRepository {
 
 class FakePermissionService {
   canCalls: unknown[] = [];
+  accessLevel = "edit";
   async assertProjectVisible() {
-    return { member: true, projectManager: false, taskOwner: false, groupAccessLevel: "edit", accessLevel: "edit" };
+    return { member: true, projectManager: false, taskOwner: false, groupAccessLevel: this.accessLevel, accessLevel: this.accessLevel };
   }
   async assertCan(_actorId: string, permission: string, context: unknown): Promise<void> {
     this.canCalls.push({ permission, context });
@@ -153,50 +160,64 @@ class FakeStorage {
   put: { objectKey: string; body: Buffer; contentType: string; metadata: Record<string, string> } | null = null;
   async headObject(): Promise<null> { return null; }
   async putObject(input: { objectKey: string; body: Buffer; contentType: string; metadata: Record<string, string> }): Promise<void> { this.put = input; }
-  async purgeObject(): Promise<void> {}
+  purged: string[] = [];
+  async purgeObject(objectKey: string): Promise<void> { this.purged.push(objectKey); }
 }
 
+function makeService() {
+  const repo = new FakeRepository();
+  const permission = new FakePermissionService();
+  const audit = new FakeAuditService();
+  const users = new FakeUserService();
+  const storage = new FakeStorage();
+  const clock = new ClockService();
+  clock.setSource(() => NOW);
+  const outbox: unknown[] = [];
+  const tx = { insert: () => ({ values: async (row: unknown) => { outbox.push(row); } }) };
+  const database = { db: { transaction: async (fn: (client: unknown) => Promise<unknown>) => fn(tx) } };
+  const service = new MaterialReissueService(
+    repo as never,
+    database as never,
+    permission as never,
+    audit as never,
+    users as never,
+    storage as never,
+    clock,
+  );
+  return { service, repo, permission, audit, storage, outbox };
+}
+
+const body: CreateMaterialReissueBody = {
+  emailTitle: "项目【补发申请】LBGN23171-G1 虹迪广州NIKE分拣改造项目项目/ 紧急（改）",
+  customerName: "NIKE 中国",
+  reason: "transport_damage",
+  applicationDepartment: "after_sales",
+  accepted: true,
+  inWarranty: false,
+  freeReissue: true,
+  approved: "no",
+  responsibleDepartment: "supplier",
+  requiredOutDate: "2026-11-12",
+  oldPartReturn: true,
+  freightBearer: "libiao",
+  recipient: "张三",
+  phone: "13800000000",
+  address: "广州市黄埔区测试路 1 号",
+  description: "运输过程中外壳破损，需要补发替换。",
+  materials: [{ materialCode: "M-001", materialName: "光电传感器", specification: "E3Z-D61", quantity: 2, unit: "个", remark: "" }],
+  taskId: TASK,
+};
+
 describe("MaterialReissueService.create", () => {
-  it("服务端自动补齐申请人 / 项目 / 任务快照，并同事务生成变更记录与 DOCX 项目文件", async () => {
-    const repo = new FakeRepository();
-    const permission = new FakePermissionService();
-    const audit = new FakeAuditService();
-    const users = new FakeUserService();
-    const storage = new FakeStorage();
-    const clock = new ClockService();
-    clock.setSource(() => NOW);
-    const outbox: unknown[] = [];
-    const tx = { insert: () => ({ values: async (row: unknown) => { outbox.push(row); } }) };
-    const database = { db: { transaction: async (fn: (client: unknown) => Promise<unknown>) => fn(tx) } };
-    const service = new MaterialReissueService(
-      repo as never,
-      database as never,
-      permission as never,
-      audit as never,
-      users as never,
-      storage as never,
-      clock,
-    );
-    const body: CreateMaterialReissueBody = {
-      emailTitle: "项目【补发申请】LBGN23171-G1 虹迪广州NIKE分拣改造项目项目/ 紧急（改）",
-      customerName: "NIKE 中国",
-      reason: "transport_damage",
-      applicationDepartment: "after_sales",
-      accepted: true,
-      inWarranty: false,
-      freeReissue: true,
-      approved: "no",
-      responsibleDepartment: "supplier",
-      requiredOutDate: "2026-11-12",
-      oldPartReturn: true,
-      freightBearer: "libiao",
-      recipient: "张三",
-      phone: "13800000000",
-      address: "广州市黄埔区测试路 1 号",
-      description: "运输过程中外壳破损，需要补发替换。",
-      materials: [{ materialCode: "M-001", materialName: "光电传感器", specification: "E3Z-D61", quantity: 2, unit: "个", remark: "" }],
-      taskId: TASK,
-    };
+  it.each([
+    { status: "active", accessLevel: "edit", ownerIds: [] },
+    { status: "archived", accessLevel: "edit", ownerIds: [] },
+    { status: "archived", accessLevel: "view", ownerIds: [ACTOR] },
+  ])("$status 项目 $accessLevel 权限提交时生成变更记录与 DOCX", async ({ status, accessLevel, ownerIds }) => {
+    const { service, repo, permission, audit, storage, outbox } = makeService();
+    repo.projectStatus = status;
+    repo.ownerIds = ownerIds;
+    permission.accessLevel = accessLevel;
 
     const result = await service.create(PROJECT, body, ACTOR);
 
@@ -243,5 +264,23 @@ describe("MaterialReissueService.create", () => {
     expect(storage.put?.body.subarray(0, 4)).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
     expect(result.changeRequest).toMatchObject({ changeType: "material_reissue", appliedBy: ACTOR, fileId: FILE, versionId: VERSION, versionSeq: 1 });
     expect(result.file).toMatchObject({ id: FILE, status: "final", currentVersionId: VERSION });
+  });
+
+  it("归档项目的普通浏览者没有补发权限", async () => {
+    const { service, repo, permission, storage } = makeService();
+    repo.projectStatus = "archived";
+    permission.accessLevel = "view";
+    await expect(service.create(PROJECT, body, ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(storage.put).toBeNull();
+  });
+
+  it("来源任务在写入前已删除时拒绝补发并清理生成的对象", async () => {
+    const { service, repo, storage, outbox } = makeService();
+    repo.projectStatus = "archived";
+    repo.deletedBeforeWrite = true;
+    await expect(service.create(PROJECT, body, ACTOR)).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+    expect(repo.changeInput).toBeNull();
+    expect(outbox).toEqual([]);
+    expect(storage.purged).toEqual([storage.put?.objectKey]);
   });
 });

@@ -10,10 +10,11 @@ import { AuditService } from "../admin/index.js";
 import { AppError } from "../../common/errors/app-error.js";
 import { ClockService } from "../../common/clock/clock.service.js";
 import { DatabaseService } from "../../db/database.service.js";
+import type { DbClient } from "../../db/db-client.js";
 import { appendOutbox } from "../../db/outbox.js";
 import { buildBlobObjectKey, ObjectStorage } from "../../storage/index.js";
 import { UserService } from "../identity/index.js";
-import { PermissionService, isProjectEditor } from "../permission/index.js";
+import { PermissionService, isProjectEditor, type ProjectAccessContext } from "../permission/index.js";
 import { FileRepository, type ChangeRequestRow, type FileLinkInsertInput, type FileRow, type FileVersionRow } from "./file.repository.js";
 import { toChangeRequestView, toFileView, toVersionView } from "./file.service.js";
 import {
@@ -30,6 +31,7 @@ type Result = z.infer<typeof MaterialReissueResultSchema>;
  * 物料变更补发（2026-11-09 · 业务口径）：任务抽屉「变更申请」下拉的第二入口。
  * 一次提交 = 变更记录 + 自动生成的《补发/补货申请表》DOCX + 任务 change_refs 回写；
  * 申请人 / 时间由服务端自动写入，项目 / 客户 / 来源任务自动带入并固化快照。
+ * 归档项目的任务也可作为补发来源，沿用项目编辑者或任务负责人的权限校验。
  */
 @Injectable()
 export class MaterialReissueService {
@@ -51,18 +53,7 @@ export class MaterialReissueService {
     if (project === null || project.deletedAt !== null) {
       throw new AppError("NOT_FOUND", "项目不存在或不可见");
     }
-    if (project.status === "archived") {
-      throw new AppError("PROJECT_ARCHIVED", "项目已归档，禁止新增文件");
-    }
-    const task = await this.repository.findTaskReissueBrief(body.taskId);
-    if (task === null || task.deletedAt !== null || task.projectId !== projectId) {
-      throw new AppError("VALIDATION_FAILED", "来源任务不存在或不属于该项目", [
-        { code: "invalid_task", message: "taskId 必须属于当前项目且未删除", path: "taskId" },
-      ]);
-    }
-    if (!isProjectEditor(access) && !task.ownerIds.includes(actorId)) {
-      throw new AppError("FORBIDDEN", "仅项目编辑者或当前任务负责人可发起物料变更补发");
-    }
+    const task = await this.requireSourceTask(projectId, body.taskId, actorId, access);
     validateOtherText(body);
     const applicant = await this.users.getUser(actorId);
     const at = this.clock.now();
@@ -100,6 +91,8 @@ export class MaterialReissueService {
     let outcome: { changeRequest: ChangeRequestRow; file: FileRow; version: FileVersionRow };
     try {
       outcome = await this.database.db.transaction(async (tx) => {
+        // 与任务删除互斥，写入前重新确认来源任务仍存在且可操作。
+        await this.requireSourceTask(projectId, task.id, actorId, access, tx);
         const change = await this.repository.insertChangeRequest(
           {
             id: changeId,
@@ -269,6 +262,25 @@ export class MaterialReissueService {
       file: toFileView(outcome.file),
       version: toVersionView(outcome.version),
     };
+  }
+
+  private async requireSourceTask(
+    projectId: string,
+    taskId: string,
+    actorId: string,
+    access: ProjectAccessContext,
+    tx?: DbClient,
+  ) {
+    const task = await this.repository.findTaskReissueBrief(taskId, tx, tx !== undefined);
+    if (task === null || task.deletedAt !== null || task.projectId !== projectId) {
+      throw new AppError("VALIDATION_FAILED", "来源任务不存在或不属于该项目", [
+        { code: "invalid_task", message: "taskId 必须属于当前项目且未删除", path: "taskId" },
+      ]);
+    }
+    if (!isProjectEditor(access) && !task.ownerIds.includes(actorId)) {
+      throw new AppError("FORBIDDEN", "仅项目编辑者或当前任务负责人可发起物料变更补发");
+    }
+    return task;
   }
 }
 

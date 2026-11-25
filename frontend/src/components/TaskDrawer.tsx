@@ -799,8 +799,9 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
   const unfinalizeAria = unfinalizeLockedByPlannedEnd ? t("drawer.finalize.afterDueAria") : onUnfinalize === undefined ? t("drawer.finalize.onAria") : t("drawer.finalize.offAria");
   const unfinalizeTitle = unfinalizeLockedByPlannedEnd ? t("drawer.finalize.afterDueTitle") : onUnfinalize === undefined ? t("drawer.finalize.onTitle") : t("drawer.finalize.offTitle");
   const canChangeFiles = filesWritable && allowFileChanges;
-  const visibleTabs = canChangeFiles ? DRAWER_TABS : DRAWER_TABS.filter((item) => item.key !== "change");
-  const visibleTab = !canChangeFiles && tab === "change" ? "detail" : tab;
+  const canRequestChange = canChangeFiles || (!unavailable && task.canApplyMaterialReissue === true);
+  const visibleTabs = canRequestChange ? DRAWER_TABS : DRAWER_TABS.filter((item) => item.key !== "change");
+  const visibleTab = !canRequestChange && tab === "change" ? "detail" : tab;
   /** 逾期提示与服务端展示态同一口径（已延期 = 未完成且过了预计完成日期）。 */
   const overdue = task.status === "已延期";
   /** 「是否按时交付」的逾期标注（服务端展示态 + onTime 派生）。 */
@@ -1627,7 +1628,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
     },
   ];
 
-  const materialModeActive = visibleTab === "change" && changeMode === "material";
+  const materialModeActive = visibleTab === "change" && (!canChangeFiles || changeMode === "material");
 
   return (
     <div className="fixed inset-0 z-50">
@@ -1824,21 +1825,29 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
                     type="button"
                     role="tab"
                     aria-selected={active}
-                    aria-haspopup="menu"
-                    aria-expanded={changeMenuOpen}
+                    aria-haspopup={canChangeFiles ? "menu" : undefined}
+                    aria-expanded={canChangeFiles ? changeMenuOpen : undefined}
                     data-drawer-tab={item.key}
-                    onClick={() => { if (tab !== "change") setChangeMode("file"); setTab("change"); setChangeMenuOpen((open) => !open); }}
+                    onClick={() => {
+                      if (canChangeFiles) {
+                        if (visibleTab !== "change") setChangeMode("file");
+                        setChangeMenuOpen((open) => !open);
+                      }
+                      setTab("change");
+                    }}
                     className={
                       "inline-flex items-center gap-1 border-b-2 px-4 py-2.5 text-sm font-medium transition " +
                       (active ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-800")
                     }
                   >
                     {fieldText(locale, item.label)}
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={"h-3.5 w-3.5 transition-transform " + (changeMenuOpen ? "rotate-180" : "")}>
-                      <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                    {canChangeFiles ? (
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={"h-3.5 w-3.5 transition-transform " + (changeMenuOpen ? "rotate-180" : "")}>
+                        <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : null}
                   </button>
-                  {changeMenuOpen ? (
+                  {canChangeFiles && changeMenuOpen ? (
                     <>
                       <button
                         type="button"
@@ -1950,7 +1959,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
             </ScrollArea>
           </>
         ) : visibleTab === "change" ? (
-          changeMode === "material" ? (
+          materialModeActive ? (
             <ScrollArea key="change-material" viewportClassName="min-h-0 flex-1" className="px-6" ariaLabel={t("mr.aria")}>
               <MaterialReissueForm projectId={projectId ?? ""} task={task} members={members} onSubmitted={handleMaterialReissueSubmitted} />
             </ScrollArea>

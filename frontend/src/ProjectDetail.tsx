@@ -392,12 +392,14 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
     () => {
       const visible = projectArchived ? rawTasks.map((task) => {
         const archiveLocked = !isOpenTemporaryTask(task);
+        const capabilities = taskCapabilitiesOf(task);
         return {
           ...task,
           archiveLocked,
+          canApplyMaterialReissue: taskWritable && capabilities.canUpload,
           capabilities: archiveLocked
             ? VIEW_ONLY_TASK_CAPABILITIES
-            : { ...taskCapabilitiesOf(task), canDelete: false, canFinalize: false },
+            : { ...capabilities, canFinalize: false },
         };
       }) : rawTasks;
       const rank = (stage: string) => {
@@ -406,7 +408,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
       };
       return preserveTaskOrder ? visible : [...visible].sort((left, right) => rank(left.stage) - rank(right.stage) || left.sortIndex - right.sortIndex);
     },
-    [rawTasks, preserveTaskOrder, projectArchived, stageNames],
+    [rawTasks, preserveTaskOrder, projectArchived, stageNames, taskWritable],
   );
 
   /**
@@ -442,6 +444,9 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
     }
     return names;
   }, [tasks]);
+  const canDeleteTasks = taskWritable && (
+    projectWritable || taskOwnerStageNames.size > 0 || tasks.some((task) => taskCapabilitiesOf(task).canDelete)
+  );
 
   /**
    * 「写进展描述即后台翻译」（业务口径 2026-10-13 · §6.16 ㉑）：项目数据一到 / 每次写入回写（tasks 变化 ——
@@ -1335,7 +1340,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
                 create: (key) => saveAdditionalStage(() => createAdditionalStage(project.id, key)),
                 remove: (id) => saveAdditionalStage(() => deleteAdditionalStage(project.id, id)),
                 createTask: handleAdditionalStageTask,
-              } : undefined} onSetProgress={taskWritable ? handleSetProgress : undefined} onSetStatus={taskWritable ? handleSetStatus : undefined} onSetActualEnd={taskWritable ? handleSetActualEnd : undefined} visibleColumns={visibleColumns} scrollRef={tableScrollRef} collapsed={collapsedStages} onToggleStage={toggleStage} onToggleAllStages={toggleAllStages} onAddNode={projectWritable ? handleAddNode : undefined} onAddNodes={projectWritable || taskOwnerStageNames.size > 0 ? handleAddNodes : undefined} canOpenAddCard={(stage) => projectWritable || taskOwnerStageNames.has(stage)} personalOnlyStages={projectWritable ? undefined : taskOwnerStageNames} onCreateTempTask={canEditManagers ? (values) => handleQuickAdd({ ownerIds: [], status: "待开始" }, values) : undefined} viewStage="项目总览" canFinalizeTask={canFinalizeTask} onSubmitTaskEdit={taskWritable ? handleSubmitTaskEdit : undefined} onRenameTask={taskWritable ? handleRenameTask : undefined} onPatchTask={taskWritable ? handlePatchTask : undefined} onChangeManagers={canEditManagers ? handleBoardManagerChange : undefined} canEditManagers={canEditManagers} onDeleteTask={projectWritable || taskOwnerStageNames.size > 0 ? requestDeleteTask : undefined} onUploadFiles={taskWritable ? handleUploadTaskFiles : undefined} onDeleteFile={taskWritable && !projectArchived ? handleDeleteTaskFile : undefined} onRenameFile={taskWritable && !projectArchived ? handleRenameTaskFile : undefined} allowFileChanges={!projectArchived} onFinalize={taskWritable ? handleFinalizeTask : undefined} onUnfinalize={taskWritable ? handleUnfinalizeTask : undefined} onChanged={reloadAll} actorName={me.user.displayName ?? ""} filesByTask={taskFiles} projectId={project.id} tierTint={tintRows} focusTaskId={focus?.kind === "task" ? focus.id : null} onFocusClosed={onClearFocus} openTaskId={changesTaskRequestId} onOpenTaskOpened={() => { setChangesTaskRequestId(null); }} />
+              } : undefined} onSetProgress={taskWritable ? handleSetProgress : undefined} onSetStatus={taskWritable ? handleSetStatus : undefined} onSetActualEnd={taskWritable ? handleSetActualEnd : undefined} visibleColumns={visibleColumns} scrollRef={tableScrollRef} collapsed={collapsedStages} onToggleStage={toggleStage} onToggleAllStages={toggleAllStages} onAddNode={projectWritable ? handleAddNode : undefined} onAddNodes={projectWritable || taskOwnerStageNames.size > 0 ? handleAddNodes : undefined} canOpenAddCard={(stage) => projectWritable || taskOwnerStageNames.has(stage)} personalOnlyStages={projectWritable ? undefined : taskOwnerStageNames} onCreateTempTask={canEditManagers ? (values) => handleQuickAdd({ ownerIds: [], status: "待开始" }, values) : undefined} viewStage="项目总览" canFinalizeTask={canFinalizeTask} onSubmitTaskEdit={taskWritable ? handleSubmitTaskEdit : undefined} onRenameTask={taskWritable ? handleRenameTask : undefined} onPatchTask={taskWritable ? handlePatchTask : undefined} onChangeManagers={canEditManagers ? handleBoardManagerChange : undefined} canEditManagers={canEditManagers} onDeleteTask={canDeleteTasks ? requestDeleteTask : undefined} onUploadFiles={taskWritable ? handleUploadTaskFiles : undefined} onDeleteFile={taskWritable && !projectArchived ? handleDeleteTaskFile : undefined} onRenameFile={taskWritable && !projectArchived ? handleRenameTaskFile : undefined} allowFileChanges={!projectArchived} onFinalize={taskWritable ? handleFinalizeTask : undefined} onUnfinalize={taskWritable ? handleUnfinalizeTask : undefined} onChanged={reloadAll} actorName={me.user.displayName ?? ""} filesByTask={taskFiles} projectId={project.id} tierTint={tintRows} focusTaskId={focus?.kind === "task" ? focus.id : null} onFocusClosed={onClearFocus} openTaskId={changesTaskRequestId} onOpenTaskOpened={() => { setChangesTaskRequestId(null); }} />
             </>
           ) : activeView === "甘特图" ? (
             // 甘特图（Push 142）：与项目总览同一份任务数据（服务端任务接口）；拖动改期 / 改进度走同一套写入口径

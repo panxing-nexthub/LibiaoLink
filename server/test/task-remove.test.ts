@@ -2,7 +2,7 @@
  * M3-05 任务软删回归（A25 · Push 152）：DELETE /projects/{id}/tasks/{taskId} ——
  * 软删（不物理删行；历史与留痕保留）+ 重复删除统一 404 + 组内位次同事务压缩（0 起、密集）+ 来源节点约束释放 + 留痕（审计 / outbox）。
  * 读面过滤（列表 / 详情 / summary / 门禁 / 节点判重 / 锁行）由仓储统一承担（isNull(tasks.deletedAt)）；本文件用替身镜像该语义，
- * 锁定服务层口径：已删任务上的一切写路径 404、归档项目 409、删除不写 task_events（其类型为四值闭集）。
+ * 锁定服务层口径：已删任务上的一切写路径 404、归档只允许删除未完成的手工临时任务、删除不写 task_events。
  * 真机口径见 server/README.md「M3-05」；门禁与批量用例见 test/task-gate.test.ts / test/task-batch.test.ts。
  * 引用守卫（Push 215 口径）：change_refs（变更记录）与问题（issues.task_id）两类判定 —— 日报「关联任务」改「关联阶段」后 report_ref 随批删除。
  */
@@ -363,9 +363,27 @@ describe("M3-05 · 任务软删（A25）", () => {
     await expect(racingService.remove(PROJECT, TASK_A, ACTOR)).rejects.toMatchObject({ code: "NOT_FOUND", httpStatus: 404 });
   });
 
-  it("归档项目：入口 409 PROJECT_ARCHIVED（未软删、无留痕）", async () => {
+  it("归档项目允许删除未完成的手工临时任务并保留审计", async () => {
     const repo = new FakeTaskRepository();
     repo.project = { ...repo.project, status: "archived" };
+    repo.tasks.set(TASK_A, makeRow(TASK_A, { stageKey: null, nodeId: null }));
+    const { service, db, audit } = makeService(repo);
+
+    await expect(service.remove(PROJECT, TASK_A, ACTOR)).resolves.toEqual({ id: TASK_A, deleted: true });
+    expect(repo.tasks.get(TASK_A)?.deletedBy).toBe(ACTOR);
+    expect(repo.project.status).toBe("archived");
+    expect(db.outbox).toEqual([expect.objectContaining({ topic: "task.deleted" })]);
+    expect(audit.entries).toEqual([expect.objectContaining({ action: "delete" })]);
+  });
+
+  it.each([
+    { name: "阶段任务", task: { stageKey: "install", nodeId: null } },
+    { name: "完成的临时任务", task: { stageKey: null, nodeId: null, status: "done" } },
+    { name: "节点来源任务", task: { stageKey: null, nodeId: NODE } },
+  ] as const)("归档项目的$name仍返回 409 PROJECT_ARCHIVED", async ({ task }) => {
+    const repo = new FakeTaskRepository();
+    repo.project = { ...repo.project, status: "archived" };
+    repo.tasks.set(TASK_A, makeRow(TASK_A, task));
     const { service, db, audit } = makeService(repo);
     await expect(service.remove(PROJECT, TASK_A, ACTOR)).rejects.toMatchObject({ code: "PROJECT_ARCHIVED", httpStatus: 409 });
     expect(repo.tasks.get(TASK_A)?.deletedAt).toBeNull();
@@ -426,9 +444,10 @@ describe("M3-05 · 任务软删（A25）", () => {
     expect(order).toEqual([0, 1]);
   });
 
-  it("已有变更关联：409 TASK_HAS_REFERENCES（不软删 / 不变位次 / 不写留痕；系统功能书 A2-01）", async () => {
+  it.each(["active", "archived"])("%s 项目有变更关联的临时任务仍返回 409 TASK_HAS_REFERENCES", async (status) => {
     const repo = new FakeTaskRepository();
-    repo.tasks.set(TASK_A, makeRow(TASK_A, { sortIndex: 0, changeRefs: [CHANGE] }));
+    repo.project = { ...repo.project, status };
+    repo.tasks.set(TASK_A, makeRow(TASK_A, { stageKey: null, nodeId: null, changeRefs: [CHANGE] }));
     const { service, db, audit } = makeService(repo);
     const rejected = await service.remove(PROJECT, TASK_A, ACTOR).catch((error: unknown) => error);
     expect(rejected).toMatchObject({ code: "TASK_HAS_REFERENCES", httpStatus: 409 });

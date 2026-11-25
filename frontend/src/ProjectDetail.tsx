@@ -1352,7 +1352,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             <ProjectFilesPanel projectId={project.id} tasks={tasks} canEdit={projectWritable} />
           ) : activeView === "物料补发" ? (
             // 物料补发（2026-11-25）：物料变更补发提交时固化的《补发物料清单》按申请单汇总；只读。
-            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} canMark={canMarkMaterialReissue} canMarkAll={projectWritable} />
+            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} canMark={canMarkMaterialReissue} canMarkAll={projectWritable} tierTint={tintRows} />
           ) : activeView === "权限管理" ? (
             <ProjectViewGrantsPanel key={project.id} projectId={project.id} />
           ) : (

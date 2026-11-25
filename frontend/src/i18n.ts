@@ -1911,6 +1911,22 @@ const ZH_TEXTS = {
   "pd.files.empty.filter": "当前筛选下没有项目文件，可清除筛选后重试。",
   "pd.files.loadFailed": "项目文件加载失败，请稍后重试。",
   "pd.files.loadForbidden": "没有权限查看这个项目的文件。",
+  "pd.material.title": "物料补发",
+  "pd.material.summary": "补发申请 {applications} · 物料 {items} 项",
+  "pd.material.search": "搜索物料编码 / 名称 / 规格 / 备注 / 任务",
+  "pd.material.empty": "这个项目还没有物料补发申请。",
+  "pd.material.empty.filter": "当前筛选下没有物料补发记录，可清除筛选后重试。",
+  "pd.material.loadFailed": "物料补发记录加载失败，请稍后重试。",
+  "pd.material.loadForbidden": "没有权限查看这个项目的物料补发记录。",
+  "pd.material.applicant": "申请人",
+  "pd.material.appliedAt": "申请时间",
+  "pd.material.viewDetail": "查看申请详情",
+  "pd.material.items": "共 {n} 项物料",
+  "pd.material.pagination": "物料补发申请分页",
+  "pd.material.pagePrev": "上一页",
+  "pd.material.pageNext": "下一页",
+  "pd.material.pageInfo": "第 {page} / {total} 页",
+  "pd.material.unassignedTask": "未关联任务",
   "pd.files.material.deleting": "删除中…",
   "pd.files.material.deleteFailed": "补发申请删除失败，请稍后重试。",
   "pd.files.material.deleteSuccess": "补发申请已移入回收站，可在 30 天内恢复：{name}",
@@ -4415,6 +4431,22 @@ const EN_TEXTS: Record<TextKey, string> = {
   "pd.files.empty.filter": "No project files match the current filters. Clear the filters and retry.",
   "pd.files.loadFailed": "Failed to load project files; try again later.",
   "pd.files.loadForbidden": "You do not have permission to view the files of this project.",
+  "pd.material.title": "Material reissue",
+  "pd.material.summary": "Reissue requests {applications} · Material items {items}",
+  "pd.material.search": "Search material code, name, spec, remark or task",
+  "pd.material.empty": "This project has no material reissue requests yet.",
+  "pd.material.empty.filter": "No material reissue records match the current filters. Clear the filters and retry.",
+  "pd.material.loadFailed": "Failed to load material reissue records; try again later.",
+  "pd.material.loadForbidden": "You do not have permission to view the material reissue records of this project.",
+  "pd.material.applicant": "Applicant",
+  "pd.material.appliedAt": "Requested at",
+  "pd.material.viewDetail": "View request",
+  "pd.material.items": "{n} material items",
+  "pd.material.pagination": "Material reissue request pages",
+  "pd.material.pagePrev": "Previous",
+  "pd.material.pageNext": "Next",
+  "pd.material.pageInfo": "Page {page} / {total}",
+  "pd.material.unassignedTask": "No linked task",
   "pd.files.material.deleting": "Deleting…",
   "pd.files.material.deleteFailed": "Could not delete the reissue request. Try again later.",
   "pd.files.material.deleteSuccess": "Reissue request moved to the recycle bin. It can be restored within 30 days: {name}",
@@ -5618,11 +5650,12 @@ const VIEW_TAB_EN: Record<string, string> = {
   "日报及问题": "Daily Reports & Issues",
   "干系人": "Stakeholders",
   "项目文件": "Project Files",
+  "物料补发": "Material Reissue",
   "权限管理": "Access Management",
 };
 
-const VIEW_TAB_JA: Record<string, string> = { "项目总览": "プロジェクト概要", "甘特图": "ガントチャート", "人员任务分配": "タスク割当", "任务进展": "タスク進捗", "日报及问题": "日報・課題", "干系人": "ステークホルダー", "项目文件": "プロジェクトファイル", "权限管理": "アクセス管理" };
-const VIEW_TAB_KO: Record<string, string> = { "项目总览": "프로젝트 개요", "甘特图": "간트 차트", "人员任务分配": "업무 배정", "任务进展": "업무 진행", "日报及问题": "일일 보고·이슈", "干系人": "이해관계자", "项目文件": "프로젝트 파일", "权限管理": "접근 권한 관리" };
+const VIEW_TAB_JA: Record<string, string> = { "项目总览": "プロジェクト概要", "甘特图": "ガントチャート", "人员任务分配": "タスク割当", "任务进展": "タスク進捗", "日报及问题": "日報・課題", "干系人": "ステークホルダー", "项目文件": "プロジェクトファイル", "物料补发": "資材再発注", "权限管理": "アクセス管理" };
+const VIEW_TAB_KO: Record<string, string> = { "项目总览": "프로젝트 개요", "甘特图": "간트 차트", "人员任务分配": "업무 배정", "任务进展": "업무 진행", "日报及问题": "일일 보고·이슈", "干系人": "이해관계자", "项目文件": "프로젝트 파일", "物料补发": "자재 재발송", "权限管理": "접근 권한 관리" };
 
 /** 主标签显示名（非中文界面换本地 / 英文；未知值原样返回）。 */
 export function viewTabText(locale: Locale, tab: string): string {

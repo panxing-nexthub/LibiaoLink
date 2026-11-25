@@ -797,8 +797,7 @@ export function ProjectFilesPanel({ projectId, tasks, canEdit = false, tabs }: {
     <section data-project-files="" className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <h2 className="text-lg font-semibold text-zinc-900">{t("pd.files.title")}</h2>
-          {tabs}
+          {tabs ?? <h2 className="text-lg font-semibold text-zinc-900">{t("pd.files.title")}</h2>}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
           <span data-project-files-summary="">{t("pd.files.summary", { stage: stageFileCount, changed: changedFileCount })}</span>

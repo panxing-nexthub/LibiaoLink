@@ -209,7 +209,8 @@ export const MaterialReissueTrackingEntrySchema = z
     trackingNo: z.string().trim().max(120).nullable().openapi({ description: "快递单号（可空）" }),
     estimatedArrivalDate: z.iso.date().nullable().openapi({ description: "预计到货时间（YYYY-MM-DD，可空）" }),
     note: z.string().trim().max(1000).nullable().openapi({ description: "发货备注（可空）" }),
-    imageFileId: UuidSchema.nullable().openapi({ description: "发货凭证图片（files.id，可空）" }),
+    imageFileId: UuidSchema.nullable().openapi({ description: "发货凭证图片（files.id，可空；单图兼容字段）" }),
+    imageFileIds: z.array(UuidSchema).max(20).optional().openapi({ description: "发货凭证图片列表（files.id，可空；最多 20 张）" }),
     shippedBy: UuidSchema.openapi({ description: "发货登记人" }),
     shippedAt: DateTimeSchema.openapi({ description: "发货登记时间" }),
     updatedAt: DateTimeSchema.openapi({ description: "最近更新时间" }),
@@ -231,7 +232,8 @@ export const CreateMaterialReissueTrackingBodySchema = z
     trackingNo: z.string().trim().max(120).optional().openapi({ description: "快递单号（可空）" }),
     estimatedArrivalDate: z.iso.date().optional().openapi({ description: "预计到货时间（YYYY-MM-DD，可空）" }),
     note: z.string().trim().max(1000).optional().openapi({ description: "发货备注（可空）" }),
-    imageFileId: UuidSchema.optional().openapi({ description: "发货凭证图片（files.id，可空；须属于本项目且未回收）" }),
+    imageFileId: UuidSchema.optional().openapi({ description: "发货凭证单图（files.id，可空；兼容旧调用）" }),
+    imageFileIds: z.array(UuidSchema).max(20).optional().openapi({ description: "发货凭证图片列表（files.id，可空；最多 20 张，须属于本项目且未回收）" }),
   })
   .openapi("CreateMaterialReissueTrackingBody", { description: "物料补发批量发货登记" });
 

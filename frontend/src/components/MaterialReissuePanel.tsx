@@ -1,17 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ApiError } from "../api";
+import { mediumCardBorderOf, mediumCardTintOf, vividCardBorderOf, vividCardTintOf, type TintedTier } from "../backgroundTier";
 import {
   createMaterialReissueTracking,
-  ensurePreviewOutcome,
   fetchProjectChanges,
-  recordPreviewView,
   uploadFile,
   type ApiChangeRequest,
   type MaterialReissueSnapshot,
   type MaterialReissueTrackingEntry,
   type MaterialReissueTrackingStatus,
 } from "../fileApi";
-import { memberNameOf, type Member } from "../data/members";
+import type { Member } from "../data/members";
 import type { ProjectTask } from "../data/tasks";
 import { fieldText, textOf, useLocale, useT } from "../i18n";
 import { materialReissueReasonText } from "../materialReissue";
@@ -19,8 +18,12 @@ import { formatDateTime } from "../projectApi";
 import { lockBodyScroll } from "../scrollLock";
 import { useLiveRefresh } from "../useLiveRefresh";
 import { ChangeDetailModal, stageLabelOf } from "./ChangeDetailModal";
+import { PhotoStrip } from "./ReportIssuePanel";
+import type { ReportPhoto } from "../data/reports";
 import { Loader } from "./Loader";
+import { DateRangePicker } from "./DateRangePicker";
 import { SearchInput } from "./SearchInput";
+import { SearchSelect } from "./SearchSelect";
 import { Toast } from "./Toast";
 
 /**
@@ -30,9 +33,8 @@ import { Toast } from "./Toast";
  * 项目详情在「项目文件」旁新增同级页面，按申请单汇总展示本项目全部物料补发清单。
  *
  * 页面结构：
- * - 补发清单：按申请单展示（原页面）；
- * - 补发追踪：展示已登记发货 / 已签收的物料行；
- * - 全部补发：把所有申请单的物料行拍平，可跨申请单勾选后批量登记发货。
+ * - 全部补发（默认）：保留原申请单卡片 + 七列物料清单形式，每行前增加复选框，可跨申请单勾选后批量登记发货；
+ * - 补发追踪：展示已登记发货 / 已签收的物料行。
  *
  * 数据面：GET /projects/{id}/change-requests 返回 materialReissue 快照 + materialReissueTracking；
  * 发货登记 POST /projects/{id}/change-requests/material-reissue/tracking 一次写多个申请单的物料行。
@@ -50,7 +52,7 @@ type MaterialReissueApplication = {
   tracking: readonly MaterialReissueTrackingEntry[];
 };
 
-type MaterialReissueView = "list" | "all" | "tracking";
+type MaterialReissueView = "all" | "tracking";
 
 type AllMaterialRow = {
   key: string;
@@ -79,7 +81,6 @@ type LoadState =
 type Notice = { kind: "ok" | "error" | "info"; text: string };
 
 const PAGE_SIZE = 8;
-const MATERIAL_PAGE_SIZE = 20;
 const TRACKING_PAGE_SIZE = 20;
 const MAX_SHIPMENT_ITEMS = 200;
 const FIELD_CLASS = "w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
@@ -125,6 +126,128 @@ function statusBadgeClass(status: MaterialReissueTrackingStatus): string {
   return status === "received" ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700";
 }
 
+type MaterialRowStatus = MaterialReissueTrackingStatus | "pending";
+
+/** 补发追踪 / 全部补发的行铺色色相：未发货蓝、已发货绿、已签收天蓝。 */
+const MATERIAL_ROW_TINT_BASE: Record<MaterialRowStatus, string> = {
+  pending: "#3b82f6",
+  shipped: "#10b981",
+  received: "#0ea5e9",
+};
+
+/** 按背景档位取行底色 / 悬停色（适中 / 炫彩）。 */
+function materialRowTintOf(tier: TintedTier, status: MaterialRowStatus): { tint: string; hover: string } {
+  const base = MATERIAL_ROW_TINT_BASE[status];
+  return tier === "vivid"
+    ? { tint: vividCardTintOf(base) ?? "", hover: vividCardBorderOf(base) ?? "" }
+    : { tint: mediumCardTintOf(base) ?? "", hover: mediumCardBorderOf(base) ?? "" };
+}
+
+/** 铺色档下状态字色（行底色已承载颜色，徽标撤底只留深色字）。 */
+function materialStatusTextClass(status: MaterialRowStatus): string {
+  return status === "pending" ? "text-blue-800" : status === "received" ? "text-sky-800" : "text-emerald-800";
+}
+
+type GalleryImage = { url: string; name: string };
+
+/** 发货凭证多图预览（上一张 / 下一张 / 关闭）。 */
+function ImageGalleryOverlay({ images, index, onChange, onClose }: {
+  images: readonly GalleryImage[];
+  index: number;
+  onChange: (index: number) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const current = images[index];
+  if (current === undefined) {
+    return null;
+  }
+  return (
+    <div
+      data-image-gallery=""
+      className="fixed inset-0 z-[95] flex items-center justify-center bg-zinc-900/70 p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={current.name}
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-5 top-5 rounded-lg bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow transition hover:bg-white"
+      >
+        {t("pd.material.close")}
+      </button>
+      {images.length <= 1 ? null : (
+        <button
+          type="button"
+          aria-label={t("pd.material.pagePrev")}
+          onClick={(event) => {
+            event.stopPropagation();
+            onChange((index - 1 + images.length) % images.length);
+          }}
+          className="absolute left-5 top-1/2 -translate-y-1/2 rounded-full bg-white/90 px-3 py-2 text-2xl leading-none text-zinc-700 shadow transition hover:bg-white"
+        >
+          ‹
+        </button>
+      )}
+      <img
+        src={current.url}
+        alt={current.name}
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+        className="max-h-[86vh] max-w-[92vw] rounded-xl bg-white object-contain shadow-2xl"
+      />
+      {images.length <= 1 ? null : (
+        <>
+          <button
+            type="button"
+            aria-label={t("pd.material.pageNext")}
+            onClick={(event) => {
+              event.stopPropagation();
+              onChange((index + 1) % images.length);
+            }}
+            className="absolute right-5 top-1/2 -translate-y-1/2 rounded-full bg-white/90 px-3 py-2 text-2xl leading-none text-zinc-700 shadow transition hover:bg-white"
+          >
+            ›
+          </button>
+          <span className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-zinc-700 shadow">
+            {index + 1} / {images.length}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 直接读取剪贴板中的全部图片（HTTPS + 用户点击手势下可用）；不支持或无图返回空数组。 */
+async function readClipboardImageFiles(): Promise<File[]> {
+  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  if (clipboard === undefined || typeof clipboard.read !== "function") {
+    return [];
+  }
+  const items = await clipboard.read();
+  const files: File[] = [];
+  for (const item of items) {
+    for (const type of item.types) {
+      if (!type.startsWith("image/")) {
+        continue;
+      }
+      const blob = await item.getType(type);
+      const extension = type.split("/")[1]?.split("+")[0] ?? "png";
+      files.push(new File([blob], "clipboard-" + String(Date.now()) + "-" + String(files.length + 1) + "." + extension, { type }));
+    }
+  }
+  return files;
+}
+
+/** 兼容旧记录：优先多图数组，没有时回落单图字段。 */
+function imageIdsOf(entry: MaterialReissueTrackingEntry): string[] {
+  const ids = entry.imageFileIds ?? [];
+  return ids.length > 0 ? [...ids] : entry.imageFileId === null ? [] : [entry.imageFileId];
+}
+
 export function MaterialReissuePanel({
   projectId,
   tasks,
@@ -133,6 +256,7 @@ export function MaterialReissuePanel({
   canViewAll = false,
   canMark = false,
   canMarkAll = false,
+  tierTint = false,
 }: {
   projectId: string;
   tasks: readonly ProjectTask[];
@@ -145,6 +269,8 @@ export function MaterialReissuePanel({
   canMark?: boolean;
   /** 是否可对本项目全部物料行登记发货；false = 只能选择本人负责任务的行。 */
   canMarkAll?: boolean;
+  /** 背景档位铺色档：simple = false；适中 / 炫彩 = 行铺色。 */
+  tierTint?: TintedTier | false;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -152,9 +278,8 @@ export function MaterialReissuePanel({
   const [reloadTick, setReloadTick] = useState(0);
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
-  const [allPage, setAllPage] = useState(1);
   const [trackingPage, setTrackingPage] = useState(1);
-  const [activeView, setActiveView] = useState<MaterialReissueView>("list");
+  const [activeView, setActiveView] = useState<MaterialReissueView>("all");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const [shipmentOpen, setShipmentOpen] = useState(false);
@@ -162,13 +287,34 @@ export function MaterialReissuePanel({
   const [shipmentTrackingNo, setShipmentTrackingNo] = useState("");
   const [shipmentEta, setShipmentEta] = useState("");
   const [shipmentNote, setShipmentNote] = useState("");
-  const [shipmentImage, setShipmentImage] = useState<File | null>(null);
-  const [shipmentImageUrl, setShipmentImageUrl] = useState<string | null>(null);
+  const [shipmentImages, setShipmentImages] = useState<Array<{ file: File; url: string }>>([]);
+  const shipmentImagesRef = useRef(shipmentImages);
+  shipmentImagesRef.current = shipmentImages;
+
+  const appendShipmentImages = (files: File[]): void => {
+    if (files.length === 0) {
+      return;
+    }
+    setShipmentImages((previous) => [
+      ...previous,
+      ...files.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    ]);
+    setShipmentError(null);
+  };
+
+  const removeShipmentImage = (index: number): void => {
+    setShipmentImages((previous) => {
+      const target = previous[index];
+      if (target !== undefined) {
+        URL.revokeObjectURL(target.url);
+      }
+      return previous.filter((_, current) => current !== index);
+    });
+  };
   const [shipmentBusy, setShipmentBusy] = useState(false);
   const [shipmentError, setShipmentError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
-  const [previewBusyKey, setPreviewBusyKey] = useState<string | null>(null);
+  const [imageGallery, setImageGallery] = useState<{ items: GalleryImage[]; index: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -220,7 +366,6 @@ export function MaterialReissuePanel({
 
   useEffect(() => {
     setPage(1);
-    setAllPage(1);
     setTrackingPage(1);
   }, [keyword, projectId]);
 
@@ -233,27 +378,43 @@ export function MaterialReissuePanel({
     setShipmentError(null);
   }, [activeView]);
 
+  /** 卸载时回收表单缩略图的 object URL。 */
   useEffect(() => {
-    if (shipmentImage === null) {
-      setShipmentImageUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(shipmentImage);
-    setShipmentImageUrl(url);
     return () => {
-      URL.revokeObjectURL(url);
+      for (const image of shipmentImagesRef.current) {
+        URL.revokeObjectURL(image.url);
+      }
     };
-  }, [shipmentImage]);
+  }, []);
 
   useEffect(() => {
-    if (!shipmentOpen && previewImage === null) {
+    if (!shipmentOpen && imageGallery === null) {
       return;
     }
     return lockBodyScroll();
-  }, [shipmentOpen, previewImage]);
+  }, [shipmentOpen, imageGallery]);
+
+  /** 发货登记弹窗打开时，Ctrl+V 粘贴剪贴板图片（与日报填写同一交互习惯）。 */
+  useEffect(() => {
+    if (!shipmentOpen) {
+      return;
+    }
+    const onPaste = (event: ClipboardEvent) => {
+      const files = Array.from(event.clipboardData?.files ?? []).filter((file) => file.type.startsWith("image/"));
+      if (files.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      appendShipmentImages(files);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => {
+      document.removeEventListener("paste", onPaste);
+    };
+  }, [shipmentOpen]);
 
   useEffect(() => {
-    if (!shipmentOpen && previewImage === null) {
+    if (!shipmentOpen && imageGallery === null) {
       return;
     }
     const onKey = (event: KeyboardEvent) => {
@@ -261,8 +422,8 @@ export function MaterialReissuePanel({
         return;
       }
       event.stopPropagation();
-      if (previewImage !== null) {
-        setPreviewImage(null);
+      if (imageGallery !== null) {
+        setImageGallery(null);
       } else if (!shipmentBusy) {
         setShipmentOpen(false);
       }
@@ -271,7 +432,7 @@ export function MaterialReissuePanel({
     return () => {
       document.removeEventListener("keydown", onKey, true);
     };
-  }, [shipmentOpen, previewImage, shipmentBusy]);
+  }, [shipmentOpen, imageGallery, shipmentBusy]);
 
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task] as const)), [tasks]);
   const applications = state.kind === "ready" ? state.applications : [];
@@ -383,14 +544,6 @@ export function MaterialReissuePanel({
     status === "received" ? t("pd.material.status.received") : t("pd.material.status.shipped");
 
   const filteredApplications = visibleApplications.filter((application) => matchText(applicationParts(application)));
-  const filteredAllRows = allRows.filter((row) =>
-    matchText([
-      ...rowParts(row),
-      row.tracking === null ? t("pd.material.status.pending") : statusLabel(row.tracking.status),
-      row.tracking?.trackingNo ?? "",
-      row.tracking?.note ?? "",
-    ]),
-  );
   const filteredTrackingRows = trackingRows.filter((row) =>
     matchText([
       ...rowParts(row),
@@ -403,17 +556,14 @@ export function MaterialReissuePanel({
   const totalPages = Math.max(1, Math.ceil(filteredApplications.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageApplications = filteredApplications.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const materialCount = filteredApplications.reduce((sum, application) => sum + application.material.materials.length, 0);
 
-  const totalAllPages = Math.max(1, Math.ceil(filteredAllRows.length / MATERIAL_PAGE_SIZE));
-  const currentAllPage = Math.min(allPage, totalAllPages);
-  const allPageRows = filteredAllRows.slice((currentAllPage - 1) * MATERIAL_PAGE_SIZE, currentAllPage * MATERIAL_PAGE_SIZE);
-  const selectablePageRows = allPageRows.filter((row) => row.canSelect);
+  const pageApplicationIds = new Set(pageApplications.map((application) => application.id));
+  const selectablePageRows = allRows.filter((row) => pageApplicationIds.has(row.application.id) && row.canSelect);
   const selectablePageKeys = selectablePageRows.map((row) => row.key);
   const selectedOnPage = selectablePageKeys.filter((key) => selectedKeys.has(key)).length;
   const allPageSelected = selectablePageKeys.length > 0 && selectedOnPage === selectablePageKeys.length;
-  const somePageSelected = selectedOnPage > 0 && !allPageSelected;
   const selectedRows = allRows.filter((row) => row.canSelect && row.tracking === null && selectedKeys.has(row.key));
+  const allRowByKey = new Map(allRows.map((row) => [row.key, row] as const));
 
   const totalTrackingPages = Math.max(1, Math.ceil(filteredTrackingRows.length / TRACKING_PAGE_SIZE));
   const currentTrackingPage = Math.min(trackingPage, totalTrackingPages);
@@ -423,13 +573,11 @@ export function MaterialReissuePanel({
   );
 
   const hasFilter = normalizedKeyword !== "";
-  const allShippedCount = filteredAllRows.filter((row) => row.tracking !== null).length;
+  const allShippedCount = allRows.filter((row) => row.tracking !== null).length;
   const summaryText =
-    activeView === "list"
-      ? t("pd.material.summary", { applications: filteredApplications.length, items: materialCount })
-      : activeView === "all"
-        ? t("pd.material.allSummary", { total: filteredAllRows.length, shipped: allShippedCount })
-        : t("pd.material.trackingSummary", { n: filteredTrackingRows.length });
+    activeView === "all"
+      ? t("pd.material.allSummary", { total: allRows.length, shipped: allShippedCount })
+      : t("pd.material.trackingSummary", { n: filteredTrackingRows.length });
 
   const detailApplication = detailId === null ? undefined : applications.find((application) => application.id === detailId);
   const detailTask = detailApplication === undefined ? undefined : taskById.get(detailApplication.material.taskId);
@@ -485,8 +633,30 @@ export function MaterialReissuePanel({
     setShipmentTrackingNo("");
     setShipmentEta("");
     setShipmentNote("");
-    setShipmentImage(null);
+    setShipmentImages((previous) => {
+      for (const image of previous) {
+        URL.revokeObjectURL(image.url);
+      }
+      return [];
+    });
     setShipmentError(null);
+  };
+
+  const pasteFromClipboard = async (): Promise<void> => {
+    if (shipmentBusy) {
+      return;
+    }
+    setShipmentError(null);
+    try {
+      const files = await readClipboardImageFiles();
+      if (files.length === 0) {
+        setShipmentError(t("pd.material.clipboardNoImage"));
+        return;
+      }
+      appendShipmentImages(files);
+    } catch {
+      setShipmentError(t("pd.material.clipboardReadFailed"));
+    }
   };
 
   const openShipment = (): void => {
@@ -521,10 +691,12 @@ export function MaterialReissuePanel({
     setShipmentBusy(true);
     setShipmentError(null);
     try {
-      let imageFileId: string | undefined;
-      if (shipmentImage !== null) {
+      const imageFileIds: string[] = [];
+      if (shipmentImages.length > 0) {
         const taskId = canMarkAll ? undefined : selectedRows[0]?.application.material.taskId;
-        imageFileId = await uploadFile(projectId, shipmentImage, shipmentImage.name, taskId === undefined ? {} : { taskId });
+        for (const image of shipmentImages) {
+          imageFileIds.push(await uploadFile(projectId, image.file, image.file.name, taskId === undefined ? {} : { taskId }));
+        }
       }
       await createMaterialReissueTracking(projectId, {
         items: selectedRows.map((row) => ({ changeRequestId: row.application.id, lineIndex: row.lineIndex })),
@@ -532,7 +704,7 @@ export function MaterialReissuePanel({
         trackingNo: shipmentTrackingNo.trim() === "" ? undefined : shipmentTrackingNo.trim(),
         estimatedArrivalDate: shipmentEta === "" ? undefined : shipmentEta,
         note: shipmentNote.trim() === "" ? undefined : shipmentNote.trim(),
-        imageFileId,
+        imageFileIds,
       });
       const count = selectedRows.length;
       setShipmentOpen(false);
@@ -549,21 +721,6 @@ export function MaterialReissuePanel({
     } finally {
       setShipmentBusy(false);
     }
-  };
-
-  const openTrackingImage = async (row: TrackingRow): Promise<void> => {
-    if (row.entry.imageFileId === null || previewBusyKey !== null) {
-      return;
-    }
-    setPreviewBusyKey(row.key);
-    const outcome = await ensurePreviewOutcome(row.entry.imageFileId);
-    setPreviewBusyKey(null);
-    if (outcome.kind === "unavailable" || outcome.kind === "viewer") {
-      setNotice({ kind: "error", text: outcome.kind === "unavailable" ? outcome.reason ?? t("pd.material.imageUnavailable") : t("pd.material.imageUnavailable") });
-      return;
-    }
-    void recordPreviewView(row.entry.imageFileId);
-    setPreviewImage({ url: outcome.url, name: t("pd.material.imageAlt") });
   };
 
   const pager = (total: number, current: number, pages: number, onPage: (page: number) => void) => (
@@ -598,7 +755,7 @@ export function MaterialReissuePanel({
   );
 
   return (
-    <section data-project-material-reissue="" className="mx-auto w-full max-w-[1000px] space-y-4">
+    <section data-project-material-reissue="" className={"mx-auto w-full space-y-4 " + (activeView === "tracking" ? "max-w-[1320px]" : "max-w-[1000px]")}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-zinc-900">{t("pd.material.title")}</h2>
@@ -629,17 +786,6 @@ export function MaterialReissuePanel({
           </button>
         ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-1.5" role="group" aria-label={t("pd.material.tabsAria")}>
-          {activeView === "list" ? null : (
-            <button
-              type="button"
-              onClick={() => {
-                setActiveView("list");
-              }}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-500 transition hover:bg-zinc-50 hover:text-zinc-900"
-            >
-              {t("pd.material.backToList")}
-            </button>
-          )}
           {(["tracking", "all"] as const).map((view) => {
             const active = activeView === view;
             return (
@@ -649,7 +795,7 @@ export function MaterialReissuePanel({
                 data-material-reissue-view={view}
                 aria-pressed={active}
                 onClick={() => {
-                  setActiveView((previous) => (previous === view ? "list" : view));
+                  setActiveView(view);
                 }}
                 className={
                   "rounded-lg border px-3 py-1.5 text-xs font-medium transition " +
@@ -684,109 +830,6 @@ export function MaterialReissuePanel({
             {t("common.retry")}
           </button>
         </div>
-      ) : null}
-
-      {state.kind === "ready" && activeView === "list" && filteredApplications.length === 0 ? (
-        <div data-project-material-reissue-empty="" className="rounded-xl border border-zinc-200 bg-white px-4 py-12 text-center text-sm text-zinc-500">
-          {hasFilter ? t("pd.material.empty.filter") : t("pd.material.empty")}
-        </div>
-      ) : null}
-
-      {state.kind === "ready" && activeView === "list" && filteredApplications.length > 0 ? (
-        <>
-          <div className="space-y-4">
-            {pageApplications.map((application) => {
-              const material = application.material;
-              const taskTitle = material.taskTitle !== "" ? material.taskTitle : application.material.taskId;
-              return (
-                <article
-                  key={application.id}
-                  data-material-reissue-application={application.id}
-                  className="overflow-hidden rounded-xl border border-zinc-200 bg-white"
-                >
-                  <header className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-200 bg-zinc-50/70 px-4 py-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
-                          {fieldText(locale, "物料变更补发")}
-                        </span>
-                        <h3 className="text-sm font-semibold text-zinc-900">{taskTitle}</h3>
-                      </div>
-                      <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
-                        <span>{t("pd.material.applicant")}：{textOrDash(material.applicantName)}</span>
-                        <span>{t("pd.material.appliedAt")}：{formatDateTime(application.appliedAt)}</span>
-                        <span>{fieldText(locale, "补发类别")}：{materialReissueReasonText(locale, material)}</span>
-                        <span>{fieldText(locale, "客户名称")}：{textOrDash(material.customerName)}</span>
-                        <span>{fieldText(locale, "要求出库时间")}：{textOrDash(material.requiredOutDate)}</span>
-                        {application.stageKey === null ? null : (
-                          <span>{fieldText(locale, "变更阶段")}：{stageLabelOf(locale, application.stageKey)}</span>
-                        )}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDetailId(application.id);
-                      }}
-                      className="shrink-0 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 transition hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-900"
-                    >
-                      {t("pd.material.viewDetail")}
-                    </button>
-                  </header>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[860px] table-fixed border-collapse text-xs">
-                      <colgroup>
-                        <col className="w-[56px]" />
-                        <col className="w-[150px]" />
-                        <col className="w-[190px]" />
-                        <col className="w-[170px]" />
-                        <col className="w-[76px]" />
-                        <col className="w-[68px]" />
-                        <col />
-                      </colgroup>
-                      <thead>
-                        <tr className="bg-zinc-100 text-zinc-600">
-                          <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{t("header.seqNo")}</th>
-                          <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "物料编码")}</th>
-                          <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "物料名称")}</th>
-                          <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "规格型号")}</th>
-                          <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "数量")}</th>
-                          <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "单位")}</th>
-                          <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "备注")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {material.materials.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="border border-zinc-200 px-3 py-6 text-center text-zinc-400">—</td>
-                          </tr>
-                        ) : (
-                          material.materials.map((line, index) => (
-                            <tr key={String(index)} data-material-reissue-line={String(index + 1)} className="bg-white">
-                              <td className="border border-zinc-200 px-2 py-2 text-center tabular-nums text-zinc-500">{index + 1}</td>
-                              <td className="break-words border border-zinc-200 px-2 py-2 text-zinc-700">{textOrDash(line.materialCode)}</td>
-                              <td className="break-words border border-zinc-200 px-2 py-2 font-medium text-zinc-800">{textOrDash(line.materialName)}</td>
-                              <td className="break-words border border-zinc-200 px-2 py-2 text-zinc-700">{textOrDash(line.specification)}</td>
-                              <td className="border border-zinc-200 px-2 py-2 text-right tabular-nums text-zinc-700">{quantityText(line.quantity)}</td>
-                              <td className="border border-zinc-200 px-2 py-2 text-center text-zinc-700">{textOrDash(line.unit)}</td>
-                              <td className="break-words border border-zinc-200 px-2 py-2 text-zinc-600">{textOrDash(line.remark)}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 bg-zinc-50/50 px-4 py-2 text-[11px] text-zinc-500">
-                    <span>{t("pd.material.items", { n: material.materials.length })}</span>
-                  </footer>
-                </article>
-              );
-            })}
-          </div>
-          {pager(filteredApplications.length, currentPage, totalPages, setPage)}
-        </>
       ) : null}
 
       {state.kind === "ready" && activeView === "all" ? (
@@ -831,102 +874,147 @@ export function MaterialReissuePanel({
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{t("pd.material.onlyView")}</p>
           ) : null}
 
-          {filteredAllRows.length === 0 ? (
-            <div className="rounded-xl border border-zinc-200 bg-white px-4 py-12 text-center text-sm text-zinc-500">
-              {hasFilter ? t("pd.material.allEmpty.filter") : t("pd.material.allEmpty")}
+          {filteredApplications.length === 0 ? (
+            <div data-project-material-reissue-empty="" className="rounded-xl border border-zinc-200 bg-white px-4 py-12 text-center text-sm text-zinc-500">
+              {hasFilter ? t("pd.material.empty.filter") : t("pd.material.empty")}
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-                <table className="w-full min-w-[960px] table-fixed border-collapse text-xs">
-                  <colgroup>
-                    <col className="w-[44px]" />
-                    <col className="w-[150px]" />
-                    <col className="w-[110px]" />
-                    <col className="w-[150px]" />
-                    <col className="w-[120px]" />
-                    <col className="w-[64px]" />
-                    <col className="w-[56px]" />
-                    <col className="w-[90px]" />
-                    <col />
-                  </colgroup>
-                  <thead className="bg-zinc-50 text-zinc-500">
-                    <tr>
-                      <th className="border-b border-zinc-200 px-3 py-3 font-medium">
-                        <input
-                          type="checkbox"
-                          checked={allPageSelected}
-                          ref={(input) => {
-                            if (input !== null) {
-                              input.indeterminate = somePageSelected;
-                            }
-                          }}
-                          disabled={selectablePageRows.length === 0}
-                          aria-label={t("pd.material.selectAllPage")}
-                          onChange={togglePageSelection}
-                          className="h-4 w-4 cursor-pointer rounded border-zinc-300 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
-                        />
-                      </th>
-                      <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.source")}</th>
-                      <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{fieldText(locale, "物料编码")}</th>
-                      <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{fieldText(locale, "物料名称")}</th>
-                      <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{fieldText(locale, "规格型号")}</th>
-                      <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-right font-medium">{fieldText(locale, "数量")}</th>
-                      <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-center font-medium">{fieldText(locale, "单位")}</th>
-                      <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-center font-medium">{t("pd.material.col.status")}</th>
-                      <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{fieldText(locale, "备注")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allPageRows.map((row) => {
-                      const tracked = row.tracking !== null;
-                      const sourceTitle = row.application.material.taskTitle !== "" ? row.application.material.taskTitle : row.task?.title ?? "—";
-                      return (
-                        <tr
-                          key={row.key}
-                          data-material-reissue-all-row={row.key}
-                          className={(tracked ? "text-zinc-400" : "text-blue-600") + " border-b border-zinc-100 last:border-b-0"}
-                        >
-                          <td className="px-3 py-2 align-middle">
-                            <input
-                              type="checkbox"
-                              checked={selectedKeys.has(row.key)}
-                              disabled={!row.canSelect}
-                              aria-label={row.line.materialName}
-                              onChange={() => {
-                                toggleRowSelection(row);
-                              }}
-                              className="h-4 w-4 cursor-pointer rounded border-zinc-300 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
-                            />
-                          </td>
-                          <td className="px-3 py-2 align-middle">
-                            <div className="font-medium">{sourceTitle}</div>
-                            <div className="mt-0.5 text-[11px] opacity-70">
-                              {formatDateTime(row.application.appliedAt)} · {row.application.material.applicantName}
-                            </div>
-                          </td>
-                          <td className="break-words px-3 py-2 align-middle">{textOrDash(row.line.materialCode)}</td>
-                          <td className="break-words px-3 py-2 align-middle font-medium">{textOrDash(row.line.materialName)}</td>
-                          <td className="break-words px-3 py-2 align-middle">{textOrDash(row.line.specification)}</td>
-                          <td className="px-3 py-2 text-right align-middle tabular-nums">{quantityText(row.line.quantity)}</td>
-                          <td className="px-3 py-2 text-center align-middle">{textOrDash(row.line.unit)}</td>
-                          <td className="px-3 py-2 text-center align-middle">
-                            {tracked ? (
-                              <span className={"inline-block rounded px-1.5 py-0.5 text-[11px] font-medium " + statusBadgeClass(row.tracking?.status ?? "shipped")}>
-                                {statusLabel(row.tracking?.status ?? "shipped")}
-                              </span>
-                            ) : (
-                              <span>{t("pd.material.status.pending")}</span>
+              <div className="space-y-4">
+                {pageApplications.map((application) => {
+                  const material = application.material;
+                  const taskTitle = material.taskTitle !== "" ? material.taskTitle : application.material.taskId;
+                  return (
+                    <article
+                      key={application.id}
+                      data-material-reissue-application={application.id}
+                      className="overflow-hidden rounded-xl border border-zinc-200 bg-white"
+                    >
+                      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-200 bg-zinc-50/70 px-4 py-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                              {fieldText(locale, "物料变更补发")}
+                            </span>
+                            <h3 className="text-sm font-semibold text-zinc-900">{taskTitle}</h3>
+                          </div>
+                          <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+                            <span>{t("pd.material.applicant")}：{textOrDash(material.applicantName)}</span>
+                            <span>{t("pd.material.appliedAt")}：{formatDateTime(application.appliedAt)}</span>
+                            <span>{fieldText(locale, "补发类别")}：{materialReissueReasonText(locale, material)}</span>
+                            <span>{fieldText(locale, "客户名称")}：{textOrDash(material.customerName)}</span>
+                            <span>{fieldText(locale, "要求出库时间")}：{textOrDash(material.requiredOutDate)}</span>
+                            {application.stageKey === null ? null : (
+                              <span>{fieldText(locale, "变更阶段")}：{stageLabelOf(locale, application.stageKey)}</span>
                             )}
-                          </td>
-                          <td className="break-words px-3 py-2 align-middle">{textOrDash(row.line.remark)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDetailId(application.id);
+                          }}
+                          className="shrink-0 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 transition hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-900"
+                        >
+                          {t("pd.material.viewDetail")}
+                        </button>
+                      </header>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[904px] table-fixed border-collapse text-xs">
+                          <colgroup>
+                            <col className="w-[44px]" />
+                            <col className="w-[56px]" />
+                            <col className="w-[150px]" />
+                            <col className="w-[190px]" />
+                            <col className="w-[170px]" />
+                            <col className="w-[76px]" />
+                            <col className="w-[68px]" />
+                            <col />
+                          </colgroup>
+                          <thead>
+                            <tr className="bg-zinc-100 text-zinc-600">
+                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">
+                                <span className="sr-only">{t("pd.material.selectAllPage")}</span>
+                              </th>
+                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{t("header.seqNo")}</th>
+                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "物料编码")}</th>
+                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "物料名称")}</th>
+                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "规格型号")}</th>
+                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "数量")}</th>
+                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "单位")}</th>
+                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "备注")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {material.materials.length === 0 ? (
+                              <tr>
+                                <td colSpan={8} className="border border-zinc-200 px-3 py-6 text-center text-zinc-400">—</td>
+                              </tr>
+                            ) : (
+                              material.materials.map((line, index) => {
+                                const row = allRowByKey.get(trackingKey(application.id, index));
+                                const tracked = row?.tracking !== null && row?.tracking !== undefined;
+                                const rowStatus: MaterialRowStatus = row?.tracking?.status ?? "pending";
+                                const rowTint = tierTint === false ? null : materialRowTintOf(tierTint, rowStatus);
+                                return (
+                                  <tr
+                                    key={row?.key ?? String(index)}
+                                    data-material-reissue-line={String(index + 1)}
+                                    data-material-reissue-row-status={rowStatus}
+                                    className={
+                                      rowTint === null
+                                        ? tracked
+                                          ? "bg-zinc-50/40 text-zinc-400"
+                                          : "bg-white text-blue-600"
+                                        : "task-row-tint text-zinc-800"
+                                    }
+                                    style={rowTint === null ? undefined : ({ "--row-tint": rowTint.tint, "--row-tint-hover": rowTint.hover } as CSSProperties)}
+                                  >
+                                    <td className="border border-zinc-200 px-2 py-2 text-center align-middle">
+                                      <div className="flex flex-col items-center gap-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={row !== undefined && selectedKeys.has(row.key)}
+                                          disabled={row === undefined || !row.canSelect}
+                                          aria-label={line.materialName}
+                                          onChange={() => {
+                                            if (row !== undefined) {
+                                              toggleRowSelection(row);
+                                            }
+                                          }}
+                                          className="h-4 w-4 cursor-pointer rounded border-zinc-300 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                        />
+                                        {rowTint === null ? null : (
+                                          <span className={"text-[10px] font-semibold " + materialStatusTextClass(rowStatus)}>
+                                            {rowStatus === "pending" ? t("pd.material.status.pending") : statusLabel(rowStatus)}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="border border-zinc-200 px-2 py-2 text-center align-middle tabular-nums">{index + 1}</td>
+                                    <td className="break-words border border-zinc-200 px-2 py-2 align-middle">{textOrDash(line.materialCode)}</td>
+                                    <td className="break-words border border-zinc-200 px-2 py-2 align-middle font-medium">{textOrDash(line.materialName)}</td>
+                                    <td className="break-words border border-zinc-200 px-2 py-2 align-middle">{textOrDash(line.specification)}</td>
+                                    <td className="border border-zinc-200 px-2 py-2 text-right align-middle tabular-nums">{quantityText(line.quantity)}</td>
+                                    <td className="border border-zinc-200 px-2 py-2 text-center align-middle">{textOrDash(line.unit)}</td>
+                                    <td className="break-words border border-zinc-200 px-2 py-2 align-middle">{textOrDash(line.remark)}</td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 bg-zinc-50/50 px-4 py-2 text-[11px] text-zinc-500">
+                        <span>{t("pd.material.items", { n: material.materials.length })}</span>
+                      </footer>
+                    </article>
+                  );
+                })}
               </div>
-              {pager(filteredAllRows.length, currentAllPage, totalAllPages, setAllPage)}
+              {pager(filteredApplications.length, currentPage, totalPages, setPage)}
             </>
           )}
         </>
@@ -940,29 +1028,27 @@ export function MaterialReissuePanel({
         ) : (
           <>
             <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-              <table className="w-full min-w-[1080px] table-fixed border-collapse text-xs">
+              <table className="w-full min-w-[1180px] table-fixed border-collapse text-xs">
                 <colgroup>
-                  <col className="w-[82px]" />
-                  <col className="w-[150px]" />
-                  <col className="w-[130px]" />
-                  <col className="w-[90px]" />
-                  <col className="w-[110px]" />
-                  <col className="w-[100px]" />
+                  <col className="w-[180px]" />
                   <col className="w-[140px]" />
-                  <col className="w-[130px]" />
+                  <col className="w-[80px]" />
+                  <col className="w-[120px]" />
+                  <col className="w-[110px]" />
+                  <col className="w-[180px]" />
+                  <col className="w-[90px]" />
                   <col className="w-[90px]" />
                   <col />
                 </colgroup>
                 <thead className="bg-zinc-50 text-zinc-500">
                   <tr>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-center font-medium">{t("pd.material.col.status")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{fieldText(locale, "物料名称")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{fieldText(locale, "规格型号")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-right font-medium">{fieldText(locale, "数量")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.trackingNo")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.eta")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.shipNote")}</th>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.shippedAt")}</th>
+                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-center font-medium">{t("pd.material.col.status")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-center font-medium">{t("pd.material.col.image")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.source")}</th>
                   </tr>
@@ -970,41 +1056,49 @@ export function MaterialReissuePanel({
                 <tbody>
                   {trackingPageRows.map((row) => {
                     const sourceTitle = row.application.material.taskTitle !== "" ? row.application.material.taskTitle : row.task?.title ?? "—";
-                    const shipper = memberNameOf(members, row.entry.shippedBy) ?? row.entry.shippedBy;
+                    const imageIds = imageIdsOf(row.entry);
+                    const rowTint = tierTint === false ? null : materialRowTintOf(tierTint, row.entry.status);
                     return (
-                      <tr key={row.key} data-material-reissue-tracking-row={row.key} className="border-b border-zinc-100 last:border-b-0">
-                        <td className="px-3 py-2 text-center align-middle">
-                          <span className={"inline-block rounded px-1.5 py-0.5 text-[11px] font-medium " + statusBadgeClass(row.entry.status)}>
-                            {statusLabel(row.entry.status)}
-                          </span>
-                        </td>
+                      <tr
+                        key={row.key}
+                        data-material-reissue-tracking-row={row.key}
+                        data-material-reissue-row-status={row.entry.status}
+                        className={"border-b border-zinc-100 last:border-b-0" + (rowTint === null ? "" : " task-row-tint")}
+                        style={rowTint === null ? undefined : ({ "--row-tint": rowTint.tint, "--row-tint-hover": rowTint.hover } as CSSProperties)}
+                      >
                         <td className="px-3 py-2 align-middle">
                           <div className="font-medium text-zinc-800">{textOrDash(row.line.materialName)}</div>
                           <div className="mt-0.5 text-[11px] text-zinc-400">{textOrDash(row.line.materialCode)}</div>
                         </td>
                         <td className="break-words px-3 py-2 align-middle text-zinc-700">{textOrDash(row.line.specification)}</td>
-                        <td className="px-3 py-2 text-right align-middle tabular-nums text-zinc-700">{quantityText(row.line.quantity)} {textOrDash(row.line.unit)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right align-middle tabular-nums text-zinc-700">{quantityText(row.line.quantity)} {textOrDash(row.line.unit)}</td>
                         <td className="break-words px-3 py-2 align-middle text-zinc-700">{textOrDash(row.entry.trackingNo)}</td>
-                        <td className="px-3 py-2 align-middle text-zinc-700">{row.entry.estimatedArrivalDate === null ? "—" : row.entry.estimatedArrivalDate.replace(/-/g, "/")}</td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle text-zinc-700">{row.entry.estimatedArrivalDate === null ? "—" : row.entry.estimatedArrivalDate.replace(/-/g, "/")}</td>
                         <td className="break-words px-3 py-2 align-middle text-zinc-600">{textOrDash(row.entry.note)}</td>
-                        <td className="px-3 py-2 align-middle text-zinc-600">
-                          <div>{formatDateTime(row.entry.shippedAt)}</div>
-                          <div className="mt-0.5 text-[11px] text-zinc-400">{shipper}</div>
-                        </td>
                         <td className="px-3 py-2 text-center align-middle">
-                          {row.entry.imageFileId === null ? (
+                          <span
+                            className={
+                              rowTint === null
+                                ? "inline-block rounded px-1.5 py-0.5 text-[11px] font-medium " + statusBadgeClass(row.entry.status)
+                                : "text-[11px] font-bold " + materialStatusTextClass(row.entry.status)
+                            }
+                          >
+                            {statusLabel(row.entry.status)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 align-middle">
+                          {imageIds.length === 0 ? (
                             <span className="text-zinc-400">—</span>
                           ) : (
-                            <button
-                              type="button"
-                              disabled={previewBusyKey !== null}
-                              onClick={() => {
-                                void openTrackingImage(row);
-                              }}
-                              className="rounded-md border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {previewBusyKey === row.key ? t("common.loading") : t("pd.material.viewImage")}
-                            </button>
+                            <PhotoStrip
+                              items={imageIds.map((fileId, index): ReportPhoto => ({
+                                fileId,
+                                name: t("pd.material.imageN", { n: index + 1 }),
+                                url: null,
+                              }))}
+                              size="lg"
+                              strip={"material-reissue-" + row.key}
+                            />
                           )}
                         </td>
                         <td className="px-3 py-2 align-middle text-zinc-600">
@@ -1063,60 +1157,109 @@ export function MaterialReissuePanel({
             </header>
 
             <div className="mt-4 space-y-3">
-              <label className={LABEL_CLASS}>
-                {t("pd.material.shipmentImage")}
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={shipmentBusy}
-                  onChange={(event) => {
-                    setShipmentImage(event.target.files?.[0] ?? null);
-                  }}
-                  className="mt-1 block w-full text-xs text-zinc-500 file:mr-2 file:rounded-md file:border-0 file:bg-zinc-100 file:px-2.5 file:py-1.5 file:text-xs file:font-medium file:text-zinc-700 hover:file:bg-zinc-200"
-                />
-              </label>
-              {shipmentImageUrl === null ? null : (
-                <div className="flex items-start gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-2">
-                  <img src={shipmentImageUrl} alt={t("pd.material.imageAlt")} className="max-h-28 max-w-[180px] rounded object-contain" />
+              <div>
+                <div className={LABEL_CLASS}>{t("pd.material.shipmentImage")}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     disabled={shipmentBusy}
                     onClick={() => {
-                      setShipmentImage(null);
+                      void pasteFromClipboard();
                     }}
-                    className="rounded-md border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-600 transition hover:bg-white disabled:opacity-40"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {t("pd.material.removeImage")}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                      <rect x="5" y="4" width="14" height="17" rx="2" />
+                      <path d="M9 4.5h6v3H9zM8.5 11h7M8.5 15h7" />
+                    </svg>
+                    {t("pd.material.pasteImage")}
                   </button>
+                  <label className="inline-flex h-8 cursor-pointer items-center rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50">
+                    {t("pd.material.chooseImage")}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={shipmentBusy}
+                      onChange={(event) => {
+                        appendShipmentImages(Array.from(event.currentTarget.files ?? []));
+                        event.currentTarget.value = "";
+                      }}
+                      className="sr-only"
+                    />
+                  </label>
                 </div>
-              )}
+                {shipmentImages.length === 0 ? null : (
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    {shipmentImages.map((image, index) => (
+                      <div key={image.url} className="relative">
+                        <button
+                          type="button"
+                          disabled={shipmentBusy}
+                          onClick={() => {
+                            setImageGallery({
+                              items: shipmentImages.map((item) => ({ url: item.url, name: item.file.name })),
+                              index,
+                            });
+                          }}
+                          className="block overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 p-1 transition hover:border-zinc-300"
+                        >
+                          <img src={image.url} alt={image.file.name} className="h-24 w-24 rounded object-cover" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={shipmentBusy}
+                          aria-label={t("pd.material.removeImage")}
+                          title={t("pd.material.removeImage")}
+                          onClick={() => {
+                            removeShipmentImage(index);
+                          }}
+                          className="absolute -right-1.5 -top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs font-semibold leading-none text-white shadow transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className={LABEL_CLASS}>
-                  {t("pd.material.shipmentStatus")}
-                  <select
-                    value={shipmentStatus}
-                    disabled={shipmentBusy}
-                    onChange={(event) => {
-                      setShipmentStatus(event.target.value === "received" ? "received" : "shipped");
-                    }}
-                    className={FIELD_CLASS + " mt-1"}
-                  >
-                    <option value="shipped">{t("pd.material.status.shipped")}</option>
-                    <option value="received">{t("pd.material.status.received")}</option>
-                  </select>
-                </label>
-                <label className={LABEL_CLASS}>
-                  {t("pd.material.shipmentEta")}
-                  <input
-                    type="date"
-                    value={shipmentEta}
-                    disabled={shipmentBusy}
-                    onChange={(event) => {
-                      setShipmentEta(event.target.value);
-                    }}
-                    className={FIELD_CLASS + " mt-1"}
-                  />
-                </label>
+                <div>
+                  <div className={LABEL_CLASS}>{t("pd.material.shipmentStatus")}</div>
+                  <div className="mt-1">
+                    <SearchSelect
+                      mode="single"
+                      ariaLabel={t("pd.material.shipmentStatus")}
+                      value={shipmentStatus}
+                      options={[
+                        { value: "shipped", label: t("pd.material.status.shipped") },
+                        { value: "received", label: t("pd.material.status.received") },
+                      ]}
+                      onChange={(value) => {
+                        setShipmentStatus(value === "received" ? "received" : "shipped");
+                      }}
+                      placeholder={t("pd.material.shipmentStatus")}
+                      searchPlaceholder={t("lib.filter.status.search")}
+                      disabled={shipmentBusy}
+                      menuZClass="z-[90]"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className={LABEL_CLASS}>{t("pd.material.shipmentEta")}</div>
+                  <div className={"mt-1 " + (shipmentBusy ? "pointer-events-none opacity-50" : "")}>
+                    <DateRangePicker
+                      mode="single"
+                      value={shipmentEta === "" ? null : { from: shipmentEta, to: shipmentEta }}
+                      onChange={(range) => {
+                        setShipmentEta(range === null ? "" : range.from);
+                      }}
+                      placeholder={t("pd.material.shipmentEta")}
+                      ariaLabel={t("pd.material.shipmentEta")}
+                      popoverZClass="z-[90]"
+                    />
+                  </div>
+                </div>
               </div>
               <label className={LABEL_CLASS}>
                 {t("pd.material.shipmentTrackingNo")}
@@ -1172,34 +1315,17 @@ export function MaterialReissuePanel({
         </div>
       ) : null}
 
-      {previewImage === null ? null : (
-        <div
-          className="fixed inset-0 z-[95] flex items-center justify-center bg-zinc-900/70 p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-label={previewImage.name}
-          onClick={() => {
-            setPreviewImage(null);
+      {imageGallery === null ? null : (
+        <ImageGalleryOverlay
+          images={imageGallery.items}
+          index={imageGallery.index}
+          onChange={(index) => {
+            setImageGallery((previous) => (previous === null ? previous : { ...previous, index }));
           }}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setPreviewImage(null);
-            }}
-            className="absolute right-5 top-5 rounded-lg bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow transition hover:bg-white"
-          >
-            {t("pd.material.close")}
-          </button>
-          <img
-            src={previewImage.url}
-            alt={previewImage.name}
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-            className="max-h-[86vh] max-w-[92vw] rounded-xl bg-white object-contain shadow-2xl"
-          />
-        </div>
+          onClose={() => {
+            setImageGallery(null);
+          }}
+        />
       )}
 
       {detailId === null ? null : (

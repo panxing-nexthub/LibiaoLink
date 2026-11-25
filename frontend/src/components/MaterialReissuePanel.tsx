@@ -705,7 +705,9 @@ export function MaterialReissuePanel({
   return (
     // 页面内容最大宽度 1740px 居中、两侧留白（2026-11-25 业务口径：宽屏不铺满整行，小屏动态收窄）；
     // 屏幕小于 1740px 时由 w-full 自动收窄，表格横向滚动兜底不变。
-    <section data-project-material-reissue="" className="mx-auto w-full max-w-[1740px] space-y-4">
+    // 全部补发追求紧凑：内容列最大 1140px，表格只留备注列吸收少量余量；补发追踪列更多，保留 1480px。
+    // 小屏时随容器收窄，表格自身横向滚动兜底（2026-11-25 口径「整体表格长度缩减」）。
+    <section data-project-material-reissue="" className={"mx-auto w-full space-y-4 " + (activeView === "tracking" ? "max-w-[1480px]" : "max-w-[1140px]")}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-zinc-900">{t("pd.material.title")}</h2>
@@ -871,7 +873,7 @@ export function MaterialReissuePanel({
                       </header>
 
                       <div className="overflow-x-auto">
-                        <table className="w-full min-w-[1180px] table-fixed border-collapse text-left text-sm">
+                        <table className="w-full min-w-[1120px] table-fixed border-collapse text-left text-sm">
                           <colgroup>
                             <col className="w-[72px]" />
                             <col className="w-[64px]" />

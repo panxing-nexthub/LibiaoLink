@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, count, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
 import { files, fileVersions, uploadSessions } from "../../db/schema/files.js";
 import { users } from "../../db/schema/identity.js";
+import { notifyDeliveryMessages } from "../../db/schema/notify.js";
 import { projectArchives, projects, projectStages } from "../../db/schema/projects.js";
 import { dailyReports, issues } from "../../db/schema/reports.js";
 import { tasks } from "../../db/schema/tasks.js";
@@ -82,6 +83,27 @@ export class ArchiveRepository {
       .where(and(eq(tasks.projectId, projectId), eq(tasks.stageKey, "acceptance"), eq(tasks.status, "done"), isNull(tasks.deletedAt)))
       .limit(1);
     return rows.length > 0;
+  }
+
+  /** 项目完成喜报（R06）是否已成功送达：永久留档表，成功过一次后不再重复发送。 */
+  async findSentCompletionPoster(
+    client: DbClient,
+    projectId: string,
+  ): Promise<{ sentAt: Date | null } | null> {
+    const rows = await client
+      .select({ sentAt: notifyDeliveryMessages.sentAt })
+      .from(notifyDeliveryMessages)
+      .where(
+        and(
+          eq(notifyDeliveryMessages.templateCode, "R06_GROUP"),
+          eq(notifyDeliveryMessages.refType, "project"),
+          eq(notifyDeliveryMessages.refId, projectId),
+          eq(notifyDeliveryMessages.lastState, "sent"),
+        ),
+      )
+      .orderBy(desc(notifyDeliveryMessages.sentAt))
+      .limit(1);
+    return rows[0] ?? null;
   }
 
   /** 任务数按状态分组（清单：任务数与状态分布）。 */

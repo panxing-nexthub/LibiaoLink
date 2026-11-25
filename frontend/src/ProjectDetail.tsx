@@ -25,6 +25,7 @@ import { lockBodyScroll } from "./scrollLock";
 import { TEMP_TASK_STAGE, VIEW_ONLY_TASK_CAPABILITIES, hasOutputDeliverables, isOpenTemporaryTask, isTaskDone, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "./data/tasks";
 import type { TemplatePresetNode } from "./data/templatePresets";
 import { fetchTaskFiles, recycleFile, renameFile, uploadFiles, type TaskFileRef } from "./fileApi";
+import { fetchCompletionPosterStatus } from "./projectApi";
 import { exportProjectOverviewPdfHtml } from "./exportOverviewPdf";
 import { groupedByStage, type OverviewExportOptions, type OverviewExportStageOption } from "./overviewExportShared";
 import { prefetchLocalizedText, useLocale, useT, viewTabText } from "./i18n";
@@ -115,13 +116,13 @@ type ProjectDetailProps = {
   canManageStakeholders: boolean;
   /** 本项目经理或系统管理员可变更经理和手工创建临时任务。 */
   canManageProjectManagers: boolean;
-  /** 验收完成后归档项目的写入口（无 project.archive 权限时父层不传）；false = 写失败，父层已提示。 */
-  onArchiveProject?: (projectId: string) => Promise<boolean>;
+  /** 验收完成后同步完成喜报到项目群的写入口（无 project.archive 权限时父层不传）；false = 写失败，父层已提示。 */
+  onSendCompletionPoster?: (projectId: string) => Promise<boolean>;
   /** 应急全页只读开关；项目级只读由 project.accessLevel 判定，不能用它关闭任务负责人的本人任务编辑。 */
   readOnly?: boolean;
 };
 
-export default function ProjectDetail({ me, project, view, dailySub, dailyDate, focus, onClearFocus, onClearDailyDate, customDeliverableTypes, onCreateDeliverableType, members, managerMembers, onTaskEdited, taskHiddenColumns, onTaskHiddenColumnsChange, canManageStakeholders, canManageProjectManagers, onArchiveProject, readOnly = false }: ProjectDetailProps) {
+export default function ProjectDetail({ me, project, view, dailySub, dailyDate, focus, onClearFocus, onClearDailyDate, customDeliverableTypes, onCreateDeliverableType, members, managerMembers, onTaskEdited, taskHiddenColumns, onTaskHiddenColumnsChange, canManageStakeholders, canManageProjectManagers, onSendCompletionPoster, readOnly = false }: ProjectDetailProps) {
   /** 顶部视图（Push 82 / 121）：阶段标签收进「项目总览」，另两块是看板视图，最后一块是「日报及问题」；Push 154 起当前标签由地址 `?view=` 派生。 */
   const locale = useLocale();
   const t = useT();
@@ -171,7 +172,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState<string | null>(null);
   /** 键盘焦点陷阱（Push 264 追订）：删除确认条开着时焦点进条内、Tab 在条内循环、关闭还原到行内删除按钮。 */
   const deleteTaskConfirmTrapRef = useFocusTrap<HTMLDivElement>(pendingDeleteTaskId !== null);
-  /** 验收交付完成询问（2026-10-22）：只在本次写入让验收阶段首次全部完成时打开一次。 */
+  /** 验收交付完成询问（2026-10-22 / 2026-11-25）：只在本次写入让验收阶段首次全部完成、且完成喜报尚未成功同步过时打开一次。 */
   const [acceptanceDonePromptOpen, setAcceptanceDonePromptOpen] = useState(false);
   const [acceptanceDonePending, setAcceptanceDonePending] = useState(false);
   const [acceptanceDoneClosing, setAcceptanceDoneClosing] = useState(false);
@@ -454,13 +455,14 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   const rowOf = (taskId: string): ProjectTask | undefined => tasks.find((task) => task.id === taskId);
 
   /**
-   * 验收交付完成后询问是否归档：
+   * 验收交付完成后询问是否同步完成喜报：
    * 本次写入把「验收」阶段最后一颗未完成任务改成完成态时打开询问；打开 / 刷新已全部完成的项目不弹。
    * 验收完成 = 该阶段至少有一条任务，且全部为已完成 / 提前完成；写回状态以服务端响应为准。
+   * 已成功同步过完成喜报的项目不再弹；状态预检失败仍弹，由服务端永久送达留档与幂等键兜底。
    */
   const promptAfterAcceptanceCompletion = (updated: ApiTaskListItem | ApiTask): void => {
     if (
-      onArchiveProject === undefined ||
+      onSendCompletionPoster === undefined ||
       project === null ||
       project.status === "archived" ||
       project.status === "done" ||
@@ -483,25 +485,41 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
     if (!acceptanceTasks.every((task) => task.id === updated.id || isTaskDone(task))) {
       return;
     }
+    const id = project.id;
     acceptanceDonePromptOpenRef.current = true;
     if (acceptanceDoneCloseTimer.current !== null) {
       window.clearTimeout(acceptanceDoneCloseTimer.current);
       acceptanceDoneCloseTimer.current = null;
     }
-    setAcceptanceDoneClosing(false);
-    setAcceptanceDonePending(false);
-    setAcceptanceDonePromptOpen(true);
+    void (async () => {
+      let alreadySent = false;
+      try {
+        alreadySent = (await fetchCompletionPosterStatus(id)).sent;
+      } catch {
+        // 状态读取失败：保留询问，服务端按永久送达留档与幂等键兜底不重复发送
+      }
+      if (!acceptanceDonePromptOpenRef.current) {
+        return;
+      }
+      if (alreadySent) {
+        acceptanceDonePromptOpenRef.current = false;
+        return;
+      }
+      setAcceptanceDoneClosing(false);
+      setAcceptanceDonePending(false);
+      setAcceptanceDonePromptOpen(true);
+    })();
   };
 
-  /** 确认归档项目：成功才关弹窗；失败保留弹窗供重试，错误由父层顶部 Toast 提示。 */
+  /** 确认同步完成喜报：成功才关弹窗；失败保留弹窗供重试，错误由父层顶部 Toast 提示。 */
   const confirmAcceptanceDonePrompt = (): void => {
-    if (acceptanceDonePending || project === null || onArchiveProject === undefined) {
+    if (acceptanceDonePending || project === null || onSendCompletionPoster === undefined) {
       return;
     }
     const id = project.id;
     setAcceptanceDonePending(true);
     void (async () => {
-      const ok = await onArchiveProject(id);
+      const ok = await onSendCompletionPoster(id);
       setAcceptanceDonePending(false);
       if (ok) {
         closeAcceptanceDonePrompt();
@@ -1361,9 +1379,9 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
         ) : null}
       </main>
 
-      {/* 验收交付完成后询问是否归档：
+      {/* 验收交付完成后询问是否同步完成喜报：
           参考 react-hot-toast 的底部 toast：白色圆角卡片、无深色遮罩，自底部弹性上浮 + 轻微放大；
-          只有本次任务写入让验收阶段首次全部完成时打开，点击卡外 / 暂不 / Esc 先播退出再卸载。 */}
+          只有本次任务写入让验收阶段首次全部完成且尚未成功同步过喜报时打开，点击卡外 / 暂不 / Esc 先播退出再卸载。 */}
       {acceptanceDonePromptOpen ? (
         <div className="fixed inset-0 z-[80] flex items-end justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-6">
           <div

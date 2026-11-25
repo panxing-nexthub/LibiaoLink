@@ -3,7 +3,6 @@ import { ProjectArchiveBodySchema, ProjectArchiveViewSchema, ProjectArchiveWithU
 import type { StageKey } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import { DatabaseService } from "../../db/database.service.js";
-import { appendOutbox } from "../../db/outbox.js";
 import type { DbClient } from "../../db/db-client.js";
 import { AuditService } from "../admin/index.js";
 import { ArchiveRepository, type ArchiveViewRow } from "./archive.repository.js";
@@ -113,13 +112,6 @@ export class ArchiveService {
         changes: [{ field: "status", from: locked.status, to: "archived" }],
         metadata: { archiveId: record.id, archiveKind: body.archiveKind },
       });
-      if (body.archiveKind === "accepted") {
-        await appendOutbox(tx, {
-          topic: "project.completed",
-          dedupeKey: "project.completed:" + projectId + ":" + updated.version,
-          payload: { projectId, status: updated.status, previousStatus: locked.status, version: updated.version, actorId, at: at.toISOString() },
-        });
-      }
       const archiveView = await this.archive.findArchive(tx, projectId);
       if (archiveView === null) throw new AppError("INTERNAL", "归档记录写入后读取失败");
       return toArchiveView(archiveView);

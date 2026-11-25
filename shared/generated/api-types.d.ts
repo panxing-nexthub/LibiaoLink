@@ -1783,6 +1783,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/completion-poster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 项目完成喜报同步状态（是否已成功同步到项目群） */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 完成喜报同步状态 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectCompletionPosterStatus"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** 把项目完成喜报同步到项目群（已成功同步过则返回 already_sent，不重复发送） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 已排队同步 / 之前已同步过 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectCompletionPosterSendResult"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{id}/unarchive": {
         parameters: {
             query?: never;
@@ -15660,6 +15767,20 @@ export interface components {
              */
             archiveKind: "accepted" | "unaccepted";
             changes: components["schemas"]["ProjectArchiveChanges"];
+        };
+        /** @description 项目完成喜报同步请求结果 */
+        ProjectCompletionPosterSendResult: {
+            /**
+             * @description queued = 已排队同步；already_sent = 之前已成功同步，本次不重复发送
+             * @enum {string}
+             */
+            status: "queued" | "already_sent";
+        };
+        /** @description 项目完成喜报同步状态 */
+        ProjectCompletionPosterStatus: {
+            /** @description 是否已成功同步过完成喜报（群消息已送达） */
+            sent: boolean;
+            sentAt: components["schemas"]["DateTime"] & (string | null);
         };
         /** @description 创建项目：项目序号 seqNo 不接受传入，由服务端分配并随响应返回 */
         ProjectCreateBody: {

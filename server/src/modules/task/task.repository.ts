@@ -7,7 +7,7 @@ import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
 import { files, uploadSessions } from "../../db/schema/files.js";
 import { projectNodes } from "../../db/schema/flow.js";
-import { wecomGroups } from "../../db/schema/notify.js";
+import { notifyDeliveryMessages, wecomGroups } from "../../db/schema/notify.js";
 import { users } from "../../db/schema/identity.js";
 import { projectAdditionalStages, projectStages, projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
@@ -750,6 +750,30 @@ export class TaskRepository {
     await client.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${projectId + ":" + stageKey}, 0))`,
     );
+  }
+
+  /**
+   * 阶段完成群通知是否已成功送达（永久留档 notify_delivery_messages）：
+   * 同一项目同一阶段只播报一次；阶段回退后再次完成也不重复发。
+   */
+  async hasSentStageCompletionNotice(
+    client: DbClient,
+    projectId: string,
+    stageKey: string,
+  ): Promise<boolean> {
+    const rows = await client
+      .select({ id: notifyDeliveryMessages.id })
+      .from(notifyDeliveryMessages)
+      .where(
+        and(
+          eq(notifyDeliveryMessages.templateCode, "STAGE_COMPLETE_GROUP"),
+          eq(notifyDeliveryMessages.recipientLabel, "project:" + projectId),
+          eq(notifyDeliveryMessages.lastState, "sent"),
+          sql`${notifyDeliveryMessages.payload}->>${"stageKey"} = ${stageKey}`,
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
   }
 
   /** 全项目按阶段的任务计数（GET /projects/{id}/stages 的 tasks 完成度）。 */

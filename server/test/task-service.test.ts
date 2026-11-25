@@ -259,6 +259,10 @@ class FakeTaskRepository {
   async lockStageCompletion(_client: unknown, projectId: string, stageKey: string): Promise<void> {
     this.stageLocks.push({ projectId, stageKey });
   }
+  stageNoticeSent = false;
+  async hasSentStageCompletionNotice(_client: unknown, _projectId: string, _stageKey: string): Promise<boolean> {
+    return this.stageNoticeSent;
+  }
   async countStageTasks(): Promise<{ total: number; done: number; deliveryReady: number }> {
     return this.stageCounts;
   }
@@ -362,8 +366,9 @@ class FakeDatabase {
   makeTx() {
     return {
       insert: () => ({
-        values: async (value: unknown) => {
+        values: (value: unknown) => {
           this.outbox.push(value);
+          return { onConflictDoUpdate: async () => undefined };
         },
       }),
     };
@@ -1163,7 +1168,7 @@ describe("大阶段完成群通知（全部小任务完成）", () => {
       | undefined;
     expect(groupEvent).toMatchObject({
       topic: "notify.group",
-      dedupeKey: "stage.completed:" + PROJECT + ":design:" + TASK + ":v4",
+      dedupeKey: "stage.completed:" + PROJECT + ":design",
       payload: {
         projectId: PROJECT,
         title: "阶段完成｜设计开发",
@@ -1174,6 +1179,20 @@ describe("大阶段完成群通知（全部小任务完成）", () => {
         stageKey: "design",
       },
     });
+  });
+
+  it("已成功发送过阶段完成通知：阶段再次完成不重复写群通知", async () => {
+    const repo = new FakeTaskRepository();
+    repo.task = makeRow({ stageKey: "design", status: "active" });
+    repo.stageNoticeSent = true;
+    const gate = new FakeTaskGateRepository();
+    gate.delivery = { total: 5, done: 5, deliveryReady: 5, issues: [] };
+    const database = new FakeDatabase();
+    const service = makeService(repo, new FakePermissionService(), gate, new FakeAuditService(), database);
+
+    await service.complete(PROJECT, TASK, { version: 3 }, ACTOR);
+
+    expect(database.outbox.some((item) => (item as { topic?: string }).topic === "notify.group")).toBe(false);
   });
 
   it("阶段仍有未完成任务 / 未分组任务：不发群通知", async () => {

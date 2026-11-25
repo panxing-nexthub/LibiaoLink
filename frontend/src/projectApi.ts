@@ -216,6 +216,25 @@ export function archiveProjectWithUpdate(id: string, input: ProjectEditInput, ve
   });
 }
 
+/** 项目完成喜报（R06）同步状态：sent = 群消息已成功送达，后续不再重复发送。 */
+export type ProjectCompletionPosterStatus = { sent: boolean; sentAt: string | null };
+
+export function fetchCompletionPosterStatus(id: string): Promise<ProjectCompletionPosterStatus> {
+  return apiRequest<ProjectCompletionPosterStatus>(
+    "/api/v1/projects/" + encodeURIComponent(id) + "/completion-poster",
+  );
+}
+
+export type ProjectCompletionPosterSendResult = { status: "queued" | "already_sent" };
+
+/** 验收完成后把完成喜报同步到项目群；已成功同步过时服务端返回 already_sent，不重复发送。 */
+export function sendCompletionPoster(id: string): Promise<ProjectCompletionPosterSendResult> {
+  return apiSend<ProjectCompletionPosterSendResult>(
+    "/api/v1/projects/" + encodeURIComponent(id) + "/completion-poster",
+    "POST",
+  );
+}
+
 /** 归档项目恢复到进行中：只清归档状态并递增 version，保留最近一次归档清单。 */
 export function restoreArchivedProject(id: string, version: number): Promise<ApiProject> {
   return apiSend<ApiProject>("/api/v1/projects/" + encodeURIComponent(id) + "/unarchive", "POST", { version });

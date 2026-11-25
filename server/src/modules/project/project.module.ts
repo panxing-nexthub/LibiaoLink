@@ -8,6 +8,8 @@ import { TranslateModule } from "../translate/index.js";
 import { ArchiveController } from "./archive.controller.js";
 import { ArchiveRepository } from "./archive.repository.js";
 import { ArchiveService } from "./archive.service.js";
+import { ProjectCompletionPosterController } from "./completion-poster.controller.js";
+import { ProjectCompletionPosterService } from "./completion-poster.service.js";
 import { FlowController } from "./flow.controller.js";
 import { FlowRepository } from "./flow.repository.js";
 import { FlowService } from "./flow.service.js";
@@ -33,7 +35,7 @@ import { ProjectViewGrantService } from "./project-view-grant.service.js";
  */
 @Module({
   imports: [IdentityModule, BlueprintModule, NodeModule, PermissionModule, AdminModule, TranslateModule],
-  controllers: [ProjectsController, ProjectViewGrantController, FlowController, NodesController, ArchiveController],
+  controllers: [ProjectsController, ProjectViewGrantController, FlowController, NodesController, ArchiveController, ProjectCompletionPosterController],
   providers: [
     ProjectRepository,
     ProjectQueryService,
@@ -47,6 +49,7 @@ import { ProjectViewGrantService } from "./project-view-grant.service.js";
     FlowService,
     ArchiveRepository,
     ArchiveService,
+    ProjectCompletionPosterService,
   ],
   // Push 316：project-import（导入表导入）复用项目插入 / 成员名册写口 —— 两个仓库随本模块导出（同事务建项目 + upsert 项目经理）。
   exports: [ProjectService, ProjectQueryService, ProjectMemberService, ProjectRepository, ProjectMemberRepository, ProjectGroupService, FlowService],

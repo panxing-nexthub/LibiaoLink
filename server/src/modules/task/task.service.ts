@@ -40,7 +40,7 @@ import type { OutboxTopic } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import type { DbClient } from "../../db/db-client.js";
 import { DatabaseService } from "../../db/database.service.js";
-import { appendOutbox } from "../../db/outbox.js";
+import { appendOutbox, appendOutboxIfAbsent } from "../../db/outbox.js";
 import { hasUnfinishedTemporaryTask, isTemporaryTask } from "../../db/task-scope.js";
 import { AuditService, diffRecords } from "../admin/index.js";
 import { addDays } from "../calendar/index.js";
@@ -1515,7 +1515,7 @@ export class TaskService {
   /**
    * 大阶段完成群通知：只在本次任务首次转入 done 的同一事务内判定。
    * 阶段锁保证并发完成最后两项时只有后一笔看到“全部完成”；无任务 / 未分组阶段不发。
-   * 幂等键包含触发任务版本，阶段回退后再次完成可再次形成里程碑。
+   * 每个项目每个阶段只播报一次：阶段回退后再次完成不重复发（永久送达留档 + outbox 稳定幂等键双保险）。
    */
   private async appendStageCompletionOutbox(
     tx: DbClient,
@@ -1532,10 +1532,11 @@ export class TaskService {
     ) {
       return;
     }
+    if (await this.repository.hasSentStageCompletionNotice(tx, input.projectId, stageKey)) return;
     const stageName = (STAGE_NAMES as Record<string, string>)[stageKey] ?? stageKey;
-    await appendOutbox(tx, {
+    await appendOutboxIfAbsent(tx, {
       topic: "notify.group",
-      dedupeKey: "stage.completed:" + input.projectId + ":" + stageKey + ":" + input.task.id + ":v" + String(input.task.version),
+      dedupeKey: "stage.completed:" + input.projectId + ":" + stageKey,
       payload: {
         projectId: input.projectId,
         title: "阶段完成｜" + stageName,

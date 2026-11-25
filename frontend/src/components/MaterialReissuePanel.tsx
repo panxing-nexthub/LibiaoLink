@@ -855,6 +855,39 @@ export function MaterialReissuePanel({
       </header>
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5">
+        {state.kind === "ready" && activeView === "all" ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+            <span data-project-material-reissue-selected={selectedRows.length}>{t("pd.material.selectedCount", { n: selectedRows.length })}</span>
+            <span className="hidden lg:inline">{t("pd.material.batchHint")}</span>
+            <button
+              type="button"
+              disabled={selectableRows.length === 0}
+              onClick={toggleSelection}
+              className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
+            >
+              {allSelected ? t("pd.material.unselectAllPage") : t("pd.material.selectAllPage")}
+            </button>
+            <button
+              type="button"
+              disabled={selectedRows.length === 0}
+              onClick={() => {
+                setSelectedKeys(new Set());
+              }}
+              className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
+            >
+              {t("pd.material.clearSelection")}
+            </button>
+            <button
+              type="button"
+              data-material-reissue-mark-shipped="true"
+              disabled={!canMark || selectedRows.length === 0}
+              onClick={openShipment}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400"
+            >
+              {t("pd.material.markShipped")}
+            </button>
+          </div>
+        ) : null}
         <span data-project-material-reissue-filter="keyword" className="w-80 shrink-0">
           <SearchInput
             value={keyword}
@@ -923,42 +956,6 @@ export function MaterialReissuePanel({
 
       {state.kind === "ready" && activeView === "all" ? (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-              <span data-project-material-reissue-selected={selectedRows.length}>{t("pd.material.selectedCount", { n: selectedRows.length })}</span>
-              <span>{t("pd.material.batchHint")}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                disabled={selectableRows.length === 0}
-                onClick={toggleSelection}
-                className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
-              >
-                {allSelected ? t("pd.material.unselectAllPage") : t("pd.material.selectAllPage")}
-              </button>
-              <button
-                type="button"
-                disabled={selectedRows.length === 0}
-                onClick={() => {
-                  setSelectedKeys(new Set());
-                }}
-                className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
-              >
-                {t("pd.material.clearSelection")}
-              </button>
-              <button
-                type="button"
-                data-material-reissue-mark-shipped="true"
-                disabled={!canMark || selectedRows.length === 0}
-                onClick={openShipment}
-                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400"
-              >
-                {t("pd.material.markShipped")}
-              </button>
-            </div>
-          </div>
-
           {!canMark ? (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{t("pd.material.onlyView")}</p>
           ) : null}

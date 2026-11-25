@@ -805,7 +805,7 @@ export function ProjectFilesPanel({ projectId, tasks, canEdit = false, tabs }: {
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5">
+      <div className="sticky top-[171px] z-[9] flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white/95 px-3 py-2.5 backdrop-blur">
         <span data-project-files-filter="keyword" className="w-72 shrink-0">
           <SearchInput
             value={keyword}

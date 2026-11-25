@@ -249,7 +249,7 @@ function imageIdsOf(entry: MaterialReissueTrackingEntry): string[] {
   return ids.length > 0 ? [...ids] : entry.imageFileId === null ? [] : [entry.imageFileId];
 }
 
-type TrackingMergeKey = "trackingNo" | "eta" | "note" | "images" | "source";
+type TrackingMergeKey = "trackingNo" | "eta" | "note" | "status" | "images" | "source";
 
 function trackingMergeValueOf(row: TrackingRow, key: TrackingMergeKey): string {
   const batch = row.entry.shippedAt;
@@ -260,6 +260,8 @@ function trackingMergeValueOf(row: TrackingRow, key: TrackingMergeKey): string {
       return batch + "|" + (row.entry.estimatedArrivalDate ?? "");
     case "note":
       return batch + "|" + (row.entry.note ?? "");
+    case "status":
+      return batch + "|" + row.entry.status;
     case "images":
       return batch + "|" + imageIdsOf(row.entry).join(",");
     case "source":
@@ -586,6 +588,7 @@ export function MaterialReissuePanel({
     trackingNo: trackingSpansOf(filteredTrackingRows, "trackingNo"),
     eta: trackingSpansOf(filteredTrackingRows, "eta"),
     note: trackingSpansOf(filteredTrackingRows, "note"),
+    status: trackingSpansOf(filteredTrackingRows, "status"),
     images: trackingSpansOf(filteredTrackingRows, "images"),
     source: trackingSpansOf(filteredTrackingRows, "source"),
   };
@@ -1166,7 +1169,8 @@ export function MaterialReissuePanel({
                             />
                           </td>
                         )}
-                        <td className="border border-zinc-200 px-4 py-4 text-center align-middle">
+                        {spanOf("status") === 0 ? null : (
+                        <td rowSpan={spanOf("status")} className="border border-zinc-200 px-4 py-4 text-center align-middle">
                             <InlineOptionCell
                               value={row.entry.status}
                               options={[
@@ -1190,11 +1194,12 @@ export function MaterialReissuePanel({
                               }
                               onPick={(value) => {
                                 if (value !== row.entry.status) {
-                                  void patchTracking([row], { status: value === "received" ? "received" : "shipped" });
+                                  void patchTracking(groupOf("status"), { status: value === "received" ? "received" : "shipped" });
                                 }
                               }}
                             />
                         </td>
+                        )}
                         {spanOf("images") === 0 ? null : (
                           <td rowSpan={spanOf("images")} className="border border-zinc-200 px-4 py-4 align-middle">
                             {imageIds.length === 0 ? (

@@ -504,6 +504,8 @@ export type MaterialReissueTrackingEntry = {
   estimatedArrivalDate: string | null;
   note: string | null;
   imageFileId: string | null;
+  /** 发货凭证图片列表（多图；旧记录可能只有 imageFileId）。 */
+  imageFileIds?: readonly string[];
   shippedBy: string;
   shippedAt: string;
   updatedAt: string;
@@ -516,6 +518,7 @@ export type CreateMaterialReissueTrackingInput = {
   estimatedArrivalDate?: string;
   note?: string;
   imageFileId?: string;
+  imageFileIds?: string[];
 };
 
 

@@ -13523,6 +13523,8 @@ export interface components {
             /** @description 发货备注（可空） */
             note?: string;
             imageFileId?: components["schemas"]["Uuid"] & unknown;
+            /** @description 发货凭证图片列表（files.id，可空；最多 20 张，须属于本项目且未回收） */
+            imageFileIds?: components["schemas"]["Uuid"][];
         };
         /** @description 一条日报（A3-01 全字段 + 系统字段） */
         DailyReport: {
@@ -14820,6 +14822,8 @@ export interface components {
             /** @description 发货备注（可空） */
             note: string | null;
             imageFileId: components["schemas"]["Uuid"] & (string | null);
+            /** @description 发货凭证图片列表（files.id，可空；最多 20 张） */
+            imageFileIds?: components["schemas"]["Uuid"][];
             shippedBy: components["schemas"]["Uuid"] & unknown;
             shippedAt: components["schemas"]["DateTime"] & unknown;
             updatedAt: components["schemas"]["DateTime"] & unknown;

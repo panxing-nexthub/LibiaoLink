@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api";
 import {
   createMaterialReissueTracking,
@@ -125,23 +125,104 @@ function statusBadgeClass(status: MaterialReissueTrackingStatus): string {
   return status === "received" ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700";
 }
 
-/** 直接读取剪贴板中的第一张图片（HTTPS + 用户点击手势下可用）；不支持或无图返回 null。 */
-async function readClipboardImageFile(): Promise<File | null> {
-  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
-  if (clipboard === undefined || typeof clipboard.read !== "function") {
+type GalleryImage = { url: string; name: string };
+
+/** 发货凭证多图预览（上一张 / 下一张 / 关闭）。 */
+function ImageGalleryOverlay({ images, index, onChange, onClose }: {
+  images: readonly GalleryImage[];
+  index: number;
+  onChange: (index: number) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const current = images[index];
+  if (current === undefined) {
     return null;
   }
-  const items = await clipboard.read();
-  for (const item of items) {
-    const type = item.types.find((value) => value.startsWith("image/"));
-    if (type === undefined) {
-      continue;
-    }
-    const blob = await item.getType(type);
-    const extension = type.split("/")[1]?.split("+")[0] ?? "png";
-    return new File([blob], "clipboard-" + String(Date.now()) + "." + extension, { type });
+  return (
+    <div
+      data-image-gallery=""
+      className="fixed inset-0 z-[95] flex items-center justify-center bg-zinc-900/70 p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={current.name}
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-5 top-5 rounded-lg bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow transition hover:bg-white"
+      >
+        {t("pd.material.close")}
+      </button>
+      {images.length <= 1 ? null : (
+        <button
+          type="button"
+          aria-label={t("pd.material.pagePrev")}
+          onClick={(event) => {
+            event.stopPropagation();
+            onChange((index - 1 + images.length) % images.length);
+          }}
+          className="absolute left-5 top-1/2 -translate-y-1/2 rounded-full bg-white/90 px-3 py-2 text-2xl leading-none text-zinc-700 shadow transition hover:bg-white"
+        >
+          ‹
+        </button>
+      )}
+      <img
+        src={current.url}
+        alt={current.name}
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+        className="max-h-[86vh] max-w-[92vw] rounded-xl bg-white object-contain shadow-2xl"
+      />
+      {images.length <= 1 ? null : (
+        <>
+          <button
+            type="button"
+            aria-label={t("pd.material.pageNext")}
+            onClick={(event) => {
+              event.stopPropagation();
+              onChange((index + 1) % images.length);
+            }}
+            className="absolute right-5 top-1/2 -translate-y-1/2 rounded-full bg-white/90 px-3 py-2 text-2xl leading-none text-zinc-700 shadow transition hover:bg-white"
+          >
+            ›
+          </button>
+          <span className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-zinc-700 shadow">
+            {index + 1} / {images.length}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 直接读取剪贴板中的全部图片（HTTPS + 用户点击手势下可用）；不支持或无图返回空数组。 */
+async function readClipboardImageFiles(): Promise<File[]> {
+  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  if (clipboard === undefined || typeof clipboard.read !== "function") {
+    return [];
   }
-  return null;
+  const items = await clipboard.read();
+  const files: File[] = [];
+  for (const item of items) {
+    for (const type of item.types) {
+      if (!type.startsWith("image/")) {
+        continue;
+      }
+      const blob = await item.getType(type);
+      const extension = type.split("/")[1]?.split("+")[0] ?? "png";
+      files.push(new File([blob], "clipboard-" + String(Date.now()) + "-" + String(files.length + 1) + "." + extension, { type }));
+    }
+  }
+  return files;
+}
+
+/** 兼容旧记录：优先多图数组，没有时回落单图字段。 */
+function imageIdsOf(entry: MaterialReissueTrackingEntry): string[] {
+  const ids = entry.imageFileIds ?? [];
+  return ids.length > 0 ? [...ids] : entry.imageFileId === null ? [] : [entry.imageFileId];
 }
 
 export function MaterialReissuePanel({
@@ -180,12 +261,34 @@ export function MaterialReissuePanel({
   const [shipmentTrackingNo, setShipmentTrackingNo] = useState("");
   const [shipmentEta, setShipmentEta] = useState("");
   const [shipmentNote, setShipmentNote] = useState("");
-  const [shipmentImage, setShipmentImage] = useState<File | null>(null);
-  const [shipmentImageUrl, setShipmentImageUrl] = useState<string | null>(null);
+  const [shipmentImages, setShipmentImages] = useState<Array<{ file: File; url: string }>>([]);
+  const shipmentImagesRef = useRef(shipmentImages);
+  shipmentImagesRef.current = shipmentImages;
+
+  const appendShipmentImages = (files: File[]): void => {
+    if (files.length === 0) {
+      return;
+    }
+    setShipmentImages((previous) => [
+      ...previous,
+      ...files.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    ]);
+    setShipmentError(null);
+  };
+
+  const removeShipmentImage = (index: number): void => {
+    setShipmentImages((previous) => {
+      const target = previous[index];
+      if (target !== undefined) {
+        URL.revokeObjectURL(target.url);
+      }
+      return previous.filter((_, current) => current !== index);
+    });
+  };
   const [shipmentBusy, setShipmentBusy] = useState(false);
   const [shipmentError, setShipmentError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
+  const [imageGallery, setImageGallery] = useState<{ items: GalleryImage[]; index: number } | null>(null);
   const [previewBusyKey, setPreviewBusyKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -250,24 +353,21 @@ export function MaterialReissuePanel({
     setShipmentError(null);
   }, [activeView]);
 
+  /** 卸载时回收表单缩略图的 object URL。 */
   useEffect(() => {
-    if (shipmentImage === null) {
-      setShipmentImageUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(shipmentImage);
-    setShipmentImageUrl(url);
     return () => {
-      URL.revokeObjectURL(url);
+      for (const image of shipmentImagesRef.current) {
+        URL.revokeObjectURL(image.url);
+      }
     };
-  }, [shipmentImage]);
+  }, []);
 
   useEffect(() => {
-    if (!shipmentOpen && previewImage === null) {
+    if (!shipmentOpen && imageGallery === null) {
       return;
     }
     return lockBodyScroll();
-  }, [shipmentOpen, previewImage]);
+  }, [shipmentOpen, imageGallery]);
 
   /** 发货登记弹窗打开时，Ctrl+V 粘贴剪贴板图片（与日报填写同一交互习惯）。 */
   useEffect(() => {
@@ -275,14 +375,12 @@ export function MaterialReissuePanel({
       return;
     }
     const onPaste = (event: ClipboardEvent) => {
-      const files = Array.from(event.clipboardData?.files ?? []);
-      const image = files.find((file) => file.type.startsWith("image/"));
-      if (image === undefined) {
+      const files = Array.from(event.clipboardData?.files ?? []).filter((file) => file.type.startsWith("image/"));
+      if (files.length === 0) {
         return;
       }
       event.preventDefault();
-      setShipmentImage(image);
-      setShipmentError(null);
+      appendShipmentImages(files);
     };
     document.addEventListener("paste", onPaste);
     return () => {
@@ -291,7 +389,7 @@ export function MaterialReissuePanel({
   }, [shipmentOpen]);
 
   useEffect(() => {
-    if (!shipmentOpen && previewImage === null) {
+    if (!shipmentOpen && imageGallery === null) {
       return;
     }
     const onKey = (event: KeyboardEvent) => {
@@ -299,8 +397,8 @@ export function MaterialReissuePanel({
         return;
       }
       event.stopPropagation();
-      if (previewImage !== null) {
-        setPreviewImage(null);
+      if (imageGallery !== null) {
+        setImageGallery(null);
       } else if (!shipmentBusy) {
         setShipmentOpen(false);
       }
@@ -309,7 +407,7 @@ export function MaterialReissuePanel({
     return () => {
       document.removeEventListener("keydown", onKey, true);
     };
-  }, [shipmentOpen, previewImage, shipmentBusy]);
+  }, [shipmentOpen, imageGallery, shipmentBusy]);
 
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task] as const)), [tasks]);
   const applications = state.kind === "ready" ? state.applications : [];
@@ -510,7 +608,12 @@ export function MaterialReissuePanel({
     setShipmentTrackingNo("");
     setShipmentEta("");
     setShipmentNote("");
-    setShipmentImage(null);
+    setShipmentImages((previous) => {
+      for (const image of previous) {
+        URL.revokeObjectURL(image.url);
+      }
+      return [];
+    });
     setShipmentError(null);
   };
 
@@ -520,12 +623,12 @@ export function MaterialReissuePanel({
     }
     setShipmentError(null);
     try {
-      const file = await readClipboardImageFile();
-      if (file === null) {
+      const files = await readClipboardImageFiles();
+      if (files.length === 0) {
         setShipmentError(t("pd.material.clipboardNoImage"));
         return;
       }
-      setShipmentImage(file);
+      appendShipmentImages(files);
     } catch {
       setShipmentError(t("pd.material.clipboardReadFailed"));
     }
@@ -563,10 +666,12 @@ export function MaterialReissuePanel({
     setShipmentBusy(true);
     setShipmentError(null);
     try {
-      let imageFileId: string | undefined;
-      if (shipmentImage !== null) {
+      const imageFileIds: string[] = [];
+      if (shipmentImages.length > 0) {
         const taskId = canMarkAll ? undefined : selectedRows[0]?.application.material.taskId;
-        imageFileId = await uploadFile(projectId, shipmentImage, shipmentImage.name, taskId === undefined ? {} : { taskId });
+        for (const image of shipmentImages) {
+          imageFileIds.push(await uploadFile(projectId, image.file, image.file.name, taskId === undefined ? {} : { taskId }));
+        }
       }
       await createMaterialReissueTracking(projectId, {
         items: selectedRows.map((row) => ({ changeRequestId: row.application.id, lineIndex: row.lineIndex })),
@@ -574,7 +679,7 @@ export function MaterialReissuePanel({
         trackingNo: shipmentTrackingNo.trim() === "" ? undefined : shipmentTrackingNo.trim(),
         estimatedArrivalDate: shipmentEta === "" ? undefined : shipmentEta,
         note: shipmentNote.trim() === "" ? undefined : shipmentNote.trim(),
-        imageFileId,
+        imageFileIds,
       });
       const count = selectedRows.length;
       setShipmentOpen(false);
@@ -593,19 +698,32 @@ export function MaterialReissuePanel({
     }
   };
 
-  const openTrackingImage = async (row: TrackingRow): Promise<void> => {
-    if (row.entry.imageFileId === null || previewBusyKey !== null) {
+  const openTrackingImages = async (row: TrackingRow): Promise<void> => {
+    const imageIds = imageIdsOf(row.entry);
+    if (imageIds.length === 0 || previewBusyKey !== null) {
       return;
     }
     setPreviewBusyKey(row.key);
-    const outcome = await ensurePreviewOutcome(row.entry.imageFileId);
-    setPreviewBusyKey(null);
-    if (outcome.kind === "unavailable" || outcome.kind === "viewer") {
-      setNotice({ kind: "error", text: outcome.kind === "unavailable" ? outcome.reason ?? t("pd.material.imageUnavailable") : t("pd.material.imageUnavailable") });
-      return;
+    try {
+      const items: GalleryImage[] = [];
+      for (const imageId of imageIds) {
+        const outcome = await ensurePreviewOutcome(imageId);
+        if (outcome.kind === "url") {
+          items.push({ url: outcome.url, name: t("pd.material.imageN", { n: items.length + 1 }) });
+        }
+      }
+      if (items.length === 0) {
+        setNotice({ kind: "error", text: t("pd.material.imageUnavailable") });
+        return;
+      }
+      const firstId = imageIds[0];
+      if (firstId !== undefined) {
+        void recordPreviewView(firstId);
+      }
+      setImageGallery({ items, index: 0 });
+    } finally {
+      setPreviewBusyKey(null);
     }
-    void recordPreviewView(row.entry.imageFileId);
-    setPreviewImage({ url: outcome.url, name: t("pd.material.imageAlt") });
   };
 
   const pager = (total: number, current: number, pages: number, onPage: (page: number) => void) => (
@@ -924,6 +1042,7 @@ export function MaterialReissuePanel({
                 <tbody>
                   {trackingPageRows.map((row) => {
                     const sourceTitle = row.application.material.taskTitle !== "" ? row.application.material.taskTitle : row.task?.title ?? "—";
+                    const imageIds = imageIdsOf(row.entry);
                     return (
                       <tr key={row.key} data-material-reissue-tracking-row={row.key} className="border-b border-zinc-100 last:border-b-0">
                         <td className="px-3 py-2 align-middle">
@@ -941,18 +1060,22 @@ export function MaterialReissuePanel({
                           </span>
                         </td>
                         <td className="px-3 py-2 text-center align-middle">
-                          {row.entry.imageFileId === null ? (
+                          {imageIds.length === 0 ? (
                             <span className="text-zinc-400">—</span>
                           ) : (
                             <button
                               type="button"
                               disabled={previewBusyKey !== null}
                               onClick={() => {
-                                void openTrackingImage(row);
+                                void openTrackingImages(row);
                               }}
                               className="rounded-md border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              {previewBusyKey === row.key ? t("common.loading") : t("pd.material.viewImage")}
+                              {previewBusyKey === row.key
+                                ? t("common.loading")
+                                : imageIds.length > 1
+                                  ? t("pd.material.viewImages", { n: imageIds.length })
+                                  : t("pd.material.viewImage")}
                             </button>
                           )}
                         </td>
@@ -1034,28 +1157,47 @@ export function MaterialReissuePanel({
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
                       disabled={shipmentBusy}
                       onChange={(event) => {
-                        setShipmentImage(event.target.files?.[0] ?? null);
-                        setShipmentError(null);
+                        appendShipmentImages(Array.from(event.currentTarget.files ?? []));
+                        event.currentTarget.value = "";
                       }}
                       className="sr-only"
                     />
                   </label>
                 </div>
-                {shipmentImageUrl === null ? null : (
-                  <div className="mt-2 flex items-start gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-2">
-                    <img src={shipmentImageUrl} alt={t("pd.material.imageAlt")} className="max-h-28 max-w-[180px] rounded object-contain" />
-                    <button
-                      type="button"
-                      disabled={shipmentBusy}
-                      onClick={() => {
-                        setShipmentImage(null);
-                      }}
-                      className="rounded-md border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-600 transition hover:bg-white disabled:opacity-40"
-                    >
-                      {t("pd.material.removeImage")}
-                    </button>
+                {shipmentImages.length === 0 ? null : (
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    {shipmentImages.map((image, index) => (
+                      <div key={image.url} className="relative">
+                        <button
+                          type="button"
+                          disabled={shipmentBusy}
+                          onClick={() => {
+                            setImageGallery({
+                              items: shipmentImages.map((item) => ({ url: item.url, name: item.file.name })),
+                              index,
+                            });
+                          }}
+                          className="block overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 p-1 transition hover:border-zinc-300"
+                        >
+                          <img src={image.url} alt={image.file.name} className="h-24 w-24 rounded object-cover" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={shipmentBusy}
+                          aria-label={t("pd.material.removeImage")}
+                          title={t("pd.material.removeImage")}
+                          onClick={() => {
+                            removeShipmentImage(index);
+                          }}
+                          className="absolute -right-1.5 -top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs font-semibold leading-none text-white shadow transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1151,34 +1293,17 @@ export function MaterialReissuePanel({
         </div>
       ) : null}
 
-      {previewImage === null ? null : (
-        <div
-          className="fixed inset-0 z-[95] flex items-center justify-center bg-zinc-900/70 p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-label={previewImage.name}
-          onClick={() => {
-            setPreviewImage(null);
+      {imageGallery === null ? null : (
+        <ImageGalleryOverlay
+          images={imageGallery.items}
+          index={imageGallery.index}
+          onChange={(index) => {
+            setImageGallery((previous) => (previous === null ? previous : { ...previous, index }));
           }}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setPreviewImage(null);
-            }}
-            className="absolute right-5 top-5 rounded-lg bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow transition hover:bg-white"
-          >
-            {t("pd.material.close")}
-          </button>
-          <img
-            src={previewImage.url}
-            alt={previewImage.name}
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-            className="max-h-[86vh] max-w-[92vw] rounded-xl bg-white object-contain shadow-2xl"
-          />
-        </div>
+          onClose={() => {
+            setImageGallery(null);
+          }}
+        />
       )}
 
       {detailId === null ? null : (

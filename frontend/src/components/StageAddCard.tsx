@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { createPortal } from "react-dom";
 import { addedNodeKey } from "../data/tasks";
 import type { TemplatePresetNode } from "../data/templatePresets";
-import { createTaskTemplate, createTemplateStageNode, fetchStageNodes, fetchStageTemplates, nodeWriteMessage, type TemplateItem } from "../templateApi";
+import { createTaskTemplate, createTemplateStageNode, fetchStageNodes, fetchStageTemplates, nodeWriteMessage, updateTaskTemplate, type TemplateItem } from "../templateApi";
 import { cachedZhTo, translateZhTo } from "../translateApi";
 import { ApiError } from "../api";
 import { canEditTaskTemplate, useMyPermissions } from "../permissions";
@@ -655,17 +655,26 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
             template.visibility,
           );
           const createdNode = await createTemplateStageNode(createdTemplate.id, title, templateFormTitleEn.trim());
+          // 新增模板私有节点后立即把引用写回模板：否则节点只落在 task_nodes，刷新后不会出现在模板里，重名还会被服务端判重复。
+          const saved = await updateTaskTemplate(createdTemplate.id, {
+            nodeIds: [...createdTemplate.nodes.map((node) => node.id), createdNode.id],
+            version: createdTemplate.version,
+          });
           rememberPersonalDefaultTemplate(currentUserId, stage, createdTemplate.id);
-          const next: TemplateItem = { ...createdTemplate, nodes: [...createdTemplate.nodes, createdNode] };
-          setTemplates((previous) => ensurePersonalDefaultTemplate(previous, stage, currentUserId).map((item) => (item.id === template.id ? next : item)));
-          setActiveTab(createdTemplate.id);
+          setTemplates((previous) => ensurePersonalDefaultTemplate(previous, stage, currentUserId).map((item) => (item.id === template.id ? saved : item)));
+          setActiveTab(saved.id);
           closeTemplateNodeForm();
-          setTemplateNotice({ kind: "ok", text: t("sac.template.added", { name: localize(createdTemplate.name) }) });
+          setTemplateNotice({ kind: "ok", text: t("sac.template.added", { name: localize(saved.name) }) });
         } else {
           const createdNode = await createTemplateStageNode(template.id, title, templateFormTitleEn.trim());
-          setTemplates((previous) => ensurePersonalDefaultTemplate(previous, stage, currentUserId).map((item) => (item.id === template.id ? { ...item, nodes: [...item.nodes, createdNode] } : item)));
+          // 新增模板私有节点后立即把引用写回模板：否则节点只落在 task_nodes，刷新后不会出现在模板里，重名还会被服务端判重复。
+          const saved = await updateTaskTemplate(template.id, {
+            nodeIds: [...template.nodes.map((node) => node.id), createdNode.id],
+            version: template.version,
+          });
+          setTemplates((previous) => ensurePersonalDefaultTemplate(previous, stage, currentUserId).map((item) => (item.id === template.id ? saved : item)));
           closeTemplateNodeForm();
-          setTemplateNotice({ kind: "ok", text: t("sac.template.added", { name: localize(template.name) }) });
+          setTemplateNotice({ kind: "ok", text: t("sac.template.added", { name: localize(saved.name) }) });
         }
       } catch (error) {
         const message = error instanceof ApiError && error.code === "NODE_ALREADY_EXISTS"

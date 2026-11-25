@@ -1942,7 +1942,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "sac.template.added": "「{name}」에 추가했습니다",
   "sac.template.duplicate": "이 템플릿에 같은 이름의 노드가 이미 있습니다. 다른 이름을 사용하세요.",
   "sac.template.addFailed": "템플릿에 추가하지 못했습니다: {message}",
-  "sac.template.empty": "이 템플릿에는 아직 노드가 없습니다. 「＋ 노드 추가」에서 노드 라이브러리의 노드를 추가하세요.",
+  "sac.template.empty": "이 템플릿에는 아직 노드가 없습니다. 「＋ 노드 추가」에서 중국어 이름을 입력해 추가하세요.",
   "sac.added": "{n} 추가됨",
   "sac.batch.title": "아직 프로젝트에 없는 이 템플릿의 모든 노드 추가",
   "sac.batch": "모두 추가 ({n})",

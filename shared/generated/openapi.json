@@ -17950,6 +17950,57 @@
           "translatedText"
         ]
       },
+      "UpdateMaterialReissueTrackingBody": {
+        "type": "object",
+        "properties": {
+          "changeRequestId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "lineIndex": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MaterialReissueTrackingStatus"
+              },
+              {
+                "description": "状态（不传 = 保持不变）"
+              }
+            ]
+          },
+          "trackingNo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120,
+            "description": "快递单号（null = 清空；不传 = 保持不变）"
+          },
+          "estimatedArrivalDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "预计到货时间（null = 清空；不传 = 保持不变）"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1000,
+            "description": "发货备注（null = 清空；不传 = 保持不变）"
+          }
+        },
+        "required": [
+          "changeRequestId",
+          "lineIndex"
+        ],
+        "description": "物料补发单行发货信息修改"
+      },
       "UploadAbortResponse": {
         "type": "object",
         "properties": {
@@ -28910,6 +28961,74 @@
           },
           "409": {
             "description": "冲突（VERSION_CONFLICT / 状态不允许当前操作）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "物料补发单行发货信息修改（快递单号 / 预计到货 / 发货备注 / 状态）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMaterialReissueTrackingBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "修改后的发货记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialReissueTrackingResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
             "content": {
               "application/json": {
                 "schema": {

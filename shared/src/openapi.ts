@@ -243,6 +243,7 @@ import {
   ChangeRequestDetailSchema,
   CreateMaterialReissueBodySchema,
   CreateMaterialReissueTrackingBodySchema,
+  UpdateMaterialReissueTrackingBodySchema,
   MaterialReissueResultSchema,
   MaterialReissueTrackingResultSchema,
   ChangeRequestListQuerySchema,
@@ -2051,6 +2052,20 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
       403: commonErrors[403],
       404: commonErrors[404],
       409: commonErrors[409],
+    },
+  });
+
+  registry.registerPath({
+    method: "patch",
+    path: "/api/v1/projects/{id}/change-requests/material-reissue/tracking",
+    tags: ["changes"],
+    summary: "物料补发单行发货信息修改（快递单号 / 预计到货 / 发货备注 / 状态）",
+    request: { params: idParams, body: json(UpdateMaterialReissueTrackingBodySchema) },
+    responses: {
+      200: { description: "修改后的发货记录", ...json(MaterialReissueTrackingResultSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
     },
   });
 

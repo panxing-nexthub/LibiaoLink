@@ -4,11 +4,13 @@ import { mediumCardBorderOf, mediumCardTintOf, vividCardBorderOf, vividCardTintO
 import {
   createMaterialReissueTracking,
   fetchProjectChanges,
+  updateMaterialReissueTracking,
   uploadFile,
   type ApiChangeRequest,
   type MaterialReissueSnapshot,
   type MaterialReissueTrackingEntry,
   type MaterialReissueTrackingStatus,
+  type UpdateMaterialReissueTrackingInput,
 } from "../fileApi";
 import type { Member } from "../data/members";
 import type { ProjectTask } from "../data/tasks";
@@ -24,6 +26,7 @@ import { Loader } from "./Loader";
 import { DateRangePicker } from "./DateRangePicker";
 import { SearchInput } from "./SearchInput";
 import { SearchSelect } from "./SearchSelect";
+import { InlineDateCell, InlineOptionCell, InlineTextCell } from "./InlineEdit";
 import { Toast } from "./Toast";
 
 /**
@@ -310,6 +313,7 @@ export function MaterialReissuePanel({
   const [shipmentBusy, setShipmentBusy] = useState(false);
   const [shipmentError, setShipmentError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [trackingSavingKey, setTrackingSavingKey] = useState<string | null>(null);
   const [imageGallery, setImageGallery] = useState<{ items: GalleryImage[]; index: number } | null>(null);
 
   useEffect(() => {
@@ -702,6 +706,49 @@ export function MaterialReissuePanel({
     }
   };
 
+  /** 补发追踪行内修改：快递单号 / 预计到货 / 发货备注 / 状态。 */
+  const patchTracking = async (row: TrackingRow, patch: Omit<UpdateMaterialReissueTrackingInput, "changeRequestId" | "lineIndex">): Promise<void> => {
+    if (!canMark || trackingSavingKey !== null) {
+      return;
+    }
+    setTrackingSavingKey(row.key);
+    try {
+      const result = await updateMaterialReissueTracking(projectId, {
+        changeRequestId: row.application.id,
+        lineIndex: row.lineIndex,
+        ...patch,
+      });
+      const updated = result.items[0];
+      if (updated === undefined) {
+        setNotice({ kind: "error", text: t("pd.material.trackingSaveFailed") });
+        return;
+      }
+      setState((previous) =>
+        previous.kind !== "ready"
+          ? previous
+          : {
+              kind: "ready",
+              applications: previous.applications.map((application) =>
+                application.id !== row.application.id
+                  ? application
+                  : {
+                      ...application,
+                      tracking: application.tracking.map((entry) => (entry.lineIndex === row.lineIndex ? updated : entry)),
+                    },
+              ),
+            },
+      );
+      setNotice({ kind: "ok", text: t("pd.material.trackingSaved") });
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text: error instanceof Error && error.message !== "" ? error.message : t("pd.material.trackingSaveFailed"),
+      });
+    } finally {
+      setTrackingSavingKey(null);
+    }
+  };
+
   return (
     // 页面内容最大宽度 1740px 居中、两侧留白（2026-11-25 业务口径：宽屏不铺满整行，小屏动态收窄）；
     // 屏幕小于 1740px 时由 w-full 自动收窄，表格横向滚动兜底不变。
@@ -1013,19 +1060,79 @@ export function MaterialReissuePanel({
                         </td>
                         <td className="break-words px-4 py-4 align-middle text-zinc-700">{textOrDash(row.line.specification)}</td>
                         <td className="whitespace-nowrap px-4 py-4 text-right align-middle tabular-nums text-zinc-700">{quantityText(row.line.quantity)} {textOrDash(row.line.unit)}</td>
-                        <td className="break-words px-4 py-4 align-middle text-zinc-700">{textOrDash(row.entry.trackingNo)}</td>
-                        <td className="whitespace-nowrap px-4 py-4 align-middle text-zinc-700">{row.entry.estimatedArrivalDate === null ? "—" : row.entry.estimatedArrivalDate.replace(/-/g, "/")}</td>
-                        <td className="break-words px-4 py-4 align-middle text-zinc-600">{textOrDash(row.entry.note)}</td>
+                        <td className="break-words px-4 py-4 align-middle text-zinc-700">
+                          <InlineTextCell
+                            value={row.entry.trackingNo ?? ""}
+                            ariaLabel={t("pd.material.col.trackingNo")}
+                            placeholder={t("pd.material.col.trackingNo")}
+                            rows={1}
+                            disabled={!canMark || trackingSavingKey !== null}
+                            disabledHint={t("pd.material.editLocked")}
+                            triggerClassName="break-words text-left text-zinc-700"
+                            display={row.entry.trackingNo === null ? <span className="text-zinc-400">—</span> : row.entry.trackingNo}
+                            onSave={(value) => {
+                              const next = value.trim();
+                              void patchTracking(row, { trackingNo: next === "" ? null : next });
+                            }}
+                          />
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-4 align-middle text-zinc-700">
+                          <InlineDateCell
+                            valueIso={row.entry.estimatedArrivalDate ?? ""}
+                            ariaLabel={t("pd.material.col.eta")}
+                            disabled={!canMark || trackingSavingKey !== null}
+                            disabledHint={t("pd.material.editLocked")}
+                            triggerClassName="tabular-nums text-zinc-700"
+                            display={row.entry.estimatedArrivalDate === null ? <span className="text-zinc-400">—</span> : row.entry.estimatedArrivalDate.replace(/-/g, "/")}
+                            onChange={(iso) => {
+                              void patchTracking(row, { estimatedArrivalDate: iso === "" ? null : iso });
+                            }}
+                          />
+                        </td>
+                        <td className="break-words px-4 py-4 align-middle text-zinc-600">
+                          <InlineTextCell
+                            value={row.entry.note ?? ""}
+                            ariaLabel={t("pd.material.col.shipNote")}
+                            placeholder={t("pd.material.col.shipNote")}
+                            rows={2}
+                            disabled={!canMark || trackingSavingKey !== null}
+                            disabledHint={t("pd.material.editLocked")}
+                            triggerClassName="break-words text-left text-zinc-600"
+                            display={row.entry.note === null ? <span className="text-zinc-400">—</span> : row.entry.note}
+                            onSave={(value) => {
+                              const next = value.trim();
+                              void patchTracking(row, { note: next === "" ? null : next });
+                            }}
+                          />
+                        </td>
                         <td className="px-4 py-4 text-center align-middle">
-                          <span
-                            className={
-                              rowTint === null
-                                ? "inline-block rounded px-1.5 py-0.5 text-[11px] font-medium " + statusBadgeClass(row.entry.status)
-                                : "text-[11px] font-bold " + materialStatusTextClass(row.entry.status)
+                          <InlineOptionCell
+                            value={row.entry.status}
+                            options={[
+                              { value: "shipped", label: t("pd.material.status.shipped") },
+                              { value: "received", label: t("pd.material.status.received") },
+                            ]}
+                            ariaLabel={t("pd.material.col.status")}
+                            disabled={!canMark || trackingSavingKey !== null}
+                            disabledHint={t("pd.material.editLocked")}
+                            bare
+                            display={
+                              <span
+                                className={
+                                  rowTint === null
+                                    ? "inline-block rounded px-1.5 py-0.5 text-[11px] font-medium " + statusBadgeClass(row.entry.status)
+                                    : "text-[11px] font-bold " + materialStatusTextClass(row.entry.status)
+                                }
+                              >
+                                {statusLabel(row.entry.status)}
+                              </span>
                             }
-                          >
-                            {statusLabel(row.entry.status)}
-                          </span>
+                            onPick={(value) => {
+                              if (value !== row.entry.status) {
+                                void patchTracking(row, { status: value === "received" ? "received" : "shipped" });
+                              }
+                            }}
+                          />
                         </td>
                         <td className="px-4 py-4 align-middle">
                           {imageIds.length === 0 ? (

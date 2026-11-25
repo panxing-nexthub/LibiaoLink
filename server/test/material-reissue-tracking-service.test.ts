@@ -123,6 +123,54 @@ describe("MaterialReissueTrackingService", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  it("updates tracking fields without changing the registered time", async () => {
+    const repository = new FakeRepository();
+    const entry = {
+      changeRequestId: CHANGE_A,
+      lineIndex: 0,
+      status: "shipped",
+      trackingNo: "OLD",
+      estimatedArrivalDate: "2026-11-29",
+      note: null,
+      imageFileId: null,
+      imageFileIds: [],
+      shippedBy: ACTOR,
+      shippedAt: "2026-11-25T04:00:00.000Z",
+      updatedAt: "2026-11-25T04:00:00.000Z",
+    };
+    repository.changes.set(CHANGE_A, changeRow(CHANGE_A, TASK_A, 1, [entry]));
+    const { service, audit } = buildService(repository, { accessLevel: "edit", projectManager: true });
+
+    const result = await service.update(PROJECT, {
+      changeRequestId: CHANGE_A,
+      lineIndex: 0,
+      status: "received",
+      trackingNo: "SF999",
+      estimatedArrivalDate: "2026-12-01",
+      note: "已签收",
+    }, ACTOR);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.status).toBe("received");
+    expect(result.items[0]?.trackingNo).toBe("SF999");
+    expect(result.items[0]?.estimatedArrivalDate).toBe("2026-12-01");
+    expect(result.items[0]?.note).toBe("已签收");
+    expect(result.items[0]?.shippedAt).toBe("2026-11-25T04:00:00.000Z");
+    expect(result.items[0]?.updatedAt).toBe(NOW.toISOString());
+    expect(repository.updated).toHaveLength(1);
+    expect(audit.records).toHaveLength(1);
+  });
+
+  it("rejects updating a line that has not been registered", async () => {
+    const repository = new FakeRepository();
+    repository.changes.set(CHANGE_A, changeRow(CHANGE_A, TASK_A, 1));
+    const { service } = buildService(repository, { accessLevel: "edit", projectManager: true });
+
+    await expect(
+      service.update(PROJECT, { changeRequestId: CHANGE_A, lineIndex: 0, note: "x" }, ACTOR),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
   it("rejects already tracked lines", async () => {
     const repository = new FakeRepository();
     repository.changes.set(CHANGE_A, changeRow(CHANGE_A, TASK_A, 1, [{ lineIndex: 0 }]));

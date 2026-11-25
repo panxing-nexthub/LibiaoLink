@@ -445,6 +445,28 @@ export class TaskService {
     if (!isProjectStageKey(template.stageKey)) {
       throw new AppError("VALIDATION_FAILED", "「入库审核」是模板专区分组，不能生成项目任务");
     }
+    /**
+     * 项目编辑者仍按 task.create 正常建任务；
+     * 当前阶段的任务负责人只允许从「本人私有个人模版」向本人负责的阶段补任务，且新任务强制归属本人。
+     */
+    const projectAccess = await this.permission.assertProjectVisible(actorId, projectId);
+    const canCreateTask = await this.permission.can(actorId, "task.create", {
+      member: projectAccess.member,
+      projectManager: projectAccess.projectManager,
+      taskOwner: projectAccess.taskOwner,
+      groupAccessLevel: projectAccess.groupAccessLevel,
+      accessLevel: projectAccess.accessLevel,
+    });
+    let taskOwnerPersonal = false;
+    if (!canCreateTask) {
+      if (template.visibility !== "private" || template.createdBy !== actorId) {
+        throw new AppError("FORBIDDEN", "任务负责人只能从本人的个人模版向本人负责的阶段添加任务");
+      }
+      if (!(await this.repository.isStageTaskOwner(projectId, template.stageKey, actorId))) {
+        throw new AppError("FORBIDDEN", "任务负责人只能向本人负责的阶段添加任务");
+      }
+      taskOwnerPersonal = true;
+    }
     const ordered = template.nodes;
     let picked = ordered;
     if (body.nodeIds !== undefined) {
@@ -459,7 +481,8 @@ export class TaskService {
       return { created: [], skipped: [] };
     }
     // 同 create()：缺省 = 「待分配」（2026-09-24 业务口径）；项目经理缺省继承项目当前经理。
-    const ownerIds = body.ownerIds !== undefined ? body.ownerIds : [];
+    // 任务负责人个人模版例外：新任务强制归属本人，避免替他人建任务。
+    const ownerIds = taskOwnerPersonal ? [actorId] : body.ownerIds !== undefined ? body.ownerIds : [];
     const managerIds = project.managerIds;
     const stageKey = template.stageKey as string;
     const at = new Date();

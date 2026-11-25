@@ -838,7 +838,8 @@ export default function App() {
   const canManageNodes = canEditTaskNodes(permissions);
   const canReviewNodes = canReviewTaskNodes(permissions);
   const canManageTemplates = canEditTaskTemplates(permissions);
-  const canManageTemplate = (createdBy: string | null): boolean => canEditTaskTemplate(permissions, createdBy);
+  const canManageTemplate = (createdBy: string | null, visibility?: "private" | "public"): boolean =>
+    canEditTaskTemplate(permissions, createdBy, visibility);
   const canChangeTemplateVisibility = (createdBy: string | null): boolean => canChangeTaskTemplateVisibility(permissions, createdBy);
   /**
    * 干系人写入口（Push 221 · A27）：新建 / 编辑 / 删除 = stakeholder.manage。与 project.create / project.update

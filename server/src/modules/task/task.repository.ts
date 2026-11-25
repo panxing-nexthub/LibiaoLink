@@ -268,6 +268,21 @@ export class TaskRepository {
     return Number(totals[0]?.value ?? 0);
   }
 
+  /** 当前账号是否为指定项目 + 阶段的未删除任务负责人（项目空间个人模版补任务用）。 */
+  async isStageTaskOwner(projectId: string, stageKey: string, actorId: string, client: DbClient = this.database.db): Promise<boolean> {
+    const [row] = await client
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(
+        eq(tasks.projectId, projectId),
+        eq(tasks.stageKey, stageKey),
+        isNull(tasks.deletedAt),
+        sql`${actorId} = any(${tasks.ownerIds})`,
+      ))
+      .limit(1);
+    return row !== undefined;
+  }
+
   async findListRowById(taskId: string, projectId: string, client: DbClient = this.database.db): Promise<TaskListRow | null> {
     const rows = await client
       .select({ task: tasks, ownerNames: OWNER_NAMES_SQL, managerNames: MANAGER_NAMES_SQL, changeLinks: CHANGE_LINKS_SQL })

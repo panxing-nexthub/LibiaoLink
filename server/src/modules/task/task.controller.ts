@@ -118,7 +118,6 @@ export class TaskController {
    * 阶段取模板阶段、描述取节点库现值；同一项目已存在的节点默认跳过（skipped），skipExisting=false 时 409。
    */
   @Post(":id/tasks/from-template")
-  @RequirePermission("task.create")
   async createFromTemplate(
     @Param("id", uuidParam) id: string,
     @Body(new ZodValidationPipe(TaskCreateFromTemplateBodySchema)) body: TaskCreateFromTemplateBody,

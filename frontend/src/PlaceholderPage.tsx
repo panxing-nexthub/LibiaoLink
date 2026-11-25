@@ -575,7 +575,7 @@ type PlaceholderPageProps = {
   /** 是否可新建公共任务模板（管理员，或至少管理一个有效项目的项目经理）。 */
   canManageTemplates: boolean;
   /** 单份模板是否可维护：管理员，或仍为有效项目经理的创建人。 */
-  canManageTemplate: (createdBy: string | null) => boolean;
+  canManageTemplate: (createdBy: string | null, visibility?: "private" | "public") => boolean;
   /** 单份模板是否可调整可见范围：只允许填写人本人。 */
   canChangeTemplateVisibility: (createdBy: string | null) => boolean;
 };
@@ -990,9 +990,9 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
         );
   /** 当前阶段里正被编辑的那一份（跨阶段编辑时为 null）；左列点击 / 拖拽只认它。 */
   const editingTemplateHere =
-    templates.find((template) => template.id === editingTemplateId && canManageTemplate(template.createdBy)) ?? null;
+    templates.find((template) => template.id === editingTemplateId && canManageTemplate(template.createdBy, template.visibility)) ?? null;
   /** 当前阶段是否有可维护的模板：没有就不给节点卡片挂「点击加入」提示。 */
-  const canEditAnyTemplateHere = templates.some((template) => canManageTemplate(template.createdBy));
+  const canEditAnyTemplateHere = templates.some((template) => canManageTemplate(template.createdBy, template.visibility));
   /** 当前唯一编辑项；切到别的阶段时仍能认出它，提示用户先回原阶段收尾。 */
   const editingTemplateAnywhere = editingTemplateId === null ? null : findTemplateAnywhere(editingTemplateId);
 
@@ -1067,7 +1067,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
    */
   function beginTemplateEditing(templateId: string): boolean {
     const target = templates.find((template) => template.id === templateId);
-    if (target === undefined || !canManageTemplate(target.createdBy)) {
+    if (target === undefined || !canManageTemplate(target.createdBy, target.visibility)) {
       return false;
     }
     if (editingTemplateId !== null && editingTemplateId !== templateId) {
@@ -1113,7 +1113,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       return;
     }
     const target = templates.find((template) => template.id === editingTemplateId);
-    if (target === undefined || !canManageTemplate(target.createdBy)) {
+    if (target === undefined || !canManageTemplate(target.createdBy, target.visibility)) {
       const active = editingTemplateId === null ? null : findTemplateAnywhere(editingTemplateId);
       setTemplateNotice({
         kind: "info",
@@ -1912,7 +1912,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
     if (editingTemplateId === null || templateId !== editingTemplateId) {
       return null;
     }
-    if (!templates.some((template) => template.id === templateId && canManageTemplate(template.createdBy))) {
+    if (!templates.some((template) => template.id === templateId && canManageTemplate(template.createdBy, template.visibility))) {
       return null;
     }
     const cards = Array.from(panel.querySelectorAll("article"));
@@ -1934,7 +1934,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
       return;
     }
     const targetTemplate = templates.find((template) => template.id === spot.templateId);
-    if (targetTemplate === undefined || !canManageTemplate(targetTemplate.createdBy)) {
+    if (targetTemplate === undefined || !canManageTemplate(targetTemplate.createdBy, targetTemplate.visibility)) {
       return;
     }
     const insertAt = spot.index;
@@ -2842,7 +2842,7 @@ export default function PlaceholderPage({ me, page, section, canManageNodes, can
                   const duplicate = hovered && isDuplicateIn(template);
                   const nodeCount = template.nodes.length;
                   const savedOk = !isDirty(template);
-                  const canManageThisTemplate = canManageTemplate(template.createdBy);
+                  const canManageThisTemplate = canManageTemplate(template.createdBy, template.visibility);
                   /** 只有这块面板处于唯一「编辑中」状态时才允许改名 / 调可见范围 / 增删节点 / 拖拽排序。 */
                   const isEditing = canManageThisTemplate && editingTemplateId === template.id;
                   const isPersonalDefault = template.virtualPersonalDefault === true || isPersistedPersonalDefault(template, currentUserId, activeSection);

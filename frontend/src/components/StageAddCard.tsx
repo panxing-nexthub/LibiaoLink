@@ -8,7 +8,7 @@ import { createTaskTemplate, createTemplateStageNode, fetchStageNodes, fetchStag
 import { cachedZhTo, translateZhTo } from "../translateApi";
 import { ApiError } from "../api";
 import { canEditTaskTemplate, useMyPermissions } from "../permissions";
-import { PERSONAL_DEFAULT_TEMPLATE_ID_PREFIX, PERSONAL_DEFAULT_TEMPLATE_NAME, ensurePersonalDefaultTemplate, rememberPersonalDefaultTemplate } from "../personalTemplate";
+import { PERSONAL_DEFAULT_TEMPLATE_ID_PREFIX, PERSONAL_DEFAULT_TEMPLATE_NAME, ensurePersonalDefaultTemplate, isPersonalDefaultTemplate, rememberPersonalDefaultTemplate } from "../personalTemplate";
 import { ScrollArea } from "./ScrollArea";
 import { usePopover } from "./usePopover";
 import { useFocusTrapFor } from "./useFocusTrap";
@@ -223,6 +223,8 @@ type StageAddCardProps = {
   viewportDraggable?: boolean;
   /** 初始落点由调用方提供；不传时回落到右上角。 */
   style?: CSSProperties;
+  /** 任务负责人模式：只显示默认「个人模版」，隐藏公共任务节点与参考模板。 */
+  personalOnly?: boolean;
 };
 
 /**
@@ -231,7 +233,7 @@ type StageAddCardProps = {
  * 其余每个标签 = 这个阶段的一块模板（按预设顺序预览、可鼠标滚动，也能逐条 / 整套加）。
  * 关卡片 = 右上 × / `Esc` / **点卡片外的空白处** / **再点同一个阶段标签**；换阶段标签或换项目时也会自动关掉（由 TaskBoard 控制）。
  */
-export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, onAddNodes, placement, onClose, viewportDraggable = false, style }: StageAddCardProps) {
+export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, onAddNodes, placement, onClose, viewportDraggable = false, style, personalOnly = false }: StageAddCardProps) {
   const t = useT();
   const locale = useLocale();
   const localize = useLocalizedTranslator();
@@ -472,12 +474,16 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
     () => ensurePersonalDefaultTemplate(templates, stage, currentUserId),
     [templates, stage, currentUserId],
   );
-  const currentTemplate = displayedTemplates.find((item) => item.id === activeTab);
-  const isNodesTab = currentTemplate === undefined;
+  const personalTemplate = displayedTemplates.find((item) => isPersonalDefaultTemplate(item, currentUserId, stage));
+  const visibleTemplates = personalOnly
+    ? (personalTemplate === undefined ? [] : [personalTemplate])
+    : displayedTemplates;
+  const currentTemplate = personalOnly ? personalTemplate : displayedTemplates.find((item) => item.id === activeTab);
+  const isNodesTab = !personalOnly && currentTemplate === undefined;
   const templateFormOpen = currentTemplate !== undefined && templateEditorId === currentTemplate.id;
   const virtualCurrentTemplate = currentTemplate?.id.startsWith(PERSONAL_DEFAULT_TEMPLATE_ID_PREFIX) ?? false;
-  const canEditCurrentTemplate = currentTemplate !== undefined && canEditTaskTemplate(permissions, currentTemplate.createdBy);
-  const items = currentTemplate?.nodes ?? nodes;
+  const canEditCurrentTemplate = currentTemplate !== undefined && canEditTaskTemplate(permissions, currentTemplate.createdBy, currentTemplate.visibility);
+  const items = currentTemplate?.nodes ?? (personalOnly ? [] : nodes);
   const normalizedQuery = nodeQuery.trim().toLowerCase();
   const visibleItems = items.map((node, index) => ({ node, index })).filter(({ node }) =>
     normalizedQuery === "" || (node.title + "\n" + node.titleEn).toLowerCase().includes(normalizedQuery));
@@ -557,7 +563,7 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
 
   /** 打开模板内新增节点表单（只对可编辑模板显示入口；同一入口再点一次收起）。 */
   const openTemplateNodeForm = (template: TemplateItem): void => {
-    if (!canEditTaskTemplate(permissions, template.createdBy)) return;
+    if (!canEditTaskTemplate(permissions, template.createdBy, template.visibility)) return;
     if (templateEditorId === template.id) {
       closeTemplateNodeForm();
       return;
@@ -640,7 +646,7 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
       return;
     }
     const template = displayedTemplates.find((item) => item.id === templateEditorId);
-    if (template === undefined || !canEditTaskTemplate(permissions, template.createdBy)) {
+    if (template === undefined || !canEditTaskTemplate(permissions, template.createdBy, template.visibility)) {
       return;
     }
     setTemplateFormBusy(true);
@@ -714,7 +720,7 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
         <div className={"min-w-0 " + (viewportDraggable ? "flex-1 touch-none cursor-grab select-none active:cursor-grabbing" : "")} {...dragHandlers}>
           <p className="truncate text-sm font-semibold text-zinc-800">{stageText(locale, stage)}</p>
           <p className="mt-0.5 text-[11px] text-zinc-500">
-            {t("sac.summary", { nodes: nodes.length, templates: displayedTemplates.length })}
+            {t("sac.summary", { nodes: nodes.length, templates: visibleTemplates.length })}
           </p>
         </div>
         {viewportDraggable ? (
@@ -749,20 +755,22 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
 
       {/* 标签导航：任务节点 + 这个阶段的模板（模板多时横向滚动） */}
       <div className="mt-3 flex shrink-0 gap-1 overflow-x-auto border-b border-zinc-200/80">
-        <button
-          type="button"
-          onClick={() => { setActiveTab("nodes"); setTemplateEditorId(null); setTemplateNotice(null); }}
-          aria-current={isNodesTab ? "true" : undefined}
-          className={
-            "whitespace-nowrap border-b-2 px-2.5 py-1.5 text-xs font-medium transition " +
-            (isNodesTab ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-800")
-          }
-        >
-          {t("sac.tab.nodes")}
-          <span className="ml-1 text-[10px] text-zinc-400">{nodes.length}</span>
-        </button>
-        {displayedTemplates.map((template) => {
-          const active = template.id === activeTab;
+        {personalOnly ? null : (
+          <button
+            type="button"
+            onClick={() => { setActiveTab("nodes"); setTemplateEditorId(null); setTemplateNotice(null); }}
+            aria-current={isNodesTab ? "true" : undefined}
+            className={
+              "whitespace-nowrap border-b-2 px-2.5 py-1.5 text-xs font-medium transition " +
+              (isNodesTab ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-800")
+            }
+          >
+            {t("sac.tab.nodes")}
+            <span className="ml-1 text-[10px] text-zinc-400">{nodes.length}</span>
+          </button>
+        )}
+        {visibleTemplates.map((template) => {
+          const active = personalOnly ? true : template.id === activeTab;
           return (
             <button
               key={template.id}
@@ -900,7 +908,9 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
 
       {/* Push 207 撤：本卡片原「常驻临时任务入口」整块在此，按业务口径「临时任务不应该存在于阶段里面新建」下架。 */}
 
-      {listNotice !== null ? (
+      {personalOnly && personalTemplate === undefined ? (
+        <p className="mt-2 rounded-lg border border-dashed border-zinc-200 px-3 py-4 text-center text-xs text-zinc-500">{t("sac.template.unavailable")}</p>
+      ) : listNotice !== null ? (
         <p className="mt-2 flex min-h-0 flex-1 items-center justify-center gap-2 rounded-lg border border-dashed border-zinc-200 px-3 text-center text-xs text-zinc-500">
           {listNotice}
           {!listFailed ? null : (

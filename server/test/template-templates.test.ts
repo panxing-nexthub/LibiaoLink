@@ -612,7 +612,7 @@ describe("编辑模板（改名 / 可见范围 / 节点全量替换 + 乐观锁�
     await expect(first.service.updateTemplate(MISSING, { name: "新名字", version: 0 }, ACTOR)).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
-    const second = makeService({ allowed: false });
+    const second = makeService({ allowed: false, admin: false });
     await expect(second.service.updateTemplate(TEMPLATE, { name: "新名字", version: 0 }, ACTOR)).rejects.toMatchObject({
       code: "FORBIDDEN",
     });
@@ -668,7 +668,7 @@ describe("删除模板（软删 + 审计快照）", () => {
     await expect(first.service.deleteTemplate(MISSING, { version: 0 }, ACTOR)).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
-    const second = makeService({ allowed: false });
+    const second = makeService({ allowed: false, admin: false });
     await expect(second.service.deleteTemplate(TEMPLATE, { version: 0 }, ACTOR)).rejects.toMatchObject({
       code: "FORBIDDEN",
     });
@@ -703,10 +703,16 @@ describe("导入到个人模板", () => {
     ]);
   });
 
-  it("无模板编辑权限时不提供个人模板选项", async () => {
-    const { service, repo } = makeService({ allowed: false });
-    repo.rows = [makeTemplate({ visibility: "private", createdBy: ACTOR })];
-    expect(await service.listPersonalImportTemplates(ACTOR)).toEqual([]);
+  it("任务负责人也能在导入页看到自己的个人模板（公共 / 他人模板不返回）", async () => {
+    const { service, repo } = makeService({ allowed: false, admin: false });
+    repo.rows = [
+      makeTemplate({ id: TEMPLATE, visibility: "private", createdBy: ACTOR }),
+      makeTemplate({ id: OTHER, visibility: "private", createdBy: OTHER }),
+      makeTemplate({ id: MISSING, visibility: "public", createdBy: ACTOR }),
+    ];
+    expect(await service.listPersonalImportTemplates(ACTOR)).toEqual([
+      { id: TEMPLATE, name: "硬件实施模板一", stageKey: "install", version: 0 },
+    ]);
   });
 
   it("拒绝别人的模板、公共模板、跨阶段和过期版本", async () => {
@@ -719,5 +725,43 @@ describe("导入到个人模板", () => {
     await expect(service.appendImportedPrivateNodes([selection], ACTOR, {} as DbClient)).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
     await expect(service.appendImportedPrivateNodes([{ ...selection, version: 1, stageKey: "design" }], ACTOR, {} as DbClient)).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
     expect(nodes.inserts).toEqual([]);
+  });
+});
+
+describe("任务负责人私有个人模版权限（2026-11-25）", () => {
+  it("非项目经理可新建 / 编辑 / 删除本人私有模板，并可新增模板私有节点", async () => {
+    const { service, permission } = makeService({ allowed: false, admin: false });
+    const created = await service.createTemplate(
+      { name: "个人模版", stageKey: "install", visibility: "private", nodeIds: [] },
+      ACTOR,
+    );
+    expect(created.visibility).toBe("private");
+    expect(created.createdBy).toBe(ACTOR);
+
+    const renamed = await service.updateTemplate(created.id, { name: "我的布局模板", version: created.version }, ACTOR);
+    expect(renamed.name).toBe("我的布局模板");
+
+    const node = await service.createTemplateNode(created.id, { title: "1", titleEn: "1" }, ACTOR);
+    expect(node).toMatchObject({ title: "1", titleEn: "1" });
+
+    await service.deleteTemplate(created.id, { version: renamed.version }, ACTOR);
+    expect(permission.lastKey).toBe(null);
+  });
+
+  it("任务负责人不能把个人模板切换为公共模板", async () => {
+    const { service, repo } = makeService({ allowed: false, admin: false });
+    repo.rows = [makeTemplate({ createdBy: ACTOR, visibility: "private", version: 0 })];
+    await expect(
+      service.updateTemplate(TEMPLATE, { visibility: "public", version: 0 }, ACTOR),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(repo.rows[0]).toMatchObject({ visibility: "private", version: 0 });
+  });
+
+  it("公共模板仍只允许项目经理 / 管理员维护", async () => {
+    const { service, repo } = makeService({ allowed: false, admin: false });
+    repo.rows = [makeTemplate({ createdBy: ACTOR, visibility: "public", version: 0 })];
+    await expect(
+      service.updateTemplate(TEMPLATE, { name: "任务负责人改公共", version: 0 }, ACTOR),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

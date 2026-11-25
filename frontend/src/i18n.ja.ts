@@ -1943,6 +1943,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "sac.template.duplicate": "このテンプレートには同名のノードがすでにあります。別の名前にしてください。",
   "sac.template.addFailed": "テンプレートへの追加に失敗しました：{message}",
   "sac.template.empty": "このテンプレートにはまだノードがありません。「＋ ノードを追加」から中国語名を入力して追加してください。",
+  "sac.template.unavailable": "個人テンプレートが利用できません。先にタスクテンプレートページで作成してください。",
   "sac.added": "{n} を追加しました",
   "sac.batch.title": "このテンプレートのうち、まだプロジェクトにないノードをすべて追加します",
   "sac.batch": "すべて追加（{n}）",

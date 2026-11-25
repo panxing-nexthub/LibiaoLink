@@ -869,9 +869,9 @@ export function MaterialReissuePanel({
                       </header>
 
                       <div className="overflow-x-auto">
-                        <table className="w-full min-w-[1080px] table-fixed border-collapse text-left text-sm">
+                        <table className="w-full min-w-[1180px] table-fixed border-collapse text-left text-sm">
                           <colgroup>
-                            <col className="w-[84px]" />
+                            <col className="w-[72px]" />
                             <col className="w-[64px]" />
                             <col className="w-[150px]" />
                             <col className="w-[200px]" />
@@ -879,6 +879,7 @@ export function MaterialReissuePanel({
                             <col className="w-[80px]" />
                             <col className="w-[72px]" />
                             <col />
+                            <col className="w-[104px]" />
                           </colgroup>
                           <thead className="bg-zinc-50 text-zinc-500">
                             <tr>
@@ -892,47 +893,40 @@ export function MaterialReissuePanel({
                               <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-right font-medium">{fieldText(locale, "数量")}</th>
                               <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">{fieldText(locale, "单位")}</th>
                               <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "备注")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">{t("pd.material.col.status")}</th>
                             </tr>
                           </thead>
                           <tbody>
                             {material.materials.length === 0 ? (
                               <tr>
-                                <td colSpan={8} className="border-b border-zinc-100 px-4 py-10 text-center text-sm text-zinc-400">—</td>
+                                <td colSpan={9} className="border-b border-zinc-100 px-4 py-10 text-center text-sm text-zinc-400">—</td>
                               </tr>
                             ) : (
                               material.materials.map((line, index) => {
                                 const row = allRowByKey.get(trackingKey(application.id, index));
                                 const rowStatus: MaterialRowStatus = row?.tracking?.status ?? "pending";
+                                const rowTint = materialRowTintOf(tierTint === "vivid" ? "vivid" : "medium", rowStatus);
                                 return (
                                   <tr
                                     key={row?.key ?? String(index)}
                                     data-material-reissue-line={String(index + 1)}
                                     data-material-reissue-row-status={rowStatus}
-                                    className="transition hover:bg-zinc-50/70"
+                                    className="task-row-tint transition"
+                                    style={{ "--row-tint": rowTint.tint, "--row-tint-hover": rowTint.hover } as CSSProperties}
                                   >
                                     <td className="border-b border-zinc-100 px-4 py-4 text-center align-middle">
-                                      <div className="flex flex-col items-center gap-1.5">
-                                        <input
-                                          type="checkbox"
-                                          checked={row !== undefined && selectedKeys.has(row.key)}
-                                          disabled={row === undefined || !row.canSelect}
-                                          aria-label={line.materialName}
-                                          onChange={() => {
-                                            if (row !== undefined) {
-                                              toggleRowSelection(row);
-                                            }
-                                          }}
-                                          className="h-4 w-4 cursor-pointer rounded border-zinc-300 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
-                                        />
-                                        <span
-                                          className={
-                                            "inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium " +
-                                            (rowStatus === "pending" ? "bg-blue-50 text-blue-700" : statusBadgeClass(rowStatus))
+                                      <input
+                                        type="checkbox"
+                                        checked={row !== undefined && selectedKeys.has(row.key)}
+                                        disabled={row === undefined || !row.canSelect}
+                                        aria-label={line.materialName}
+                                        onChange={() => {
+                                          if (row !== undefined) {
+                                            toggleRowSelection(row);
                                           }
-                                        >
-                                          {rowStatus === "pending" ? t("pd.material.status.pending") : statusLabel(rowStatus)}
-                                        </span>
-                                      </div>
+                                        }}
+                                        className="h-4 w-4 cursor-pointer rounded border-zinc-300 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                      />
                                     </td>
                                     <td className="border-b border-zinc-100 px-4 py-4 text-center align-middle tabular-nums text-zinc-500">{index + 1}</td>
                                     <td className="break-words border-b border-zinc-100 px-4 py-4 align-middle text-zinc-700">{textOrDash(line.materialCode)}</td>
@@ -941,6 +935,11 @@ export function MaterialReissuePanel({
                                     <td className="border-b border-zinc-100 px-4 py-4 text-right align-middle tabular-nums text-zinc-700">{quantityText(line.quantity)}</td>
                                     <td className="border-b border-zinc-100 px-4 py-4 text-center align-middle text-zinc-700">{textOrDash(line.unit)}</td>
                                     <td className="break-words border-b border-zinc-100 px-4 py-4 align-middle text-zinc-600">{textOrDash(line.remark)}</td>
+                                    <td className="whitespace-nowrap border-b border-zinc-100 px-4 py-4 text-center align-middle">
+                                      <span className={"text-[11px] font-bold " + materialStatusTextClass(rowStatus)}>
+                                        {rowStatus === "pending" ? t("pd.material.status.pending") : statusLabel(rowStatus)}
+                                      </span>
+                                    </td>
                                   </tr>
                                 );
                               })

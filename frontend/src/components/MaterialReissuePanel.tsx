@@ -252,17 +252,18 @@ function imageIdsOf(entry: MaterialReissueTrackingEntry): string[] {
 type TrackingMergeKey = "trackingNo" | "eta" | "note" | "images" | "source";
 
 function trackingMergeValueOf(row: TrackingRow, key: TrackingMergeKey): string {
+  const batch = row.entry.shippedAt;
   switch (key) {
     case "trackingNo":
-      return row.entry.trackingNo ?? "";
+      return batch + "|" + (row.entry.trackingNo ?? "");
     case "eta":
-      return row.entry.estimatedArrivalDate ?? "";
+      return batch + "|" + (row.entry.estimatedArrivalDate ?? "");
     case "note":
-      return row.entry.note ?? "";
+      return batch + "|" + (row.entry.note ?? "");
     case "images":
-      return imageIdsOf(row.entry).join(",");
+      return batch + "|" + imageIdsOf(row.entry).join(",");
     case "source":
-      return row.application.id;
+      return batch + "|" + row.application.id;
   }
 }
 
@@ -1097,6 +1098,7 @@ export function MaterialReissuePanel({
                     const sourceTitle = row.application.material.taskTitle !== "" ? row.application.material.taskTitle : row.task?.title ?? "—";
                     const imageIds = imageIdsOf(row.entry);
                     const rowTint = tierTint === false ? null : materialRowTintOf(tierTint, row.entry.status);
+                    const batchStart = index > 0 && filteredTrackingRows[index - 1]?.entry.shippedAt !== row.entry.shippedAt;
                     const spanOf = (key: TrackingMergeKey): number => trackingSpans[key][index] ?? 0;
                     const groupOf = (key: TrackingMergeKey): TrackingRow[] => trackingGroupOf(index, key);
                     return (
@@ -1104,7 +1106,7 @@ export function MaterialReissuePanel({
                         key={row.key}
                         data-material-reissue-tracking-row={row.key}
                         data-material-reissue-row-status={row.entry.status}
-                        className={rowTint === null ? "" : "task-row-tint"}
+                        className={(rowTint === null ? "" : "task-row-tint-static ") + (batchStart ? "tracking-batch-start" : "")}
                         style={rowTint === null ? undefined : ({ "--row-tint": rowTint.tint, "--row-tint-hover": rowTint.hover } as CSSProperties)}
                       >
                         <td className="border border-zinc-200 px-4 py-4 align-middle">

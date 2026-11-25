@@ -1150,8 +1150,18 @@ export function MaterialReissuePanel({
                           )}
                         </td>
                         <td className="px-4 py-4 align-middle text-zinc-600">
-                          <div>{sourceTitle}</div>
-                          <div className="mt-0.5 text-[11px] text-zinc-400">{formatDateTime(row.application.appliedAt)} · {row.application.material.applicantName}</div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDetailId(row.application.id);
+                            }}
+                            aria-label={t("pd.material.viewDetail")}
+                            title={t("pd.material.viewDetail")}
+                            className="group w-full text-left transition hover:text-zinc-900"
+                          >
+                            <div className="group-hover:underline">{sourceTitle}</div>
+                            <div className="mt-0.5 text-[11px] text-zinc-400">{formatDateTime(row.application.appliedAt)} · {row.application.material.applicantName}</div>
+                          </button>
                         </td>
                       </tr>
                     );

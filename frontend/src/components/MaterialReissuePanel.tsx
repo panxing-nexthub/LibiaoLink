@@ -1010,37 +1010,37 @@ export function MaterialReissuePanel({
                       </header>
 
                       <div className="overflow-x-auto">
-                        <table className="w-full min-w-[1120px] table-fixed border-collapse text-left text-sm">
+                        <table className="w-full table-fixed border-collapse text-left text-sm">
                           <colgroup>
-                            <col className="w-[72px]" />
-                            <col className="w-[64px]" />
-                            <col className="w-[150px]" />
-                            <col className="w-[200px]" />
-                            <col className="w-[170px]" />
-                            <col className="w-[80px]" />
-                            <col className="w-[72px]" />
+                            <col className="w-[52px]" />
+                            <col className="w-[56px]" />
+                            <col className="w-[130px]" />
                             <col />
-                            <col className="w-[104px]" />
+                            <col />
+                            <col className="w-[72px]" />
+                            <col className="w-[60px]" />
+                            <col />
+                            <col className="w-[88px]" />
                           </colgroup>
                           <thead className="bg-zinc-50 text-zinc-500">
                             <tr>
-                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-3 py-3.5 text-center font-medium">
                                 <span className="sr-only">{t("pd.material.selectAllPage")}</span>
                               </th>
-                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">{t("header.seqNo")}</th>
-                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "物料编码")}</th>
-                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "物料名称")}</th>
-                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "规格型号")}</th>
-                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-right font-medium">{fieldText(locale, "数量")}</th>
-                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">{fieldText(locale, "单位")}</th>
-                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "备注")}</th>
-                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">{t("pd.material.col.status")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-3 py-3.5 text-center font-medium">{t("header.seqNo")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-3 py-3.5 text-left font-medium">{fieldText(locale, "物料编码")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-3 py-3.5 text-left font-medium">{fieldText(locale, "物料名称")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-3 py-3.5 text-left font-medium">{fieldText(locale, "规格型号")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-3 py-3.5 text-right font-medium">{fieldText(locale, "数量")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-3 py-3.5 text-center font-medium">{fieldText(locale, "单位")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-3 py-3.5 text-left font-medium">{fieldText(locale, "备注")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-3 py-3.5 text-center font-medium">{t("pd.material.col.status")}</th>
                             </tr>
                           </thead>
                           <tbody>
                             {material.materials.length === 0 ? (
                               <tr>
-                                <td colSpan={9} className="border-b border-zinc-100 px-4 py-10 text-center text-sm text-zinc-400">—</td>
+                                <td colSpan={9} className="border-b border-zinc-100 px-3 py-10 text-center text-sm text-zinc-400">—</td>
                               </tr>
                             ) : (
                               material.materials.map((line, index) => {
@@ -1055,7 +1055,7 @@ export function MaterialReissuePanel({
                                     className="task-row-tint transition"
                                     style={{ "--row-tint": rowTint.tint, "--row-tint-hover": rowTint.hover } as CSSProperties}
                                   >
-                                    <td className="border-b border-zinc-100 px-4 py-4 text-center align-middle">
+                                    <td className="border-b border-zinc-100 px-3 py-3.5 text-center align-middle">
                                       <input
                                         type="checkbox"
                                         checked={row !== undefined && selectedKeys.has(row.key)}
@@ -1069,14 +1069,14 @@ export function MaterialReissuePanel({
                                         className="h-4 w-4 cursor-pointer rounded border-zinc-300 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
                                       />
                                     </td>
-                                    <td className="border-b border-zinc-100 px-4 py-4 text-center align-middle tabular-nums text-zinc-500">{index + 1}</td>
-                                    <td className="break-words border-b border-zinc-100 px-4 py-4 align-middle text-zinc-700">{textOrDash(line.materialCode)}</td>
-                                    <td className="break-words border-b border-zinc-100 px-4 py-4 align-middle font-medium text-zinc-800">{textOrDash(line.materialName)}</td>
-                                    <td className="break-words border-b border-zinc-100 px-4 py-4 align-middle text-zinc-700">{textOrDash(line.specification)}</td>
-                                    <td className="border-b border-zinc-100 px-4 py-4 text-right align-middle tabular-nums text-zinc-700">{quantityText(line.quantity)}</td>
-                                    <td className="border-b border-zinc-100 px-4 py-4 text-center align-middle text-zinc-700">{textOrDash(line.unit)}</td>
-                                    <td className="break-words border-b border-zinc-100 px-4 py-4 align-middle text-zinc-600">{textOrDash(line.remark)}</td>
-                                    <td className="whitespace-nowrap border-b border-zinc-100 px-4 py-4 text-center align-middle">
+                                    <td className="border-b border-zinc-100 px-3 py-3.5 text-center align-middle tabular-nums text-zinc-500">{index + 1}</td>
+                                    <td className="break-words border-b border-zinc-100 px-3 py-3.5 align-middle text-zinc-700">{textOrDash(line.materialCode)}</td>
+                                    <td className="break-words border-b border-zinc-100 px-3 py-3.5 align-middle font-medium text-zinc-800">{textOrDash(line.materialName)}</td>
+                                    <td className="break-words border-b border-zinc-100 px-3 py-3.5 align-middle text-zinc-700">{textOrDash(line.specification)}</td>
+                                    <td className="border-b border-zinc-100 px-3 py-3.5 text-right align-middle tabular-nums text-zinc-700">{quantityText(line.quantity)}</td>
+                                    <td className="border-b border-zinc-100 px-3 py-3.5 text-center align-middle text-zinc-700">{textOrDash(line.unit)}</td>
+                                    <td className="break-words border-b border-zinc-100 px-3 py-3.5 align-middle text-zinc-600">{textOrDash(line.remark)}</td>
+                                    <td className="whitespace-nowrap border-b border-zinc-100 px-3 py-3.5 text-center align-middle">
                                       <span className={"text-[11px] font-bold " + materialStatusTextClass(rowStatus)}>
                                         {rowStatus === "pending" ? t("pd.material.status.pending") : statusLabel(rowStatus)}
                                       </span>

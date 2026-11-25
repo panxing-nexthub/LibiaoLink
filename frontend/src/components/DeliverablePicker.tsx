@@ -6,7 +6,6 @@ import {
   DOC_TYPE_NAME_MAX,
   DOC_TYPE_NAME_PATTERN,
   DOC_TYPE_OPTIONS,
-  DOC_TYPE_SELECTION_MAX,
   isBuiltinDocType,
 } from "../docTypes";
 import { fieldText, useLocale, useT, type Locale } from "../i18n";
@@ -16,7 +15,7 @@ import { fieldText, useLocale, useT, type Locale } from "../i18n";
  * 内置十类成果文件（契约 DOC_TYPES；顺序 = 契约顺序：CAD图纸 / 技术协议 / 合同 / 评审单 / 设备清单 /
  * 物料总清单 / 发货装箱单 / 到货单 / 安装完成证明 / 验收单），以及公开与本账号的私有候选。
  * 样式照业务给的参考图 —— 顶部搜索框（「查找选项」）+ 「多选」小标 + 彩签选项（悬停浅灰底、选中打绿勾、
- * 点选不收浮层、再点取消）；私有新增只登记候选，点选后才保存至任务。
+ * 点选不收浮层、再点取消）；新增只登记候选，点选后才保存至任务。
  * 色表（2026-10-08 业务口径「和这个相同即可 简约一点」）对齐「是否按时交付」列徽标：浅彩底（Tailwind 50 档 hex）+ 同色系深字小签（rounded + px-1.5 py-0.5 + text-[11px]）。
  * 任务表「输出成果文件」列与任务详情抽屉「输出成果文件」行共用（DeliverableCell）。
  */
@@ -143,13 +142,8 @@ export function DeliverablePanel({ values, onChange, customTypes = EMPTY_CUSTOM_
       return;
     }
     const visibility = isAdmin ? customVisibility : "private";
-    if (visibility === "public" && !values.includes(name) && values.length >= DOC_TYPE_SELECTION_MAX) {
-      setCustomError(t("dp.customMax"));
-      return;
-    }
-    // 用公开候选和私有候选各自去重。同名私有新增也不改任务选择。
+    // 用公开候选和私有候选各自去重。
     if ((visibility === "private" && personalNames.has(name)) || (visibility === "public" && publicNames.has(name))) {
-      if (visibility === "public" && !values.includes(name)) onChange([...values, name]);
       setKeyword("");
       closeCustom();
       return;
@@ -165,7 +159,6 @@ export function DeliverablePanel({ values, onChange, customTypes = EMPTY_CUSTOM_
         setCustomError(error);
         return;
       }
-      if (visibility === "public" && !values.includes(name)) onChange([...values, name]);
       setKeyword("");
       closeCustom();
     } catch (error: unknown) {
@@ -271,7 +264,6 @@ export function DeliverablePanel({ values, onChange, customTypes = EMPTY_CUSTOM_
                 </label>
               </fieldset>
             ) : <p className="mt-2 text-[11px] text-zinc-700">{t("dp.customPrivate")}</p>}
-            <p className="mt-1 text-[11px] leading-4 text-zinc-500">{t("dp.customTaskVisibility")}</p>
             {customError === null ? null : (
               <p role="alert" className="mt-1 text-[11px] leading-4 text-rose-600">
                 {customError}
@@ -292,7 +284,7 @@ export function DeliverablePanel({ values, onChange, customTypes = EMPTY_CUSTOM_
                 disabled={customSaving}
                 className="rounded-md bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:cursor-wait disabled:opacity-60"
               >
-                {t(customSaving ? "dp.customSaving" : isAdmin && customVisibility === "public" ? "dp.customAddAndSelect" : "dp.customAdd")}
+                {t(customSaving ? "dp.customSaving" : "dp.customAdd")}
               </button>
             </div>
           </form>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api";
 import {
   createMaterialReissueTracking,
@@ -20,7 +20,9 @@ import { lockBodyScroll } from "../scrollLock";
 import { useLiveRefresh } from "../useLiveRefresh";
 import { ChangeDetailModal, stageLabelOf } from "./ChangeDetailModal";
 import { Loader } from "./Loader";
+import { DateRangePicker } from "./DateRangePicker";
 import { SearchInput } from "./SearchInput";
+import { SearchSelect } from "./SearchSelect";
 import { Toast } from "./Toast";
 
 /**
@@ -166,6 +168,7 @@ export function MaterialReissuePanel({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
   const [previewBusyKey, setPreviewBusyKey] = useState<string | null>(null);
+  const pasteSinkRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -247,6 +250,27 @@ export function MaterialReissuePanel({
     }
     return lockBodyScroll();
   }, [shipmentOpen, previewImage]);
+
+  /** 发货登记弹窗打开时，Ctrl+V 粘贴剪贴板图片（与日报填写同一交互习惯）。 */
+  useEffect(() => {
+    if (!shipmentOpen) {
+      return;
+    }
+    const onPaste = (event: ClipboardEvent) => {
+      const files = Array.from(event.clipboardData?.files ?? []);
+      const image = files.find((file) => file.type.startsWith("image/"));
+      if (image === undefined) {
+        return;
+      }
+      event.preventDefault();
+      setShipmentImage(image);
+      setShipmentError(null);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => {
+      document.removeEventListener("paste", onPaste);
+    };
+  }, [shipmentOpen]);
 
   useEffect(() => {
     if (!shipmentOpen && previewImage === null) {
@@ -581,7 +605,7 @@ export function MaterialReissuePanel({
   );
 
   return (
-    <section data-project-material-reissue="" className="mx-auto w-full max-w-[1000px] space-y-4">
+    <section data-project-material-reissue="" className={"mx-auto w-full space-y-4 " + (activeView === "tracking" ? "max-w-[1320px]" : "max-w-[1000px]")}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-zinc-900">{t("pd.material.title")}</h2>
@@ -837,17 +861,17 @@ export function MaterialReissuePanel({
         ) : (
           <>
             <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-              <table className="w-full min-w-[1080px] table-fixed border-collapse text-xs">
+              <table className="w-full min-w-[1200px] table-fixed border-collapse text-xs">
                 <colgroup>
-                  <col className="w-[82px]" />
-                  <col className="w-[150px]" />
-                  <col className="w-[130px]" />
-                  <col className="w-[90px]" />
+                  <col className="w-[76px]" />
+                  <col className="w-[160px]" />
+                  <col className="w-[120px]" />
+                  <col className="w-[80px]" />
                   <col className="w-[110px]" />
                   <col className="w-[100px]" />
+                  <col className="w-[150px]" />
                   <col className="w-[140px]" />
-                  <col className="w-[130px]" />
-                  <col className="w-[90px]" />
+                  <col className="w-[80px]" />
                   <col />
                 </colgroup>
                 <thead className="bg-zinc-50 text-zinc-500">
@@ -880,11 +904,11 @@ export function MaterialReissuePanel({
                           <div className="mt-0.5 text-[11px] text-zinc-400">{textOrDash(row.line.materialCode)}</div>
                         </td>
                         <td className="break-words px-3 py-2 align-middle text-zinc-700">{textOrDash(row.line.specification)}</td>
-                        <td className="px-3 py-2 text-right align-middle tabular-nums text-zinc-700">{quantityText(row.line.quantity)} {textOrDash(row.line.unit)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right align-middle tabular-nums text-zinc-700">{quantityText(row.line.quantity)} {textOrDash(row.line.unit)}</td>
                         <td className="break-words px-3 py-2 align-middle text-zinc-700">{textOrDash(row.entry.trackingNo)}</td>
-                        <td className="px-3 py-2 align-middle text-zinc-700">{row.entry.estimatedArrivalDate === null ? "—" : row.entry.estimatedArrivalDate.replace(/-/g, "/")}</td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle text-zinc-700">{row.entry.estimatedArrivalDate === null ? "—" : row.entry.estimatedArrivalDate.replace(/-/g, "/")}</td>
                         <td className="break-words px-3 py-2 align-middle text-zinc-600">{textOrDash(row.entry.note)}</td>
-                        <td className="px-3 py-2 align-middle text-zinc-600">
+                        <td className="whitespace-nowrap px-3 py-2 align-middle text-zinc-600">
                           <div>{formatDateTime(row.entry.shippedAt)}</div>
                           <div className="mt-0.5 text-[11px] text-zinc-400">{shipper}</div>
                         </td>
@@ -960,60 +984,97 @@ export function MaterialReissuePanel({
             </header>
 
             <div className="mt-4 space-y-3">
-              <label className={LABEL_CLASS}>
-                {t("pd.material.shipmentImage")}
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={shipmentBusy}
-                  onChange={(event) => {
-                    setShipmentImage(event.target.files?.[0] ?? null);
-                  }}
-                  className="mt-1 block w-full text-xs text-zinc-500 file:mr-2 file:rounded-md file:border-0 file:bg-zinc-100 file:px-2.5 file:py-1.5 file:text-xs file:font-medium file:text-zinc-700 hover:file:bg-zinc-200"
-                />
-              </label>
-              {shipmentImageUrl === null ? null : (
-                <div className="flex items-start gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-2">
-                  <img src={shipmentImageUrl} alt={t("pd.material.imageAlt")} className="max-h-28 max-w-[180px] rounded object-contain" />
+              <div>
+                <div className={LABEL_CLASS}>{t("pd.material.shipmentImage")}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     disabled={shipmentBusy}
                     onClick={() => {
-                      setShipmentImage(null);
+                      pasteSinkRef.current?.focus();
                     }}
-                    className="rounded-md border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-600 transition hover:bg-white disabled:opacity-40"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {t("pd.material.removeImage")}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                      <rect x="5" y="4" width="14" height="17" rx="2" />
+                      <path d="M9 4.5h6v3H9zM8.5 11h7M8.5 15h7" />
+                    </svg>
+                    {t("pd.material.pasteImage")}
                   </button>
-                </div>
-              )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className={LABEL_CLASS}>
-                  {t("pd.material.shipmentStatus")}
-                  <select
-                    value={shipmentStatus}
-                    disabled={shipmentBusy}
-                    onChange={(event) => {
-                      setShipmentStatus(event.target.value === "received" ? "received" : "shipped");
-                    }}
-                    className={FIELD_CLASS + " mt-1"}
-                  >
-                    <option value="shipped">{t("pd.material.status.shipped")}</option>
-                    <option value="received">{t("pd.material.status.received")}</option>
-                  </select>
-                </label>
-                <label className={LABEL_CLASS}>
-                  {t("pd.material.shipmentEta")}
+                  <label className="inline-flex h-8 cursor-pointer items-center rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50">
+                    {t("pd.material.chooseImage")}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={shipmentBusy}
+                      onChange={(event) => {
+                        setShipmentImage(event.target.files?.[0] ?? null);
+                        setShipmentError(null);
+                      }}
+                      className="sr-only"
+                    />
+                  </label>
                   <input
-                    type="date"
-                    value={shipmentEta}
-                    disabled={shipmentBusy}
-                    onChange={(event) => {
-                      setShipmentEta(event.target.value);
-                    }}
-                    className={FIELD_CLASS + " mt-1"}
+                    ref={pasteSinkRef}
+                    value=""
+                    onChange={() => {}}
+                    tabIndex={-1}
+                    aria-label={t("pd.material.pasteImage")}
+                    className="pointer-events-none absolute h-px w-px opacity-0"
                   />
-                </label>
+                </div>
+                <p className="mt-1 text-[11px] text-zinc-400">{t("pd.material.pasteHint")}</p>
+                {shipmentImageUrl === null ? null : (
+                  <div className="mt-2 flex items-start gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+                    <img src={shipmentImageUrl} alt={t("pd.material.imageAlt")} className="max-h-28 max-w-[180px] rounded object-contain" />
+                    <button
+                      type="button"
+                      disabled={shipmentBusy}
+                      onClick={() => {
+                        setShipmentImage(null);
+                      }}
+                      className="rounded-md border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-600 transition hover:bg-white disabled:opacity-40"
+                    >
+                      {t("pd.material.removeImage")}
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <div className={LABEL_CLASS}>{t("pd.material.shipmentStatus")}</div>
+                  <div className="mt-1">
+                    <SearchSelect
+                      mode="single"
+                      ariaLabel={t("pd.material.shipmentStatus")}
+                      value={shipmentStatus}
+                      options={[
+                        { value: "shipped", label: t("pd.material.status.shipped") },
+                        { value: "received", label: t("pd.material.status.received") },
+                      ]}
+                      onChange={(value) => {
+                        setShipmentStatus(value === "received" ? "received" : "shipped");
+                      }}
+                      placeholder={t("pd.material.shipmentStatus")}
+                      searchPlaceholder={t("lib.filter.status.search")}
+                      disabled={shipmentBusy}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className={LABEL_CLASS}>{t("pd.material.shipmentEta")}</div>
+                  <div className={"mt-1 " + (shipmentBusy ? "pointer-events-none opacity-50" : "")}>
+                    <DateRangePicker
+                      mode="single"
+                      value={shipmentEta === "" ? null : { from: shipmentEta, to: shipmentEta }}
+                      onChange={(range) => {
+                        setShipmentEta(range === null ? "" : range.from);
+                      }}
+                      placeholder={t("pd.material.shipmentEta")}
+                      ariaLabel={t("pd.material.shipmentEta")}
+                    />
+                  </div>
+                </div>
               </div>
               <label className={LABEL_CLASS}>
                 {t("pd.material.shipmentTrackingNo")}

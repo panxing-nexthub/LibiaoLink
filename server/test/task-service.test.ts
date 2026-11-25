@@ -70,6 +70,13 @@ function makeRow(overrides: Partial<TaskRow> = {}): TaskRow {
 }
 
 class FakeTaskRepository {
+  createdByActor = false;
+  async wasTaskCreatedBy(): Promise<boolean> {
+    return this.createdByActor;
+  }
+  async taskIdsCreatedBy(_projectId: string, taskIds: readonly string[]): Promise<Set<string>> {
+    return this.createdByActor ? new Set(taskIds) : new Set();
+  }
   project: TaskProjectRow | null = { id: PROJECT, managerIds: [MANAGER], stageKey: "presale", status: "active" };
   node: TaskProjectNodeRow | null = { id: NODE, stageKey: "install", status: "active" };
   existingTaskId: string | null = null;
@@ -1580,5 +1587,17 @@ describe("Pro 逐人权限：任务负责人只能编辑本人任务", () => {
 
     const other = await service.detail(PROJECT, TASK, MANAGER_2);
     expect(other.capabilities).toMatchObject({ source: "view", level: "view", canEditFields: false });
+  });
+
+  it("任务负责人本人创建的任务 canDelete=true", async () => {
+    const repo = new FakeTaskRepository();
+    repo.task = makeRow({ ownerIds: [ACTOR] });
+    repo.createdByActor = true;
+    const permission = new FakePermissionService();
+    permission.accessLevel = "view";
+    const service = makeService(repo, permission);
+
+    const own = await service.detail(PROJECT, TASK, ACTOR);
+    expect(own.capabilities).toMatchObject({ source: "task_owner", canDelete: true });
   });
 });

@@ -13,6 +13,8 @@ import {
   ProjectArchiveWithUpdateBodySchema,
   ProjectUnarchiveBodySchema,
   ProjectArchiveViewSchema,
+  ProjectCompletionPosterStatusSchema,
+  ProjectCompletionPosterSendResultSchema,
   ProjectCreateBodySchema,
   ProjectDeliverableTypeCreateBodySchema,
   ProjectDetailSchema,
@@ -639,6 +641,33 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     request: { params: idParams },
     responses: {
       200: { description: "归档记录与清单", ...json(ProjectArchiveViewSchema) },
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/projects/{id}/completion-poster",
+    tags: ["projects"],
+    summary: "项目完成喜报同步状态（是否已成功同步到项目群）",
+    request: { params: idParams },
+    responses: {
+      200: { description: "完成喜报同步状态", ...json(ProjectCompletionPosterStatusSchema) },
+      403: commonErrors[403],
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/completion-poster",
+    tags: ["projects"],
+    summary: "把项目完成喜报同步到项目群（已成功同步过则返回 already_sent，不重复发送）",
+    request: { params: idParams },
+    responses: {
+      200: { description: "已排队同步 / 之前已同步过", ...json(ProjectCompletionPosterSendResultSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
       404: commonErrors[404],
     },
   });

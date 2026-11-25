@@ -378,6 +378,27 @@ export const ProjectArchiveViewSchema = z
   })
   .openapi("ProjectArchiveView", { description: "归档记录与清单（POST 归档返回；GET /projects/{id}/archive 读面同形）" });
 
+/**
+ * 项目完成喜报（R06）群同步（2026-11-25）：验收完成后由用户确认是否同步到项目群；
+ * 归档不再自动发送喜报；同一项目成功同步过一次后，后续不再重复发送。
+ */
+export const ProjectCompletionPosterStatusSchema = z
+  .object({
+    sent: z.boolean().describe("是否已成功同步过完成喜报（群消息已送达）"),
+    sentAt: DateTimeSchema.nullable().describe("最近一次成功同步时刻；未同步 = null"),
+  })
+  .openapi("ProjectCompletionPosterStatus", { description: "项目完成喜报同步状态" });
+export type ProjectCompletionPosterStatus = z.infer<typeof ProjectCompletionPosterStatusSchema>;
+
+export const ProjectCompletionPosterSendResultSchema = z
+  .object({
+    status: z
+      .enum(["queued", "already_sent"])
+      .describe("queued = 已排队同步；already_sent = 之前已成功同步，本次不重复发送"),
+  })
+  .openapi("ProjectCompletionPosterSendResult", { description: "项目完成喜报同步请求结果" });
+export type ProjectCompletionPosterSendResult = z.infer<typeof ProjectCompletionPosterSendResultSchema>;
+
 /** 首页侧边栏计数（facets）：与列表同一过滤口径（v0.2 §8.2）。 */
 export const ProjectFacetsSchema = z
   .object({

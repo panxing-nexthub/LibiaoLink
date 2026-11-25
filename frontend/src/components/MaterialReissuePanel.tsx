@@ -38,6 +38,9 @@ type LoadState =
 
 const PAGE_SIZE = 8;
 
+/** 「补发追踪」「全部物料」暂只提供入口与占位，具体内容后续补充。 */
+type MaterialReissueStubView = "tracking" | "all-materials";
+
 function materialReissueApplicationOf(change: ApiChangeRequest): MaterialReissueApplication | null {
   if (change.changeType !== "material_reissue" || change.materialReissue === null) {
     return null;
@@ -80,6 +83,7 @@ export function MaterialReissuePanel({ projectId, tasks, members, viewerId = nul
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [stubView, setStubView] = useState<MaterialReissueStubView | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -174,7 +178,7 @@ export function MaterialReissuePanel({ projectId, tasks, members, viewerId = nul
   const detailTask = detailApplication === undefined ? undefined : taskById.get(detailApplication.material.taskId);
 
   return (
-    <section data-project-material-reissue="" className="space-y-4">
+    <section data-project-material-reissue="" className="mx-auto w-full max-w-[1000px] space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-zinc-900">{t("pd.material.title")}</h2>
@@ -206,6 +210,30 @@ export function MaterialReissuePanel({ projectId, tasks, members, viewerId = nul
             {t("lib.clear")}
           </button>
         ) : null}
+        <div className="ml-auto flex flex-wrap items-center gap-1.5" role="group" aria-label={t("pd.material.tabsAria")}>
+          {(["tracking", "all-materials"] as const).map((view) => {
+            const active = stubView === view;
+            return (
+              <button
+                key={view}
+                type="button"
+                data-material-reissue-view={view}
+                aria-pressed={active}
+                onClick={() => {
+                  setStubView((previous) => (previous === view ? null : view));
+                }}
+                className={
+                  "rounded-lg border px-3 py-1.5 text-xs font-medium transition " +
+                  (active
+                    ? "border-zinc-900 bg-zinc-900 text-white"
+                    : "border-zinc-300 bg-white text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-900")
+                }
+              >
+                {view === "tracking" ? t("pd.material.tracking") : t("pd.material.allMaterials")}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {state.kind === "loading" ? (
@@ -229,13 +257,31 @@ export function MaterialReissuePanel({ projectId, tasks, members, viewerId = nul
         </div>
       ) : null}
 
-      {state.kind === "ready" && filteredApplications.length === 0 ? (
+      {stubView === null ? null : (
+        <div data-project-material-reissue-stub={stubView} className="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
+          <p className="text-sm font-semibold text-zinc-800">
+            {stubView === "tracking" ? t("pd.material.tracking") : t("pd.material.allMaterials")}
+          </p>
+          <p className="mt-2 text-xs text-zinc-500">{t("pd.material.stubHint")}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setStubView(null);
+            }}
+            className="mt-5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50"
+          >
+            {t("pd.material.backToList")}
+          </button>
+        </div>
+      )}
+
+      {stubView === null && state.kind === "ready" && filteredApplications.length === 0 ? (
         <div data-project-material-reissue-empty="" className="rounded-xl border border-zinc-200 bg-white px-4 py-12 text-center text-sm text-zinc-500">
           {hasFilter ? t("pd.material.empty.filter") : t("pd.material.empty")}
         </div>
       ) : null}
 
-      {state.kind === "ready" && pageApplications.length > 0 ? (
+      {stubView === null && state.kind === "ready" && pageApplications.length > 0 ? (
         <div className="space-y-4">
           {pageApplications.map((application) => {
             const material = application.material;
@@ -332,30 +378,32 @@ export function MaterialReissuePanel({ projectId, tasks, members, viewerId = nul
         </div>
       ) : null}
 
-      {state.kind === "ready" && filteredApplications.length > PAGE_SIZE ? (
-        <nav className="flex items-center justify-end gap-2 text-xs text-zinc-500" aria-label={t("pd.material.pagination")}>
-          <button
-            type="button"
-            disabled={currentPage <= 1}
-            onClick={() => {
-              setPage((value) => Math.max(1, value - 1));
-            }}
-            className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
-          >
-            {t("pd.material.pagePrev")}
-          </button>
-          <span className="tabular-nums">{t("pd.material.pageInfo", { page: currentPage, total: totalPages })}</span>
-          <button
-            type="button"
-            disabled={currentPage >= totalPages}
-            onClick={() => {
-              setPage((value) => Math.min(totalPages, value + 1));
-            }}
-            className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
-          >
-            {t("pd.material.pageNext")}
-          </button>
-        </nav>
+      {stubView === null && state.kind === "ready" && filteredApplications.length > 0 ? (
+        <footer data-project-material-reissue-pagination="" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-xs text-zinc-500">
+          <span>{t("pd.material.pageInfo", { total: filteredApplications.length, page: currentPage, pages: totalPages })}</span>
+          <nav className="flex items-center gap-2" aria-label={t("pd.material.pagination")}>
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => {
+                setPage((value) => Math.max(1, value - 1));
+              }}
+              className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
+            >
+              {t("pd.material.pagePrev")}
+            </button>
+            <button
+              type="button"
+              disabled={currentPage >= totalPages}
+              onClick={() => {
+                setPage((value) => Math.min(totalPages, value + 1));
+              }}
+              className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
+            >
+              {t("pd.material.pageNext")}
+            </button>
+          </nav>
+        </footer>
       ) : null}
 
       {detailId === null ? null : (

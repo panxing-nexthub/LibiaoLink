@@ -703,7 +703,9 @@ export function MaterialReissuePanel({
   };
 
   return (
-    <section data-project-material-reissue="" className="w-full space-y-4">
+    // 页面内容最大宽度 1740px 居中、两侧留白（2026-11-25 业务口径：宽屏不铺满整行，小屏动态收窄）；
+    // 屏幕小于 1740px 时由 w-full 自动收窄，表格横向滚动兜底不变。
+    <section data-project-material-reissue="" className="mx-auto w-full max-w-[1740px] space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-zinc-900">{t("pd.material.title")}</h2>

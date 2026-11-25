@@ -80,8 +80,6 @@ type LoadState =
 
 type Notice = { kind: "ok" | "error" | "info"; text: string };
 
-const PAGE_SIZE = 8;
-const TRACKING_PAGE_SIZE = 20;
 const MAX_SHIPMENT_ITEMS = 200;
 const FIELD_CLASS = "w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 const LABEL_CLASS = "block text-xs font-medium text-zinc-600";
@@ -277,8 +275,6 @@ export function MaterialReissuePanel({
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [reloadTick, setReloadTick] = useState(0);
   const [keyword, setKeyword] = useState("");
-  const [page, setPage] = useState(1);
-  const [trackingPage, setTrackingPage] = useState(1);
   const [activeView, setActiveView] = useState<MaterialReissueView>("all");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
@@ -363,11 +359,6 @@ export function MaterialReissuePanel({
     state.kind === "ready",
     { readOnly: true },
   );
-
-  useEffect(() => {
-    setPage(1);
-    setTrackingPage(1);
-  }, [keyword, projectId]);
 
   useEffect(() => {
     if (activeView === "all") {
@@ -553,24 +544,13 @@ export function MaterialReissuePanel({
     ]),
   );
 
-  const totalPages = Math.max(1, Math.ceil(filteredApplications.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pageApplications = filteredApplications.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-
-  const pageApplicationIds = new Set(pageApplications.map((application) => application.id));
-  const selectablePageRows = allRows.filter((row) => pageApplicationIds.has(row.application.id) && row.canSelect);
-  const selectablePageKeys = selectablePageRows.map((row) => row.key);
-  const selectedOnPage = selectablePageKeys.filter((key) => selectedKeys.has(key)).length;
-  const allPageSelected = selectablePageKeys.length > 0 && selectedOnPage === selectablePageKeys.length;
+  const filteredApplicationIds = new Set(filteredApplications.map((application) => application.id));
+  const selectableRows = allRows.filter((row) => filteredApplicationIds.has(row.application.id) && row.canSelect);
+  const selectableKeys = selectableRows.map((row) => row.key);
+  const selectedSelectableCount = selectableKeys.filter((key) => selectedKeys.has(key)).length;
+  const allSelected = selectableKeys.length > 0 && selectedSelectableCount === selectableKeys.length;
   const selectedRows = allRows.filter((row) => row.canSelect && row.tracking === null && selectedKeys.has(row.key));
   const allRowByKey = new Map(allRows.map((row) => [row.key, row] as const));
-
-  const totalTrackingPages = Math.max(1, Math.ceil(filteredTrackingRows.length / TRACKING_PAGE_SIZE));
-  const currentTrackingPage = Math.min(trackingPage, totalTrackingPages);
-  const trackingPageRows = filteredTrackingRows.slice(
-    (currentTrackingPage - 1) * TRACKING_PAGE_SIZE,
-    currentTrackingPage * TRACKING_PAGE_SIZE,
-  );
 
   const hasFilter = normalizedKeyword !== "";
   const allShippedCount = allRows.filter((row) => row.tracking !== null).length;
@@ -601,14 +581,14 @@ export function MaterialReissuePanel({
     });
   };
 
-  const togglePageSelection = (): void => {
-    if (selectablePageKeys.length === 0) {
+  const toggleSelection = (): void => {
+    if (selectableKeys.length === 0) {
       return;
     }
     setSelectedKeys((previous) => {
       const next = new Set(previous);
-      if (allPageSelected) {
-        for (const key of selectablePageKeys) {
+      if (allSelected) {
+        for (const key of selectableKeys) {
           next.delete(key);
         }
         return next;
@@ -618,10 +598,10 @@ export function MaterialReissuePanel({
         setNotice({ kind: "info", text: t("pd.material.selectionLimit", { n: MAX_SHIPMENT_ITEMS }) });
         return previous;
       }
-      if (selectablePageKeys.length > slots) {
+      if (selectableKeys.length > slots) {
         setNotice({ kind: "info", text: t("pd.material.selectionLimit", { n: MAX_SHIPMENT_ITEMS }) });
       }
-      for (const key of selectablePageKeys.slice(0, slots)) {
+      for (const key of selectableKeys.slice(0, slots)) {
         next.add(key);
       }
       return next;
@@ -711,7 +691,6 @@ export function MaterialReissuePanel({
       setSelectedKeys(new Set());
       resetShipmentForm();
       setActiveView("tracking");
-      setTrackingPage(1);
       setNotice({ kind: "ok", text: t("pd.material.shipmentSuccess", { n: count }) });
       setReloadTick((tick) => tick + 1);
     } catch (error) {
@@ -722,37 +701,6 @@ export function MaterialReissuePanel({
       setShipmentBusy(false);
     }
   };
-
-  const pager = (total: number, current: number, pages: number, onPage: (page: number) => void) => (
-    <footer
-      data-project-material-reissue-pagination=""
-      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-xs text-zinc-500"
-    >
-      <span>{t("pd.material.pageInfo", { total, page: current, pages })}</span>
-      <nav className="flex items-center gap-2" aria-label={t("pd.material.pagination")}>
-        <button
-          type="button"
-          disabled={current <= 1}
-          onClick={() => {
-            onPage(current - 1);
-          }}
-          className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
-        >
-          {t("pd.material.pagePrev")}
-        </button>
-        <button
-          type="button"
-          disabled={current >= pages}
-          onClick={() => {
-            onPage(current + 1);
-          }}
-          className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
-        >
-          {t("pd.material.pageNext")}
-        </button>
-      </nav>
-    </footer>
-  );
 
   return (
     <section data-project-material-reissue="" className="w-full space-y-4">
@@ -842,11 +790,11 @@ export function MaterialReissuePanel({
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                disabled={selectablePageRows.length === 0}
-                onClick={togglePageSelection}
+                disabled={selectableRows.length === 0}
+                onClick={toggleSelection}
                 className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
               >
-                {allPageSelected ? t("pd.material.unselectAllPage") : t("pd.material.selectAllPage")}
+                {allSelected ? t("pd.material.unselectAllPage") : t("pd.material.selectAllPage")}
               </button>
               <button
                 type="button"
@@ -881,7 +829,7 @@ export function MaterialReissuePanel({
           ) : (
             <>
               <div className="space-y-4">
-                {pageApplications.map((application) => {
+                {filteredApplications.map((application) => {
                   const material = application.material;
                   const taskTitle = material.taskTitle !== "" ? material.taskTitle : application.material.taskId;
                   return (
@@ -921,58 +869,49 @@ export function MaterialReissuePanel({
                       </header>
 
                       <div className="overflow-x-auto">
-                        <table className="w-full min-w-[904px] table-fixed border-collapse text-xs">
+                        <table className="w-full min-w-[1080px] table-fixed border-collapse text-left text-sm">
                           <colgroup>
-                            <col className="w-[44px]" />
-                            <col className="w-[56px]" />
+                            <col className="w-[84px]" />
+                            <col className="w-[64px]" />
                             <col className="w-[150px]" />
-                            <col className="w-[190px]" />
+                            <col className="w-[200px]" />
                             <col className="w-[170px]" />
-                            <col className="w-[76px]" />
-                            <col className="w-[68px]" />
+                            <col className="w-[80px]" />
+                            <col className="w-[72px]" />
                             <col />
                           </colgroup>
-                          <thead>
-                            <tr className="bg-zinc-100 text-zinc-600">
-                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">
+                          <thead className="bg-zinc-50 text-zinc-500">
+                            <tr>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">
                                 <span className="sr-only">{t("pd.material.selectAllPage")}</span>
                               </th>
-                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{t("header.seqNo")}</th>
-                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "物料编码")}</th>
-                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "物料名称")}</th>
-                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "规格型号")}</th>
-                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "数量")}</th>
-                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "单位")}</th>
-                              <th scope="col" className="border border-zinc-300 px-2 py-2 text-center font-semibold">{fieldText(locale, "备注")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">{t("header.seqNo")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "物料编码")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "物料名称")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "规格型号")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-right font-medium">{fieldText(locale, "数量")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">{fieldText(locale, "单位")}</th>
+                              <th scope="col" className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "备注")}</th>
                             </tr>
                           </thead>
                           <tbody>
                             {material.materials.length === 0 ? (
                               <tr>
-                                <td colSpan={8} className="border border-zinc-200 px-3 py-6 text-center text-zinc-400">—</td>
+                                <td colSpan={8} className="border-b border-zinc-100 px-4 py-10 text-center text-sm text-zinc-400">—</td>
                               </tr>
                             ) : (
                               material.materials.map((line, index) => {
                                 const row = allRowByKey.get(trackingKey(application.id, index));
-                                const tracked = row?.tracking !== null && row?.tracking !== undefined;
                                 const rowStatus: MaterialRowStatus = row?.tracking?.status ?? "pending";
-                                const rowTint = tierTint === false ? null : materialRowTintOf(tierTint, rowStatus);
                                 return (
                                   <tr
                                     key={row?.key ?? String(index)}
                                     data-material-reissue-line={String(index + 1)}
                                     data-material-reissue-row-status={rowStatus}
-                                    className={
-                                      rowTint === null
-                                        ? tracked
-                                          ? "bg-zinc-50/40 text-zinc-400"
-                                          : "bg-white text-blue-600"
-                                        : "task-row-tint text-zinc-800"
-                                    }
-                                    style={rowTint === null ? undefined : ({ "--row-tint": rowTint.tint, "--row-tint-hover": rowTint.hover } as CSSProperties)}
+                                    className="transition hover:bg-zinc-50/70"
                                   >
-                                    <td className="border border-zinc-200 px-2 py-2 text-center align-middle">
-                                      <div className="flex flex-col items-center gap-1">
+                                    <td className="border-b border-zinc-100 px-4 py-4 text-center align-middle">
+                                      <div className="flex flex-col items-center gap-1.5">
                                         <input
                                           type="checkbox"
                                           checked={row !== undefined && selectedKeys.has(row.key)}
@@ -985,20 +924,23 @@ export function MaterialReissuePanel({
                                           }}
                                           className="h-4 w-4 cursor-pointer rounded border-zinc-300 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
                                         />
-                                        {rowTint === null ? null : (
-                                          <span className={"text-[10px] font-semibold " + materialStatusTextClass(rowStatus)}>
-                                            {rowStatus === "pending" ? t("pd.material.status.pending") : statusLabel(rowStatus)}
-                                          </span>
-                                        )}
+                                        <span
+                                          className={
+                                            "inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium " +
+                                            (rowStatus === "pending" ? "bg-blue-50 text-blue-700" : statusBadgeClass(rowStatus))
+                                          }
+                                        >
+                                          {rowStatus === "pending" ? t("pd.material.status.pending") : statusLabel(rowStatus)}
+                                        </span>
                                       </div>
                                     </td>
-                                    <td className="border border-zinc-200 px-2 py-2 text-center align-middle tabular-nums">{index + 1}</td>
-                                    <td className="break-words border border-zinc-200 px-2 py-2 align-middle">{textOrDash(line.materialCode)}</td>
-                                    <td className="break-words border border-zinc-200 px-2 py-2 align-middle font-medium">{textOrDash(line.materialName)}</td>
-                                    <td className="break-words border border-zinc-200 px-2 py-2 align-middle">{textOrDash(line.specification)}</td>
-                                    <td className="border border-zinc-200 px-2 py-2 text-right align-middle tabular-nums">{quantityText(line.quantity)}</td>
-                                    <td className="border border-zinc-200 px-2 py-2 text-center align-middle">{textOrDash(line.unit)}</td>
-                                    <td className="break-words border border-zinc-200 px-2 py-2 align-middle">{textOrDash(line.remark)}</td>
+                                    <td className="border-b border-zinc-100 px-4 py-4 text-center align-middle tabular-nums text-zinc-500">{index + 1}</td>
+                                    <td className="break-words border-b border-zinc-100 px-4 py-4 align-middle text-zinc-700">{textOrDash(line.materialCode)}</td>
+                                    <td className="break-words border-b border-zinc-100 px-4 py-4 align-middle font-medium text-zinc-800">{textOrDash(line.materialName)}</td>
+                                    <td className="break-words border-b border-zinc-100 px-4 py-4 align-middle text-zinc-700">{textOrDash(line.specification)}</td>
+                                    <td className="border-b border-zinc-100 px-4 py-4 text-right align-middle tabular-nums text-zinc-700">{quantityText(line.quantity)}</td>
+                                    <td className="border-b border-zinc-100 px-4 py-4 text-center align-middle text-zinc-700">{textOrDash(line.unit)}</td>
+                                    <td className="break-words border-b border-zinc-100 px-4 py-4 align-middle text-zinc-600">{textOrDash(line.remark)}</td>
                                   </tr>
                                 );
                               })
@@ -1007,14 +949,10 @@ export function MaterialReissuePanel({
                         </table>
                       </div>
 
-                      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 bg-zinc-50/50 px-4 py-2 text-[11px] text-zinc-500">
-                        <span>{t("pd.material.items", { n: material.materials.length })}</span>
-                      </footer>
                     </article>
                   );
                 })}
               </div>
-              {pager(filteredApplications.length, currentPage, totalPages, setPage)}
             </>
           )}
         </>
@@ -1028,33 +966,33 @@ export function MaterialReissuePanel({
         ) : (
           <>
             <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-              <table className="w-full min-w-[1180px] table-fixed border-collapse text-xs">
+              <table className="w-full min-w-[1420px] table-fixed border-collapse text-left text-sm">
                 <colgroup>
-                  <col className="w-[180px]" />
+                  <col className="w-[220px]" />
+                  <col className="w-[160px]" />
+                  <col className="w-[90px]" />
                   <col className="w-[140px]" />
-                  <col className="w-[80px]" />
                   <col className="w-[120px]" />
-                  <col className="w-[110px]" />
                   <col className="w-[180px]" />
                   <col className="w-[90px]" />
-                  <col className="w-[90px]" />
+                  <col className="w-[164px]" />
                   <col />
                 </colgroup>
                 <thead className="bg-zinc-50 text-zinc-500">
                   <tr>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{fieldText(locale, "物料名称")}</th>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{fieldText(locale, "规格型号")}</th>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-right font-medium">{fieldText(locale, "数量")}</th>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.trackingNo")}</th>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.eta")}</th>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.shipNote")}</th>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-center font-medium">{t("pd.material.col.status")}</th>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-center font-medium">{t("pd.material.col.image")}</th>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.source")}</th>
+                    <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "物料名称")}</th>
+                    <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "规格型号")}</th>
+                    <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-right font-medium">{fieldText(locale, "数量")}</th>
+                    <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{t("pd.material.col.trackingNo")}</th>
+                    <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{t("pd.material.col.eta")}</th>
+                    <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{t("pd.material.col.shipNote")}</th>
+                    <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">{t("pd.material.col.status")}</th>
+                    <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-center font-medium">{t("pd.material.col.image")}</th>
+                    <th className="whitespace-nowrap border-b border-zinc-200 px-4 py-3.5 text-left font-medium">{t("pd.material.col.source")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {trackingPageRows.map((row) => {
+                  {filteredTrackingRows.map((row) => {
                     const sourceTitle = row.application.material.taskTitle !== "" ? row.application.material.taskTitle : row.task?.title ?? "—";
                     const imageIds = imageIdsOf(row.entry);
                     const rowTint = tierTint === false ? null : materialRowTintOf(tierTint, row.entry.status);
@@ -1066,16 +1004,16 @@ export function MaterialReissuePanel({
                         className={"border-b border-zinc-100 last:border-b-0" + (rowTint === null ? "" : " task-row-tint")}
                         style={rowTint === null ? undefined : ({ "--row-tint": rowTint.tint, "--row-tint-hover": rowTint.hover } as CSSProperties)}
                       >
-                        <td className="px-3 py-2 align-middle">
+                        <td className="px-4 py-4 align-middle">
                           <div className="font-medium text-zinc-800">{textOrDash(row.line.materialName)}</div>
                           <div className="mt-0.5 text-[11px] text-zinc-400">{textOrDash(row.line.materialCode)}</div>
                         </td>
-                        <td className="break-words px-3 py-2 align-middle text-zinc-700">{textOrDash(row.line.specification)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right align-middle tabular-nums text-zinc-700">{quantityText(row.line.quantity)} {textOrDash(row.line.unit)}</td>
-                        <td className="break-words px-3 py-2 align-middle text-zinc-700">{textOrDash(row.entry.trackingNo)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 align-middle text-zinc-700">{row.entry.estimatedArrivalDate === null ? "—" : row.entry.estimatedArrivalDate.replace(/-/g, "/")}</td>
-                        <td className="break-words px-3 py-2 align-middle text-zinc-600">{textOrDash(row.entry.note)}</td>
-                        <td className="px-3 py-2 text-center align-middle">
+                        <td className="break-words px-4 py-4 align-middle text-zinc-700">{textOrDash(row.line.specification)}</td>
+                        <td className="whitespace-nowrap px-4 py-4 text-right align-middle tabular-nums text-zinc-700">{quantityText(row.line.quantity)} {textOrDash(row.line.unit)}</td>
+                        <td className="break-words px-4 py-4 align-middle text-zinc-700">{textOrDash(row.entry.trackingNo)}</td>
+                        <td className="whitespace-nowrap px-4 py-4 align-middle text-zinc-700">{row.entry.estimatedArrivalDate === null ? "—" : row.entry.estimatedArrivalDate.replace(/-/g, "/")}</td>
+                        <td className="break-words px-4 py-4 align-middle text-zinc-600">{textOrDash(row.entry.note)}</td>
+                        <td className="px-4 py-4 text-center align-middle">
                           <span
                             className={
                               rowTint === null
@@ -1086,7 +1024,7 @@ export function MaterialReissuePanel({
                             {statusLabel(row.entry.status)}
                           </span>
                         </td>
-                        <td className="px-3 py-2 align-middle">
+                        <td className="px-4 py-4 align-middle">
                           {imageIds.length === 0 ? (
                             <span className="text-zinc-400">—</span>
                           ) : (
@@ -1101,7 +1039,7 @@ export function MaterialReissuePanel({
                             />
                           )}
                         </td>
-                        <td className="px-3 py-2 align-middle text-zinc-600">
+                        <td className="px-4 py-4 align-middle text-zinc-600">
                           <div>{sourceTitle}</div>
                           <div className="mt-0.5 text-[11px] text-zinc-400">{formatDateTime(row.application.appliedAt)} · {row.application.material.applicantName}</div>
                         </td>
@@ -1111,7 +1049,6 @@ export function MaterialReissuePanel({
                 </tbody>
               </table>
             </div>
-            {pager(filteredTrackingRows.length, currentTrackingPage, totalTrackingPages, setTrackingPage)}
           </>
         )
       ) : null}

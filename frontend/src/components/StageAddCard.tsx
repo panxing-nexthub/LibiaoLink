@@ -524,8 +524,6 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
   };
   /** 当前标签取数失败了吗（决定出不出重试按钮）。 */
   const listFailed = isNodesTab ? nodesError !== null : templatesError !== null;
-  const addedCount = items.length - pendingCount;
-
   // 当前标签被服务端刷新带走后回到节点标签，避免停在失效的虚拟模板 id 上。
   useEffect(() => {
     if (activeTab !== "nodes" && !displayedTemplates.some((item) => item.id === activeTab)) {
@@ -811,10 +809,7 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
         )}
       </div>
 
-      <div className="mt-2 flex shrink-0 items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-[11px] text-zinc-500">
-          {isNodesTab ? "" : t("sac.previewPrefix") + t("sac.added", { n: addedCount })}
-        </span>
+      <div className="mt-2 flex shrink-0 items-center justify-end gap-2">
         <div className="flex shrink-0 items-center gap-2">
           {isNodesTab ? null : (
             <>

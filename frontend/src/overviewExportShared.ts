@@ -111,8 +111,8 @@ export function isDoneStatus(status: ProjectTask["status"]): boolean {
  * 任务 → 阶段分组：顺序 = 项目总览（售前规划 → … → 验收，垫底「临时任务」），空分组也保留（阶段进度区出 0 / 0）；
  * 契约九阶段之外的分组名（历史脏值）照原文单列一组挂在末尾，不丢任务行。
  */
-export function groupedByStage(tasks: readonly ProjectTask[]): StageGroup[] {
-  const groups: StageGroup[] = [...STAGE_NAMES, TEMP_TASK_STAGE].map((name) => ({ name, total: 0, done: 0, tasks: [] }));
+export function groupedByStage(tasks: readonly ProjectTask[], stageNames = STAGE_NAMES): StageGroup[] {
+  const groups: StageGroup[] = [...stageNames, TEMP_TASK_STAGE].map((name) => ({ name, total: 0, done: 0, tasks: [] }));
   const indexOf = new Map(groups.map((group, index) => [group.name, index]));
   for (const task of tasks) {
     const name = task.stage === "" ? TEMP_TASK_STAGE : task.stage;

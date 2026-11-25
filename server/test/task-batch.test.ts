@@ -60,6 +60,8 @@ function makeRow(id: string, overrides: Partial<TaskRow> = {}): TaskRow {
     id,
     projectId: PROJECT,
     stageKey: "install",
+    additionalStageNumber: null,
+    additionalStageId: null,
     nodeId: NODE,
     taskNodeId: null,
     title: "任务 " + id.slice(0, 8),

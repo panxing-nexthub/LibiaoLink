@@ -72,8 +72,8 @@ function stageName(stageKey: string | null): string {
 }
 
 /** 任务的空阶段 = 临时任务（与任务表「未分组 / 临时任务」口径一致）；变更空阶段保持空。 */
-function taskStageName(stageKey: string | null): string {
-  return stageKey === null ? "临时任务" : stageName(stageKey);
+function taskStageName(stageKey: string | null, additionalStageNumber?: number): string {
+  return stageKey === null ? "临时任务" : stageName(stageKey) + (additionalStageNumber ?? "");
 }
 
 function onTimeName(value: boolean | null): string {
@@ -142,7 +142,7 @@ export function taskExportRow(
     headcount: task.headcount,
     estimatedDays: task.estimatedDays,
     actualEnd: formatTaskDate(task.actualEnd),
-    stage: taskStageName(task.stageKey),
+    stage: taskStageName(task.stageKey, task.additionalStageNumber),
     priority: task.priority ?? "",
     latestChangeDate: latestChange === undefined ? "" : formatCalendarDate(latestChange.appliedAt),
     files: [...taskFiles],

@@ -31,6 +31,8 @@ import {
   ProjectPurgeResponseSchema,
   ProjectRecycleActionBodySchema,
   ProjectSchema,
+  AdditionalProjectStageCreateBodySchema,
+  AdditionalProjectStageSchema,
   ProjectSummarySchema,
   ProjectUpdateBodySchema,
   ProjectViewGrantAddBodySchema,
@@ -814,6 +816,35 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     responses: {
       200: { description: "总览统计", ...json(ProjectSummarySchema) },
       404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/additional-stages",
+    tags: ["projects"],
+    summary: "在原阶段后新增阶段（本项目经理或系统管理员）",
+    request: { params: idParams, body: json(AdditionalProjectStageCreateBodySchema) },
+    responses: {
+      201: { description: "新增的阶段", ...json(AdditionalProjectStageSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+      409: commonErrors[409],
+    },
+  });
+
+  registry.registerPath({
+    method: "delete",
+    path: "/api/v1/projects/{id}/additional-stages/{stageId}",
+    tags: ["projects"],
+    summary: "删除新增阶段及组内任务（本项目经理或系统管理员；任务删除保护生效）",
+    request: { params: z.object({ id: UuidSchema, stageId: UuidSchema }) },
+    responses: {
+      204: { description: "阶段已删除" },
+      403: commonErrors[403],
+      404: commonErrors[404],
+      409: commonErrors[409],
     },
   });
 

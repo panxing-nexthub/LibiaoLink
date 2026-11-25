@@ -389,7 +389,8 @@ describe("项目数据导出工作簿", () => {
       priority: null,
       changeLinks: [],
     };
-    expect(taskExportRow(task as never, [], new Map(), []).description).toBe("布局定档\nLayout scheduling");
+    expect(taskExportRow(task as never, [], new Map(), [])).toMatchObject({ description: "布局定档\nLayout scheduling", stage: "临时任务" });
+    expect(taskExportRow({ ...task, stageKey: "install", additionalStageNumber: 2 } as never, [], new Map(), []).stage).toBe("硬件实施2");
     expect(taskExportRow({ ...task, titleEn: null } as never, [], new Map(), []).description).toBe("布局定档");
     expect(taskExportRow({ ...task, titleEn: "   " } as never, [], new Map(), []).description).toBe("布局定档");
   });

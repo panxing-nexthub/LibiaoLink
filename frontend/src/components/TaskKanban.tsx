@@ -868,7 +868,7 @@ export function TaskKanban({ mode, tasks, focusTaskId = null, onFocusClosed, can
   /** 项目里已添加的节点判重键（见 `addedNodeKeysOf`）：添加卡片的节点 / 模板条目按它显示「已添加」并跳过重复。 */
   const addedNodeKeys = addedNodeKeysOf(tasks);
   /** 来源节点 id 集合（见 `addedNodeIdsOf` · M3-07 刀 3）：精确判重，优先于同阶段同名兜底。 */
-  const addedNodeIds = addedNodeIdsOf(tasks);
+  const addedNodeIds = addedNodeIdsOf(tasks.filter((task) => task.additionalStageNumber === undefined));
   /**
    * 该阶段现有任务（Push 111）：给「添加 → 阶段任务」的插入位置当锚点。
    * `tasks` 已经是展示顺序（阶段为主键、组内按看板顺序表），所以这里的先后 = 项目总览里这些任务的先后。

@@ -1,3 +1,4 @@
+import type { AdditionalProjectStage } from "@libiaolink/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "../src/common/errors/app-error.js";
 import type { DatabaseService } from "../src/db/database.service.js";
@@ -9,6 +10,7 @@ import type {
   TaskEventInput,
   TaskFileSummaryCounts,
   TaskListRow,
+  TaskOrderBrief,
   TaskCompletionTargetRow,
   TaskProjectNodeRow,
   TaskProjectRow,
@@ -38,6 +40,8 @@ function makeRow(overrides: Partial<TaskRow> = {}): TaskRow {
     id: TASK,
     projectId: PROJECT,
     stageKey: "install",
+    additionalStageNumber: null,
+    additionalStageId: null,
     nodeId: NODE,
     taskNodeId: null,
     title: "货架组装",
@@ -99,6 +103,21 @@ class FakeTaskRepository {
   listPageForExportCalls = 0;
   countForExportCalls = 0;
   fileSummaryCalls = 0;
+
+  additionalStage: AdditionalProjectStage | null = null;
+  readonly insertAdditionalStage = vi.fn(async (_tx: DbClient, _projectId: string, stageKey: AdditionalProjectStage["stageKey"]) => {
+    this.additionalStage = { id: NODE, stageKey, number: 1 };
+    return this.additionalStage;
+  });
+  readonly removeAdditionalStage = vi.fn(async () => { this.additionalStage = null; });
+  readonly softDelete = vi.fn(async (_tx: DbClient, _id: string, _actorId: string, _at: Date) => true);
+  async countIssueRefs(): Promise<number> { return 0; }
+  async listAdditionalStages(): Promise<AdditionalProjectStage[]> {
+    return this.additionalStage === null ? [] : [this.additionalStage];
+  }
+  async lockAdditionalStage(): Promise<AdditionalProjectStage | null> {
+    return this.additionalStage;
+  }
 
   async summaryCounts(): Promise<{ overdue: number; done: number; total: number }> {
     return this.counts;
@@ -169,15 +188,15 @@ class FakeTaskRepository {
   relatedTasks: TaskRow[] = [];
   groupSize = 0;
 
-  async lockStageTasks(_tx: DbClient, projectId: string, stageKey: string): Promise<TaskRow[]> {
+  async lockStageTasks(_tx: DbClient, projectId: string, stageKey: string, additionalStageNumber: number | null = null): Promise<TaskRow[]> {
     return [this.task, ...this.relatedTasks]
-      .filter((task): task is TaskRow => task !== null && task.projectId === projectId && task.stageKey === stageKey && task.deletedAt === null)
+      .filter((task): task is TaskRow => task !== null && task.projectId === projectId && task.stageKey === stageKey && task.additionalStageNumber === additionalStageNumber && task.deletedAt === null)
       .sort((a, b) => a.sortIndex - b.sortIndex || a.id.localeCompare(b.id));
   }
   shifted: { from: number; to: number | null; delta: number }[] = [];
 
   async insert(input: TaskInsertInput): Promise<TaskRow> {
-    const row = makeRow({ id: TASK, status: "pending", progress: "0", version: 0, title: input.title, stageKey: input.stageKey, nodeId: input.nodeId, ownerIds: input.ownerIds, managerIds: input.managerIds, sortIndex: input.sortIndex });
+    const row = makeRow({ id: TASK, status: "pending", progress: "0", version: 0, title: input.title, stageKey: input.stageKey, additionalStageNumber: input.additionalStage?.number ?? null, additionalStageId: input.additionalStage?.id ?? null, nodeId: input.nodeId, ownerIds: input.ownerIds, managerIds: input.managerIds, sortIndex: input.sortIndex });
     this.inserted = row;
     return row;
   }
@@ -236,10 +255,10 @@ class FakeTaskRepository {
   async countStageTasks(): Promise<{ total: number; done: number; deliveryReady: number }> {
     return this.stageCounts;
   }
-  async findTaskBrief(): Promise<{ id: string; projectId: string; stageKey: string | null; sortIndex: number } | null> {
+  async findTaskBrief(): Promise<TaskOrderBrief | null> {
     return this.task === null
       ? null
-      : { id: this.task.id, projectId: this.task.projectId, stageKey: this.task.stageKey, sortIndex: this.task.sortIndex };
+      : { id: this.task.id, projectId: this.task.projectId, stageKey: this.task.stageKey, additionalStageNumber: this.task.additionalStageNumber, sortIndex: this.task.sortIndex };
   }
   async countGroup(): Promise<number> {
     return this.groupSize;
@@ -380,6 +399,63 @@ function makeService(
     managerEligibility as ProjectManagerEligibilityService,
   );
 }
+
+describe("项目新增阶段", () => {
+  it("仅本项目经理或管理员可以增删，普通编辑者不能变更阶段", async () => {
+    const repo = new FakeTaskRepository();
+    const permission = new FakePermissionService();
+    const service = makeService(repo, permission);
+    await expect(service.createAdditionalStage(PROJECT, "install", ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(repo.insertAdditionalStage).not.toHaveBeenCalled();
+
+    const stage = await service.createAdditionalStage(PROJECT, "install", MANAGER);
+    expect((await service.summary(PROJECT)).additionalStages).toEqual([stage]);
+    await expect(service.removeAdditionalStage(PROJECT, stage.id, ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(repo.removeAdditionalStage).not.toHaveBeenCalled();
+
+    permission.groupAccessAdmin = true;
+    await service.removeAdditionalStage(PROJECT, stage.id, ACTOR);
+    expect((await service.summary(PROJECT)).additionalStages).toEqual([]);
+    await expect(service.removeAdditionalStage(PROJECT, "install", ACTOR)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("删除新增阶段只删除该组任务，并记录原有任务删除事件", async () => {
+    const repo = new FakeTaskRepository();
+    const database = new FakeDatabase();
+    const service = makeService(repo, undefined, undefined, undefined, database);
+    const stage = await service.createAdditionalStage(PROJECT, "install", MANAGER);
+    const custom = makeRow({ id: NODE, nodeId: null, additionalStageNumber: stage.number });
+    repo.relatedTasks = [custom, makeRow({ id: "other-stage", additionalStageNumber: stage.number + 1 })];
+    await service.removeAdditionalStage(PROJECT, stage.id, MANAGER);
+    expect(repo.softDelete).toHaveBeenCalledExactlyOnceWith(expect.anything(), custom.id, MANAGER, expect.any(Date));
+    expect(database.outbox).toContainEqual(expect.objectContaining({
+      topic: "task.deleted",
+      payload: expect.objectContaining({ taskId: custom.id }),
+    }));
+  });
+
+  it("新增阶段存在定档任务时，整体保留该阶段及任务", async () => {
+    const repo = new FakeTaskRepository();
+    const service = makeService(repo);
+    const stage = await service.createAdditionalStage(PROJECT, "install", MANAGER);
+    repo.relatedTasks = [
+      makeRow({ id: "removable", additionalStageNumber: stage.number }),
+      makeRow({ id: "finalized", additionalStageNumber: stage.number, finalizedAt: new Date(), finalizedBy: MANAGER }),
+    ];
+    await expect(service.removeAdditionalStage(PROJECT, stage.id, MANAGER)).rejects.toMatchObject({ code: "TASK_FINALIZED" });
+    expect(repo.softDelete).not.toHaveBeenCalled();
+    expect(repo.removeAdditionalStage).not.toHaveBeenCalled();
+  });
+
+  it("新增阶段内的手工任务使用原阶段与项目经理名单，并回传新增阶段编号", async () => {
+    const repo = new FakeTaskRepository();
+    const service = makeService(repo);
+    const stage = await service.createAdditionalStage(PROJECT, "install", MANAGER);
+    await expect(service.create(PROJECT, { additionalStageId: stage.id, title: "调试设备" }, ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const task = await service.create(PROJECT, { additionalStageId: stage.id, title: "调试设备" }, MANAGER);
+    expect(task).toMatchObject({ stageKey: "install", additionalStageNumber: 1, managerIds: [MANAGER] });
+  });
+});
 
 describe("TaskService.create（A10 / A1-13）", () => {
   it("带节点创建：ownerIds 缺省 = 「待分配」空数组（2026-09-24 业务口径：不兜底项目经理），状态 pending / 进度 0，写 outbox 与项目触点", async () => {
@@ -984,6 +1060,7 @@ describe("TaskService.summary（汇总卡：最慢 / 最新阶段 + 三计数）
     const summary = await makeService(repo).summary(PROJECT);
     expect(summary).toEqual({
       projectId: PROJECT,
+      additionalStages: [],
       slowestStage: "design",
       latestStage: "install",
       overdue: 2,

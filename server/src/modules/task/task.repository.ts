@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { STAGE_KEYS } from "@libiaolink/contracts";
-import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql, type SQL } from "drizzle-orm";
+import { STAGE_KEYS, type AdditionalProjectStage, type StageKey } from "@libiaolink/contracts";
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, max, or, sql, type SQL } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
@@ -8,7 +8,7 @@ import { files, uploadSessions } from "../../db/schema/files.js";
 import { projectNodes } from "../../db/schema/flow.js";
 import { wecomGroups } from "../../db/schema/notify.js";
 import { users } from "../../db/schema/identity.js";
-import { projectStages, projects } from "../../db/schema/projects.js";
+import { projectAdditionalStages, projectStages, projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
 import { taskEvents, tasks } from "../../db/schema/tasks.js";
 import { syncProjectManagersToStageTasks } from "../../db/task-scope.js";
@@ -76,6 +76,7 @@ export interface TaskInsertInput {
   projectId: string;
   /** null = 「未分组」（A15 · Push 124）。 */
   stageKey: string | null;
+  additionalStage?: AdditionalProjectStage;
   nodeId: string | null;
   /** 来源任务节点库节点（迁移 0034 · M3-07 刀 3）：手工创建 / 流程节点任务为 null。 */
   sourceNodeId: string | null;
@@ -144,6 +145,7 @@ export interface TaskOrderBrief {
   id: string;
   projectId: string;
   stageKey: string | null;
+  additionalStageNumber: number | null;
   sortIndex: number;
 }
 
@@ -411,13 +413,14 @@ export class TaskRepository {
   }
 
   /**
-   * 节点库来源判重（迁移 0034 · A1-16）：同一项目内同一节点库节点只留一份（未删行参与）。
+   * 原阶段任务按项目判重，新增阶段各自判重（迁移 0120）。
    * 模板实例化按一批 node_id 一次查完（避免逐条查），返回 nodeId → 已存在任务 id。
    */
   async findTaskIdsBySourceNodes(
     projectId: string,
     sourceNodeIds: readonly string[],
     client: DbClient = this.database.db,
+    stage: AdditionalProjectStage | null = null,
   ): Promise<Map<string, string>> {
     if (sourceNodeIds.length === 0) {
       return new Map();
@@ -429,6 +432,7 @@ export class TaskRepository {
         and(
           eq(tasks.projectId, projectId),
           inArray(tasks.taskNodeId, [...sourceNodeIds]),
+          stage === null ? isNull(tasks.additionalStageNumber) : groupCondition(stage.stageKey, stage.number),
           isNull(tasks.deletedAt),
         ),
       );
@@ -451,10 +455,47 @@ export class TaskRepository {
     return rows[0] ?? null;
   }
 
+  async listAdditionalStages(projectId: string): Promise<AdditionalProjectStage[]> {
+    const rows = await this.database.db.select({
+      id: projectAdditionalStages.id,
+      stageKey: projectAdditionalStages.stageKey,
+      number: projectAdditionalStages.number,
+    }).from(projectAdditionalStages)
+      .where(and(eq(projectAdditionalStages.projectId, projectId), isNull(projectAdditionalStages.deletedAt)))
+      .orderBy(asc(projectAdditionalStages.number));
+    return rows.map((row) => ({ ...row, stageKey: row.stageKey as StageKey }));
+  }
+
+  /** 调用方持有项目行锁，从同一原阶段仍在使用的最大编号向后追加。 */
+  async insertAdditionalStage(client: DbClient, projectId: string, stageKey: StageKey): Promise<AdditionalProjectStage> {
+    const [last] = await client.select({ number: max(projectAdditionalStages.number) })
+      .from(projectAdditionalStages)
+      .where(and(eq(projectAdditionalStages.projectId, projectId), eq(projectAdditionalStages.stageKey, stageKey), isNull(projectAdditionalStages.deletedAt)));
+    const number = (last?.number ?? 0) + 1;
+    const [row] = await client.insert(projectAdditionalStages).values({ projectId, stageKey, number })
+      .returning({ id: projectAdditionalStages.id });
+    return { id: row!.id, stageKey, number };
+  }
+
+  async lockAdditionalStage(client: DbClient, projectId: string, stageId: string): Promise<AdditionalProjectStage | null> {
+    const [row] = await client.select({
+      id: projectAdditionalStages.id,
+      stageKey: projectAdditionalStages.stageKey,
+      number: projectAdditionalStages.number,
+    }).from(projectAdditionalStages)
+      .where(and(eq(projectAdditionalStages.projectId, projectId), eq(projectAdditionalStages.id, stageId), isNull(projectAdditionalStages.deletedAt)))
+      .for("update");
+    return row === undefined ? null : { ...row, stageKey: row.stageKey as StageKey };
+  }
+
+  async removeAdditionalStage(client: DbClient, stageId: string, at: Date): Promise<void> {
+    await client.update(projectAdditionalStages).set({ deletedAt: at }).where(eq(projectAdditionalStages.id, stageId));
+  }
+
   /** 任务精简读（无锁；只取重排需要的字段）。 */
   async findTaskBrief(taskId: string, client: DbClient = this.database.db): Promise<TaskOrderBrief | null> {
     const rows = await client
-      .select({ id: tasks.id, projectId: tasks.projectId, stageKey: tasks.stageKey, sortIndex: tasks.sortIndex })
+      .select({ id: tasks.id, projectId: tasks.projectId, stageKey: tasks.stageKey, additionalStageNumber: tasks.additionalStageNumber, sortIndex: tasks.sortIndex })
       .from(tasks)
       .where(and(eq(tasks.id, taskId), isNull(tasks.deletedAt)))
       .limit(1);
@@ -462,11 +503,11 @@ export class TaskRepository {
   }
 
   /** 组内任务数（插入位次夹取用）：同一项目 + 同一阶段（null = 未分组）。 */
-  async countGroup(projectId: string, stageKey: string | null, client: DbClient = this.database.db): Promise<number> {
+  async countGroup(projectId: string, stageKey: string | null, client: DbClient = this.database.db, additionalStageNumber: number | null = null): Promise<number> {
     const rows = await client
       .select({ value: count() })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), groupCondition(stageKey), isNull(tasks.deletedAt)));
+      .where(and(eq(tasks.projectId, projectId), groupCondition(stageKey, additionalStageNumber), isNull(tasks.deletedAt)));
     return Number(rows[0]?.value ?? 0);
   }
 
@@ -479,11 +520,12 @@ export class TaskRepository {
     stageKey: string | null,
     client: DbClient = this.database.db,
     lock = false,
+    additionalStageNumber: number | null = null,
   ): Promise<TaskOrderRow[]> {
     const base = client
       .select({ id: tasks.id, sortIndex: tasks.sortIndex })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), groupCondition(stageKey), isNull(tasks.deletedAt)))
+      .where(and(eq(tasks.projectId, projectId), groupCondition(stageKey, additionalStageNumber), isNull(tasks.deletedAt)))
       .orderBy(asc(tasks.sortIndex), asc(tasks.id));
     return lock ? base.for("update") : base;
   }
@@ -496,8 +538,9 @@ export class TaskRepository {
     to: number | null,
     delta: number,
     client: DbClient,
+    additionalStageNumber: number | null = null,
   ): Promise<void> {
-    const conditions: SQL[] = [eq(tasks.projectId, projectId), groupCondition(stageKey), gte(tasks.sortIndex, from), isNull(tasks.deletedAt) as SQL];
+    const conditions: SQL[] = [eq(tasks.projectId, projectId), groupCondition(stageKey, additionalStageNumber), gte(tasks.sortIndex, from), isNull(tasks.deletedAt) as SQL];
     if (to !== null) conditions.push(lte(tasks.sortIndex, to));
     await client
       .update(tasks)
@@ -528,11 +571,11 @@ export class TaskRepository {
   }
 
   /** 改期顺延按组内位次统一锁定任务，与重排的锁定顺序一致。 */
-  async lockStageTasks(client: DbClient, projectId: string, stageKey: string): Promise<TaskRow[]> {
+  async lockStageTasks(client: DbClient, projectId: string, stageKey: string, additionalStageNumber: number | null = null): Promise<TaskRow[]> {
     return client
       .select()
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.stageKey, stageKey), isNull(tasks.deletedAt)))
+      .where(and(eq(tasks.projectId, projectId), groupCondition(stageKey, additionalStageNumber), isNull(tasks.deletedAt)))
       .orderBy(asc(tasks.sortIndex), asc(tasks.id))
       .for("update");
   }
@@ -548,6 +591,8 @@ export class TaskRepository {
       .values({
         projectId: input.projectId,
         stageKey: input.stageKey,
+        additionalStageNumber: input.additionalStage?.number,
+        additionalStageId: input.additionalStage?.id,
         nodeId: input.nodeId,
         taskNodeId: input.sourceNodeId,
         title: input.title,
@@ -686,9 +731,11 @@ function taskConditions(projectId: string, filter: TaskListFilter, today: string
   return conditions;
 }
 
-/** 组条件：stage_key 为 null 时用 is null（SQL 的 = null 恒不成立）——「未分组」自成一组（A15 · Push 124）。 */
-function groupCondition(stageKey: string | null): SQL {
-  return stageKey === null ? (isNull(tasks.stageKey) as SQL) : (eq(tasks.stageKey, stageKey) as SQL);
+/** 原阶段和其新增阶段各自计算组内位次；stageKey 为空的是临时任务组。 */
+function groupCondition(stageKey: string | null, additionalStageNumber: number | null): SQL {
+  const base = stageKey === null ? isNull(tasks.stageKey) : eq(tasks.stageKey, stageKey);
+  const number = additionalStageNumber === null ? isNull(tasks.additionalStageNumber) : eq(tasks.additionalStageNumber, additionalStageNumber);
+  return sql`(${base} and ${number})`;
 }
 
 /**
@@ -719,7 +766,7 @@ function displayStatusCondition(status: string, today: string): SQL {
 /** 排序：显式 sort 走白名单列；缺省 = 阶段序 + 组内位次 + id（A8 / A19 / A20 · Push 124，与看板列内顺序同口径）。 */
 function taskOrderBy(sorts: readonly TaskSort[]): SQL[] {
   if (sorts.length === 0) {
-    return [sql`${STAGE_ORDER} asc`, asc(tasks.sortIndex), asc(tasks.id)];
+    return [sql`${STAGE_ORDER} asc`, sql`${tasks.additionalStageNumber} asc nulls first`, asc(tasks.sortIndex), asc(tasks.id)];
   }
   return sorts.map((item) =>
     item.direction === "desc" ? desc(SORT_COLUMNS[item.field]) : asc(SORT_COLUMNS[item.field]),

@@ -31,6 +31,8 @@ import {
   TaskSchema,
   TaskUpdateBodySchema,
   z,
+  type AdditionalProjectStage,
+  type StageKey,
   type ErrorDetail,
   type TaskCapabilities,
 } from "@libiaolink/contracts";
@@ -176,6 +178,7 @@ export class TaskService {
     const latestStage = [...STAGE_KEYS].reverse().find((key) => started.has(key)) ?? null;
     return {
       projectId,
+      additionalStages: await this.repository.listAdditionalStages(projectId),
       slowestStage,
       latestStage,
       overdue: counts.overdue,
@@ -185,6 +188,45 @@ export class TaskService {
         hasUnfinishedTemporaryTask: await hasUnfinishedTemporaryTask(this.database.db, projectId),
       } : {}),
     };
+  }
+
+  async createAdditionalStage(projectId: string, stageKey: StageKey, actorId: string): Promise<AdditionalProjectStage> {
+    return this.database.db.transaction(async (tx) => {
+      const project = await this.loadProjectForWrite(projectId, false, tx);
+      await this.permission.assertCanManageProjectManagers(actorId, project, tx, "新增阶段");
+      const stage = await this.repository.insertAdditionalStage(tx, projectId, stageKey);
+      await this.repository.touchProject(projectId, new Date(), tx);
+      await this.audit.record(tx, {
+        actorId, projectId, action: "create", objectType: "stage", objectId: stage.id,
+        summary: "新增阶段：" + STAGE_NAMES[stage.stageKey] + stage.number,
+      });
+      return stage;
+    });
+  }
+
+  async removeAdditionalStage(projectId: string, stageId: string, actorId: string): Promise<void> {
+    await this.database.db.transaction(async (tx) => {
+      const stage = await this.requireAdditionalStage(tx, projectId, stageId);
+      // 阶段行锁阻止并发添加；与重排一致，先锁本组任务，再锁项目。
+      const group = await this.repository.lockStageTasks(tx, projectId, stage.stageKey, stage.number);
+      const project = await this.loadProjectForWrite(projectId, false, tx);
+      await this.permission.assertCanManageProjectManagers(actorId, project, tx, "删除阶段");
+      const at = new Date();
+      for (const task of group) await this.assertTaskDeletable(tx, task);
+      for (const task of group) await this.softDeleteTask(tx, task, actorId, at, stage.id);
+      await this.repository.removeAdditionalStage(tx, stage.id, at);
+      await this.repository.touchProject(projectId, at, tx);
+      await this.audit.record(tx, {
+        actorId, projectId, action: "delete", objectType: "stage", objectId: stage.id,
+        summary: "删除阶段：" + STAGE_NAMES[stage.stageKey] + stage.number,
+      });
+    });
+  }
+
+  private async requireAdditionalStage(tx: DbClient, projectId: string, stageId: string): Promise<AdditionalProjectStage> {
+    const stage = await this.repository.lockAdditionalStage(tx, projectId, stageId);
+    if (stage === null) throw new AppError("NOT_FOUND", "新增阶段不存在");
+    return stage;
   }
 
   /** GET /projects/{id}/tasks：分页 + 阶段 / 负责人 / 展示态筛选 + 关键字 + 白名单排序；items 为 TaskListItem。 */
@@ -262,7 +304,11 @@ export class TaskService {
   async create(projectId: string, body: TaskCreateBody, actorId: string): Promise<Task> {
     const nodeId = body.taskNodeId ?? null;
     const sourceNodeId = body.sourceNodeId ?? null;
-    const temporary = isTemporaryTask({ stageKey: body.stageKey ?? null, nodeId, taskNodeId: sourceNodeId });
+    const additionalStageId = body.additionalStageId ?? null;
+    if (additionalStageId !== null && nodeId !== null) {
+      throw new AppError("VALIDATION_FAILED", "新增阶段不能使用项目流程节点");
+    }
+    const temporary = additionalStageId === null && isTemporaryTask({ stageKey: body.stageKey ?? null, nodeId, taskNodeId: sourceNodeId });
     if (body.syncToGroup === true && !temporary) {
       throw new AppError("VALIDATION_FAILED", "只有临时任务可在创建时同步到项目群");
     }
@@ -296,7 +342,7 @@ export class TaskService {
       sourceStage = node.stageKey;
       title = node.title;
       titleEn = node.titleEn;
-    } else if (nodeId === null && !temporary) {
+    } else if (nodeId === null && !temporary && additionalStageId === null) {
       await this.assertAdmin(actorId, "手工创建非标准任务");
     }
     // 负责人缺省 = 「待分配」空数组（2026-09-24 业务口径：任务添加后负责人默认为空 —— 不再兜底项目经理；A23 的兜底口径据此修订）
@@ -313,11 +359,17 @@ export class TaskService {
       if (nodeStage !== null && requestedStage !== null && nodeStage !== requestedStage) {
         throw new AppError("VALIDATION_FAILED", "stageKey 与来源节点所属阶段不一致（节点阶段：" + nodeStage + "）");
       }
-      const stageKey = nodeStage ?? requestedStage;
+      const additionalStage = additionalStageId === null ? null : await this.requireAdditionalStage(tx, projectId, additionalStageId);
+      if (additionalStage !== null && [nodeStage, requestedStage].some((key) => key !== null && key !== additionalStage.stageKey)) {
+        throw new AppError("VALIDATION_FAILED", "请选择新增阶段对应原阶段的任务节点");
+      }
+      const additionalStageNumber = additionalStage?.number ?? null;
+      const stageKey = additionalStage?.stageKey ?? nodeStage ?? requestedStage;
       // 指定位次时先锁任务分组，与单条重排保持相同的加锁顺序。
-      if (body.sortIndex !== undefined) await this.repository.listGroupOrder(projectId, stageKey, tx, true);
+      if (body.sortIndex !== undefined) await this.repository.listGroupOrder(projectId, stageKey, tx, true, additionalStageNumber);
       const project = await this.loadProjectForWrite(projectId, temporary, tx);
       if (temporary) await this.permission.assertCanManageProjectManagers(actorId, project, tx);
+      if (additionalStage !== null && sourceNodeId === null) await this.permission.assertCanManageProjectManagers(actorId, project, tx, "为新增阶段手工添加任务");
       if (syncToGroup) {
         const group = await this.repository.findGroupBinding(projectId, tx);
         if (group === null) {
@@ -334,22 +386,23 @@ export class TaskService {
         }
       }
       if (sourceNodeId !== null) {
-        const existing = await this.repository.findTaskIdsBySourceNodes(projectId, [sourceNodeId], tx);
+        const existing = await this.repository.findTaskIdsBySourceNodes(projectId, [sourceNodeId], tx, additionalStage);
         const hit = existing.get(sourceNodeId);
         if (hit !== undefined) {
           throw new AppError("TASK_ALREADY_EXISTS", "该项目已添加过该节点（任务：" + hit + "）");
         }
       }
-      const groupSize = await this.repository.countGroup(projectId, stageKey, tx);
+      const groupSize = await this.repository.countGroup(projectId, stageKey, tx, additionalStageNumber);
       const sortIndex = clampSortIndex(body.sortIndex ?? groupSize, groupSize);
       if (sortIndex < groupSize) {
-        await this.repository.shiftGroupIndexes(projectId, stageKey, sortIndex, null, 1, tx);
+        await this.repository.shiftGroupIndexes(projectId, stageKey, sortIndex, null, 1, tx, additionalStageNumber);
       }
       assertEndOnOrAfterStart(title, body.plannedStart ?? null, body.plannedEnd ?? null, "预计完成日期");
       const created = await this.repository.insert(
         {
           projectId,
           stageKey,
+          ...(additionalStage === null ? {} : { additionalStage }),
           nodeId,
           sourceNodeId,
           title,
@@ -416,6 +469,7 @@ export class TaskService {
         summary: "创建任务：" + created.title,
         changes: [
           { field: "stageKey", from: null, to: created.stageKey },
+          { field: "additionalStageNumber", from: null, to: additionalStageNumber },
           { field: "title", from: null, to: created.title },
           { field: "ownerIds", from: null, to: created.ownerIds },
           { field: "managerIds", from: null, to: created.managerIds },
@@ -431,7 +485,7 @@ export class TaskService {
   /**
    * POST /projects/{id}/tasks/from-template（A1-16「批量生成节点任务」· M3-07 刀 3）：整批按模板内顺序生成 ——
    * 阶段取模板阶段、任务描述 / 英文名取节点库现值（A1-17 锁定字段）、负责人缺省 = 「待分配」空数组（Push 184 修订：不再兜底项目经理，A23 的兜底口径下线）。
-   * 判重（系统功能书 A1-16「同一项目已生成过的节点默认不重复生成」）：已存在的节点进 skipped；skipExisting=false 时 409。
+   * 原阶段按项目判重，新增阶段分别判重。已存在的节点进 skipped；skipExisting=false 时 409。
    * 整批**同事务**（要么全落、要么不落）；位次按模板内顺序依次落位（sortIndex 起，缺省 = 组尾，同组顺延）。
    * 留痕：逐条审计（action=create，metadata 记 templateId / sourceNodeId）+ outbox task.created；不写 task_events（非字段级变更）。
    */
@@ -440,7 +494,7 @@ export class TaskService {
     body: TaskCreateFromTemplateBody,
     actorId: string,
   ): Promise<TaskCreateFromTemplateResponse> {
-    const project = await this.loadProjectForWrite(projectId);
+    await this.loadProjectForWrite(projectId);
     const template = await this.templates.getTemplate(body.templateId, actorId);
     if (!isProjectStageKey(template.stageKey)) {
       throw new AppError("VALIDATION_FAILED", "「入库审核」是模板专区分组，不能生成项目任务");
@@ -455,17 +509,21 @@ export class TaskService {
       }
       picked = ordered.filter((node) => wanted.has(node.nodeId));
     }
-    if (picked.length === 0) {
-      return { created: [], skipped: [] };
-    }
-    // 同 create()：缺省 = 「待分配」（2026-09-24 业务口径）；项目经理缺省继承项目当前经理。
+    // 负责人缺省为「待分配」，项目经理继承项目当前名单。
     const ownerIds = body.ownerIds !== undefined ? body.ownerIds : [];
-    const managerIds = project.managerIds;
-    const stageKey = template.stageKey as string;
+    const stageKey = template.stageKey;
     const at = new Date();
     const today = shanghaiToday(at);
     return this.database.db.transaction(async (tx) => {
-      const existing = await this.repository.findTaskIdsBySourceNodes(projectId, picked.map((node) => node.nodeId), tx);
+      const additionalStage = body.additionalStageId === undefined ? null : await this.requireAdditionalStage(tx, projectId, body.additionalStageId);
+      if (additionalStage !== null && additionalStage.stageKey !== stageKey) {
+        throw new AppError("VALIDATION_FAILED", "请选择新增阶段对应原阶段的任务模板");
+      }
+      if (picked.length === 0) return { created: [], skipped: [] };
+      const additionalStageNumber = additionalStage?.number ?? null;
+      if (body.sortIndex !== undefined) await this.repository.listGroupOrder(projectId, stageKey, tx, true, additionalStageNumber);
+      const { managerIds } = await this.loadProjectForWrite(projectId, false, tx);
+      const existing = await this.repository.findTaskIdsBySourceNodes(projectId, picked.map((node) => node.nodeId), tx, additionalStage);
       const skipped: { nodeId: string; taskId: string }[] = [];
       const toCreate = picked.filter((node) => {
         const hit = existing.get(node.nodeId);
@@ -476,10 +534,10 @@ export class TaskService {
         skipped.push({ nodeId: node.nodeId, taskId: hit });
         return false;
       });
-      const groupSize = await this.repository.countGroup(projectId, stageKey, tx);
+      const groupSize = await this.repository.countGroup(projectId, stageKey, tx, additionalStageNumber);
       const base = clampSortIndex(body.sortIndex ?? groupSize, groupSize);
       if (toCreate.length > 0 && base < groupSize) {
-        await this.repository.shiftGroupIndexes(projectId, stageKey, base, null, toCreate.length, tx);
+        await this.repository.shiftGroupIndexes(projectId, stageKey, base, null, toCreate.length, tx, additionalStageNumber);
       }
       const created: Task[] = [];
       for (let index = 0; index < toCreate.length; index += 1) {
@@ -488,6 +546,7 @@ export class TaskService {
           {
             projectId,
             stageKey,
+            ...(additionalStage === null ? {} : { additionalStage }),
             nodeId: null,
             sourceNodeId: node.nodeId,
             title: node.title,
@@ -528,6 +587,7 @@ export class TaskService {
           summary: "从模板创建任务：" + row.title,
           changes: [
             { field: "stageKey", from: null, to: row.stageKey },
+            { field: "additionalStageNumber", from: null, to: additionalStageNumber },
             { field: "title", from: null, to: row.title },
             { field: "ownerIds", from: null, to: row.ownerIds },
             { field: "managerIds", from: null, to: row.managerIds },
@@ -661,43 +721,45 @@ export class TaskService {
     const at = new Date();
     await this.database.db.transaction(async (tx) => {
       const before = await this.requireActiveTask(tx, projectId, taskId);
-      this.assertTaskMutable(before);
-      const references = await this.referencesOf(tx, before);
-      if (references.length > 0) {
-        throw new AppError(
-          "TASK_HAS_REFERENCES",
-          "任务已产生问题 / 变更，不允许删除（系统功能书 A2-01）；只能关闭或标记",
-          references,
-        );
-      }
-      const deleted = await this.repository.softDelete(tx, taskId, actorId, at);
-      if (!deleted) throw new AppError("NOT_FOUND", "任务不存在或已删除：" + taskId);
-      await this.repository.shiftGroupIndexes(projectId, before.stageKey, before.sortIndex + 1, null, -1, tx);
-      await appendOutbox(tx, {
-        topic: "task.deleted",
-        dedupeKey: "task.deleted:" + taskId + ":" + before.version,
-        payload: {
-          projectId,
-          taskId,
-          stageKey: before.stageKey,
-          nodeId: before.nodeId,
-          actorId,
-          at: at.toISOString(),
-        },
-      });
+      await this.assertTaskDeletable(tx, before);
+      await this.softDeleteTask(tx, before, actorId, at);
+      await this.repository.shiftGroupIndexes(projectId, before.stageKey, before.sortIndex + 1, null, -1, tx, before.additionalStageNumber);
       await this.repository.touchProject(projectId, at, tx);
-      await this.audit.record(tx, {
-        actorId,
-        action: "delete",
-        objectType: "task",
-        objectId: taskId,
-        projectId,
-        summary: "删除任务：" + before.title,
-        changes: diffRecords(taskAuditSnapshot(before), null),
-        metadata: { softDelete: true, stageKey: before.stageKey, nodeId: before.nodeId },
-      });
     });
     return { id: taskId, deleted: true };
+  }
+
+  private async assertTaskDeletable(tx: DbClient, task: TaskRow): Promise<void> {
+    this.assertTaskMutable(task);
+    const references = await this.referencesOf(tx, task);
+    if (references.length > 0) {
+      throw new AppError(
+        "TASK_HAS_REFERENCES",
+        "任务已产生问题 / 变更，不允许删除（系统功能书 A2-01）；只能关闭或标记",
+        references,
+      );
+    }
+  }
+
+  private async softDeleteTask(tx: DbClient, task: TaskRow, actorId: string, at: Date, additionalStageId?: string): Promise<void> {
+    const { id: taskId, projectId, stageKey, nodeId } = task;
+    const deleted = await this.repository.softDelete(tx, taskId, actorId, at);
+    if (!deleted) throw new AppError("NOT_FOUND", "任务不存在或已删除：" + taskId);
+    await appendOutbox(tx, {
+      topic: "task.deleted",
+      dedupeKey: "task.deleted:" + taskId + ":" + task.version,
+      payload: { projectId, taskId, stageKey, nodeId, actorId, at: at.toISOString() },
+    });
+    await this.audit.record(tx, {
+      actorId,
+      action: "delete",
+      objectType: "task",
+      objectId: taskId,
+      projectId,
+      summary: "删除任务：" + task.title,
+      changes: diffRecords(taskAuditSnapshot(task), null),
+      metadata: { softDelete: true, stageKey, nodeId, ...(additionalStageId === undefined ? {} : { additionalStageId }) },
+    });
   }
 
   /**
@@ -865,9 +927,9 @@ export class TaskService {
         throw new AppError("NOT_FOUND", "任务不存在或不属于该项目");
       }
       if (request.shiftFollowing === true && brief.stageKey !== null) {
-        stageTasks = await this.repository.lockStageTasks(tx, projectId, brief.stageKey);
+        stageTasks = await this.repository.lockStageTasks(tx, projectId, brief.stageKey, brief.additionalStageNumber);
       } else if (request.sortIndex !== undefined) {
-        await this.repository.listGroupOrder(projectId, brief.stageKey, tx, true);
+        await this.repository.listGroupOrder(projectId, brief.stageKey, tx, true, brief.additionalStageNumber);
       }
     }
     const anchorIndex = stageTasks.findIndex((task) => task.id === taskId);
@@ -1525,15 +1587,15 @@ export class TaskService {
   }
 
   private async moveWithinGroup(tx: DbClient, projectId: string, task: TaskRow, requested: number): Promise<number> {
-    const rows = await this.repository.listGroupOrder(projectId, task.stageKey, tx);
+    const rows = await this.repository.listGroupOrder(projectId, task.stageKey, tx, false, task.additionalStageNumber);
     const currentIndex = rows.findIndex((row) => row.id === task.id);
     const from = currentIndex >= 0 ? currentIndex : Number(task.sortIndex);
     const target = clampSortIndex(requested, rows.length - 1);
     if (target !== from) {
       if (target < from) {
-        await this.repository.shiftGroupIndexes(projectId, task.stageKey, target, from - 1, 1, tx);
+        await this.repository.shiftGroupIndexes(projectId, task.stageKey, target, from - 1, 1, tx, task.additionalStageNumber);
       } else {
-        await this.repository.shiftGroupIndexes(projectId, task.stageKey, from + 1, target, -1, tx);
+        await this.repository.shiftGroupIndexes(projectId, task.stageKey, from + 1, target, -1, tx, task.additionalStageNumber);
       }
     }
     return target;
@@ -1707,6 +1769,7 @@ function toTaskView(row: TaskRow, today: string, changeLinks: Task["changeLinks"
     id: row.id,
     projectId: row.projectId,
     stageKey: row.stageKey as Task["stageKey"],
+    ...(row.additionalStageNumber == null ? {} : { additionalStageNumber: row.additionalStageNumber }),
     sortIndex: row.sortIndex,
     nodeId: row.nodeId,
     sourceNodeId: row.taskNodeId,

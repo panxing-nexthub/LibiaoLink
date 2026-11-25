@@ -175,7 +175,7 @@ const NEWLINE = String.fromCharCode(10);
 const DONE_STATUS = new Set(["已完成", "提前完成"]);
 const BINS = [0, 0.25, 0.5, 0.75, 1];
 
-const STAGE_KEY_BY_NAME: Record<string, StageKey> = {};
+const STAGE_KEY_BY_NAME: Partial<Record<string, StageKey>> = Object.create(null);
 for (const [key, name] of Object.entries(STAGE_NAMES)) STAGE_KEY_BY_NAME[name] = key as StageKey;
 // 旧导入表仍可能写“生产阶段”；内部 key 不变，统一落 production。
 STAGE_KEY_BY_NAME["生产阶段"] = "production";
@@ -647,7 +647,8 @@ export function convertLegacyWorkbook(workbook: ParsedWorkbook, fileName: string
     const split = splitTitle(descRaw);
     const title = split.title === "" ? squashSpaces(descRaw) : split.title;
     const stageRaw = cellAt(sheet, row, index, "阶段性里程");
-    const stageKey = STAGE_KEY_BY_NAME[stageRaw] ?? null;
+    // Excel 导出的编号阶段仍属于固定九阶段；导入保留原阶段归属。
+    const stageKey = STAGE_KEY_BY_NAME[stageRaw] ?? STAGE_KEY_BY_NAME[stageRaw.replace(/[1-9][0-9]*$/, "")] ?? null;
     if (stageRaw !== "" && stageKey === null) {
       issues.push(
         createIssue(

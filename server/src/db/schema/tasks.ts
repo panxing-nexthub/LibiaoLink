@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   numeric,
@@ -17,7 +18,7 @@ import {
 import { projectNodes } from "./flow.js";
 import { STAGE_KEYS, sqlValueList } from "./literals.js";
 import { users } from "./identity.js";
-import { projects } from "./projects.js";
+import { projectAdditionalStages, projects } from "./projects.js";
 import { taskNodes } from "./templates.js";
 
 /** tasks（项目总览 15 列口径；status 为存储基础态，展示态派生，见 v0.2 §2.4）。 */
@@ -28,6 +29,8 @@ export const tasks = pgTable(
     projectId: uuid("project_id").notNull().references(() => projects.id),
     /** 可空（A15 · Push 124）：看板「＋ 添加 → 临时任务」先不带阶段，前端显示「未分组」。 */
     stageKey: text("stage_key"),
+    additionalStageNumber: integer("additional_stage_number"),
+    additionalStageId: uuid("additional_stage_id"),
     nodeId: uuid("node_id").references(() => projectNodes.id),
     /**
      * 来源任务节点库节点（迁移 0034 · M3-07 刀 3 · A1-16）：与 node_id（**项目流程节点** / 蓝图实例）并行、互不替代 ——
@@ -111,14 +114,24 @@ export const tasks = pgTable(
     index("ix_tasks_due").on(table.projectId, table.actualEnd, table.plannedEnd),
     /** 未删行专用（0022）：列表 / 看板顺序读（project_id, stage_key, sort_index）—— 读面恒带 deleted_at is null。 */
     index("ix_tasks_active_group").on(table.projectId, table.stageKey, table.sortIndex).where(sql`deleted_at is null`),
-    /** 任务侧「节点库来源」判重（0034）：同一项目内同一节点库节点只留一份（只约束未删行）。 */
+    /** 节点库来源判重（0120）：原阶段按项目判重，新增阶段分别判重，只约束未删行。 */
     uniqueIndex("uq_tasks_active_source_node")
       .on(table.projectId, table.taskNodeId)
-      .where(sql`deleted_at is null and task_node_id is not null`),
+      .where(sql`deleted_at is null and task_node_id is not null and additional_stage_number is null`),
+    uniqueIndex("uq_tasks_additional_stage_source_node")
+      .on(table.projectId, table.stageKey, table.additionalStageNumber, table.taskNodeId)
+      .where(sql`deleted_at is null and task_node_id is not null and additional_stage_number is not null`),
     check(
       "ck_tasks_stage_key",
       sql`${table.stageKey} in ${sql.raw(sqlValueList(STAGE_KEYS))}`,
     ),
+    check("ck_tasks_additional_stage_key", sql`${table.additionalStageNumber} is null or ${table.stageKey} is not null`),
+    check("ck_tasks_additional_stage_pair", sql`(${table.additionalStageNumber} is null) = (${table.additionalStageId} is null)`),
+    foreignKey({
+      name: "fk_tasks_additional_stage",
+      columns: [table.projectId, table.stageKey, table.additionalStageNumber, table.additionalStageId],
+      foreignColumns: [projectAdditionalStages.projectId, projectAdditionalStages.stageKey, projectAdditionalStages.number, projectAdditionalStages.id],
+    }),
     check("ck_tasks_status", sql`${table.status} in ${sql.raw(sqlValueList(["pending", "active", "done"]))}`),
     check(
       "ck_tasks_status_override",

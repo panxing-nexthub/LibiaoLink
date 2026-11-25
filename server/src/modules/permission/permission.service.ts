@@ -212,11 +212,12 @@ export class PermissionService {
     actorId: string,
     project: { id: string; managerIds: readonly string[] },
     client: DbClient,
+    action = "变更项目经理",
   ): Promise<void> {
     if (await this.canManageGroupAccess(actorId)) return;
     const membership = await this.repository.findMembership(actorId, project.id, client);
     if (isProjectManager(project.managerIds.includes(actorId), membership)) return;
-    throw new AppError("FORBIDDEN", "仅本项目的项目经理或系统管理员可以变更项目经理");
+    throw new AppError("FORBIDDEN", "仅本项目的项目经理或系统管理员可以" + action);
   }
 
   async canAccessPage(actorId: string, page: GroupAccessPage): Promise<boolean> {

@@ -2530,6 +2530,151 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/additional-stages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 在原阶段后新增阶段（本项目经理或系统管理员） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AdditionalProjectStageCreateBody"];
+                };
+            };
+            responses: {
+                /** @description 新增的阶段 */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdditionalProjectStage"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 冲突（VERSION_CONFLICT / 状态不允许当前操作） */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{id}/additional-stages/{stageId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 删除新增阶段及组内任务（本项目经理或系统管理员；任务删除保护生效） */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                    /** @description UUID（主键与关联 ID） */
+                    stageId: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 阶段已删除 */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 冲突（VERSION_CONFLICT / 状态不允许当前操作） */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{id}/tasks": {
         parameters: {
             query?: never;
@@ -12507,6 +12652,15 @@ export interface components {
             taskTemplateManage?: boolean;
             auditScope?: components["schemas"]["AuditScope"];
         };
+        AdditionalProjectStage: {
+            id: components["schemas"]["Uuid"];
+            stageKey: components["schemas"]["StageKey"];
+            /** @description 同一原阶段下的新增阶段编号 */
+            number: number;
+        };
+        AdditionalProjectStageCreateBody: {
+            stageKey: components["schemas"]["StageKey"];
+        };
         AiModelActivate: {
             providerId: components["schemas"]["Uuid"];
             modelId: string;
@@ -16083,6 +16237,7 @@ export interface components {
             overdue: number;
             done: number;
             total: number;
+            additionalStages?: components["schemas"]["AdditionalProjectStage"][];
             /** @description 仅归档项目返回，表示是否仍可填报日报（另需具备填报权限） */
             hasUnfinishedTemporaryTask?: boolean;
         };
@@ -16347,6 +16502,8 @@ export interface components {
             id: components["schemas"]["Uuid"];
             projectId: components["schemas"]["Uuid"];
             stageKey: components["schemas"]["StageKey"] & (string | null);
+            /** @description 所属新增阶段的编号。缺省时任务直接归入原阶段或临时任务 */
+            additionalStageNumber?: number;
             /** @description 组内位次（A19 / A20 · Push 124）：一组 = 同一项目 + 同一阶段（null = 未分组），0 起、密集；看板列内顺序与项目总览排序都按它 */
             sortIndex: number;
             nodeId: components["schemas"]["Uuid"] & (string | null);
@@ -16486,6 +16643,7 @@ export interface components {
         };
         /** @description 创建任务，进度默认 0、状态默认 pending。无阶段、无来源节点的临时任务可由系统管理员或当前项目名单中的项目经理创建 */
         TaskCreateBody: {
+            additionalStageId?: components["schemas"]["Uuid"] & unknown;
             /**
              * @description 所属阶段（A15 · Push 124：可选）—— 缺省 / null = 「未分组」（看板「＋ 添加 → 临时任务」）；带 taskNodeId 时缺省取来源节点所属阶段，显式给出且与节点不一致返回 400
              * @enum {string|null}
@@ -16516,9 +16674,10 @@ export interface components {
             deliverableTypes?: components["schemas"]["DeliverableType"][];
             note?: string | null;
         };
-        /** @description 从任务模板生成任务（批量；同一节点在项目里只留一份） */
+        /** @description 从任务模板批量生成任务，新增阶段各自判重 */
         TaskCreateFromTemplateBody: {
             templateId: components["schemas"]["Uuid"];
+            additionalStageId?: components["schemas"]["Uuid"] & unknown;
             /** @description 只添加模板内的部分节点（≤ 500 个；缺省 = 模板全部节点）；必须是该模板包含的节点，否则 400 */
             nodeIds?: components["schemas"]["Uuid"][];
             /**

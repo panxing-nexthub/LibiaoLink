@@ -48,6 +48,8 @@ function makeRow(overrides: Partial<TaskRow> = {}): TaskRow {
     id: TASK,
     projectId: PROJECT,
     stageKey: "install",
+    additionalStageNumber: null,
+    additionalStageId: null,
     nodeId: NODE,
     taskNodeId: null,
     title: "货架组装",

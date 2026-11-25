@@ -65,6 +65,8 @@ function makeRow(id: string, overrides: Partial<TaskRow> = {}): TaskRow {
     id,
     projectId: PROJECT,
     stageKey: "install",
+    additionalStageNumber: null,
+    additionalStageId: null,
     nodeId: NODE,
     taskNodeId: null,
     title: "任务 " + id.slice(0, 8),
@@ -181,7 +183,7 @@ class FakeTaskRepository {
   async findTaskBrief(taskId: string): Promise<TaskOrderBrief | null> {
     const row = this.tasks.get(taskId);
     if (row === undefined || row.deletedAt !== null) return null;
-    return { id: row.id, projectId: row.projectId, stageKey: row.stageKey, sortIndex: row.sortIndex };
+    return { id: row.id, projectId: row.projectId, stageKey: row.stageKey, additionalStageNumber: row.additionalStageNumber, sortIndex: row.sortIndex };
   }
 
   async findCompletionTarget(_client: DbClient, taskId: string): Promise<{ id: string; projectId: string; nodeId: string | null; status: string; deliverableTypes: string[] } | null> {

@@ -42,6 +42,8 @@ function makeRow(overrides: Partial<TaskRow> = {}): TaskRow {
     id: "55555555-5555-4555-8555-555555555555",
     projectId: PROJECT,
     stageKey: "install",
+    additionalStageNumber: null,
+    additionalStageId: null,
     nodeId: null,
     taskNodeId: null,
     title: "货架组装",
@@ -100,6 +102,7 @@ class FakeTaskRepository {
     }
     return found;
   }
+  async listGroupOrder() { return []; }
   async countGroup(): Promise<number> {
     return this.groupSize;
   }
@@ -118,6 +121,8 @@ class FakeTaskRepository {
     return makeRow({
       id: "aaaaaaaa-0000-4000-8000-" + String(this.seq).padStart(12, "0"),
       stageKey: input.stageKey,
+      additionalStageNumber: input.additionalStage?.number ?? null,
+      additionalStageId: input.additionalStage?.id ?? null,
       nodeId: input.nodeId,
       taskNodeId: input.sourceNodeId,
       title: input.title,

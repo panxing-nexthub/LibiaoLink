@@ -76,8 +76,40 @@
       if (appendFits(clone)) {
         return;
       }
+      var grid = clone.querySelector(".stages");
+      if (grid !== null) {
+        appendStageProgress(clone, grid);
+        return;
+      }
       addPage();
       pageBody.appendChild(clone);
+    }
+
+    function appendStageProgress(section, grid) {
+      var cards = Array.prototype.slice.call(grid.children);
+      grid.replaceChildren();
+      var continuation = section.cloneNode(true);
+      pageBody.appendChild(section);
+      var columns = parseInt(window.getComputedStyle(grid).getPropertyValue("--stage-columns"), 10);
+
+      for (var index = 0; index < cards.length; index += columns) {
+        var row = cards.slice(index, index + columns);
+        grid.append.apply(grid, row);
+        if (!overflows()) {
+          continue;
+        }
+        row.forEach(function (card) {
+          card.remove();
+        });
+        if (grid.childElementCount === 0) {
+          section.remove();
+        }
+        section = continuation.cloneNode(true);
+        grid = section.querySelector(".stages");
+        grid.append.apply(grid, row);
+        addPage();
+        pageBody.appendChild(section);
+      }
     }
 
     pageBody = addPage();

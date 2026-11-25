@@ -18,6 +18,7 @@ export type ApiTask = {
   id: string;
   projectId: string;
   stageKey: string | null;
+  additionalStageNumber?: number;
   sortIndex: number;
   nodeId: string | null;
   sourceNodeId: string | null;
@@ -66,6 +67,8 @@ export type ApiTaskDetail = ApiTask & {
 
 export type ApiTaskListResult = { items: ApiTaskListItem[]; page: number; limit: number; total: number };
 
+export type AdditionalProjectStage = { id: string; stageKey: string; number: number };
+
 /** 项目总览汇总卡（契约 ProjectSummary）。 */
 export type ApiProjectSummary = {
   projectId: string;
@@ -75,6 +78,7 @@ export type ApiProjectSummary = {
   done: number;
   total: number;
   hasUnfinishedTemporaryTask?: boolean;
+  additionalStages?: AdditionalProjectStage[];
 };
 
 /** 九阶段字典（契约 STAGE_KEYS / STAGE_NAMES）：阶段名 ↔ key 的双向映射在前端本地维护。 */
@@ -100,6 +104,26 @@ STAGE_KEYS_BY_NAME["生产阶段"] = "production";
 /** 阶段 key → 展示名；null / 未知 key → 空串（展示层垫底归「临时任务」分组，Push 196 起原「未分组」；看板临时任务）。 */
 export function stageNameOf(stageKey: string | null): string {
   return stageKey === null ? "" : STAGE_NAMES_BY_KEY[stageKey] ?? "";
+}
+
+export function additionalStageName(stage: Pick<AdditionalProjectStage, "stageKey" | "number">): string {
+  return stageNameOf(stage.stageKey) + stage.number;
+}
+
+export function projectTaskStageNames(
+  additionalStages: readonly AdditionalProjectStage[] = [],
+  tasks: readonly Pick<ProjectTask, "stageKey" | "additionalStageNumber">[] = [],
+): string[] {
+  // 任务列表和项目汇总分别读取。任务已经返回时，其分组不能因汇总暂时滞后而消失。
+  const numberedStages = [
+    ...additionalStages,
+    ...tasks.flatMap(({ stageKey, additionalStageNumber }) =>
+      stageKey === null || additionalStageNumber === undefined ? [] : [{ stageKey, number: additionalStageNumber }]),
+  ];
+  return Object.entries(STAGE_NAMES_BY_KEY).flatMap(([key, name]) => {
+    const numbers = new Set(numberedStages.filter((stage) => stage.stageKey === key).map((stage) => stage.number));
+    return [name, ...[...numbers].sort((left, right) => left - right).map((number) => name + number)];
+  });
 }
 
 /** 舞台展示名 → 阶段 key；不在九阶段内（「临时任务」等分组名）→ null。 */
@@ -199,7 +223,8 @@ export function toUiTask(
     nodeId: view.nodeId,
     sourceNodeId: view.sourceNodeId ?? null,
     stageKey: view.stageKey,
-    stage: stageNameOf(view.stageKey),
+    additionalStageNumber: view.additionalStageNumber,
+    stage: stageNameOf(view.stageKey) + (view.additionalStageNumber ?? ""),
     sortIndex: view.sortIndex,
     title: view.title,
     titleEn: view.titleEn ?? "",
@@ -242,6 +267,14 @@ export function fetchTaskDetail(projectId: string, taskId: string): Promise<ApiT
   );
 }
 
+export function createAdditionalStage(projectId: string, stageKey: string): Promise<AdditionalProjectStage> {
+  return apiSend("/api/v1/projects/" + encodeURIComponent(projectId) + "/additional-stages", "POST", { stageKey });
+}
+
+export function deleteAdditionalStage(projectId: string, stageId: string): Promise<void> {
+  return apiSend("/api/v1/projects/" + encodeURIComponent(projectId) + "/additional-stages/" + encodeURIComponent(stageId), "DELETE");
+}
+
 /** 创建任务（节点生成 / 手工创建）：响应 = 契约 Task（不带姓名与文件摘要，调用方随后重取列表）。 */
 export function createTask(projectId: string, body: TaskCreateInput): Promise<ApiTask> {
   return apiSend<ApiTask>("/api/v1/projects/" + encodeURIComponent(projectId) + "/tasks", "POST", body);
@@ -249,6 +282,7 @@ export function createTask(projectId: string, body: TaskCreateInput): Promise<Ap
 
 export type TaskCreateInput = {
   stageKey: string | null;
+  additionalStageId?: string;
   sortIndex?: number;
   title: string;
   titleEn?: string | null;
@@ -272,6 +306,7 @@ export type TaskCreateInput = {
 /** 模板实例化入参（契约 TaskCreateFromTemplateBody · `POST …/tasks/from-template`）。 */
 export type TaskFromTemplateInput = {
   templateId: string;
+  additionalStageId?: string;
   /** 只加模板内的部分节点（缺省 = 模板全部节点）；顺序仍按模板内顺序。 */
   nodeIds?: string[];
   /** 已存在的节点跳过并计入 skipped（默认 true）；false 时遇重复整批 409。 */

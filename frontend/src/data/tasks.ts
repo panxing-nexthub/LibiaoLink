@@ -48,6 +48,7 @@ export type ProjectTask = {
   sourceNodeId: string | null;
   /** 所属阶段 key；null = 看板临时任务（展示层垫底归「临时任务」分组）。 */
   stageKey: string | null;
+  additionalStageNumber?: number;
   /** 所属阶段中文名（展示与分组用；无阶段任务 = 空串，展示层归「临时任务」分组）。 */
   stage: string;
   /** 组内位次（契约 sortIndex）：一组 = 同一项目 + 同一阶段，0 起、密集。 */

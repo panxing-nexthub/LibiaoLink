@@ -1,5 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import {
+  AdditionalProjectStageCreateBodySchema,
+  type AdditionalProjectStage,
   ProjectSummarySchema,
   TaskBatchBodySchema,
   TaskBatchResponseSchema,
@@ -78,6 +80,27 @@ export class TaskController {
   @Get(":id/summary")
   summary(@Param("id", uuidParam) id: string): Promise<z.infer<typeof ProjectSummarySchema>> {
     return this.tasks.summary(id);
+  }
+
+  @Post(":id/additional-stages")
+  @RequirePermission("project.update")
+  createAdditionalStage(
+    @Param("id", uuidParam) id: string,
+    @Body(new ZodValidationPipe(AdditionalProjectStageCreateBodySchema)) body: z.infer<typeof AdditionalProjectStageCreateBodySchema>,
+    @CurrentActorId() actorId: string,
+  ): Promise<AdditionalProjectStage> {
+    return this.tasks.createAdditionalStage(id, body.stageKey, actorId);
+  }
+
+  @Delete(":id/additional-stages/:stageId")
+  @RequirePermission("project.update")
+  @HttpCode(204)
+  removeAdditionalStage(
+    @Param("id", uuidParam) id: string,
+    @Param("stageId", uuidParam) stageId: string,
+    @CurrentActorId() actorId: string,
+  ): Promise<void> {
+    return this.tasks.removeAdditionalStage(id, stageId, actorId);
   }
 
   /** 任务列表：分页 + 阶段 / 负责人 / 展示态筛选 + 关键字 + 白名单排序（TaskListItem 随行摘要）。 */

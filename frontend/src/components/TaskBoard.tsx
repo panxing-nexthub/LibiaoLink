@@ -5,7 +5,7 @@ import { PROJECT_STAGES } from "../data/projects";
 import { memberOptionsWithExisting, type Member } from "../data/members";
 import type { TaskFileRef } from "../fileApi";
 import { TEMP_TASK_STAGE, addedNodeIdsOf, addedNodeKeysOf, dateOnlyText, daysBetweenInclusive, lateDeliveryLabel, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskPriority, type TaskStatus } from "../data/tasks";
-import { stageNameOf, type ApiProjectSummary, type TaskUpdateInput } from "../taskApi";
+import { additionalStageName, stageNameOf, type AdditionalProjectStage, type ApiProjectSummary, type TaskUpdateInput } from "../taskApi";
 import { fieldText, isLocalizedLocale, mdText, priorityText, stageText, statusText, useLocale, useLocalizedText, useT } from "../i18n";
 import { InlineDateCell, InlineMemberMultiCell, InlineNumberCell, InlineOptionCell, InlineTextCell } from "./InlineEdit";
 import type { SelectOption } from "./SelectMenu";
@@ -17,6 +17,7 @@ import { TaskFilesPopover } from "./TaskFilesPopover";
 import { Tracker } from "./Tracker";
 import { RowDeleteButton } from "./RowDeleteButton";
 import { DeliverableCell, docTypeCapsule } from "./DeliverablePicker";
+import { AdditionalStageDialog } from "./AdditionalStageDialog";
 import { StageAddCard } from "./StageAddCard";
 import type { StagePlacement } from "./StageAddCard";
 import { TempTaskCreateForm, type TempTaskCreateValues } from "./TempTaskCreateForm";
@@ -337,10 +338,16 @@ type TaskBoardProps = {
   onToggleAllStages: () => void;
   /** 没有数据也要出分组头的阶段（还没有任务的项目：只出阶段骨架，展开后没有任务行）。 */
   skeletonStages?: readonly string[];
+  additionalStages?: readonly AdditionalProjectStage[];
+  manageStages?: {
+    create: (stageKey: string) => Promise<string | null>;
+    remove: (id: string) => Promise<string | null>;
+    createTask: (id: string, values: TempTaskCreateValues) => Promise<string | null>;
+  };
   /** 「添加任务」：从任务模板预设里挑节点加进项目（不传 = 阶段标签点不开右侧卡片）。 */
-  onAddNode?: (stage: string, node: TemplatePresetNode) => void;
+  onAddNode?: (stage: string, node: TemplatePresetNode, additionalStage?: AdditionalProjectStage) => void;
   /** 加一条 / 一批并指定插入位置（Push 113：点「＋ 添加」先弹位置浮层，选完才加进项目）。不传 = 点一条直接加到该阶段最后。 */
-  onAddNodes?: (stage: string, nodes: readonly TemplatePresetNode[], placement: StagePlacement, templateId?: string) => void;
+  onAddNodes?: (stage: string, nodes: readonly TemplatePresetNode[], placement: StagePlacement, templateId?: string, additionalStage?: AdditionalProjectStage) => void;
   /** 哪些阶段允许打开添加卡片（项目经理全开；任务负责人仅本人负责的阶段）。 */
   canOpenAddCard?: (stage: string) => boolean;
   /** 这些阶段打开添加卡片时只显示个人模版（任务负责人模式）。 */
@@ -948,7 +955,7 @@ export function ProjectSummary({ summary }: { summary: ApiProjectSummary | null 
   );
 }
 
-export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes, onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, onAddNode, onAddNodes, canOpenAddCard, personalOnlyStages, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, filesByTask, projectId, tierTint }: TaskBoardProps) {
+export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes, onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, additionalStages, manageStages, onAddNode, onAddNodes, canOpenAddCard, personalOnlyStages, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, filesByTask, projectId, tierTint }: TaskBoardProps) {
   const t = useT();
   const locale = useLocale();
   /**
@@ -984,9 +991,16 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
     onOpenTaskOpened?.();
   }, [openTaskId, tasks, onOpenTaskOpened]);
   /** 右侧「任务节点 / 模板」卡片停在哪个阶段（点阶段标签打开）。 */
-  const [cardStage, setCardStage] = useState<string | null>(null);
+  const [stageCard, setCardStage] = useState<{ name: string; additionalStage?: AdditionalProjectStage } | null>(null);
+  const cardAdditionalStage = stageCard?.additionalStage;
+  const cardStage = cardAdditionalStage !== undefined && !additionalStages?.some((stage) => stage.id === cardAdditionalStage.id)
+    ? null
+    : stageCard?.name ?? null;
   /** 底部「临时任务」分组头的新建表单开着没有（Push 197；与阶段卡片互斥）。 */
   const [tempFormOpen, setTempFormOpen] = useState(false);
+  const [stageDialog, setStageDialog] = useState<"create" | AdditionalProjectStage | null>(null);
+  const [stageTaskId, setStageTaskId] = useState<string | null>(null);
+  const taskStage = additionalStages?.find((stage) => stage.id === stageTaskId);
   const boardWrapRef = useRef<HTMLDivElement | null>(null);
   const boardCardRef = useRef<HTMLDivElement | null>(null);
   const headerRowRef = useRef<HTMLDivElement | null>(null);
@@ -1001,10 +1015,6 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
   const columns = resolveColumns(visibleColumns ?? DEFAULT_VISIBLE_COLUMNS);
   const gridTemplate = tableGridTemplate(columns);
   const minWidth = tableMinWidth(columns);
-  /** 项目里已添加的节点判重键（见 `addedNodeKeysOf`）：添加卡片的节点 / 模板条目按它显示「已添加」并跳过重复。 */
-  const addedNodeKeys = addedNodeKeysOf(tasks);
-  /** 来源节点 id 集合（见 `addedNodeIdsOf` · M3-07 刀 3）：精确判重，优先于上面的同阶段同名兜底。 */
-  const addedNodeIds = addedNodeIdsOf(tasks);
   /**
    * 该阶段现有任务（Push 113）：给「点 ＋ 添加 → 选位置」当锚点 —— `tasks` 已经是展示顺序
    * （阶段为主键、组内按看板顺序表），所以这里的先后 = 项目总览里这些任务的先后。
@@ -1018,13 +1028,13 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
   }, [viewStage]);
 
   /** 点阶段标签：再点同一个 = 关掉；新卡片在视口内居中打开。 */
-  const toggleCard = (stage: string) => {
+  const toggleCard = (stage: string, additionalStage?: AdditionalProjectStage) => {
     if (cardStage === stage) {
       setCardStage(null);
       return;
     }
     setTempFormOpen(false);
-    setCardStage(stage);
+    setCardStage({ name: stage, additionalStage });
   };
 
   const toggleTempForm = () => {
@@ -1100,7 +1110,11 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
    * 它没有节点 / 模板可挑，点击 = 直接出新建表单（自己填名称），建完直接打开详情抽屉补时间等细节。
    */
   const stageOf = (task: ProjectTask) => (task.stage === "" ? TEMP_TASK_STAGE : task.stage);
-  const groups = [...STAGE_ORDER, TEMP_TASK_STAGE]
+  const additionalStageByName = new Map(additionalStages?.map((stage) => [additionalStageName(stage), stage]));
+  const cardNodeTasks = tasks.filter((task) => cardAdditionalStage === undefined
+    ? task.additionalStageNumber === undefined
+    : task.stage === cardStage);
+  const groups = (skeletonStages ?? [...STAGE_ORDER, TEMP_TASK_STAGE])
     .map((stage) => ({
       stage,
       items: tasks.filter((task) => stageOf(task) === stage),
@@ -1178,11 +1192,12 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
             const pct = group.items.length === 0 ? 0 : Math.round((done / group.items.length) * 100);
             const isCollapsed = collapsed[group.stage] === true;
             /** 只读关系用户没有新增回调：阶段头退化为普通标签，不出现「＋」和可展开卡片。 */
+            const additionalStage = additionalStageByName.get(group.stage);
             const canAddToStage = group.stage === TEMP_TASK_STAGE
               ? onCreateTempTask !== undefined
-              : (onAddNode !== undefined || onAddNodes !== undefined) && (canOpenAddCard === undefined || canOpenAddCard(group.stage));
+              : (additionalStage !== undefined || STAGE_ORDER.includes(group.stage)) && (onAddNode !== undefined || onAddNodes !== undefined) && (canOpenAddCard === undefined || canOpenAddCard(group.stage));
             return (
-              <section key={group.stage} className="border-b border-zinc-100 last:border-b-0">
+              <section key={additionalStage?.id ?? group.stage} className="border-b border-zinc-100 last:border-b-0">
                 {/* 阶段分组头（业务口径 2026-09-24）：整行不再是点击区域 —— 只有左侧「折叠箭头 + 阶段标签」这一小片可点，
                     右边那一段空行点不动（原来整行是 role=button 的折叠开关，点在空白处也会折叠，容易被误触）。 */}
                 <div data-stage-header={group.stage} className="flex w-full items-center gap-2.5 bg-zinc-100 px-5 py-3">
@@ -1247,7 +1262,7 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
                     aria-expanded={cardStage === group.stage}
                     onClick={(event) => {
                       event.stopPropagation();
-                      toggleCard(group.stage);
+                      toggleCard(group.stage, additionalStage);
                     }}
                     title={t("board.stage.openCard")}
                     className={
@@ -1269,6 +1284,13 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
                     </svg>
                   </button>
                   )}
+                  {additionalStage !== undefined && manageStages !== undefined ? (
+                    <RowDeleteButton
+                      persistent
+                      label={t("board.additionalStage.remove") + " " + stageText(locale, group.stage)}
+                      onDelete={() => { setCardStage(null); setStageDialog(additionalStage); }}
+                    />
+                  ) : null}
                 </div>
                 {isCollapsed ? null : (
                   <div className="divide-y divide-zinc-100">
@@ -1310,6 +1332,20 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
               </section>
             );
           })}
+          {manageStages !== undefined ? (
+            <div className="flex w-full items-center bg-zinc-100 py-3 pl-[3.375rem] pr-5">
+              <button
+                type="button"
+                onClick={() => { setCardStage(null); setStageDialog("create"); }}
+                className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 ring-1 ring-zinc-200 transition hover:ring-zinc-300"
+              >
+                {t("board.additionalStage.add")}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className="h-3 w-3 text-zinc-400">
+                  <path d="M12 5.5v13M5.5 12h13" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
       </div>
@@ -1328,6 +1364,30 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
           {t("drawer.finalize.label")}
         </span>
       ))}
+      {stageDialog !== null && manageStages !== undefined ? (
+        <AdditionalStageDialog
+          target={stageDialog === "create" ? null : stageDialog}
+          onCreate={manageStages.create}
+          onRemove={manageStages.remove}
+          onClose={() => { setStageDialog(null); }}
+        />
+      ) : null}
+      {taskStage !== undefined && manageStages !== undefined ? (
+        <TempTaskCreateForm
+          stageName={stageText(locale, additionalStageName(taskStage))}
+          managerOptions={managerMembers}
+          ownerOptions={members}
+          onCreate={async (values) => {
+            const id = await manageStages.createTask(taskStage.id, values);
+            if (id !== null) {
+              setSelectedTaskId(id);
+              if (collapsed[additionalStageName(taskStage)] === true) onToggleStage(additionalStageName(taskStage));
+            }
+            return id;
+          }}
+          onClose={() => { setStageTaskId(null); }}
+        />
+      ) : null}
       {tempFormOpen && onCreateTempTask !== undefined ? (
         <TempTaskCreateForm
           projectId={projectId}
@@ -1344,14 +1404,17 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
       {cardStage !== null && (onAddNode !== undefined || onAddNodes !== undefined) ? (
         <StageAddCard
           stage={cardStage}
-          addedNodeKeys={addedNodeKeys}
-          addedNodeIds={addedNodeIds}
-          onAddNode={onAddNode}
+          sourceStage={cardAdditionalStage === undefined ? undefined : stageNameOf(cardAdditionalStage.stageKey)}
+          addedNodeKeys={addedNodeKeysOf(cardNodeTasks)}
+          addedNodeIds={addedNodeIdsOf(cardNodeTasks)}
+          onCreateManualTask={cardAdditionalStage === undefined || manageStages === undefined ? undefined : () => {
+            setCardStage(null);
+            setStageTaskId(cardAdditionalStage.id);
+          }}
+          onAddNode={onAddNode === undefined ? undefined : (stage, node) => onAddNode(stage, node, cardAdditionalStage)}
           placement={onAddNodes === undefined ? undefined : { tasks: stageTasksOf(cardStage) }}
-          onAddNodes={onAddNodes}
+          onAddNodes={onAddNodes === undefined ? undefined : (stage, nodes, placement, templateId) => onAddNodes(stage, nodes, placement, templateId, cardAdditionalStage)}
           personalOnly={personalOnlyStages?.has(cardStage) ?? false}
-          // Push 207 撤（业务口径「临时任务不应该存在于阶段里面新建」）：阶段卡片不再收「临时任务」入口 ——
-          // 临时任务的新建仍走本表底部「临时任务」分组头（见下方常驻入口）与看板列底「添加」菜单
           onClose={() => setCardStage(null)}
           viewportDraggable
           style={{ position: "fixed", top: 0, left: 0 }}

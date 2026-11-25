@@ -411,6 +411,7 @@ function buildBar(locale: Locale, task: ProjectTask): GanttBar {
 function buildModel(
   locale: Locale,
   tasks: readonly ProjectTask[],
+  stageOrder: readonly string[],
   today: number,
   collapsed: Record<string, boolean>,
   hideEmptyGroups: boolean,
@@ -495,7 +496,7 @@ function buildModel(
   // 分组 = 阶段（九个阶段按项目总览顺序 + 有内容才出现的「临时任务」，与项目总览最后一组同口径）。
   const byStage = new Map<string, GanttBar[]>();
   for (const bar of bars) {
-    const stage = STAGE_ORDER.includes(bar.task.stage) ? bar.task.stage : UNGROUPED;
+    const stage = stageOrder.includes(bar.task.stage) ? bar.task.stage : UNGROUPED;
     const list = byStage.get(stage);
     if (list === undefined) {
       byStage.set(stage, [bar]);
@@ -503,7 +504,7 @@ function buildModel(
       list.push(bar);
     }
   }
-  const stageNames: string[] = [...STAGE_ORDER];
+  const stageNames: string[] = [...stageOrder];
   if (byStage.has(UNGROUPED)) {
     stageNames.push(UNGROUPED);
   }
@@ -589,7 +590,7 @@ function GanttLockIcon({ locked }: { locked: boolean }) {
  * 传了 onPatchTask / onSetProgress 就能拖动改期 / 改进度（不传 = 拖动照常预览、松手不写回）。
  * members = 人员目录（负责人筛选项的成员行渲染）。
  */
-export function GanttChart({ tasks, members, tierTint = false, onPatchTask, onSetProgress }: { tasks: readonly ProjectTask[]; members: readonly Member[]; /** 背景档位（适中 / 炫彩；空态兜底列表的行色与项目页任务行的铺色同口径，Push 294）。 */ tierTint?: TintedTier | false; onPatchTask?: (taskId: string, patch: TaskPatch) => void; onSetProgress?: (taskId: string, progress: number) => void }) {
+export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint = false, onPatchTask, onSetProgress }: { tasks: readonly ProjectTask[]; members: readonly Member[]; stageOrder?: readonly string[]; /** 背景档位（适中 / 炫彩；空态兜底列表的行色与项目页任务行的铺色同口径，Push 294）。 */ tierTint?: TintedTier | false; onPatchTask?: (taskId: string, patch: TaskPatch) => void; onSetProgress?: (taskId: string, progress: number) => void }) {
   const locale = useLocale();
   const localize = useLocalizedTranslator();
   /** 手打内容（任务名）机翻显示：英文界面 titleEn 优先 → 机翻 → 原文；中文界面照旧。 */
@@ -725,8 +726,8 @@ export function GanttChart({ tasks, members, tierTint = false, onPatchTask, onSe
         end: origin + Math.ceil((node.scrollLeft + Math.max(0, node.clientWidth - leftWidth)) / previousDayWidth) * DAY_MS,
       }
       : undefined;
-    return buildModel(locale, visibleTasks, today, collapsed, filtering, includeToday, viewport);
-  }, [visibleTasks, today, collapsed, filtering, includeToday, viewportKey, leftWidth, locale]);
+    return buildModel(locale, visibleTasks, stageOrder, today, collapsed, filtering, includeToday, viewport);
+  }, [visibleTasks, stageOrder, today, collapsed, filtering, includeToday, viewportKey, leftWidth, locale]);
   const weekendSet = useMemo(() => new Set(model === null ? [] : model.weekends), [model]);
 
   /**
@@ -734,10 +735,10 @@ export function GanttChart({ tasks, members, tierTint = false, onPatchTask, onSe
    * 口径同左表 / 项目总览 —— 九个阶段按顺序 + 「临时任务」垫底、只出有任务的分组；
    * 折叠状态与左表共用同一份 `collapsed`（列表箭头 / 左表箭头 / 工具栏「全部折叠 / 全部展开」三处联动）。
    */
-  const listGroups = [...STAGE_ORDER, UNGROUPED]
+  const listGroups = [...stageOrder, UNGROUPED]
     .map((stage) => ({
       stage,
-      items: visibleTasks.filter((task) => (STAGE_ORDER.includes(task.stage) ? task.stage : UNGROUPED) === stage),
+      items: visibleTasks.filter((task) => (stageOrder.includes(task.stage) ? task.stage : UNGROUPED) === stage),
     }))
     .filter((group) => group.items.length > 0);
   const listStages = listGroups.map((group) => group.stage);

@@ -39,7 +39,8 @@ export const TaskSchema = z
   .object({
     id: UuidSchema,
     projectId: UuidSchema,
-    stageKey: StageKeySchema.nullable().openapi({ description: "所属阶段；null = 「未分组」（A15 · Push 124：临时任务允许没有阶段）" }),
+    stageKey: StageKeySchema.nullable().openapi({ description: "所属原阶段；null = 临时任务" }),
+    additionalStageNumber: z.number().int().positive().optional().describe("所属新增阶段的编号。缺省时任务直接归入原阶段或临时任务"),
     sortIndex: z.number().int().min(0).openapi({
       description:
         "组内位次（A19 / A20 · Push 124）：一组 = 同一项目 + 同一阶段（null = 未分组），0 起、密集；看板列内顺序与项目总览排序都按它",
@@ -289,6 +290,7 @@ export const TaskCanCompleteResponseSchema = z
  */
 export const TaskCreateBodySchema = z
   .object({
+    additionalStageId: UuidSchema.optional().describe("在本项目新增阶段内建任务，支持手工或从对应原阶段的节点库创建"),
     stageKey: StageKeySchema.nullable().optional().openapi({
       description:
         "所属阶段（A15 · Push 124：可选）—— 缺省 / null = 「未分组」（看板「＋ 添加 → 临时任务」）；带 taskNodeId 时缺省取来源节点所属阶段，显式给出且与节点不一致返回 400",
@@ -305,7 +307,7 @@ export const TaskCreateBodySchema = z
     }),
     sourceNodeId: UuidSchema.optional().openapi({
       description:
-        "来源任务节点库节点（task_nodes）id：从节点库生成任务（A1-16，成员可建）—— 任务描述 / 英文名 / 阶段取节点现值（A1-17 锁定字段），同一项目内同一节点只留一份（重复 409 TASK_ALREADY_EXISTS）；与 taskNodeId（项目流程节点）二选一",
+        "来源任务节点库节点（task_nodes）id：从节点库生成任务（A1-16，成员可建）—— 任务描述 / 英文名 / 阶段取节点现值（A1-17 锁定字段），原阶段按项目判重，新增阶段分别判重（重复 409 TASK_ALREADY_EXISTS）；与 taskNodeId（项目流程节点）二选一",
     }),
     ownerIds: z.array(UuidSchema).max(TASK_OWNER_IDS_LIMIT).optional().openapi({
       description:
@@ -402,6 +404,7 @@ export const TaskUpdateBodySchema = z
 export const TaskCreateFromTemplateBodySchema = z
   .object({
     templateId: UuidSchema,
+    additionalStageId: UuidSchema.optional().describe("目标新增阶段。模板须属于其对应的原阶段"),
     nodeIds: z.array(UuidSchema).max(TASK_TEMPLATE_NODE_IDS_LIMIT).optional().openapi({ description: "只添加模板内的部分节点（≤ 500 个；缺省 = 模板全部节点）；必须是该模板包含的节点，否则 400" }),
     skipExisting: z.boolean().default(true).openapi({ description: "已存在的节点跳过并计入 skipped（默认 true）；false 时遇重复返回 409" }),
     ownerIds: z.array(UuidSchema).max(TASK_OWNER_IDS_LIMIT).optional().openapi({ description: "任务负责人（≤ 200 位）：缺省 = 「待分配」（2026-09-24 业务口径修订：不再兜底项目经理）；显式 [] 同义" }),
@@ -412,7 +415,7 @@ export const TaskCreateFromTemplateBodySchema = z
       description: "生成任务的紧急重要度（可空 = 不写）；节点库暂无「默认紧急重要度」列（A1-17 映射待补），先由调用方给",
     }),
   })
-  .openapi("TaskCreateFromTemplateBody", { description: "从任务模板生成任务（批量；同一节点在项目里只留一份）" });
+  .openapi("TaskCreateFromTemplateBody", { description: "从任务模板批量生成任务，新增阶段各自判重" });
 
 export const TaskCreateFromTemplateResponseSchema = z
   .object({

@@ -232,6 +232,39 @@
         ],
         "description": "当前用户授权画像（全量能力基线 + 部门规则裁决结果）"
       },
+      "AdditionalProjectStage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "stageKey": {
+            "$ref": "#/components/schemas/StageKey"
+          },
+          "number": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "同一原阶段下的新增阶段编号"
+          }
+        },
+        "required": [
+          "id",
+          "stageKey",
+          "number"
+        ]
+      },
+      "AdditionalProjectStageCreateBody": {
+        "type": "object",
+        "properties": {
+          "stageKey": {
+            "$ref": "#/components/schemas/StageKey"
+          }
+        },
+        "required": [
+          "stageKey"
+        ],
+        "additionalProperties": false
+      },
       "AiModelActivate": {
         "type": "object",
         "properties": {
@@ -14510,6 +14543,12 @@
             "type": "integer",
             "minimum": 0
           },
+          "additionalStages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdditionalProjectStage"
+            }
+          },
           "hasUnfinishedTemporaryTask": {
             "type": "boolean",
             "description": "仅归档项目返回，表示是否仍可填报日报（另需具备填报权限）"
@@ -15487,9 +15526,14 @@
                   "string",
                   "null"
                 ],
-                "description": "所属阶段；null = 「未分组」（A15 · Push 124：临时任务允许没有阶段）"
+                "description": "所属原阶段；null = 临时任务"
               }
             ]
+          },
+          "additionalStageNumber": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "所属新增阶段的编号。缺省时任务直接归入原阶段或临时任务"
           },
           "sortIndex": {
             "type": "integer",
@@ -16084,6 +16128,16 @@
       "TaskCreateBody": {
         "type": "object",
         "properties": {
+          "additionalStageId": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "description": "在本项目新增阶段内建任务，支持手工或从对应原阶段的节点库创建"
+              }
+            ]
+          },
           "stageKey": {
             "type": [
               "string",
@@ -16138,7 +16192,7 @@
                 "$ref": "#/components/schemas/Uuid"
               },
               {
-                "description": "来源任务节点库节点（task_nodes）id：从节点库生成任务（A1-16，成员可建）—— 任务描述 / 英文名 / 阶段取节点现值（A1-17 锁定字段），同一项目内同一节点只留一份（重复 409 TASK_ALREADY_EXISTS）；与 taskNodeId（项目流程节点）二选一"
+                "description": "来源任务节点库节点（task_nodes）id：从节点库生成任务（A1-16，成员可建）—— 任务描述 / 英文名 / 阶段取节点现值（A1-17 锁定字段），原阶段按项目判重，新增阶段分别判重（重复 409 TASK_ALREADY_EXISTS）；与 taskNodeId（项目流程节点）二选一"
               }
             ]
           },
@@ -16235,6 +16289,16 @@
           "templateId": {
             "$ref": "#/components/schemas/Uuid"
           },
+          "additionalStageId": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "description": "目标新增阶段。模板须属于其对应的原阶段"
+              }
+            ]
+          },
           "nodeIds": {
             "type": "array",
             "items": {
@@ -16278,7 +16342,7 @@
         "required": [
           "templateId"
         ],
-        "description": "从任务模板生成任务（批量；同一节点在项目里只留一份）"
+        "description": "从任务模板批量生成任务，新增阶段各自判重"
       },
       "TaskCreateFromTemplateResponse": {
         "type": "object",
@@ -21970,6 +22034,149 @@
           },
           "404": {
             "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{id}/additional-stages": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "在原阶段后新增阶段（本项目经理或系统管理员）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdditionalProjectStageCreateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "新增的阶段",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdditionalProjectStage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "冲突（VERSION_CONFLICT / 状态不允许当前操作）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{id}/additional-stages/{stageId}": {
+      "delete": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "删除新增阶段及组内任务（本项目经理或系统管理员；任务删除保护生效）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "stageId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "阶段已删除"
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "冲突（VERSION_CONFLICT / 状态不允许当前操作）",
             "content": {
               "application/json": {
                 "schema": {

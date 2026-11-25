@@ -1251,6 +1251,13 @@ const ZH_TEXTS = {
   "board.stage.expand": "展开这个阶段",
   "board.stage.collapse": "折叠这个阶段",
   "board.temp.addAria": "添加任务：临时任务",
+  "board.additionalStage.add": "增加阶段",
+  "board.additionalStage.after": "插入到哪个原阶段下方",
+  "board.additionalStage.remove": "删除阶段",
+  "board.additionalStage.removeConfirm": "删除「{stage}」？其中的所有任务也会一起删除。",
+  "board.additionalStage.addTask": "为「{stage}」新建任务",
+  "board.additionalStage.manualTask": "手工添加任务",
+  "board.additionalStage.submit": "增加",
   "board.temp.createTitle": "新建临时任务（没有模板，自己填名称）",
   "board.stage.done": "已完成 {done}/{total}",
   "board.stage.openCard": "打开右侧卡片：这个阶段的任务节点 + 模板（预览 / 添加到项目）",
@@ -3749,6 +3756,13 @@ const EN_TEXTS: Record<TextKey, string> = {
   "board.stage.expand": "Expand this stage",
   "board.stage.collapse": "Collapse this stage",
   "board.temp.addAria": "Add task: Temp Task",
+  "board.additionalStage.add": "Add Stage",
+  "board.additionalStage.after": "Insert after",
+  "board.additionalStage.remove": "Delete Stage",
+  "board.additionalStage.removeConfirm": "Delete {stage} and all its tasks?",
+  "board.additionalStage.addTask": "New task in {stage}",
+  "board.additionalStage.manualTask": "Add task manually",
+  "board.additionalStage.submit": "Add",
   "board.temp.createTitle": "New temp task (no template — name it yourself)",
   "board.stage.done": "{done}/{total} done",
   "board.stage.openCard": "Open the side panel: stage nodes + templates (preview / add to project)",
@@ -5274,6 +5288,10 @@ const STAGE_KO: Record<string, string> = {
 
 /** 阶段显示名（非中文界面换本地名；未知值原样返回，不吞信息）。 */
 export function stageText(locale: Locale, stage: string): string {
+  const numbered = /^(.*?)([1-9][0-9]*)$/.exec(stage);
+  if (locale !== "zh" && numbered !== null && STAGE_EN[numbered[1]] !== undefined) {
+    return localizedName(locale, numbered[1], STAGE_EN, STAGE_JA, STAGE_KO) + " " + numbered[2];
+  }
   return localizedName(locale, stage, STAGE_EN, STAGE_JA, STAGE_KO);
 }
 

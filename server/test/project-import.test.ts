@@ -969,7 +969,7 @@ describe("ProjectImportService.preview（导入表解析预览）", () => {
     expect(preview.imagesManual[0]?.reason).toContain("手动上传");
   });
 
-  it("阶段名称兼容：旧「生产阶段」与新「投产阶段」都落 production，变更阶段同样识别", async () => {
+  it("阶段名称兼容：编号阶段归入原阶段，新旧投产名称仍兼容", async () => {
     const h = createHarness();
     h.nodes.library = [];
     const sheets = sampleSheets();
@@ -978,6 +978,7 @@ describe("ProjectImportService.preview（导入表解析预览）", () => {
       TASK_HEADER,
       ["旧阶段名任务", "生产阶段", "已完成", "1", "贾海洋(haiyang)", "贾海洋(haiyang)", "2026-09-02", "2026-09-10", "2026-09-01", "10", "4", "", "", "按时交付", ""],
       ["新阶段名任务", "投产阶段", "已完成", "1", "贾海洋(haiyang)", "贾海洋(haiyang)", "2026-09-02", "2026-09-10", "2026-09-01", "10", "4", "", "", "按时交付", ""],
+      ["编号阶段任务", "硬件实施2", "待开始", "0"],
     ];
     const changeSheet = sheets[2]!;
     changeSheet.rows = [
@@ -998,6 +999,7 @@ describe("ProjectImportService.preview（导入表解析预览）", () => {
     expect(parsed.tasks.map((task) => [task.stageRaw, task.stageKey])).toEqual([
       ["生产阶段", "production"],
       ["投产阶段", "production"],
+      ["硬件实施2", "install"],
     ]);
     expect(parsed.changes.map((change) => [change.stageRaw, change.stageKey])).toEqual([
       ["生产阶段", "production"],

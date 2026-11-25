@@ -2,7 +2,7 @@
  * 项目总览导出（PDF）——业务口径 2026-10-09：「按钮 用于导出项目总览的数据 导出要美观给客户看的 间距也要合适 先考虑 pdf 格式吧」。
  *
  * 口径（详见 `前端功能需求.md` §6.16）：
- * - 导出内容 = 当前项目的项目总览：项目信息 + 汇总统计 + 九阶段进度 + 任务明细（分组 / 行序同「项目总览」任务表）；
+ * - 导出内容 = 当前项目的项目总览：项目信息 + 汇总统计 + 阶段进度 + 任务明细（分组 / 行序同「项目总览」任务表）；
  * - 数据准备（阶段分组 / 计数 / 文本与进度口径）收敛在 `overviewExportShared.ts`；
  * - 产物 = PDF：报告 HTML 先经现有预览分页器拆成 A4 横版页，再由 html2canvas-pro 逐页栅格化、pdf-lib 封装，
  *   生成后由浏览器直接下载（不再唤起系统打印窗口）；分页、版式和语言口径与面板左侧预览同源；
@@ -50,14 +50,13 @@
 import notoSansJpCss from "@fontsource-variable/noto-sans-jp/index.css?inline";
 import notoSansKrCss from "@fontsource-variable/noto-sans-kr/index.css?inline";
 import notoSansScCss from "@fontsource-variable/noto-sans-sc/index.css?inline";
-import { type ProjectTask, type TaskStatus } from "./data/tasks";
-import { stageNameOf } from "./taskApi";
+import { TEMP_TASK_STAGE, type ProjectTask, type TaskStatus } from "./data/tasks";
+import { projectTaskStageNames, stageNameOf } from "./taskApi";
 import { translateZhTo, type TranslationTarget } from "./translateApi";
 import overviewPreviewPagedCss from "./overviewPreviewPaged.css?inline";
 import overviewPreviewPagedScriptUrl from "./overviewPreviewPaged.js?url";
 import { projectManagerText } from "./types";
 import {
-  STAGE_NAMES,
   countsOf,
   dateText,
   groupedByStage,
@@ -185,7 +184,7 @@ const FIXED_TEXT: Record<string, LanguageStrings> = {
   项目编号: { en: "Project Code", ja: "プロジェクト番号", ko: "프로젝트 번호" },
   项目经理: { en: "Project Manager", ja: "プロジェクト責任者", ko: "프로젝트 관리자" },
   阶段进度: { en: "Stage Progress", ja: "ステージ進捗", ko: "단계 진행률" },
-  施工阶段统计完成情况: { en: "Completion of the nine construction stages", ja: "9つの施工段階の完了状況", ko: "9개 시공 단계 완료 현황" },
+  施工阶段统计完成情况: { en: "Completion by construction stage", ja: "施工段階ごとの完了状況", ko: "시공 단계별 완료 현황" },
   任务明细: { en: "Task Details", ja: "タスク詳細", ko: "작업 상세" },
   任务名称: { en: "Task Name", ja: "タスク名", ko: "작업 이름" },
   任务描述: { en: "Task Description", ja: "タスク説明", ko: "작업 설명" },
@@ -224,6 +223,10 @@ function localizedValue(zh: string, primary: OverviewExportLanguage): string {
   if (primary === "zh") {
     return zh;
   }
+  const match = /^(.*?)([1-9][0-9]*)$/.exec(zh);
+  if (match !== null && STAGE_TEXT[match[1]] !== undefined) {
+    return STAGE_TEXT[match[1]][primary] + " " + match[2];
+  }
   const strings = FIXED_TEXT[zh];
   if (strings === undefined) {
     return zh;
@@ -235,8 +238,8 @@ function localizedValue(zh: string, primary: OverviewExportLanguage): string {
 function fixedText(zh: string, primary: OverviewExportLanguage): string {
   const main = localizedValue(zh, primary);
   if (primary === "zh") {
-    const english = FIXED_TEXT[zh]?.en ?? "";
-    return escapeHtml(main) + (english === "" ? "" : " " + secondaryText(english, "en"));
+    const english = localizedValue(zh, "en");
+    return escapeHtml(main) + (english === zh ? "" : " " + secondaryText(english, "en"));
   }
   return escapeHtml(main) + (main === zh ? "" : " " + secondaryText(zh, "zh"));
 }
@@ -304,7 +307,7 @@ function statHtml(label: string, value: string, hint: string, dot: string, prima
   );
 }
 
-/** 阶段进度格：九阶段按 5 列网格排、末行 4 格；空阶段出「暂无任务」。 */
+/* 阶段进度格按 5 列网格排，空阶段显示「暂无任务」。 */
 function stageCellHtml(group: StageGroup, primary: OverviewExportLanguage): string {
   const pct = group.total === 0 ? 0 : Math.round((group.done / group.total) * 100);
   const fill = group.total === 0 ? "#d4d4d8" : pct === 100 ? "#10b981" : "#18181b";
@@ -508,7 +511,7 @@ const REPORT_STYLE = `
   .section__title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 5px; font-size: 12px; font-weight: 700; }
   .section__title::before { content: ""; width: 3px; height: 11px; border-radius: 2px; background: #18181b; align-self: center; }
   .section__note { margin-left: auto; font-size: 9.5px; font-weight: 400; color: #a1a1aa; }
-  .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px 7px; }
+  .stages { --stage-columns: 5; display: grid; grid-template-columns: repeat(var(--stage-columns), 1fr); gap: 5px 7px; }
   .stage { padding: 4px 7px 5px; border: 1px solid #e4e4e7; border-radius: 6px; background: #ffffff; break-inside: avoid; }
   .stage__head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
   .stage__name { font-size: 10.5px; font-weight: 600; }
@@ -582,7 +585,7 @@ export function buildOverviewReportHtml(
   hiddenStages: readonly string[] = [],
 ): string {
   const { project, tasks, summary } = input;
-  const groups = groupedByStage(tasks);
+  const groups = groupedByStage(tasks, projectTaskStageNames(summary?.additionalStages, tasks));
   const counts = countsOf(tasks, summary);
   const stageTextOf = (key: string | null): string => (key === null ? "—" : stageNameOf(key) || "—");
   const latest = summary === null ? "—" : stageTextOf(summary.latestStage);
@@ -611,7 +614,7 @@ export function buildOverviewReportHtml(
 
   const hidden = new Set(hiddenStages);
   const shownGroups = groups.filter((group) => !hidden.has(group.name));
-  const reportGroups = shownGroups.filter((group) => group.tasks.length > 0 || STAGE_NAMES.includes(group.name));
+  const reportGroups = shownGroups.filter((group) => group.tasks.length > 0 || group.name !== TEMP_TASK_STAGE);
   const stageCells = reportGroups.map((group) => stageCellHtml(group, primary)).join("");
   const detailGroups = shownGroups.filter((group) => group.tasks.length > 0);
   const counter = { value: 0 };
@@ -898,7 +901,7 @@ async function waitForPagedPreview(frame: HTMLIFrameElement): Promise<PagedPrevi
   const deadline = performance.now() + PDF_READY_TIMEOUT_MS;
   while (performance.now() < deadline) {
     const doc = frame.contentDocument;
-    if (doc !== null && doc.body.classList.contains("preview-ready")) {
+    if (doc?.body?.classList.contains("preview-ready")) {
       const pages = Array.from(doc.querySelectorAll<HTMLElement>(".preview-page"));
       if (pages.length > 0) {
         return { document: doc, pages };

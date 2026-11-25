@@ -20,7 +20,6 @@ import type { TaskEditSubmit } from "./components/TaskDrawer";
 import { TaskKanban, type KanbanAddContext } from "./components/TaskKanban";
 import type { TempTaskCreateValues } from "./components/TempTaskCreateForm";
 import type { StagePlacement } from "./components/StageAddCard";
-import { PROJECT_STAGES } from "./data/projects";
 import { memberNameOf, type Member } from "./data/members";
 import { lockBodyScroll } from "./scrollLock";
 import { TEMP_TASK_STAGE, VIEW_ONLY_TASK_CAPABILITIES, hasOutputDeliverables, isOpenTemporaryTask, isTaskDone, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "./data/tasks";
@@ -37,42 +36,28 @@ import type { MeResponse, Project } from "./types";
 import { replaceProjectSubView, replaceProjectView, type DailySubView, type ProjectFocus, type ProjectView } from "./useHashRoute";
 import { ApiError } from "./api";
 import {
+  createAdditionalStage,
   createTask,
+  deleteAdditionalStage,
   deleteTask,
   fetchProjectSummary,
   fetchProjectTasks,
   finalizeTask,
+  projectTaskStageNames,
   stageKeyOfName,
-  stageNameOf,
   statusWriteValue,
   taskWriteMessage,
   toUiTask,
   unfinalizeTask,
   updateTask,
   updateTaskProgress,
+  type AdditionalProjectStage,
   type ApiProjectSummary,
   type ApiTask,
   type ApiTaskListItem,
   type TaskCreateInput,
   createTasksFromTemplate,
 } from "./taskApi";
-
-/** 阶段名（不含「项目总览」汇总视图）。 */
-const STAGE_NAMES: readonly string[] = PROJECT_STAGES.filter((stage) => stage !== "项目总览");
-/**
- * 「项目总览」任务表的全部固定分组（Push 196）：九个施工阶段 + 垫底的「临时任务」（无阶段任务的分组，原「未分组」）——
- * 骨架常显、一键收起 / 全部展开都按这一份。
- */
-const BOARD_STAGES: readonly string[] = [...STAGE_NAMES, TEMP_TASK_STAGE];
-
-/**
- * 阶段序号（Push 111）：展示顺序以**阶段为主键**，顺序就是项目总览的分组顺序（售前规划 → … → 验收）。
- * 不在九阶段里的（看板「添加 → 临时任务」建的空任务）= 「临时任务」，垫底 —— 与项目总览里「临时任务」固定最后一组的口径一致（Push 196 改名）。
- */
-function stageRankOf(stage: string): number {
-  const at = STAGE_NAMES.indexOf(stage);
-  return at < 0 ? STAGE_NAMES.length : at;
-}
 
 /**
  * 顶部视图标签（Push 82 定稿）：阶段标签不再各占一格，改成「项目总览 + 两块看板」；
@@ -151,6 +136,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   const projectArchived = project?.status === "archived";
   const projectWritable = projectEditable && !projectArchived;
   const canEditManagers = projectEditable && canManageProjectManagers;
+  const canManageStages = canEditManagers && projectWritable;
   /** 任务级写入口即使项目只读也要下传，由每条任务的 capabilities 再逐项裁决。 */
   const taskWritable = !readOnly;
   const createDeliverableType: DeliverableTypeCreator | undefined =
@@ -171,6 +157,9 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
    *  （列表接口不带文件名，这里按项目走文件库列表一次拉全量，见 fileApi.fetchTaskFiles）。 */
   const [taskFiles, setTaskFiles] = useState<Map<string, TaskFileRef[]>>(new Map());
   const [summary, setSummary] = useState<ApiProjectSummary | null>(null);
+  const additionalStages = summary?.projectId === projectId ? summary?.additionalStages : undefined;
+  const stageNames = useMemo(() => projectTaskStageNames(additionalStages, rawTasks), [additionalStages, rawTasks]);
+  const boardStages = useMemo(() => [...stageNames, TEMP_TASK_STAGE], [stageNames]);
   /** 取数版本号：换项目、或新建 / 删除 / 排序 / 版本冲突后需要整表重取时 +1。 */
   const [dataVersion, setDataVersion] = useState(0);
   const projectManagerSignatureRef = useRef<string | null>(null);
@@ -412,9 +401,13 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             : { ...taskCapabilitiesOf(task), canDelete: false, canFinalize: false },
         };
       }) : rawTasks;
-      return preserveTaskOrder ? visible : [...visible].sort((left, right) => stageRankOf(left.stage) - stageRankOf(right.stage) || left.sortIndex - right.sortIndex);
+      const rank = (stage: string) => {
+        const index = stageNames.indexOf(stage);
+        return index === -1 ? stageNames.length : index;
+      };
+      return preserveTaskOrder ? visible : [...visible].sort((left, right) => rank(left.stage) - rank(right.stage) || left.sortIndex - right.sortIndex);
     },
-    [rawTasks, preserveTaskOrder, projectArchived],
+    [rawTasks, preserveTaskOrder, projectArchived, stageNames],
   );
 
   /** 当前账号在本项目里担任任务负责人的阶段（用于只开放个人模版补任务）。 */
@@ -422,8 +415,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
     const names = new Set<string>();
     for (const task of tasks) {
       if (task.capabilities?.source === "task_owner" && task.stageKey !== null) {
-        const name = stageNameOf(task.stageKey);
-        if (name !== "") names.add(name);
+        if (task.stage !== "") names.add(task.stage);
       }
     }
     return names;
@@ -834,10 +826,10 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
       return;
     }
     const anchor = rowOf(anchorId);
-    if (anchor === undefined || anchor.stageKey !== task.stageKey) {
+    if (anchor === undefined || anchor.stage !== task.stage) {
       return;
     }
-    const group = tasks.filter((item) => item.stageKey === task.stageKey);
+    const group = tasks.filter((item) => item.stage === task.stage);
     const current = group.findIndex((item) => item.id === taskId);
     const at = group.filter((item) => item.id !== taskId).findIndex((item) => item.id === anchorId);
     if (at < 0) {
@@ -857,23 +849,12 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
     })();
   };
 
-  /**
-   * 位置浮层（Push 111-113）的落点 → 组内位次（A20）：锚点任务在它那一组里的下标，before = 原位、after = 后一位；
-   * 组尾（`last`）/ 找不到锚点 = 不给 sortIndex（服务端追加到组尾）。
-   */
-  const sortIndexFor = (placement: StagePlacement): number | undefined => {
-    if (placement.kind === "last") {
-      return undefined;
-    }
+  /** 位置浮层按服务端组内位次插入，实时刷新保留的屏幕顺序不参与位次计算。 */
+  const sortIndexFor = (stage: string, placement: StagePlacement): number | undefined => {
+    if (placement.kind === "last") return undefined;
     const anchor = rowOf(placement.taskId);
-    if (anchor === undefined) {
-      return undefined;
-    }
-    const at = tasks.filter((task) => task.stageKey === anchor.stageKey).findIndex((task) => task.id === anchor.id);
-    if (at < 0) {
-      return undefined;
-    }
-    return placement.kind === "before" ? at : at + 1;
+    if (anchor?.stage !== stage) return undefined;
+    return placement.kind === "before" ? anchor.sortIndex : anchor.sortIndex + 1;
   };
 
   /**
@@ -909,6 +890,30 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
     }
   };
 
+  const saveAdditionalStage = async (save: () => Promise<unknown>): Promise<string | null> => {
+    try {
+      await save();
+      afterCreate();
+      return null;
+    } catch (error) {
+      return error instanceof ApiError ? taskWriteMessage(locale, error) : t("pd.tasks.writeFailed");
+    }
+  };
+
+  const handleAdditionalStageTask = async (stageId: string, values: TempTaskCreateValues): Promise<string | null> => {
+    const created = await createOne({
+      stageKey: null,
+      additionalStageId: stageId,
+      title: values.title,
+      titleEn: values.titleEn || null,
+      ownerIds: values.ownerIds,
+      priority: "中",
+    }, "待开始");
+    if (created === null) return null;
+    afterCreate();
+    return created.id;
+  };
+
   /**
    * 手工填写名称、项目经理和负责人。看板入口的负责人默认取所在列，状态取所在列；负责人可在表单中改选或清空为待定。
    * 「同步到项目群」仅在项目群已绑定且机器人已激活时出现在表单中，勾选后由创建事务原子写入群消息。
@@ -937,17 +942,18 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   /**
    * 「＋ 添加 / 整套添加」（项目总览的添加卡片与看板「添加 → 阶段任务」，Push 113）：按阶段建任务，
    * 位置浮层的锚点换算成组内位次；一次多条按传入顺序依次落位（第 k 条的位次 = 锚点位次 + k，整体不颠倒）。
-   * M3-07 刀 3 起都带**来源节点库节点**（`sourceNodeId`）：判重由服务端按（项目 × 节点）精确裁决；
+   * 创建时带上来源节点库节点。原阶段按项目判重，新增阶段分别判重。
    * 来自某块模板的「整套添加」改走模板实例化接口（`POST …/tasks/from-template`，整批同事务 + skipped 清单）。
    */
-  const handleAddNodes = (stage: string, nodes: readonly TemplatePresetNode[], placement: StagePlacement, templateId?: string) => {
-    const stageKey = stageKeyOfName(stage);
-    const base = sortIndexFor(placement);
+  const handleAddNodes = (stage: string, nodes: readonly TemplatePresetNode[], placement: StagePlacement, templateId?: string, additionalStage?: AdditionalProjectStage) => {
+    const stageKey = additionalStage?.stageKey ?? stageKeyOfName(stage);
+    const base = sortIndexFor(stage, placement);
     void (async () => {
       if (templateId !== undefined && projectId !== null && nodes.length > 0) {
         try {
           const result = await createTasksFromTemplate(projectId, {
             templateId,
+            additionalStageId: additionalStage?.id,
             nodeIds: nodes.map((node) => node.id),
             skipExisting: true,
             priority: "中",
@@ -970,7 +976,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
       let created = false;
       for (let index = 0; index < nodes.length; index += 1) {
         const node = nodes[index];
-        const body: TaskCreateInput = { stageKey, title: node.title, titleEn: node.titleEn === "" ? null : node.titleEn, sourceNodeId: node.id, priority: "中" };
+        const body: TaskCreateInput = { stageKey, additionalStageId: additionalStage?.id, title: node.title, titleEn: node.titleEn === "" ? null : node.titleEn, sourceNodeId: node.id, priority: "中" };
         if (base !== undefined) {
           body.sortIndex = base + index;
         }
@@ -983,14 +989,14 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   };
 
   /** 添加卡片「任务节点」标签里点一条（Push 61）：直接追加到该阶段末尾（不弹位置浮层）。 */
-  const handleAddNode = (stage: string, node: TemplatePresetNode) => {
-    handleAddNodes(stage, [node], { kind: "last" });
+  const handleAddNode = (stage: string, node: TemplatePresetNode, additionalStage?: AdditionalProjectStage) => {
+    handleAddNodes(stage, [node], { kind: "last" }, undefined, additionalStage);
   };
 
   /** 看板「添加 → 阶段任务」：节点自带阶段，并带上所在列的负责人 / 状态（与「临时任务」同一套列上下文）。 */
   const handleKanbanAddNode = (context: KanbanAddContext, stage: string, nodes: readonly TemplatePresetNode[], placement: StagePlacement, templateId?: string) => {
     const stageKey = stageKeyOfName(stage);
-    const base = sortIndexFor(placement);
+    const base = sortIndexFor(stage, placement);
     void (async () => {
       // 来自某块模板的「整套添加」（M3-07 刀 3）：走模板实例化接口一次落库，再按所在列补一次状态写入（创建体没有 status）
       if (templateId !== undefined && projectId !== null && nodes.length > 0) {
@@ -1066,7 +1072,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
    * 阶段骨架常显（Push 61 调整）：没有任务的阶段也保留分组头（只有阶段名、组内没有任务行），
    * 所以点「添加任务」加出任务后，其余阶段的分组头不会消失。
    */
-  const visibleStageNames = BOARD_STAGES;
+  const visibleStageNames = boardStages;
   const allCollapsed = visibleStageNames.length > 0 && visibleStageNames.every((stage) => collapsedStages[stage] === true);
   const toggleAllStages = () => {
     if (allCollapsed) {
@@ -1109,10 +1115,10 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   /** 导出面板逐阶段折叠用的同一份分组（与服务端 summary 计数同口径；默认全部展开）。 */
   const exportStageOptions = useMemo<OverviewExportStageOption[]>(
     () =>
-      groupedByStage(tasks)
-        .filter((group) => group.tasks.length > 0 || STAGE_NAMES.includes(group.name))
+      groupedByStage(tasks, stageNames)
+        .filter((group) => group.tasks.length > 0 || group.name !== TEMP_TASK_STAGE)
         .map((group) => ({ name: group.name, total: group.total, done: group.done })),
-    [tasks],
+    [tasks, stageNames],
   );
 
   /**
@@ -1303,11 +1309,15 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             <>
               {/* 汇总卡（M3-07 刀 1 后半）：最慢 / 最新阶段由服务端按任务聚合（GET /projects/{id}/summary） */}
               <ProjectSummary summary={summary} />
-              <TaskBoard tasks={tasks} members={members} managerMembers={managerMembers} customDeliverableTypes={customDeliverableTypes} onCreateDeliverableType={createDeliverableType} skeletonStages={BOARD_STAGES} onSetProgress={taskWritable ? handleSetProgress : undefined} onSetStatus={taskWritable ? handleSetStatus : undefined} onSetActualEnd={taskWritable ? handleSetActualEnd : undefined} visibleColumns={visibleColumns} scrollRef={tableScrollRef} collapsed={collapsedStages} onToggleStage={toggleStage} onToggleAllStages={toggleAllStages} onAddNode={projectWritable ? handleAddNode : undefined} onAddNodes={projectWritable || taskOwnerStageNames.size > 0 ? handleAddNodes : undefined} canOpenAddCard={(stage) => projectWritable || taskOwnerStageNames.has(stage)} personalOnlyStages={projectWritable ? undefined : taskOwnerStageNames} onCreateTempTask={canEditManagers ? (values) => handleQuickAdd({ ownerIds: [], status: "待开始" }, values) : undefined} viewStage="项目总览" canFinalizeTask={canFinalizeTask} onSubmitTaskEdit={taskWritable ? handleSubmitTaskEdit : undefined} onRenameTask={taskWritable ? handleRenameTask : undefined} onPatchTask={taskWritable ? handlePatchTask : undefined} onChangeManagers={canEditManagers ? handleBoardManagerChange : undefined} canEditManagers={canEditManagers} onDeleteTask={projectWritable || taskOwnerStageNames.size > 0 ? requestDeleteTask : undefined} onUploadFiles={taskWritable ? handleUploadTaskFiles : undefined} onDeleteFile={taskWritable && !projectArchived ? handleDeleteTaskFile : undefined} onRenameFile={taskWritable && !projectArchived ? handleRenameTaskFile : undefined} allowFileChanges={!projectArchived} onFinalize={taskWritable ? handleFinalizeTask : undefined} onUnfinalize={taskWritable ? handleUnfinalizeTask : undefined} onChanged={reloadAll} actorName={me.user.displayName ?? ""} filesByTask={taskFiles} projectId={project.id} tierTint={tintRows} focusTaskId={focus?.kind === "task" ? focus.id : null} onFocusClosed={onClearFocus} openTaskId={changesTaskRequestId} onOpenTaskOpened={() => { setChangesTaskRequestId(null); }} />
+              <TaskBoard tasks={tasks} members={members} managerMembers={managerMembers} customDeliverableTypes={customDeliverableTypes} onCreateDeliverableType={createDeliverableType} skeletonStages={boardStages} additionalStages={additionalStages} manageStages={canManageStages ? {
+                create: (key) => saveAdditionalStage(() => createAdditionalStage(project.id, key)),
+                remove: (id) => saveAdditionalStage(() => deleteAdditionalStage(project.id, id)),
+                createTask: handleAdditionalStageTask,
+              } : undefined} onSetProgress={taskWritable ? handleSetProgress : undefined} onSetStatus={taskWritable ? handleSetStatus : undefined} onSetActualEnd={taskWritable ? handleSetActualEnd : undefined} visibleColumns={visibleColumns} scrollRef={tableScrollRef} collapsed={collapsedStages} onToggleStage={toggleStage} onToggleAllStages={toggleAllStages} onAddNode={projectWritable ? handleAddNode : undefined} onAddNodes={projectWritable || taskOwnerStageNames.size > 0 ? handleAddNodes : undefined} canOpenAddCard={(stage) => projectWritable || taskOwnerStageNames.has(stage)} personalOnlyStages={projectWritable ? undefined : taskOwnerStageNames} onCreateTempTask={canEditManagers ? (values) => handleQuickAdd({ ownerIds: [], status: "待开始" }, values) : undefined} viewStage="项目总览" canFinalizeTask={canFinalizeTask} onSubmitTaskEdit={taskWritable ? handleSubmitTaskEdit : undefined} onRenameTask={taskWritable ? handleRenameTask : undefined} onPatchTask={taskWritable ? handlePatchTask : undefined} onChangeManagers={canEditManagers ? handleBoardManagerChange : undefined} canEditManagers={canEditManagers} onDeleteTask={projectWritable || taskOwnerStageNames.size > 0 ? requestDeleteTask : undefined} onUploadFiles={taskWritable ? handleUploadTaskFiles : undefined} onDeleteFile={taskWritable && !projectArchived ? handleDeleteTaskFile : undefined} onRenameFile={taskWritable && !projectArchived ? handleRenameTaskFile : undefined} allowFileChanges={!projectArchived} onFinalize={taskWritable ? handleFinalizeTask : undefined} onUnfinalize={taskWritable ? handleUnfinalizeTask : undefined} onChanged={reloadAll} actorName={me.user.displayName ?? ""} filesByTask={taskFiles} projectId={project.id} tierTint={tintRows} focusTaskId={focus?.kind === "task" ? focus.id : null} onFocusClosed={onClearFocus} openTaskId={changesTaskRequestId} onOpenTaskOpened={() => { setChangesTaskRequestId(null); }} />
             </>
           ) : activeView === "甘特图" ? (
             // 甘特图（Push 142）：与项目总览同一份任务数据（服务端任务接口）；拖动改期 / 改进度走同一套写入口径
-            <GanttChart tasks={tasks} members={members} tierTint={tintRows} onPatchTask={taskWritable ? handlePatchTask : undefined} onSetProgress={taskWritable ? handleSetProgress : undefined} />
+            <GanttChart tasks={tasks} stageOrder={stageNames} members={members} tierTint={tintRows} onPatchTask={taskWritable ? handlePatchTask : undefined} onSetProgress={taskWritable ? handleSetProgress : undefined} />
           ) : activeView === "日报及问题" ? (
             // key = 项目 id：换项目时把日报 / 问题与填写草稿一起复位（原型内存态，见 ReportIssuePanel.tsx）
             // Push 290：背景档位「适中」透传给「问题追踪」做表格呈现（原醒目模式挂点，随功能下架改吃档位）；失败提示沿用同一条 toolError

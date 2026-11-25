@@ -42,6 +42,8 @@ function makeRow(overrides: Partial<TaskRow> = {}): TaskRow {
     id: "55555555-5555-4555-8555-555555555555",
     projectId: PROJECT,
     stageKey: "install",
+    additionalStageNumber: null,
+    additionalStageId: null,
     nodeId: null,
     taskNodeId: null,
     title: "货架组装",
@@ -76,8 +78,13 @@ function makeRow(overrides: Partial<TaskRow> = {}): TaskRow {
 /** 任务仓储替身：只实现 create / createFromTemplate 用到的读与写。 */
 class FakeTaskRepository {
   stageTaskOwner = false;
-  async isStageTaskOwner(): Promise<boolean> {
-    return this.stageTaskOwner;
+  additionalStage = { id: "aaaaaaaa-0000-4000-8000-000000000123", stageKey: "install", number: 1 };
+  ownerStageNumber: number | null = null;
+  async lockAdditionalStage() {
+    return this.additionalStage;
+  }
+  async isStageTaskOwner(_projectId: string, _stageKey: string, _actorId: string, _tx: unknown, stageNumber: number | null): Promise<boolean> {
+    return this.stageTaskOwner && this.ownerStageNumber === stageNumber;
   }
   async lockStageCompletion(): Promise<void> {}
   async countStageTasks(): Promise<{ total: number; done: number; deliveryReady: number }> {
@@ -104,6 +111,7 @@ class FakeTaskRepository {
     }
     return found;
   }
+  async listGroupOrder() { return []; }
   async countGroup(): Promise<number> {
     return this.groupSize;
   }
@@ -122,6 +130,8 @@ class FakeTaskRepository {
     return makeRow({
       id: "aaaaaaaa-0000-4000-8000-" + String(this.seq).padStart(12, "0"),
       stageKey: input.stageKey,
+      additionalStageNumber: input.additionalStage?.number ?? null,
+      additionalStageId: input.additionalStage?.id ?? null,
       nodeId: input.nodeId,
       taskNodeId: input.sourceNodeId,
       title: input.title,
@@ -461,6 +471,27 @@ describe("TaskService.createFromTemplate · 任务负责人个人模版例外（
 
     expect(result.created).toHaveLength(3);
     expect(repo.inserted.map((input) => input.ownerIds)).toEqual([[ACTOR], [ACTOR], [ACTOR]]);
+  });
+
+  it("新增阶段的个人模版补任务权限只在本人负责的分组生效", async () => {
+    const repo = new FakeTaskRepository();
+    repo.stageTaskOwner = true;
+    const templates = new FakeTemplateService();
+    templates.template = { ...templates.template!, visibility: "private", createdBy: ACTOR };
+    const permission = new FakePermissionService();
+    permission.taskCreateAllowed = false;
+    const { service } = makeService(repo, new FakeTaskNodeRepository(), templates, permission);
+
+    const body = { templateId: TEMPLATE, additionalStageId: repo.additionalStage.id, skipExisting: true };
+    await expect(service.createFromTemplate(PROJECT, body, ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(repo.inserted).toHaveLength(0);
+
+    repo.ownerStageNumber = repo.additionalStage.number;
+    const result = await service.createFromTemplate(PROJECT, body, ACTOR);
+    expect(result.created).toHaveLength(3);
+    expect(repo.inserted.map((input) => [input.additionalStage?.id, input.ownerIds])).toEqual(
+      Array.from({ length: 3 }, () => [repo.additionalStage.id, [ACTOR]]),
+    );
   });
 
   it("公共模板 / 他人私有模板 / 非本人负责阶段一律 403，不落库", async () => {

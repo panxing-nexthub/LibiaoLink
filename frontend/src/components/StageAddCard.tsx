@@ -190,6 +190,8 @@ function SequentialToggle({ checked, onChange }: { checked: boolean; onChange: (
 
 type StageAddCardProps = {
   stage: string;
+  sourceStage?: string;
+  onCreateManualTask?: () => void;
   /**
    * 项目里「已添加的节点」判重键（`data/tasks.ts` 的 addedNodeKey = 阶段名 + 换行 + 任务描述）：
    * Push 181 起节点池来自节点库（UUID），判重按「同阶段同名」折算 —— 键与节点标题在卡片内比对。
@@ -233,7 +235,7 @@ type StageAddCardProps = {
  * 其余每个标签 = 这个阶段的一块模板（按预设顺序预览、可鼠标滚动，也能逐条 / 整套加）。
  * 关卡片 = 右上 × / `Esc` / **点卡片外的空白处** / **再点同一个阶段标签**；换阶段标签或换项目时也会自动关掉（由 TaskBoard 控制）。
  */
-export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, onAddNodes, placement, onClose, viewportDraggable = false, style, personalOnly = false }: StageAddCardProps) {
+export function StageAddCard({ stage, sourceStage = stage, onCreateManualTask, addedNodeKeys, addedNodeIds, onAddNode, onAddNodes, placement, onClose, viewportDraggable = false, style, personalOnly = false }: StageAddCardProps) {
   const t = useT();
   const locale = useLocale();
   const localize = useLocalizedTranslator();
@@ -368,9 +370,9 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
   }, [nodeQuery, activeTab, stage]);
 
   useLiveRefresh(["templates"], async () => {
-    const [nextNodes, nextTemplates] = await Promise.all([fetchStageNodes(stage), fetchStageTemplates(stage)]);
+    const [nextNodes, nextTemplates] = await Promise.all([fetchStageNodes(sourceStage), fetchStageTemplates(sourceStage)]);
     return () => {
-      const nextDisplayed = ensurePersonalDefaultTemplate(nextTemplates, stage, currentUserId);
+      const nextDisplayed = ensurePersonalDefaultTemplate(nextTemplates, sourceStage, currentUserId);
       setNodes((previous) => keepLiveOrder(previous, nextNodes));
       setTemplates((previous) => keepLiveOrder(previous.filter((item) => !item.id.startsWith(PERSONAL_DEFAULT_TEMPLATE_ID_PREFIX)), nextDisplayed));
       // An armed selection stays a snapshot; the write API still validates its nodes/template.
@@ -386,7 +388,7 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
     setNodesError(null);
     void (async () => {
       try {
-        const items = await fetchStageNodes(stage);
+        const items = await fetchStageNodes(sourceStage);
         if (alive) {
           setNodes(items);
         }
@@ -403,7 +405,7 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
     return () => {
       alive = false;
     };
-  }, [stage, nodesRetry]);
+  }, [sourceStage, nodesRetry]);
 
   // 模板取数（换阶段 / 重试重取）：与节点库同样只在卡片里提示失败
   useEffect(() => {
@@ -412,10 +414,10 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
     setTemplatesError(null);
     void (async () => {
       try {
-        const items = await fetchStageTemplates(stage);
+        const items = await fetchStageTemplates(sourceStage);
         if (alive) {
           prefetchLocalizedText([...items.map((item) => item.name), PERSONAL_DEFAULT_TEMPLATE_NAME]);
-          setTemplates(ensurePersonalDefaultTemplate(items, stage, currentUserId));
+          setTemplates(ensurePersonalDefaultTemplate(items, sourceStage, currentUserId));
         }
       } catch (error) {
         if (alive) {
@@ -430,7 +432,7 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
     return () => {
       alive = false;
     };
-  }, [stage, templatesRetry, currentUserId]);
+  }, [sourceStage, templatesRetry, currentUserId]);
 
   useEffect(() => {
     prefetchLocalizedText([...templates.map((item) => item.name), PERSONAL_DEFAULT_TEMPLATE_NAME]);
@@ -471,10 +473,10 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
   }, [onClose]);
 
   const displayedTemplates = useMemo(
-    () => ensurePersonalDefaultTemplate(templates, stage, currentUserId),
-    [templates, stage, currentUserId],
+    () => ensurePersonalDefaultTemplate(templates, sourceStage, currentUserId),
+    [templates, sourceStage, currentUserId],
   );
-  const personalTemplate = displayedTemplates.find((item) => isPersonalDefaultTemplate(item, currentUserId, stage));
+  const personalTemplate = displayedTemplates.find((item) => isPersonalDefaultTemplate(item, currentUserId, sourceStage));
   const visibleTemplates = personalOnly
     ? (personalTemplate === undefined ? [] : [personalTemplate])
     : displayedTemplates;
@@ -653,7 +655,7 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
       try {
         if (template.id.startsWith(PERSONAL_DEFAULT_TEMPLATE_ID_PREFIX)) {
           const createdTemplate = await createTaskTemplate(
-            stage,
+            sourceStage,
             template.name.trim() === "" ? PERSONAL_DEFAULT_TEMPLATE_NAME : template.name.trim(),
             template.nodes.map((node) => node.id),
             template.visibility,
@@ -664,8 +666,8 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
             nodeIds: [...createdTemplate.nodes.map((node) => node.id), createdNode.id],
             version: createdTemplate.version,
           });
-          rememberPersonalDefaultTemplate(currentUserId, stage, createdTemplate.id);
-          setTemplates((previous) => ensurePersonalDefaultTemplate(previous, stage, currentUserId).map((item) => (item.id === template.id ? saved : item)));
+          rememberPersonalDefaultTemplate(currentUserId, sourceStage, createdTemplate.id);
+          setTemplates((previous) => ensurePersonalDefaultTemplate(previous, sourceStage, currentUserId).map((item) => (item.id === template.id ? saved : item)));
           setActiveTab(saved.id);
           closeTemplateNodeForm();
           setTemplateNotice({ kind: "ok", text: t("sac.template.added", { name: localize(saved.name) }) });
@@ -676,7 +678,7 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
             nodeIds: [...template.nodes.map((node) => node.id), createdNode.id],
             version: template.version,
           });
-          setTemplates((previous) => ensurePersonalDefaultTemplate(previous, stage, currentUserId).map((item) => (item.id === template.id ? saved : item)));
+          setTemplates((previous) => ensurePersonalDefaultTemplate(previous, sourceStage, currentUserId).map((item) => (item.id === template.id ? saved : item)));
           closeTemplateNodeForm();
           setTemplateNotice({ kind: "ok", text: t("sac.template.added", { name: localize(saved.name) }) });
         }
@@ -901,7 +903,15 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
         </form>
       ) : null}
 
-      {/* Push 207 撤：本卡片原「常驻临时任务入口」整块在此，按业务口径「临时任务不应该存在于阶段里面新建」下架。 */}
+      {onCreateManualTask === undefined ? null : (
+        <button
+          type="button"
+          onClick={onCreateManualTask}
+          className="mt-2 self-start rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-700 hover:border-zinc-300"
+        >
+          {t("board.additionalStage.manualTask")}
+        </button>
+      )}
 
       {personalOnly && personalTemplate === undefined ? (
         <p className="mt-2 rounded-lg border border-dashed border-zinc-200 px-3 py-4 text-center text-xs text-zinc-500">{t("sac.template.unavailable")}</p>

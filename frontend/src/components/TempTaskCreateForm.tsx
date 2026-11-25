@@ -20,6 +20,7 @@ export type TempTaskCreateValues = {
 type TempTaskCreateFormProps = {
   /** 项目群绑定查询用；缺省 = 不显示群同步入口。 */
   projectId?: string;
+  stageName?: string;
   managerOptions: readonly Member[];
   ownerOptions: readonly Member[];
   /** 看板负责人列新建时预填该列负责人；仍可在表单里改选或清空为待定。 */
@@ -29,7 +30,7 @@ type TempTaskCreateFormProps = {
 };
 
 /** 项目总览和看板共用的新建面板，固定在视口内。 */
-export function TempTaskCreateForm({ projectId, managerOptions, ownerOptions, initialOwnerIds = [], onCreate, onClose }: TempTaskCreateFormProps) {
+export function TempTaskCreateForm({ projectId, stageName, managerOptions, ownerOptions, initialOwnerIds = [], onCreate, onClose }: TempTaskCreateFormProps) {
   const t = useT();
   const headingId = useId();
   const dialogRef = useFocusTrap<HTMLDivElement>();
@@ -40,7 +41,7 @@ export function TempTaskCreateForm({ projectId, managerOptions, ownerOptions, in
   const [syncToGroup, setSyncToGroup] = useState(false);
   const [groupSyncAvailable, setGroupSyncAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
-  const invalid = title.trim() === "" || managerIds.length === 0;
+  const invalid = title.trim() === "" || (stageName === undefined && managerIds.length === 0);
 
   useEffect(() => {
     if (projectId === undefined || projectId === "") {
@@ -107,7 +108,7 @@ export function TempTaskCreateForm({ projectId, managerOptions, ownerOptions, in
         aria-labelledby={headingId}
         className="max-h-[calc(100dvh-2rem)] w-full max-w-[400px] overflow-y-auto overscroll-contain rounded-2xl border border-white/80 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.98),rgba(255,255,255,0.94))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_12px_40px_rgba(15,23,42,0.22)] backdrop-blur-2xl backdrop-saturate-150"
       >
-        <h2 id={headingId} className="mb-3 text-sm font-semibold text-zinc-800">{t("tt.formAria")}</h2>
+        <h2 id={headingId} className="mb-3 text-sm font-semibold text-zinc-800">{stageName === undefined ? t("tt.formAria") : t("board.additionalStage.addTask", { stage: stageName })}</h2>
         <form data-temp-task-form="true" onSubmit={submit}>
           <fieldset disabled={busy} className="grid min-w-0 gap-2">
             <input
@@ -127,7 +128,7 @@ export function TempTaskCreateForm({ projectId, managerOptions, ownerOptions, in
               aria-label={t("tt.nameEnAria")}
               className={INPUT_CLASS}
             />
-            <div data-temp-task-manager="true">
+            {stageName === undefined ? <div data-temp-task-manager="true">
               <p className="mb-1 text-xs font-medium text-zinc-700">{t("tt.managerRequired")}</p>
               <MemberMultiSelect
                 values={managerIds}
@@ -135,7 +136,7 @@ export function TempTaskCreateForm({ projectId, managerOptions, ownerOptions, in
                 options={managerOptions}
                 ariaLabel={t("tt.managerRequired")}
               />
-            </div>
+            </div> : null}
             <div data-temp-task-owner="true">
               <p className="mb-1 text-xs font-medium text-zinc-700">{t("tt.ownerOptional")}</p>
               <MemberMultiSelect

@@ -11,6 +11,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { users } from "./identity.js";
@@ -132,6 +133,26 @@ export const projectViewGrants = pgTable(
   (table) => [
     primaryKey({ name: "project_view_grants_pkey", columns: [table.projectId, table.userId] }),
     index("ix_project_view_grants_user").on(table.userId),
+  ],
+);
+
+/** 项目总览中按原阶段编号的新增任务分组。 */
+export const projectAdditionalStages = pgTable(
+  "project_additional_stages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    stageKey: text("stage_key").notNull(),
+    number: integer("number").notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("uq_project_additional_stages_identity").on(table.projectId, table.stageKey, table.number, table.id),
+    uniqueIndex("uq_project_additional_stages_active_number")
+      .on(table.projectId, table.stageKey, table.number)
+      .where(sql`deleted_at is null`),
+    check("ck_project_additional_stages_key", sql`${table.stageKey} in ${sql.raw(sqlValueList(STAGE_KEYS))}`),
+    check("ck_project_additional_stages_number", sql`${table.number} > 0`),
   ],
 );
 

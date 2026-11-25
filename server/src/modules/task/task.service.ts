@@ -741,17 +741,17 @@ export class TaskService {
    * ② 重复删除 = 统一 404（记录级 404 语义，与已删任务上的任何写路径一致 —— 不新增错误码）；
    * ③ 组内位次同事务压缩，保持「0 起、密集」不变式（A19 / A20）；
    * ④ 来源节点约束随软删释放（节点回到「可添加」，A10 / A11 口径不变 —— 判重走 findTaskIdByNode 已过滤软删）；
-   * ⑤ 权限沿用 task.update（与编辑同一权限位，不新增权限键）；归档项目写保护照旧 409 PROJECT_ARCHIVED。
+   * ⑤ 沿用任务删除权限。归档项目仅允许删除未完成的手工临时任务。
    * ⑥ 已有引用（问题 / 变更记录）的任务不允许删除 = 409 TASK_HAS_REFERENCES（系统功能书 A2-01「已产生日报 / 问题 / 变更的任务不允许删除，只能关闭或标记」；
    *   Push 215 起日报「关联任务」改「关联阶段」，日报一侧引用守卫随批删除：details[].code = change_ref / issue_ref）；
    * 留痕：审计 action=delete（objectType=task，changes = 删除前快照）+ outbox task.deleted；
    * 不写 task_events —— 其类型为四值闭集（status_change / date_change / progress_change / note_change），删除不属于字段级变更。
    */
   async remove(projectId: string, taskId: string, actorId: string): Promise<TaskDeleteResponse> {
-    await this.loadProjectForWrite(projectId);
     const at = new Date();
     await this.database.db.transaction(async (tx) => {
       const before = await this.requireActiveTask(tx, projectId, taskId);
+      await this.loadProjectForWrite(projectId, isOpenTemporaryTask(before), tx);
       const projectAccess = await this.permission.assertProjectVisible(actorId, projectId);
       const canUpdate = await this.permission.can(actorId, "task.update", {
         member: projectAccess.member,

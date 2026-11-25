@@ -34,7 +34,6 @@ export interface FileProjectReissueBriefRow {
   code: string;
   name: string;
   customer: string | null;
-  status: string;
   deletedAt: Date | null;
 }
 
@@ -280,7 +279,6 @@ export class FileRepository {
         code: projects.code,
         name: projects.name,
         customer: projects.customer,
-        status: projects.status,
         deletedAt: projects.deletedAt,
       })
       .from(projects)
@@ -336,8 +334,8 @@ export class FileRepository {
   }
 
   /** 补发申请：来源任务需校验未删除并取阶段 / 节点 / 标题。 */
-  async findTaskReissueBrief(taskId: string, client: DbClient = this.database.db): Promise<FileTaskReissueBriefRow | null> {
-    const rows = await client
+  async findTaskReissueBrief(taskId: string, client: DbClient = this.database.db, lock = false): Promise<FileTaskReissueBriefRow | null> {
+    const query = client
       .select({
         id: tasks.id,
         projectId: tasks.projectId,
@@ -350,6 +348,7 @@ export class FileRepository {
       .from(tasks)
       .where(eq(tasks.id, taskId))
       .limit(1);
+    const rows = await (lock ? query.for("no key update") : query);
     return rows[0] ?? null;
   }
 

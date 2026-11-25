@@ -93,8 +93,10 @@ export type ProjectTask = {
   finalizedAt: string | null;
   /** 服务端逐任务能力投影；写回响应缺省时沿用上一行。 */
   capabilities?: TaskCapabilities;
-  /** 项目归档后，除未完成的手工临时任务外均锁定；由项目详情按同一业务口径标记，用于区分归档与普通只读提示。 */
+  /** 项目归档后的常规编辑锁定，用于区分归档与普通只读提示。 */
   archiveLocked?: boolean;
+  /** 项目归档后，物料变更补发可按原任务权限发起。 */
+  canApplyMaterialReissue?: boolean;
 };
 
 /** 能力缺失（旧响应 / 非任务接口来源）一律按只读处理，避免前端误开写入口。 */
@@ -150,7 +152,7 @@ export function isTemporaryTask(task: Pick<ProjectTask, "stageKey" | "nodeId" | 
   return task.stageKey === null && task.nodeId === null && task.sourceNodeId === null;
 }
 
-/** 归档项目唯一保留写能力的任务：未完成的手工临时任务。 */
+/** 归档后仍可进行常规编辑的任务：未完成的手工临时任务。 */
 export function isOpenTemporaryTask(task: Pick<ProjectTask, "stageKey" | "nodeId" | "sourceNodeId" | "status">): boolean {
   return isTemporaryTask(task) && !isCompleteStatus(task.status);
 }

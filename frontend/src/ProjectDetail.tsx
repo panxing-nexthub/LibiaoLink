@@ -440,6 +440,8 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
   const visibleTabs = (project?.canManageViewGrants === true ? VIEW_TABS : VIEW_TABS.filter((tab) => tab !== "权限管理"))
     .filter((tab) => tab !== "物料补发" || canSeeMaterialReissue);
   const activeView = visibleTabs.find((tab) => VIEW_KEYS[tab] === view) ?? VIEW_TABS[0];
+  // 物料补发已收进「项目文件」页作为内部切换，顶部标签栏不再单列。
+  const tabBarTabs = visibleTabs.filter((tab) => tab !== "物料补发");
 
   useEffect(() => {
     setChangesTaskRequestId(null);
@@ -1200,6 +1202,38 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
     );
   }
 
+  /** 「项目文件 / 物料补发」内部切换（2026-11-25：物料补发不再占顶部标签，收进项目文件页标题右侧）。 */
+  const filesTabs = canSeeMaterialReissue ? (
+    <div role="group" aria-label={t("pd.files.tabsAria")} className="inline-flex items-center rounded-lg border border-zinc-300 bg-white p-0.5">
+      <button
+        type="button"
+        aria-pressed={activeView === "项目文件"}
+        onClick={() => {
+          replaceProjectView(project.id, "files");
+        }}
+        className={
+          "rounded-md px-3 py-1.5 text-xs font-medium transition " +
+          (activeView === "项目文件" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-100")
+        }
+      >
+        {t("pd.files.title")}
+      </button>
+      <button
+        type="button"
+        aria-pressed={activeView === "物料补发"}
+        onClick={() => {
+          replaceProjectView(project.id, "material-reissue");
+        }}
+        className={
+          "rounded-md px-3 py-1.5 text-xs font-medium transition " +
+          (activeView === "物料补发" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-100")
+        }
+      >
+        {t("pd.material.title")}
+      </button>
+    </div>
+  ) : undefined;
+
   /** 顶部确认 Toast 上的那一行（从最新任务列表里取标题 / 版本；任务已被别处删除时自动为 undefined = 不显示确认）。 */
   const pendingDeleteTask = pendingDeleteTaskId === null ? undefined : rowOf(pendingDeleteTaskId);
 
@@ -1214,8 +1248,8 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
         <div ref={maintabsRef} data-maintabs="true" className="sticky top-16 z-20 -mx-6 -mt-3 border-b border-zinc-200 bg-[#f5f6f8]/95 px-6 pt-3 backdrop-blur">
           <div className="flex items-center gap-3">
             <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto" onScroll={submenuOpen ? closeSubmenu : undefined}>
-              {visibleTabs.map((tab) => {
-                const active = tab === activeView;
+              {tabBarTabs.map((tab) => {
+                const active = tab === activeView || (tab === "项目文件" && activeView === "物料补发");
                 // 子菜单父项（业务口径 2026-09-30「日报及问题页面的导航栏按钮集成到页面导航栏 如图一的效果」）：
                 // 四块子视图收进这枚标签的下拉面板；悬停即展开；点击时已在该视图 = 切换展开态，否则照旧先切视图。
                 const withSubmenu = tab === "日报及问题";
@@ -1365,10 +1399,10 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
             <StakeholderPanel projectId={project.id} projectCode={project.code} projectName={project.description} canManage={canManageStakeholders && projectWritable} scrollRef={tableScrollRef} />
           ) : activeView === "项目文件" ? (
             // 项目文件（2026-10-29）：阶段任务文件 + 变更记录关联文件的并集；日报 / 问题附图不进入。
-            <ProjectFilesPanel projectId={project.id} tasks={tasks} canEdit={projectWritable} />
+            <ProjectFilesPanel projectId={project.id} tasks={tasks} canEdit={projectWritable} tabs={filesTabs} />
           ) : activeView === "物料补发" ? (
             // 物料补发（2026-11-25）：物料变更补发提交时固化的《补发物料清单》按申请单汇总；只读。
-            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} canMark={canMarkMaterialReissue} canMarkAll={canMarkAllMaterialReissue} tierTint={tintRows} view={materialSub} onChangeView={(next) => { replaceProjectMaterialSubView(project.id, next); }} />
+            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} canMark={canMarkMaterialReissue} canMarkAll={canMarkAllMaterialReissue} tierTint={tintRows} tabs={filesTabs} view={materialSub} onChangeView={(next) => { replaceProjectMaterialSubView(project.id, next); }} />
           ) : activeView === "权限管理" ? (
             <ProjectViewGrantsPanel key={project.id} projectId={project.id} />
           ) : (

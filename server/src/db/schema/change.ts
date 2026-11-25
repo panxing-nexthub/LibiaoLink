@@ -64,6 +64,8 @@ export const changeRequests = pgTable(
       "ck_change_requests_material_reissue_payload",
       sql`(${table.changeType} = 'file_change' and ${table.materialReissue} is null) or (${table.changeType} = 'material_reissue' and ${table.materialReissue} is not null)`,
     ),
+    check("ck_change_requests_material_reissue_tracking_array", sql`jsonb_typeof(${table.materialReissueTracking}) = 'array'`),
+    check("ck_change_requests_material_reissue_tracking_scope", sql`${table.changeType} = 'material_reissue' or ${table.materialReissueTracking} = '[]'::jsonb`),
     check("ck_change_requests_before_summary_file_ids", sql`cardinality(${table.beforeSummaryFileIds}) <= 30`),
     check("ck_change_requests_after_summary_file_ids", sql`cardinality(${table.afterSummaryFileIds}) <= 30`),
   ],

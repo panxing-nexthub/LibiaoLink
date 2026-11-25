@@ -422,6 +422,8 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   const isMaterialReissueTaskOwner =
     viewerUserId !== null && rawTasks.some((task) => task.ownerIds.includes(viewerUserId));
   const canSeeMaterialReissue = canViewAllMaterialReissue || isMaterialReissueTaskOwner;
+  /** 发货登记写权限：项目编辑者（项目经理 / 管理员 / 全部项目编辑）或任务负责人；归档 / 应急只读关闭。 */
+  const canMarkMaterialReissue = !readOnly && !projectArchived && (projectEditable || isMaterialReissueTaskOwner);
   const visibleTabs = (project?.canManageViewGrants === true ? VIEW_TABS : VIEW_TABS.filter((tab) => tab !== "权限管理"))
     .filter((tab) => tab !== "物料补发" || canSeeMaterialReissue);
   const activeView = visibleTabs.find((tab) => VIEW_KEYS[tab] === view) ?? VIEW_TABS[0];
@@ -1350,7 +1352,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             <ProjectFilesPanel projectId={project.id} tasks={tasks} canEdit={projectWritable} />
           ) : activeView === "物料补发" ? (
             // 物料补发（2026-11-25）：物料变更补发提交时固化的《补发物料清单》按申请单汇总；只读。
-            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} />
+            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} canMark={canMarkMaterialReissue} canMarkAll={projectWritable} />
           ) : activeView === "权限管理" ? (
             <ProjectViewGrantsPanel key={project.id} projectId={project.id} />
           ) : (

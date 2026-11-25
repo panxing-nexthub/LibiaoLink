@@ -1975,6 +1975,7 @@ export function toChangeRequestView(
     stageKey: row.stageKey as ChangeRequestView["stageKey"],
     changeType: row.changeType as ChangeRequestView["changeType"],
     materialReissue: row.materialReissue,
+    materialReissueTracking: row.materialReissueTracking,
     reason: row.reason,
     beforeSummary: row.beforeSummary,
     afterSummary: row.afterSummary,

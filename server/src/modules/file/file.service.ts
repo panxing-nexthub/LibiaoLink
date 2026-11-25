@@ -1975,7 +1975,10 @@ export function toChangeRequestView(
     stageKey: row.stageKey as ChangeRequestView["stageKey"],
     changeType: row.changeType as ChangeRequestView["changeType"],
     materialReissue: row.materialReissue,
-    materialReissueTracking: row.materialReissueTracking,
+    materialReissueTracking: (row.materialReissueTracking ?? []).map((entry) => ({
+      ...entry,
+      imageFileIds: entry.imageFileIds ?? (entry.imageFileId === null ? [] : [entry.imageFileId]),
+    })),
     reason: row.reason,
     beforeSummary: row.beforeSummary,
     afterSummary: row.afterSummary,

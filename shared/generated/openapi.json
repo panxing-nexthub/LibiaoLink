@@ -2854,9 +2854,17 @@
                 "$ref": "#/components/schemas/Uuid"
               },
               {
-                "description": "发货凭证图片（files.id，可空；须属于本项目且未回收）"
+                "description": "发货凭证单图（files.id，可空；兼容旧调用）"
               }
             ]
+          },
+          "imageFileIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "maxItems": 20,
+            "description": "发货凭证图片列表（files.id，可空；最多 20 张，须属于本项目且未回收）"
           }
         },
         "required": [
@@ -7711,9 +7719,17 @@
                   "string",
                   "null"
                 ],
-                "description": "发货凭证图片（files.id，可空）"
+                "description": "发货凭证图片（files.id，可空；单图兼容字段）"
               }
             ]
+          },
+          "imageFileIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "maxItems": 20,
+            "description": "发货凭证图片列表（files.id，可空；最多 20 张）"
           },
           "shippedBy": {
             "allOf": [

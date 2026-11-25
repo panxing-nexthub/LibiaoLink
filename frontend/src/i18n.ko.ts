@@ -1607,6 +1607,8 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "pd.material.allEmpty": "표시할 재발송 자재가 없습니다.",
   "pd.material.allEmpty.filter": "현재 필터에 해당하는 재발송 자재가 없습니다. 필터를 지우고 다시 시도하세요.",
   "pd.material.viewImage": "이미지 보기",
+  "pd.material.viewImages": "이미지 보기({n})",
+  "pd.material.imageN": "이미지 {n}",
   "pd.material.imageAlt": "발송 증빙",
   "pd.material.imageUnavailable": "이미지를 불러오지 못했습니다. 잠시 후 다시 시도하세요.",
   "pd.material.removeImage": "이미지 제거",

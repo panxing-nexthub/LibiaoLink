@@ -39,12 +39,12 @@ export class MaterialReissueTrackingService {
 
   async register(projectId: string, body: CreateBody, actorId: string): Promise<Result> {
     const access = await this.permission.assertProjectVisible(actorId, projectId);
-    const imageFileId = body.imageFileId ?? null;
-    if (imageFileId !== null) {
+    const imageFileIds = [...new Set([...(body.imageFileIds ?? []), ...(body.imageFileId === undefined ? [] : [body.imageFileId])])];
+    for (const imageFileId of imageFileIds) {
       const image = await this.repository.findFileById(imageFileId);
       if (image === null || image.projectId !== projectId || image.recycledAt !== null) {
         throw new AppError("VALIDATION_FAILED", "发货凭证图片不存在、不属于当前项目或已回收", [
-          { code: "invalid_image", message: "imageFileId 必须属于当前项目且未回收", path: "imageFileId" },
+          { code: "invalid_image", message: "imageFileIds 必须属于当前项目且未回收", path: "imageFileIds" },
         ]);
       }
     }
@@ -106,7 +106,8 @@ export class MaterialReissueTrackingService {
             trackingNo: textOrNull(body.trackingNo),
             estimatedArrivalDate: body.estimatedArrivalDate ?? null,
             note: textOrNull(body.note),
-            imageFileId,
+            imageFileId: imageFileIds[0] ?? null,
+            imageFileIds,
             shippedBy: actorId,
             shippedAt: at.toISOString(),
             updatedAt: at.toISOString(),
@@ -126,7 +127,7 @@ export class MaterialReissueTrackingService {
             trackingNo: textOrNull(body.trackingNo),
             estimatedArrivalDate: body.estimatedArrivalDate ?? null,
             note: textOrNull(body.note),
-            imageFileId,
+            imageFileIds,
             lineIndexes: newEntries.map((entry) => entry.lineIndex),
           },
         });

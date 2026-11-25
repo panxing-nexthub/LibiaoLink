@@ -1607,6 +1607,8 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "pd.material.allEmpty": "表示できる再発注資材がありません。",
   "pd.material.allEmpty.filter": "現在の絞り込みに一致する再発注資材はありません。絞り込みを解除して再試行してください。",
   "pd.material.viewImage": "画像を表示",
+  "pd.material.viewImages": "画像を表示（{n}）",
+  "pd.material.imageN": "画像 {n}",
   "pd.material.imageAlt": "発送証明",
   "pd.material.imageUnavailable": "画像を読み込めませんでした。しばらくしてから再試行してください。",
   "pd.material.removeImage": "画像を削除",

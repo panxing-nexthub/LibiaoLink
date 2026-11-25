@@ -197,10 +197,14 @@ export class TaskService {
     const offset = (query.page - 1) * query.limit;
     const { items, total } = await this.repository.listPage(projectId, filter, sorts, query.limit, offset, today);
     const summaries = await this.repository.fileSummaries(items.map((row) => row.task.id));
+    const ownedTaskIds = actorId === undefined ? [] : items.filter((row) => row.task.ownerIds.includes(actorId)).map((row) => row.task.id);
+    const createdByActor = ownedTaskIds.length === 0 ? new Set<string>() : await this.repository.taskIdsCreatedBy(projectId, ownedTaskIds, actorId!);
     return {
       items: items.map((row) => {
         const item = toListItem(row, summaries.get(row.task.id) ?? EMPTY_FILE_SUMMARY, today);
-        return actorId === undefined ? item : { ...item, capabilities: taskCapabilitiesOf(actorId, access, row.task.ownerIds) };
+        if (actorId === undefined) return item;
+        const capabilities = taskCapabilitiesOf(actorId, access, row.task.ownerIds);
+        return { ...item, capabilities: capabilities.source === "task_owner" ? { ...capabilities, canDelete: createdByActor.has(row.task.id) } : capabilities };
       }),
       page: query.page,
       limit: query.limit,
@@ -240,6 +244,13 @@ export class TaskService {
     if (row === null) throw new AppError("NOT_FOUND", "任务不存在或不属于该项目");
     const files = await this.repository.listFiles(taskId);
     const today = shanghaiToday(new Date());
+    let capabilities: TaskCapabilities | undefined;
+    if (actorId !== undefined) {
+      const base = taskCapabilitiesOf(actorId, access, row.task.ownerIds);
+      capabilities = base.source === "task_owner"
+        ? { ...base, canDelete: await this.repository.wasTaskCreatedBy(projectId, taskId, actorId) }
+        : base;
+    }
     return {
       ...toTaskView(row.task, today, toChangeLinks(row.changeLinks)),
       ownerNames: row.ownerNames ?? [],
@@ -250,7 +261,7 @@ export class TaskService {
         status: file.status as TaskDetail["files"][number]["status"],
         docType: normalizeDocType(file.docType),
       })),
-      ...(actorId === undefined ? {} : { capabilities: taskCapabilitiesOf(actorId, access, row.task.ownerIds) }),
+      ...(capabilities === undefined ? {} : { capabilities }),
     };
   }
 
@@ -684,6 +695,20 @@ export class TaskService {
     const at = new Date();
     await this.database.db.transaction(async (tx) => {
       const before = await this.requireActiveTask(tx, projectId, taskId);
+      const projectAccess = await this.permission.assertProjectVisible(actorId, projectId);
+      const canUpdate = await this.permission.can(actorId, "task.update", {
+        member: projectAccess.member,
+        projectManager: projectAccess.projectManager,
+        taskOwner: projectAccess.taskOwner,
+        groupAccessLevel: projectAccess.groupAccessLevel,
+        accessLevel: projectAccess.accessLevel,
+      });
+      if (!canUpdate) {
+        const ownTask = before.ownerIds.includes(actorId);
+        if (!ownTask || !(await this.repository.wasTaskCreatedBy(projectId, taskId, actorId, tx))) {
+          throw new AppError("FORBIDDEN", "任务负责人只能删除自己添加的任务");
+        }
+      }
       this.assertTaskMutable(before);
       const references = await this.referencesOf(tx, before);
       if (references.length > 0) {

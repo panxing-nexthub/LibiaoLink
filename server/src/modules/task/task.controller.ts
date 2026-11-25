@@ -162,7 +162,6 @@ export class TaskController {
    * 重复删除与已删任务上的任何写操作 = 统一 404（记录级 404 语义，不新增错误码）；归档项目 409 PROJECT_ARCHIVED。
    */
   @Delete(":id/tasks/:taskId")
-  @RequirePermission("task.update")
   remove(
     @Param("id", uuidParam) id: string,
     @Param("taskId", uuidParam) taskId: string,

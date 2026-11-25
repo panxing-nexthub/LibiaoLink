@@ -35,8 +35,8 @@ export const EMPTY_LIST_QUERY: ListQueryState = {
 /** 占位页（Push 230 起只剩「任务模板」）：「我的任务」已转正式页面 frontend/src/WorkspacePage.tsx。 */
 export type PlaceholderPage = "templates";
 
-/** 项目详情页顶部标签（7 视图；2026-10-29 新增「项目文件」）在地址里的取值：`#/project/{id}?view=`。缺省「项目总览」不落参数（默认值不进 URL，与列表筛选态同一口径）。 */
-export type ProjectView = "overview" | "gantt" | "owners" | "progress" | "daily" | "stakeholders" | "files" | "view-grants";
+/** 项目详情页顶部标签（8 视图；2026-10-29 新增「项目文件」、2026-11-25 新增「物料补发」）在地址里的取值：`#/project/{id}?view=`。缺省「项目总览」不落参数（默认值不进 URL，与列表筛选态同一口径）。 */
+export type ProjectView = "overview" | "gantt" | "owners" | "progress" | "daily" | "stakeholders" | "files" | "material-reissue" | "view-grants";
 
 /**
  * 「日报及问题」的四块页内子视图（Push 214）在地址里的取值：`#/project/{id}?view=daily&sub=`。
@@ -308,7 +308,7 @@ function parseHubView(search: string): HubView | null {
 }
 
 /** 项目详情标签的合法取值（顺序与标签栏一致）。 */
-const PROJECT_VIEW_KEYS: readonly ProjectView[] = ["overview", "gantt", "owners", "progress", "daily", "stakeholders", "files", "view-grants"];
+const PROJECT_VIEW_KEYS: readonly ProjectView[] = ["overview", "gantt", "owners", "progress", "daily", "stakeholders", "files", "material-reissue", "view-grants"];
 
 /** 项目详情标签参数（`?view=`）：只认 `PROJECT_VIEW_KEYS`，不认识的取值 / 重复键一律落回「项目总览」。 */
 function parseProjectView(search: string): ProjectView {

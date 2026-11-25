@@ -26,6 +26,20 @@ export function canUseProjectManagement(email: string | null | undefined): boole
 
 
 export type GroupProjectAccess = "allowed" | "empty" | "denied";
+
+/**
+ * 全部项目数据范围（仅浏览 / 编辑）或系统管理员：前端呈现层收敛「物料补发」等跨项目敏感页面的入口。
+ * 判定只看部门规则命中的 all 范围（accessLevel = view / edit），不看当前项目的 accessLevel ——
+ * 「指定项目 / 仅自己的项目」的浏览或编辑不满足本条件；服务端逐请求仍是最终裁决。
+ */
+export function hasAllProjectAccess(permissions: MyPermissions | null): boolean {
+  if (permissions === null) return false;
+  return permissions.groupAccessAdmin ||
+    permissions.groupScopePermissions.some(
+      (item) => item.projectScope === "all" && (item.accessLevel === "view" || item.accessLevel === "edit"),
+    );
+}
+
 /** 部门规则的项目范围；多个部门命中时按并集展示。 */
 export type GroupAccessProjectScope = "all" | "own" | "selected" | "none";
 /** 可授予数据权限的项目范围（none 不进入权限数组；空数组 = 不显示项目数据）。 */

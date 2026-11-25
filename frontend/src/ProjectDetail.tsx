@@ -8,6 +8,7 @@ import { DailySubMenu } from "./components/DailySubMenu";
 import { ExportOverviewButton } from "./components/ExportOverviewButton";
 import { GanttChart } from "./components/GanttChart";
 import { ProjectChangesPopover } from "./components/ProjectChangesPopover";
+import { MaterialReissuePanel } from "./components/MaterialReissuePanel";
 import { ProjectFilesPanel } from "./components/ProjectFilesPanel";
 import { ProjectViewGrantsPanel } from "./components/ProjectViewGrantsPanel";
 import { ReportIssuePanel } from "./components/ReportIssuePanel";
@@ -35,6 +36,7 @@ import { useBackgroundTier, type TintedTier } from "./backgroundTier";
 import type { MeResponse, Project } from "./types";
 import { replaceProjectSubView, replaceProjectView, type DailySubView, type ProjectFocus, type ProjectView } from "./useHashRoute";
 import { ApiError } from "./api";
+import { hasAllProjectAccess, useMyPermissions } from "./permissions";
 import {
   createAdditionalStage,
   createTask,
@@ -66,7 +68,7 @@ import {
  * Push 154：当前标签走地址 `?view=`，刷新 / 收藏 / 分享都停在同一块标签。
  */
 /** Push 221：第六个视图「干系人」；2026-10-29：其后再加「项目文件」—— 只列阶段任务文件与变更文件，替代原全站文件库浏览入口。 */
-const VIEW_TABS = ["项目总览", "甘特图", "人员任务分配", "任务进展", "日报及问题", "干系人", "项目文件", "权限管理"] as const;
+const VIEW_TABS = ["项目总览", "甘特图", "人员任务分配", "任务进展", "日报及问题", "干系人", "项目文件", "物料补发", "权限管理"] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
 
 /** 顶部标签 ↔ 地址参数（`?view=`）：缺省「项目总览」（overview）不落参数。 */
@@ -78,6 +80,7 @@ const VIEW_KEYS: Record<ViewTab, ProjectView> = {
   "日报及问题": "daily",
   "干系人": "stakeholders",
   "项目文件": "files",
+  "物料补发": "material-reissue",
   "权限管理": "view-grants",
 };
 
@@ -126,8 +129,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   /** 顶部视图（Push 82 / 121）：阶段标签收进「项目总览」，另两块是看板视图，最后一块是「日报及问题」；Push 154 起当前标签由地址 `?view=` 派生。 */
   const locale = useLocale();
   const t = useT();
-  const visibleTabs = project?.canManageViewGrants === true ? VIEW_TABS : VIEW_TABS.filter((tab) => tab !== "权限管理");
-  const activeView = visibleTabs.find((tab) => VIEW_KEYS[tab] === view) ?? VIEW_TABS[0];
+  const permissions = useMyPermissions();
   const projectId = project?.id ?? null;
   /** 项目经理名单签名：项目弹窗改经理后触发任务整表重取，保证任务行与项目卡即时一致。 */
   const projectManagerSignature = project?.managerIds.join("\u0000") ?? "";
@@ -163,9 +165,6 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   /** 取数版本号：换项目、或新建 / 删除 / 排序 / 版本冲突后需要整表重取时 +1。 */
   const [dataVersion, setDataVersion] = useState(0);
   const projectManagerSignatureRef = useRef<string | null>(null);
-  useEffect(() => {
-    setChangesTaskRequestId(null);
-  }, [activeView, projectId]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   /** 待确认删除的任务行（Push 264 追订 · 业务口径「任务行内删除无二次确认」）：第一下只开顶部确认 Toast，第二下才真删。 */
@@ -409,6 +408,27 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
     },
     [rawTasks, preserveTaskOrder, projectArchived, stageNames],
   );
+
+  /**
+   * 「物料补发」页访问口径（2026-11-25）：
+   * 仅项目经理 / 系统管理员 / 拥有全部项目仅浏览或编辑范围 / 本任务负责人（商务助理）可看到入口；
+   * 非项目经理、非全项目范围的商务助理只看到自己负责任务的补发清单。
+   * 权限画像未取到按无权限处理（与 permissions.ts 的入口收敛口径一致），服务端逐请求仍是最终裁决。
+   */
+  const viewerUserId = permissions?.userId ?? null;
+  const canViewAllMaterialReissue =
+    hasAllProjectAccess(permissions) ||
+    (viewerUserId !== null && project !== null && project.managerIds.includes(viewerUserId));
+  const isMaterialReissueTaskOwner =
+    viewerUserId !== null && rawTasks.some((task) => task.ownerIds.includes(viewerUserId));
+  const canSeeMaterialReissue = canViewAllMaterialReissue || isMaterialReissueTaskOwner;
+  const visibleTabs = (project?.canManageViewGrants === true ? VIEW_TABS : VIEW_TABS.filter((tab) => tab !== "权限管理"))
+    .filter((tab) => tab !== "物料补发" || canSeeMaterialReissue);
+  const activeView = visibleTabs.find((tab) => VIEW_KEYS[tab] === view) ?? VIEW_TABS[0];
+
+  useEffect(() => {
+    setChangesTaskRequestId(null);
+  }, [activeView, projectId]);
 
   /** 当前账号在本项目里担任任务负责人的阶段（用于只开放个人模版补任务）。 */
   const taskOwnerStageNames = useMemo(() => {
@@ -1328,6 +1348,9 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
           ) : activeView === "项目文件" ? (
             // 项目文件（2026-10-29）：阶段任务文件 + 变更记录关联文件的并集；日报 / 问题附图不进入。
             <ProjectFilesPanel projectId={project.id} tasks={tasks} canEdit={projectWritable} />
+          ) : activeView === "物料补发" ? (
+            // 物料补发（2026-11-25）：物料变更补发提交时固化的《补发物料清单》按申请单汇总；只读。
+            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} />
           ) : activeView === "权限管理" ? (
             <ProjectViewGrantsPanel key={project.id} projectId={project.id} />
           ) : (

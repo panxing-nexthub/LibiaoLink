@@ -859,7 +859,7 @@ export function MaterialReissuePanel({
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5">
+      <div className="sticky top-[171px] z-[9] flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white/95 px-3 py-2.5 backdrop-blur">
         {state.kind === "ready" && activeView === "all" ? (
           <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
             <span data-project-material-reissue-selected={selectedRows.length}>{t("pd.material.selectedCount", { n: selectedRows.length })}</span>

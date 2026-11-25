@@ -1107,14 +1107,14 @@ export function MaterialReissuePanel({
                 <colgroup>
                   <col className="w-[96px]" />
                   <col className="w-[220px]" />
-                  <col className="w-[160px]" />
+                  <col />
                   <col className="w-[90px]" />
                   <col className="w-[140px]" />
                   <col className="w-[120px]" />
                   <col className="w-[180px]" />
                   <col className="w-[90px]" />
                   <col className="w-[164px]" />
-                  <col />
+                  <col className="w-[220px]" />
                 </colgroup>
                 <thead className="bg-zinc-50 text-zinc-500">
                   <tr>

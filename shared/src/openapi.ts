@@ -242,7 +242,9 @@ import {
 import {
   ChangeRequestDetailSchema,
   CreateMaterialReissueBodySchema,
+  CreateMaterialReissueTrackingBodySchema,
   MaterialReissueResultSchema,
+  MaterialReissueTrackingResultSchema,
   ChangeRequestListQuerySchema,
   ChangeRequestListResponseSchema,
   FileArchiveRequestSchema,
@@ -2030,6 +2032,21 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     request: { params: idParams, body: json(CreateMaterialReissueBodySchema) },
     responses: {
       201: { description: "已提交：变更记录 + 补发申请 DOCX", ...json(MaterialReissueResultSchema) },
+      400: commonErrors[400],
+      403: commonErrors[403],
+      404: commonErrors[404],
+      409: commonErrors[409],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/change-requests/material-reissue/tracking",
+    tags: ["changes"],
+    summary: "物料补发批量发货登记（跨申请单勾选物料行；状态 / 快递 / 预计到货 / 备注 / 凭证图片）",
+    request: { params: idParams, body: json(CreateMaterialReissueTrackingBodySchema) },
+    responses: {
+      201: { description: "已登记的发货记录", ...json(MaterialReissueTrackingResultSchema) },
       400: commonErrors[400],
       403: commonErrors[403],
       404: commonErrors[404],

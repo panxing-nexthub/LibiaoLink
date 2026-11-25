@@ -3,7 +3,9 @@ import {
   ChangeRequestListQuerySchema,
   ChangeRequestListResponseSchema,
   CreateMaterialReissueBodySchema,
+  CreateMaterialReissueTrackingBodySchema,
   MaterialReissueResultSchema,
+  MaterialReissueTrackingResultSchema,
   UuidSchema,
   z,
 } from "@libiaolink/contracts";
@@ -12,12 +14,15 @@ import { CsrfGuard, CurrentActorId, SessionGuard } from "../identity/index.js";
 import { ProjectAccessGuard } from "../permission/index.js";
 import { ChangeService } from "./change.service.js";
 import { MaterialReissueService } from "./material-reissue.service.js";
+import { MaterialReissueTrackingService } from "./material-reissue-tracking.service.js";
 
 type ChangeListQuery = z.infer<typeof ChangeRequestListQuerySchema>;
 type CreateMaterialReissueBody = z.infer<typeof CreateMaterialReissueBodySchema>;
+type CreateMaterialReissueTrackingBody = z.infer<typeof CreateMaterialReissueTrackingBodySchema>;
 
 const uuidParam = new ZodValidationPipe(UuidSchema);
 const createMaterialReissueBody = new ZodValidationPipe(CreateMaterialReissueBodySchema);
+const createMaterialReissueTrackingBody = new ZodValidationPipe(CreateMaterialReissueTrackingBodySchema);
 
 /**
  * 项目变更记录列表（M4-04 读面 · A4-15）：契约 shared/src/modules/files.ts 的 `GET /projects/{id}/change-requests`。
@@ -32,6 +37,7 @@ export class ChangeRequestLibraryController {
   constructor(
     private readonly changes: ChangeService,
     private readonly materialReissues: MaterialReissueService,
+    private readonly materialReissueTracking: MaterialReissueTrackingService,
   ) {}
 
   /** 变更记录列表：阶段（多值）/ 节点 / 文件 / 申请人筛选 + 关键字（原因 / 前后摘要）+ 白名单排序 + 分页。 */
@@ -46,6 +52,16 @@ export class ChangeRequestLibraryController {
     @CurrentActorId() actorId: string,
   ): Promise<z.infer<typeof MaterialReissueResultSchema>> {
     return this.materialReissues.create(id, body, actorId);
+  }
+
+  /** POST /projects/{id}/change-requests/material-reissue/tracking（2026-11-25）：跨申请单批量登记发货。 */
+  @Post(":id/change-requests/material-reissue/tracking")
+  registerMaterialReissueTracking(
+    @Param("id", uuidParam) id: string,
+    @Body(createMaterialReissueTrackingBody) body: CreateMaterialReissueTrackingBody,
+    @CurrentActorId() actorId: string,
+  ): Promise<z.infer<typeof MaterialReissueTrackingResultSchema>> {
+    return this.materialReissueTracking.register(id, body, actorId);
   }
 
   @Get(":id/change-requests")

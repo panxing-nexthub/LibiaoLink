@@ -8383,6 +8383,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/change-requests/material-reissue/tracking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 物料补发批量发货登记（跨申请单勾选物料行；状态 / 快递 / 预计到货 / 备注 / 凭证图片） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateMaterialReissueTrackingBody"];
+                };
+            };
+            responses: {
+                /** @description 已登记的发货记录 */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MaterialReissueTrackingResult"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 冲突（VERSION_CONFLICT / 状态不允许当前操作） */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/permissions/me": {
         parameters: {
             query?: never;
@@ -13380,6 +13459,8 @@ export interface components {
             stageKey: components["schemas"]["StageKey"] & (string | null);
             changeType: components["schemas"]["ChangeType"] & unknown;
             materialReissue: components["schemas"]["MaterialReissueSnapshot"];
+            /** @description 物料补发发货登记（按 lineIndex 对应清单行；普通变更为空数组） */
+            materialReissueTracking: components["schemas"]["MaterialReissueTrackingEntry"][];
             /** @description 变更原因（必填） */
             reason: string;
             /** @description 变更前摘要 */
@@ -13426,6 +13507,22 @@ export interface components {
         /** @description 物料变更补发表单（仿现有《补发/补货申请表》） */
         CreateMaterialReissueBody: components["schemas"]["MaterialReissueBody"] & {
             taskId: components["schemas"]["Uuid"] & unknown;
+        };
+        /** @description 物料补发批量发货登记 */
+        CreateMaterialReissueTrackingBody: {
+            /** @description 所选物料行（可跨多张补发申请单） */
+            items: components["schemas"]["MaterialReissueTrackingSelection"][];
+            status: components["schemas"]["MaterialReissueTrackingStatus"];
+            /** @description 快递单号（可空） */
+            trackingNo?: string;
+            /**
+             * Format: date
+             * @description 预计到货时间（YYYY-MM-DD，可空）
+             */
+            estimatedArrivalDate?: string;
+            /** @description 发货备注（可空） */
+            note?: string;
+            imageFileId?: components["schemas"]["Uuid"] & unknown;
         };
         /** @description 一条日报（A3-01 全字段 + 系统字段） */
         DailyReport: {
@@ -14707,6 +14804,40 @@ export interface components {
             projectName: string;
             applicantName: string;
         } | null);
+        /** @description 物料补发单行发货登记 */
+        MaterialReissueTrackingEntry: {
+            changeRequestId: components["schemas"]["Uuid"] & unknown;
+            /** @description 补发清单行下标（0 起） */
+            lineIndex: number;
+            status: components["schemas"]["MaterialReissueTrackingStatus"];
+            /** @description 快递单号（可空） */
+            trackingNo: string | null;
+            /**
+             * Format: date
+             * @description 预计到货时间（YYYY-MM-DD，可空）
+             */
+            estimatedArrivalDate: string | null;
+            /** @description 发货备注（可空） */
+            note: string | null;
+            imageFileId: components["schemas"]["Uuid"] & (string | null);
+            shippedBy: components["schemas"]["Uuid"] & unknown;
+            shippedAt: components["schemas"]["DateTime"] & unknown;
+            updatedAt: components["schemas"]["DateTime"] & unknown;
+        };
+        /** @description 本次新增的发货登记行 */
+        MaterialReissueTrackingResult: {
+            items: components["schemas"]["MaterialReissueTrackingEntry"][];
+        };
+        /** @description 批量发货选择的物料行 */
+        MaterialReissueTrackingSelection: {
+            changeRequestId: components["schemas"]["Uuid"];
+            lineIndex: number;
+        };
+        /**
+         * @description 补发发货状态：已发货 / 已签收
+         * @enum {string}
+         */
+        MaterialReissueTrackingStatus: "shipped" | "received";
         /** @description /auth/me 响应（会话由 HttpOnly Cookie 承载；CSRF token 随响应下发） */
         MeResponse: {
             user: components["schemas"]["User"];

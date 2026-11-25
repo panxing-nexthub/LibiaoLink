@@ -196,6 +196,48 @@ export const MaterialReissueBodySchema = z
 export const CreateMaterialReissueBodySchema = MaterialReissueBodySchema.extend({
   taskId: UuidSchema.openapi({ description: "来源任务（变更记录回写该任务）" }),
 }).openapi("CreateMaterialReissueBody");
+export const MaterialReissueTrackingStatusSchema = z
+  .enum(["shipped", "received"])
+  .openapi("MaterialReissueTrackingStatus", { description: "补发发货状态：已发货 / 已签收" });
+
+/** 单条物料行的发货登记（随 change_requests.material_reissue_tracking 固化；lineIndex 为补发清单数组下标，0 起）。 */
+export const MaterialReissueTrackingEntrySchema = z
+  .object({
+    changeRequestId: UuidSchema.openapi({ description: "所属物料变更补发记录" }),
+    lineIndex: z.number().int().min(0).openapi({ description: "补发清单行下标（0 起）" }),
+    status: MaterialReissueTrackingStatusSchema,
+    trackingNo: z.string().trim().max(120).nullable().openapi({ description: "快递单号（可空）" }),
+    estimatedArrivalDate: z.iso.date().nullable().openapi({ description: "预计到货时间（YYYY-MM-DD，可空）" }),
+    note: z.string().trim().max(1000).nullable().openapi({ description: "发货备注（可空）" }),
+    imageFileId: UuidSchema.nullable().openapi({ description: "发货凭证图片（files.id，可空）" }),
+    shippedBy: UuidSchema.openapi({ description: "发货登记人" }),
+    shippedAt: DateTimeSchema.openapi({ description: "发货登记时间" }),
+    updatedAt: DateTimeSchema.openapi({ description: "最近更新时间" }),
+  })
+  .openapi("MaterialReissueTrackingEntry", { description: "物料补发单行发货登记" });
+
+export const MaterialReissueTrackingSelectionSchema = z
+  .object({
+    changeRequestId: UuidSchema,
+    lineIndex: z.number().int().min(0),
+  })
+  .openapi("MaterialReissueTrackingSelection", { description: "批量发货选择的物料行" });
+
+/** POST /projects/{id}/change-requests/material-reissue/tracking：一次批量登记所选物料行。 */
+export const CreateMaterialReissueTrackingBodySchema = z
+  .object({
+    items: z.array(MaterialReissueTrackingSelectionSchema).min(1).max(200).openapi({ description: "所选物料行（可跨多张补发申请单）" }),
+    status: MaterialReissueTrackingStatusSchema,
+    trackingNo: z.string().trim().max(120).optional().openapi({ description: "快递单号（可空）" }),
+    estimatedArrivalDate: z.iso.date().optional().openapi({ description: "预计到货时间（YYYY-MM-DD，可空）" }),
+    note: z.string().trim().max(1000).optional().openapi({ description: "发货备注（可空）" }),
+    imageFileId: UuidSchema.optional().openapi({ description: "发货凭证图片（files.id，可空；须属于本项目且未回收）" }),
+  })
+  .openapi("CreateMaterialReissueTrackingBody", { description: "物料补发批量发货登记" });
+
+export const MaterialReissueTrackingResultSchema = z
+  .object({ items: z.array(MaterialReissueTrackingEntrySchema) })
+  .openapi("MaterialReissueTrackingResult", { description: "本次新增的发货登记行" });
 
 export const MaterialReissueSnapshotSchema = MaterialReissueBodySchema.extend({
   taskId: UuidSchema,
@@ -216,6 +258,11 @@ export type MaterialReissueLine = z.infer<typeof MaterialReissueLineSchema>;
 export type MaterialReissueBody = z.infer<typeof MaterialReissueBodySchema>;
 export type CreateMaterialReissueBody = z.infer<typeof CreateMaterialReissueBodySchema>;
 export type MaterialReissueSnapshot = z.infer<typeof MaterialReissueSnapshotSchema>;
+export type MaterialReissueTrackingStatus = z.infer<typeof MaterialReissueTrackingStatusSchema>;
+export type MaterialReissueTrackingEntry = z.infer<typeof MaterialReissueTrackingEntrySchema>;
+export type MaterialReissueTrackingSelection = z.infer<typeof MaterialReissueTrackingSelectionSchema>;
+export type CreateMaterialReissueTrackingBody = z.infer<typeof CreateMaterialReissueTrackingBodySchema>;
+export type MaterialReissueTrackingResult = z.infer<typeof MaterialReissueTrackingResultSchema>;
 export type MaterialReissueResult = z.infer<typeof MaterialReissueResultSchema>;
 
 export const ChangeRequestSchema = z
@@ -226,6 +273,7 @@ export const ChangeRequestSchema = z
     stageKey: StageKeySchema.nullable().openapi({ description: "变更阶段（九阶段字典）" }),
     changeType: ChangeTypeSchema.openapi({ description: "变更类型：普通文件变更 / 物料变更补发" }),
     materialReissue: MaterialReissueSnapshotSchema.nullable().openapi({ description: "物料变更补发表单快照；普通文件变更为 null" }),
+    materialReissueTracking: z.array(MaterialReissueTrackingEntrySchema).openapi({ description: "物料补发发货登记（按 lineIndex 对应清单行；普通变更为空数组）" }),
     reason: z.string().openapi({ description: "变更原因（必填）" }),
     beforeSummary: z.string().nullable().openapi({ description: "变更前摘要" }),
     afterSummary: z.string().nullable().openapi({ description: "变更后摘要" }),

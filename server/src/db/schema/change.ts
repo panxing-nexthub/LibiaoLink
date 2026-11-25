@@ -1,5 +1,5 @@
 import { desc, sql } from "drizzle-orm";
-import type { MaterialReissueSnapshot } from "@libiaolink/contracts";
+import type { MaterialReissueSnapshot, MaterialReissueTrackingEntry } from "@libiaolink/contracts";
 import {
   check,
   index,
@@ -25,6 +25,11 @@ export const changeRequests = pgTable(
     changeType: text("change_type").notNull().default("file_change"),
     /** 物料变更补发表单快照（0084）：项目 / 任务 / 申请人自动带入并固化；普通变更为 null。 */
     materialReissue: jsonb("material_reissue").$type<MaterialReissueSnapshot>(),
+    /** 物料补发发货登记（0116）：按 lineIndex 对应 material_reissue.materials 行的追踪数据；普通变更为空数组。 */
+    materialReissueTracking: jsonb("material_reissue_tracking")
+      .$type<MaterialReissueTrackingEntry[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     reason: text("reason").notNull(),
     beforeSummary: text("before_summary"),
     afterSummary: text("after_summary"),

@@ -274,8 +274,7 @@ describe("项目归档（任务全部完成口径）", () => {
     expect(repo.project?.version).toBe(4);
     expect(repo.inserted?.acknowledgedMissing).toEqual([]);
     expect(repo.aborted).toBe(1);
-    expect(outbox).toMatchObject([{ topic: "project.completed", dedupeKey: "project.completed:" + PROJECT_ID + ":4",
-      payload: { projectId: PROJECT_ID, status: "archived", previousStatus: "active", version: 4, actorId: ACTOR } }]);
+    expect(outbox).toEqual([]);
     expect(audit.entries[0]?.action).toBe("archive");
     expect(audit.entries[0]?.result).toBeUndefined();
     expect(view.projectId).toBe(PROJECT_ID);

@@ -45,7 +45,7 @@ import {
 import { directoryMemberOptions, loadDirectory, type DirectoryUser } from "./directory";
 import { memberOptionsWithExisting } from "./data/members";
 import { loadProjectManagerCandidates, type ProjectManagerCandidate } from "./projectManagerCandidates";
-import { archiveProject, archiveProjectWithUpdate, createProject, deleteProject, downloadProjectWorkbook, fetchProject, recordProjectVisit, restoreArchivedProject, toUiProject, updateProject, type ProjectExportFormat } from "./projectApi";
+import { archiveProject, archiveProjectWithUpdate, createProject, deleteProject, downloadProjectWorkbook, fetchProject, recordProjectVisit, restoreArchivedProject, sendCompletionPoster, toUiProject, updateProject, type ProjectExportFormat } from "./projectApi";
 import { loadMyPreferences, loadMyPreferencesWithLegacyMigration, saveHomeSavedFilters, saveTaskTableHiddenColumns, saveHubDashProject, saveHubDashView, saveHubView, saveWorkspaceOpenProjects, type WorkspaceOpenProjects } from "./preferencesApi";
 import type { SavedFilter } from "./savedFilters";
 import { asHubDashView, type HubDashView } from "./data/dashboardProgress";
@@ -781,22 +781,15 @@ export default function App() {
     }
   };
 
-  const handleArchiveAfterAcceptance = async (id: string): Promise<boolean> => {
+  /** 验收完成后把完成喜报同步到项目群；已同步过由服务端幂等返回，不重复发送。 */
+  const handleSendCompletionPoster = async (id: string): Promise<boolean> => {
     if (detail?.id !== id) return false;
     try {
-      await archiveProject(id, detail.version, "accepted");
+      await sendCompletionPoster(id);
     } catch (error: unknown) {
-      if (error instanceof ApiError && error.code === "PROJECT_ARCHIVED") {
-        setDataVersion((value) => value + 1);
-        return true;
-      }
-      if (error instanceof ApiError && error.code === "VERSION_CONFLICT") {
-        setDataVersion((value) => value + 1);
-      }
-      setNotice(errorMessageOf(error, t("app.fail.archiveProject")));
+      setNotice(errorMessageOf(error, t("app.fail.completionPoster")));
       return false;
     }
-    setDataVersion((value) => value + 1);
     return true;
   };
 
@@ -1094,7 +1087,7 @@ export default function App() {
           onTaskHiddenColumnsChange={handleSaveTaskHiddenColumns}
           canManageStakeholders={canManageStakeholders}
           canManageProjectManagers={permissions?.groupAccessAdmin === true || detail?.canManageViewGrants === true}
-          onArchiveProject={canArchiveProject && detail?.accessLevel === "edit" ? handleArchiveAfterAcceptance : undefined}
+          onSendCompletionPoster={canArchiveProject && detail?.accessLevel === "edit" ? handleSendCompletionPoster : undefined}
         />
         {editModal}
         {bottomBars}

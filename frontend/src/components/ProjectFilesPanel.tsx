@@ -795,7 +795,7 @@ export function ProjectFilesPanel({ projectId, tasks, canEdit = false, tabs }: {
 
   return (
     <section data-project-files="" className="space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header data-files-tabs-sticky="true" className="sticky top-[123px] z-10 flex flex-wrap items-end justify-between gap-3 border-b border-zinc-200/70 bg-[#f5f6f8]/95 py-2 backdrop-blur">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           {tabs ?? <h2 className="text-lg font-semibold text-zinc-900">{t("pd.files.title")}</h2>}
         </div>

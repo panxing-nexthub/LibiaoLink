@@ -285,6 +285,26 @@ function trackingSpansOf(rows: readonly TrackingRow[], key: TrackingMergeKey): n
   return spans;
 }
 
+/** 补发批次（按 shippedAt）的行跨度与顺序编号：NO.1 / NO.2 …，每批只在首行出一个合并格。 */
+function trackingBatchesOf(rows: readonly TrackingRow[]): { spans: number[]; numbers: number[] } {
+  const spans = rows.map(() => 0);
+  const numbers = rows.map(() => 0);
+  let start = 0;
+  let number = 0;
+  while (start < rows.length) {
+    number += 1;
+    const batch = rows[start].entry.shippedAt;
+    let end = start + 1;
+    while (end < rows.length && rows[end].entry.shippedAt === batch) {
+      end += 1;
+    }
+    spans[start] = end - start;
+    numbers[start] = number;
+    start = end;
+  }
+  return { spans, numbers };
+}
+
 export function MaterialReissuePanel({
   projectId,
   tasks,
@@ -592,6 +612,7 @@ export function MaterialReissuePanel({
     images: trackingSpansOf(filteredTrackingRows, "images"),
     source: trackingSpansOf(filteredTrackingRows, "source"),
   };
+  const trackingBatches = trackingBatchesOf(filteredTrackingRows);
   const trackingGroupOf = (index: number, key: TrackingMergeKey): TrackingRow[] => {
     const span = trackingSpans[key][index] ?? 0;
     return span === 0 ? [] : filteredTrackingRows.slice(index, index + span);
@@ -1071,8 +1092,9 @@ export function MaterialReissuePanel({
         ) : (
           <>
             <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-              <table className="w-full min-w-[1420px] table-fixed border-collapse border border-zinc-200 text-left text-sm">
+              <table className="w-full min-w-[1520px] table-fixed border-collapse border border-zinc-200 text-left text-sm">
                 <colgroup>
+                  <col className="w-[96px]" />
                   <col className="w-[220px]" />
                   <col className="w-[160px]" />
                   <col className="w-[90px]" />
@@ -1085,6 +1107,7 @@ export function MaterialReissuePanel({
                 </colgroup>
                 <thead className="bg-zinc-50 text-zinc-500">
                   <tr>
+                    <th className="whitespace-nowrap border border-zinc-200 px-4 py-3.5 text-center font-medium">{t("pd.material.col.reissueNo")}</th>
                     <th className="whitespace-nowrap border border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "物料名称")}</th>
                     <th className="whitespace-nowrap border border-zinc-200 px-4 py-3.5 text-left font-medium">{fieldText(locale, "规格型号")}</th>
                     <th className="whitespace-nowrap border border-zinc-200 px-4 py-3.5 text-right font-medium">{fieldText(locale, "数量")}</th>
@@ -1102,6 +1125,8 @@ export function MaterialReissuePanel({
                     const imageIds = imageIdsOf(row.entry);
                     const rowTint = tierTint === false ? null : materialRowTintOf(tierTint, row.entry.status);
                     const batchStart = index > 0 && filteredTrackingRows[index - 1]?.entry.shippedAt !== row.entry.shippedAt;
+                    const batchSpan = trackingBatches.spans[index] ?? 0;
+                    const batchNo = trackingBatches.numbers[index] ?? 0;
                     const spanOf = (key: TrackingMergeKey): number => trackingSpans[key][index] ?? 0;
                     const groupOf = (key: TrackingMergeKey): TrackingRow[] => trackingGroupOf(index, key);
                     return (
@@ -1112,6 +1137,11 @@ export function MaterialReissuePanel({
                         className={(rowTint === null ? "" : "task-row-tint-static ") + (batchStart ? "tracking-batch-start" : "")}
                         style={rowTint === null ? undefined : ({ "--row-tint": rowTint.tint, "--row-tint-hover": rowTint.hover } as CSSProperties)}
                       >
+                        {batchSpan === 0 ? null : (
+                          <td rowSpan={batchSpan} className="border border-zinc-200 px-4 py-4 text-center align-middle font-medium tabular-nums text-zinc-600">
+                            NO.{batchNo}
+                          </td>
+                        )}
                         <td className="border border-zinc-200 px-4 py-4 align-middle">
                           <div className="font-medium text-zinc-800">{textOrDash(row.line.materialName)}</div>
                           <div className="mt-0.5 text-[11px] text-zinc-400">{textOrDash(row.line.materialCode)}</div>

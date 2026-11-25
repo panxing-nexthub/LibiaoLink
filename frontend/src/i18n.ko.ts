@@ -1572,6 +1572,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "pd.material.trackingSummary": "재발송 추적 {n}건",
   "pd.material.col.source": "출처",
   "pd.material.col.status": "상태",
+  "pd.material.col.reissueNo": "재발송 번호",
   "pd.material.col.trackingNo": "운송장 번호",
   "pd.material.col.eta": "도착 예정",
   "pd.material.col.shipNote": "발송 메모",

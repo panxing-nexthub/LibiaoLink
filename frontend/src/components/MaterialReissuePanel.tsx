@@ -557,7 +557,12 @@ export function MaterialReissuePanel({
         task: row.task,
       });
     }
-    return rows.sort((left, right) => trackingTimeOf(right.entry) - trackingTimeOf(left.entry));
+    // 已发货优先排在前面，已签收自动往下排；同状态内仍按登记时间倒序。
+    const rankOf = (status: string): number => (status === "shipped" ? 0 : 1);
+    return rows.sort((left, right) => {
+      const rankDiff = rankOf(left.entry.status) - rankOf(right.entry.status);
+      return rankDiff !== 0 ? rankDiff : trackingTimeOf(right.entry) - trackingTimeOf(left.entry);
+    });
   }, [allRows]);
 
   useEffect(() => {

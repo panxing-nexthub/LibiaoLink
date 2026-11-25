@@ -341,6 +341,10 @@ type TaskBoardProps = {
   onAddNode?: (stage: string, node: TemplatePresetNode) => void;
   /** 加一条 / 一批并指定插入位置（Push 113：点「＋ 添加」先弹位置浮层，选完才加进项目）。不传 = 点一条直接加到该阶段最后。 */
   onAddNodes?: (stage: string, nodes: readonly TemplatePresetNode[], placement: StagePlacement, templateId?: string) => void;
+  /** 哪些阶段允许打开添加卡片（项目经理全开；任务负责人仅本人负责的阶段）。 */
+  canOpenAddCard?: (stage: string) => boolean;
+  /** 这些阶段打开添加卡片时只显示个人模版（任务负责人模式）。 */
+  personalOnlyStages?: ReadonlySet<string>;
   /** 当前账号是否可修改项目经理列；不传 = 有回写回调时可改。只读账号仍渲染同款控件，仅禁用交互。 */
   canEditManagers?: boolean;
   /** 当前账号是否可对指定任务定档 / 取消定档：由任务负责人与项目经理名单共同裁决。 */
@@ -944,7 +948,7 @@ export function ProjectSummary({ summary }: { summary: ApiProjectSummary | null 
   );
 }
 
-export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes, onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, onAddNode, onAddNodes, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, filesByTask, projectId, tierTint }: TaskBoardProps) {
+export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes, onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, onAddNode, onAddNodes, canOpenAddCard, personalOnlyStages, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, filesByTask, projectId, tierTint }: TaskBoardProps) {
   const t = useT();
   const locale = useLocale();
   /**
@@ -1176,7 +1180,7 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
             /** 只读关系用户没有新增回调：阶段头退化为普通标签，不出现「＋」和可展开卡片。 */
             const canAddToStage = group.stage === TEMP_TASK_STAGE
               ? onCreateTempTask !== undefined
-              : onAddNode !== undefined || onAddNodes !== undefined;
+              : (onAddNode !== undefined || onAddNodes !== undefined) && (canOpenAddCard === undefined || canOpenAddCard(group.stage));
             return (
               <section key={group.stage} className="border-b border-zinc-100 last:border-b-0">
                 {/* 阶段分组头（业务口径 2026-09-24）：整行不再是点击区域 —— 只有左侧「折叠箭头 + 阶段标签」这一小片可点，
@@ -1345,6 +1349,7 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
           onAddNode={onAddNode}
           placement={onAddNodes === undefined ? undefined : { tasks: stageTasksOf(cardStage) }}
           onAddNodes={onAddNodes}
+          personalOnly={personalOnlyStages?.has(cardStage) ?? false}
           // Push 207 撤（业务口径「临时任务不应该存在于阶段里面新建」）：阶段卡片不再收「临时任务」入口 ——
           // 临时任务的新建仍走本表底部「临时任务」分组头（见下方常驻入口）与看板列底「添加」菜单
           onClose={() => setCardStage(null)}

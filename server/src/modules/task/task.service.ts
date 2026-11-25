@@ -197,10 +197,14 @@ export class TaskService {
     const offset = (query.page - 1) * query.limit;
     const { items, total } = await this.repository.listPage(projectId, filter, sorts, query.limit, offset, today);
     const summaries = await this.repository.fileSummaries(items.map((row) => row.task.id));
+    const ownedTaskIds = actorId === undefined ? [] : items.filter((row) => row.task.ownerIds.includes(actorId)).map((row) => row.task.id);
+    const createdByActor = ownedTaskIds.length === 0 ? new Set<string>() : await this.repository.taskIdsCreatedBy(projectId, ownedTaskIds, actorId!);
     return {
       items: items.map((row) => {
         const item = toListItem(row, summaries.get(row.task.id) ?? EMPTY_FILE_SUMMARY, today);
-        return actorId === undefined ? item : { ...item, capabilities: taskCapabilitiesOf(actorId, access, row.task.ownerIds) };
+        if (actorId === undefined) return item;
+        const capabilities = taskCapabilitiesOf(actorId, access, row.task.ownerIds);
+        return { ...item, capabilities: capabilities.source === "task_owner" ? { ...capabilities, canDelete: createdByActor.has(row.task.id) } : capabilities };
       }),
       page: query.page,
       limit: query.limit,
@@ -240,6 +244,13 @@ export class TaskService {
     if (row === null) throw new AppError("NOT_FOUND", "任务不存在或不属于该项目");
     const files = await this.repository.listFiles(taskId);
     const today = shanghaiToday(new Date());
+    let capabilities: TaskCapabilities | undefined;
+    if (actorId !== undefined) {
+      const base = taskCapabilitiesOf(actorId, access, row.task.ownerIds);
+      capabilities = base.source === "task_owner"
+        ? { ...base, canDelete: await this.repository.wasTaskCreatedBy(projectId, taskId, actorId) }
+        : base;
+    }
     return {
       ...toTaskView(row.task, today, toChangeLinks(row.changeLinks)),
       ownerNames: row.ownerNames ?? [],
@@ -250,7 +261,7 @@ export class TaskService {
         status: file.status as TaskDetail["files"][number]["status"],
         docType: normalizeDocType(file.docType),
       })),
-      ...(actorId === undefined ? {} : { capabilities: taskCapabilitiesOf(actorId, access, row.task.ownerIds) }),
+      ...(capabilities === undefined ? {} : { capabilities }),
     };
   }
 
@@ -445,6 +456,28 @@ export class TaskService {
     if (!isProjectStageKey(template.stageKey)) {
       throw new AppError("VALIDATION_FAILED", "「入库审核」是模板专区分组，不能生成项目任务");
     }
+    /**
+     * 项目编辑者仍按 task.create 正常建任务；
+     * 当前阶段的任务负责人只允许从「本人私有个人模版」向本人负责的阶段补任务，且新任务强制归属本人。
+     */
+    const projectAccess = await this.permission.assertProjectVisible(actorId, projectId);
+    const canCreateTask = await this.permission.can(actorId, "task.create", {
+      member: projectAccess.member,
+      projectManager: projectAccess.projectManager,
+      taskOwner: projectAccess.taskOwner,
+      groupAccessLevel: projectAccess.groupAccessLevel,
+      accessLevel: projectAccess.accessLevel,
+    });
+    let taskOwnerPersonal = false;
+    if (!canCreateTask) {
+      if (template.visibility !== "private" || template.createdBy !== actorId) {
+        throw new AppError("FORBIDDEN", "任务负责人只能从本人的个人模版向本人负责的阶段添加任务");
+      }
+      if (!(await this.repository.isStageTaskOwner(projectId, template.stageKey, actorId))) {
+        throw new AppError("FORBIDDEN", "任务负责人只能向本人负责的阶段添加任务");
+      }
+      taskOwnerPersonal = true;
+    }
     const ordered = template.nodes;
     let picked = ordered;
     if (body.nodeIds !== undefined) {
@@ -459,7 +492,8 @@ export class TaskService {
       return { created: [], skipped: [] };
     }
     // 同 create()：缺省 = 「待分配」（2026-09-24 业务口径）；项目经理缺省继承项目当前经理。
-    const ownerIds = body.ownerIds !== undefined ? body.ownerIds : [];
+    // 任务负责人个人模版例外：新任务强制归属本人，避免替他人建任务。
+    const ownerIds = taskOwnerPersonal ? [actorId] : body.ownerIds !== undefined ? body.ownerIds : [];
     const managerIds = project.managerIds;
     const stageKey = template.stageKey as string;
     const at = new Date();
@@ -661,6 +695,20 @@ export class TaskService {
     const at = new Date();
     await this.database.db.transaction(async (tx) => {
       const before = await this.requireActiveTask(tx, projectId, taskId);
+      const projectAccess = await this.permission.assertProjectVisible(actorId, projectId);
+      const canUpdate = await this.permission.can(actorId, "task.update", {
+        member: projectAccess.member,
+        projectManager: projectAccess.projectManager,
+        taskOwner: projectAccess.taskOwner,
+        groupAccessLevel: projectAccess.groupAccessLevel,
+        accessLevel: projectAccess.accessLevel,
+      });
+      if (!canUpdate) {
+        const ownTask = before.ownerIds.includes(actorId);
+        if (!ownTask || !(await this.repository.wasTaskCreatedBy(projectId, taskId, actorId, tx))) {
+          throw new AppError("FORBIDDEN", "任务负责人只能删除自己添加的任务");
+        }
+      }
       this.assertTaskMutable(before);
       const references = await this.referencesOf(tx, before);
       if (references.length > 0) {

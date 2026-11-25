@@ -77,7 +77,7 @@
         return;
       }
       var grid = clone.querySelector(".stages");
-      if (grid !== null) {
+      if (grid !== null && grid.childElementCount > 0) {
         appendStageProgress(clone, grid);
         return;
       }

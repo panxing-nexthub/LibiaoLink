@@ -141,7 +141,6 @@ export class TaskController {
    * 阶段取模板阶段、描述取节点库现值；同一项目已存在的节点默认跳过（skipped），skipExisting=false 时 409。
    */
   @Post(":id/tasks/from-template")
-  @RequirePermission("task.create")
   async createFromTemplate(
     @Param("id", uuidParam) id: string,
     @Body(new ZodValidationPipe(TaskCreateFromTemplateBodySchema)) body: TaskCreateFromTemplateBody,
@@ -186,7 +185,6 @@ export class TaskController {
    * 重复删除与已删任务上的任何写操作 = 统一 404（记录级 404 语义，不新增错误码）；归档项目 409 PROJECT_ARCHIVED。
    */
   @Delete(":id/tasks/:taskId")
-  @RequirePermission("task.update")
   remove(
     @Param("id", uuidParam) id: string,
     @Param("taskId", uuidParam) taskId: string,

@@ -348,6 +348,10 @@ type TaskBoardProps = {
   onAddNode?: (stage: string, node: TemplatePresetNode, additionalStage?: AdditionalProjectStage) => void;
   /** 加一条 / 一批并指定插入位置（Push 113：点「＋ 添加」先弹位置浮层，选完才加进项目）。不传 = 点一条直接加到该阶段最后。 */
   onAddNodes?: (stage: string, nodes: readonly TemplatePresetNode[], placement: StagePlacement, templateId?: string, additionalStage?: AdditionalProjectStage) => void;
+  /** 哪些阶段允许打开添加卡片（项目经理全开；任务负责人仅本人负责的阶段）。 */
+  canOpenAddCard?: (stage: string) => boolean;
+  /** 这些阶段打开添加卡片时只显示个人模版（任务负责人模式）。 */
+  personalOnlyStages?: ReadonlySet<string>;
   /** 当前账号是否可修改项目经理列；不传 = 有回写回调时可改。只读账号仍渲染同款控件，仅禁用交互。 */
   canEditManagers?: boolean;
   /** 当前账号是否可对指定任务定档 / 取消定档：由任务负责人与项目经理名单共同裁决。 */
@@ -951,7 +955,7 @@ export function ProjectSummary({ summary }: { summary: ApiProjectSummary | null 
   );
 }
 
-export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes, onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, additionalStages, manageStages, onAddNode, onAddNodes, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, filesByTask, projectId, tierTint }: TaskBoardProps) {
+export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes, onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, additionalStages, manageStages, onAddNode, onAddNodes, canOpenAddCard, personalOnlyStages, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, filesByTask, projectId, tierTint }: TaskBoardProps) {
   const t = useT();
   const locale = useLocale();
   /**
@@ -1191,7 +1195,7 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
             const additionalStage = additionalStageByName.get(group.stage);
             const canAddToStage = group.stage === TEMP_TASK_STAGE
               ? onCreateTempTask !== undefined
-              : (additionalStage !== undefined || STAGE_ORDER.includes(group.stage)) && (onAddNode !== undefined || onAddNodes !== undefined);
+              : (additionalStage !== undefined || STAGE_ORDER.includes(group.stage)) && (onAddNode !== undefined || onAddNodes !== undefined) && (canOpenAddCard === undefined || canOpenAddCard(group.stage));
             return (
               <section key={additionalStage?.id ?? group.stage} className="border-b border-zinc-100 last:border-b-0">
                 {/* 阶段分组头（业务口径 2026-09-24）：整行不再是点击区域 —— 只有左侧「折叠箭头 + 阶段标签」这一小片可点，
@@ -1410,6 +1414,7 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
           onAddNode={onAddNode === undefined ? undefined : (stage, node) => onAddNode(stage, node, cardAdditionalStage)}
           placement={onAddNodes === undefined ? undefined : { tasks: stageTasksOf(cardStage) }}
           onAddNodes={onAddNodes === undefined ? undefined : (stage, nodes, placement, templateId) => onAddNodes(stage, nodes, placement, templateId, cardAdditionalStage)}
+          personalOnly={personalOnlyStages?.has(cardStage) ?? false}
           onClose={() => setCardStage(null)}
           viewportDraggable
           style={{ position: "fixed", top: 0, left: 0 }}

@@ -103,6 +103,10 @@ function makeRow(id: string, overrides: Partial<TaskRow> = {}): TaskRow {
  * softDelete 条件带「未删」—— 重复删除返回 false（与真仓储同形）。
  */
 class FakeTaskRepository {
+  createdByActor = new Set<string>();
+  async wasTaskCreatedBy(_projectId: string, taskId: string): Promise<boolean> {
+    return this.createdByActor.has(taskId);
+  }
   async lockStageCompletion(): Promise<void> {}
   async countStageTasks(): Promise<{ total: number; done: number; deliveryReady: number }> {
     return { total: 0, done: 0, deliveryReady: 0 };
@@ -270,9 +274,13 @@ class FakeAuditService {
   }
 }
 
-function makeService(repo: FakeTaskRepository): { service: TaskService; db: FakeDatabase; audit: FakeAuditService } {
+function makeService(
+  repo: FakeTaskRepository,
+  options: { canUpdate?: boolean } = {},
+): { service: TaskService; db: FakeDatabase; audit: FakeAuditService } {
   const db = new FakeDatabase();
   const audit = new FakeAuditService();
+  const canUpdate = options.canUpdate ?? true;
   const service = new TaskService(
     db as unknown as DatabaseService,
     repo as unknown as TaskRepository,
@@ -281,10 +289,11 @@ function makeService(repo: FakeTaskRepository): { service: TaskService; db: Fake
       assertProjectVisible: async (_actorId: string, projectId: string) => ({
         projectId,
         member: true,
-        projectManager: true,
-        groupAccessLevel: "edit",
-        accessLevel: "edit",
+        projectManager: canUpdate,
+        groupAccessLevel: canUpdate ? "edit" : "view",
+        accessLevel: canUpdate ? "edit" : "view",
       }),
+      can: async () => canUpdate,
     } as unknown as PermissionService,
     audit as unknown as AuditService,
     {} as unknown as TaskNodeRepository,
@@ -472,5 +481,34 @@ describe("Push 249 · 定档任务写口闸（删除）", () => {
     expect(repo.tasks.get(TASK_A)?.deletedAt).toBeNull();
     expect(db.outbox).toEqual([]);
     expect(audit.entries).toEqual([]);
+  });
+});
+
+describe("任务负责人只能删除自己添加的任务（2026-11-25）", () => {
+  it("本人创建且本人负责的任务可删", async () => {
+    const repo = new FakeTaskRepository();
+    repo.tasks.set(TASK_A, makeRow(TASK_A, { ownerIds: [ACTOR] }));
+    repo.createdByActor.add(TASK_A);
+    const { service } = makeService(repo, { canUpdate: false });
+    const result = await service.remove(PROJECT, TASK_A, ACTOR);
+    expect(result).toEqual({ id: TASK_A, deleted: true });
+    expect(repo.tasks.get(TASK_A)?.deletedAt).not.toBeNull();
+  });
+
+  it("本人负责但不是本人创建的任务不可删", async () => {
+    const repo = new FakeTaskRepository();
+    repo.tasks.set(TASK_A, makeRow(TASK_A, { ownerIds: [ACTOR] }));
+    const { service } = makeService(repo, { canUpdate: false });
+    await expect(service.remove(PROJECT, TASK_A, ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(repo.tasks.get(TASK_A)?.deletedAt).toBeNull();
+  });
+
+  it("非本人负责的任务不可删（即使审计里能查到本人创建）", async () => {
+    const repo = new FakeTaskRepository();
+    repo.tasks.set(TASK_A, makeRow(TASK_A, { ownerIds: [OTHER_ACTOR] }));
+    repo.createdByActor.add(TASK_A);
+    const { service } = makeService(repo, { canUpdate: false });
+    await expect(service.remove(PROJECT, TASK_A, ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(repo.tasks.get(TASK_A)?.deletedAt).toBeNull();
   });
 });

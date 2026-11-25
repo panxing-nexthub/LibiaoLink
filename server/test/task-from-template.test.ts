@@ -77,6 +77,15 @@ function makeRow(overrides: Partial<TaskRow> = {}): TaskRow {
 
 /** 任务仓储替身：只实现 create / createFromTemplate 用到的读与写。 */
 class FakeTaskRepository {
+  stageTaskOwner = false;
+  additionalStage = { id: "aaaaaaaa-0000-4000-8000-000000000123", stageKey: "install", number: 1 };
+  ownerStageNumber: number | null = null;
+  async lockAdditionalStage() {
+    return this.additionalStage;
+  }
+  async isStageTaskOwner(_projectId: string, _stageKey: string, _actorId: string, _tx: unknown, stageNumber: number | null): Promise<boolean> {
+    return this.stageTaskOwner && this.ownerStageNumber === stageNumber;
+  }
   async lockStageCompletion(): Promise<void> {}
   async countStageTasks(): Promise<{ total: number; done: number; deliveryReady: number }> {
     return { total: 0, done: 0, deliveryReady: 0 };
@@ -153,11 +162,15 @@ class FakeTemplateService {
     id: string;
     name: string;
     stageKey: string;
+    visibility?: "public" | "private";
+    createdBy?: string | null;
     nodes: { nodeId: string; seq: number; title: string; titleEn: string | null }[];
   } | null = {
     id: TEMPLATE,
     name: "硬件实施模板一",
     stageKey: "install",
+    visibility: "public",
+    createdBy: null,
     nodes: [
       { nodeId: NODE_A, seq: 10, title: "货架组装", titleEn: "Rack assembly" },
       { nodeId: NODE_B, seq: 20, title: "货架检查", titleEn: null },
@@ -171,8 +184,29 @@ class FakeTemplateService {
 }
 
 class FakePermissionService {
+  taskCreateAllowed = true;
   async canManageGroupAccess(): Promise<boolean> {
     return false;
+  }
+  async assertProjectVisible(): Promise<{
+    projectId: string;
+    member: boolean;
+    projectManager: boolean;
+    taskOwner: boolean;
+    groupAccessLevel: null;
+    accessLevel: "view" | "edit";
+  }> {
+    return {
+      projectId: PROJECT,
+      member: true,
+      projectManager: false,
+      taskOwner: false,
+      groupAccessLevel: null,
+      accessLevel: "view",
+    };
+  }
+  async can(_actorId: string, key: string): Promise<boolean> {
+    return key === "task.create" ? this.taskCreateAllowed : false;
   }
 }
 
@@ -420,5 +454,65 @@ describe("TaskService.createFromTemplate（模板实例化 · A11 / A1-16）", (
     await expect(
       archivedService.createFromTemplate(PROJECT, { templateId: TEMPLATE, skipExisting: true }, ACTOR),
     ).rejects.toMatchObject({ code: "PROJECT_ARCHIVED", httpStatus: 409 });
+  });
+});
+
+describe("TaskService.createFromTemplate · 任务负责人个人模版例外（2026-11-25）", () => {
+  it("当前阶段任务负责人可从本人私有个人模版建任务，负责人强制为本人", async () => {
+    const repo = new FakeTaskRepository();
+    repo.stageTaskOwner = true;
+    const templates = new FakeTemplateService();
+    templates.template = { ...templates.template!, visibility: "private", createdBy: ACTOR };
+    const permission = new FakePermissionService();
+    permission.taskCreateAllowed = false;
+    const { service } = makeService(repo, new FakeTaskNodeRepository(), templates, permission);
+
+    const result = await service.createFromTemplate(PROJECT, { templateId: TEMPLATE, skipExisting: true }, ACTOR);
+
+    expect(result.created).toHaveLength(3);
+    expect(repo.inserted.map((input) => input.ownerIds)).toEqual([[ACTOR], [ACTOR], [ACTOR]]);
+  });
+
+  it("新增阶段的个人模版补任务权限只在本人负责的分组生效", async () => {
+    const repo = new FakeTaskRepository();
+    repo.stageTaskOwner = true;
+    const templates = new FakeTemplateService();
+    templates.template = { ...templates.template!, visibility: "private", createdBy: ACTOR };
+    const permission = new FakePermissionService();
+    permission.taskCreateAllowed = false;
+    const { service } = makeService(repo, new FakeTaskNodeRepository(), templates, permission);
+
+    const body = { templateId: TEMPLATE, additionalStageId: repo.additionalStage.id, skipExisting: true };
+    await expect(service.createFromTemplate(PROJECT, body, ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(repo.inserted).toHaveLength(0);
+
+    repo.ownerStageNumber = repo.additionalStage.number;
+    const result = await service.createFromTemplate(PROJECT, body, ACTOR);
+    expect(result.created).toHaveLength(3);
+    expect(repo.inserted.map((input) => [input.additionalStage?.id, input.ownerIds])).toEqual(
+      Array.from({ length: 3 }, () => [repo.additionalStage.id, [ACTOR]]),
+    );
+  });
+
+  it("公共模板 / 他人私有模板 / 非本人负责阶段一律 403，不落库", async () => {
+    const cases = [
+      { label: "公共模板", visibility: "public" as const, createdBy: ACTOR, stageTaskOwner: true },
+      { label: "他人私有模板", visibility: "private" as const, createdBy: MANAGER, stageTaskOwner: true },
+      { label: "非本人负责阶段", visibility: "private" as const, createdBy: ACTOR, stageTaskOwner: false },
+    ];
+    for (const item of cases) {
+      const repo = new FakeTaskRepository();
+      repo.stageTaskOwner = item.stageTaskOwner;
+      const templates = new FakeTemplateService();
+      templates.template = { ...templates.template!, visibility: item.visibility, createdBy: item.createdBy };
+      const permission = new FakePermissionService();
+      permission.taskCreateAllowed = false;
+      const { service } = makeService(repo, new FakeTaskNodeRepository(), templates, permission);
+      await expect(
+        service.createFromTemplate(PROJECT, { templateId: TEMPLATE, skipExisting: true }, ACTOR),
+        item.label,
+      ).rejects.toMatchObject({ code: "FORBIDDEN", httpStatus: 403 });
+      expect(repo.inserted).toHaveLength(0);
+    }
   });
 });

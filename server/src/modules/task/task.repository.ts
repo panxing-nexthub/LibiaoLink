@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { STAGE_KEYS, type AdditionalProjectStage, type StageKey } from "@libiaolink/contracts";
 import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, max, or, sql, type SQL } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
+import { auditLogs } from "../../db/schema/admin.js";
 import type { DbClient } from "../../db/db-client.js";
 import { changeRequests } from "../../db/schema/change.js";
 import { files, uploadSessions } from "../../db/schema/files.js";
@@ -268,6 +269,55 @@ export class TaskRepository {
     const where = and(...taskConditions(projectId, filter, today));
     const totals = await client.select({ value: count() }).from(tasks).where(where);
     return Number(totals[0]?.value ?? 0);
+  }
+
+  /** 批量查：哪些任务是由当前账号创建的（审计 create 事件；任务负责人只能删自己加的）。 */
+  async taskIdsCreatedBy(projectId: string, taskIds: readonly string[], actorId: string, client: DbClient = this.database.db): Promise<Set<string>> {
+    if (taskIds.length === 0) return new Set();
+    const rows = await client
+      .select({ objectId: auditLogs.objectId })
+      .from(auditLogs)
+      .where(and(
+        eq(auditLogs.projectId, projectId),
+        eq(auditLogs.objectType, "task"),
+        eq(auditLogs.action, "create"),
+        eq(auditLogs.actorId, actorId),
+        inArray(auditLogs.objectId, [...taskIds]),
+      ));
+    return new Set(rows.map((row) => row.objectId));
+  }
+
+  /** 单条判定：这个任务是否由当前账号创建（任务负责人删除权限用）。 */
+  async wasTaskCreatedBy(projectId: string, taskId: string, actorId: string, client: DbClient = this.database.db): Promise<boolean> {
+    const [row] = await client
+      .select({ id: auditLogs.id })
+      .from(auditLogs)
+      .where(and(
+        eq(auditLogs.projectId, projectId),
+        eq(auditLogs.objectType, "task"),
+        eq(auditLogs.action, "create"),
+        eq(auditLogs.actorId, actorId),
+        eq(auditLogs.objectId, taskId),
+      ))
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /** 当前账号是否为指定项目 + 阶段的未删除任务负责人（项目空间个人模版补任务用）。 */
+  async isStageTaskOwner(
+    projectId: string, stageKey: string, actorId: string, client: DbClient, additionalStageNumber: number | null,
+  ): Promise<boolean> {
+    const [row] = await client
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(
+        eq(tasks.projectId, projectId),
+        groupCondition(stageKey, additionalStageNumber),
+        isNull(tasks.deletedAt),
+        sql`${actorId} = any(${tasks.ownerIds})`,
+      ))
+      .limit(1);
+    return row !== undefined;
   }
 
   async findListRowById(taskId: string, projectId: string, client: DbClient = this.database.db): Promise<TaskListRow | null> {

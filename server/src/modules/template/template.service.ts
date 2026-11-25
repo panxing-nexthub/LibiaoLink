@@ -100,7 +100,6 @@ export class TemplateService {
     body: TaskTemplateNodeCreateBody,
     actorId: string,
   ): Promise<TaskTemplateNode> {
-    await this.assertTemplateEditor(actorId, "在任务模板内新增节点");
     const title = body.title.trim();
     if (title === "") {
       throw new AppError("VALIDATION_FAILED", "节点名称不能为空");
@@ -114,11 +113,7 @@ export class TemplateService {
         throw new AppError("NOT_FOUND", "任务模板不存在：" + templateId);
       }
       this.assertTemplateVisible(template, actorId);
-      await this.permission.assertCanManageTaskTemplate(
-        actorId,
-        template.createdBy,
-        "在任务模板内新增节点需要创建人或系统管理员权限",
-      );
+      await this.assertTemplateEditable(template, actorId, "在任务模板内新增节点");
       const duplicate = await this.nodes.findByTitle(template.stageKey, title, templateId, tx);
       if (duplicate !== null) {
         throw new AppError("NODE_ALREADY_EXISTS", "该模板已有同名节点：" + title);
@@ -244,7 +239,10 @@ export class TemplateService {
    * 名称 trim 后为空 400；`nodeIds` 允许空数组（新建后逐步拖入）；重复 id / 节点不存在 / 节点跨阶段一律 400 VALIDATION_FAILED。
    */
   async createTemplate(body: TaskTemplateCreateBody, actorId: string): Promise<TaskTemplate> {
-    await this.assertTemplateEditor(actorId, "新建任务模板");
+    // 私有模板允许任何登录账号新建（默认个人模版首次保存 / 个人私有模板）；公共模板仍只给项目经理或管理员。
+    if (body.visibility === "public") {
+      await this.assertTemplateEditor(actorId, "新建公共任务模板");
+    }
     const name = normalizeTemplateName(body.name);
     const created = await this.database.db.transaction(async (tx) => {
       await this.assertNodesSameStage(body.stageKey, body.nodeIds, null, tx);
@@ -274,7 +272,6 @@ export class TemplateService {
    * 不存在 / 已软删 404；`version` 过期 409 VERSION_CONFLICT；重复 id / 未知节点 / 跨阶段节点 400。
    */
   async updateTemplate(id: string, body: TaskTemplateUpdateBody, actorId: string): Promise<TaskTemplate> {
-    await this.assertTemplateEditor(actorId, "编辑任务模板");
     const at = new Date();
     const updated = await this.database.db.transaction(async (tx) => {
       const before = await this.templates.findById(id, tx);
@@ -282,11 +279,7 @@ export class TemplateService {
         throw new AppError("NOT_FOUND", "任务模板不存在：" + id);
       }
       this.assertTemplateVisible(before, actorId);
-      await this.permission.assertCanManageTaskTemplate(
-        actorId,
-        before.createdBy,
-        "编辑任务模板需要创建人或系统管理员权限",
-      );
+      await this.assertTemplateEditable(before, actorId, "编辑任务模板");
       const beforeRefs = await this.templates.nodeRefsOf([id], tx);
       const patch: TaskTemplateUpdatePatch = {};
       if (body.name !== undefined) {
@@ -295,6 +288,9 @@ export class TemplateService {
       if (body.visibility !== undefined && body.visibility !== before.visibility) {
         if (before.createdBy === null || before.createdBy !== actorId) {
           throw new AppError("FORBIDDEN", "仅填写人可以调整模板可见范围");
+        }
+        if (body.visibility === "public") {
+          await this.assertTemplateEditor(actorId, "把个人模板切换为公共模板");
         }
         patch.visibility = body.visibility;
       }
@@ -330,7 +326,6 @@ export class TemplateService {
    * 已生成的项目任务不变；`version` 过期 409、不存在 / 已删 404。模板内引用行连同软删一起物理清掉。
    */
   async deleteTemplate(id: string, body: TaskTemplateDeleteBody, actorId: string): Promise<TaskTemplateDeleteResponse> {
-    await this.assertTemplateEditor(actorId, "删除任务模板");
     const at = new Date();
     await this.database.db.transaction(async (tx) => {
       const before = await this.templates.findById(id, tx);
@@ -338,11 +333,7 @@ export class TemplateService {
         throw new AppError("NOT_FOUND", "任务模板不存在：" + id);
       }
       this.assertTemplateVisible(before, actorId);
-      await this.permission.assertCanManageTaskTemplate(
-        actorId,
-        before.createdBy,
-        "删除任务模板需要创建人或系统管理员权限",
-      );
+      await this.assertTemplateEditable(before, actorId, "删除任务模板");
       const beforeRefs = await this.templates.nodeRefsOf([id], tx);
       const row = await this.templates.softDelete(id, body.version, actorId, at, tx);
       if (row === null) {
@@ -363,7 +354,6 @@ export class TemplateService {
 
   /** 导入页只列出本人已有的个人模板。 */
   async listPersonalImportTemplates(actorId: string): Promise<Array<{ id: string; name: string; stageKey: string; version: number }>> {
-    if (!await this.permission.canManageTaskTemplates(actorId)) return [];
     return (await this.templates.list(null))
       .filter((row) => PROJECT_STAGE_KEYS.has(row.stageKey) && row.visibility === "private" && row.createdBy === actorId)
       .map(({ id, name, stageKey, version }) => ({ id, name, stageKey, version }));
@@ -376,7 +366,6 @@ export class TemplateService {
     tx: DbClient,
   ): Promise<void> {
     if (selections.length === 0) return;
-    await this.assertTemplateEditor(actorId, "编辑任务模板");
     const groups = new Map<string, typeof selections>();
     for (const item of selections) {
       const items = groups.get(item.templateId) ?? [];
@@ -477,6 +466,15 @@ export class TemplateService {
   /** 公共节点库维护：仅系统管理员；模板私有节点不走此闸。 */
   private async assertNodeEditor(actorId: string, action: string): Promise<void> {
     await this.permission.assertCanManageTaskNodes(actorId, action + "需要系统管理员权限");
+  }
+
+  /**
+   * 模板编辑权：本人私有模板（个人模版）可直接维护；其它模板仍要求创建人或管理员，
+   * 且公共模板的创建人还需保持有效项目经理身份。
+   */
+  private async assertTemplateEditable(template: TaskTemplateRow, actorId: string, action: string): Promise<void> {
+    if (template.visibility === "private" && template.createdBy === actorId) return;
+    await this.permission.assertCanManageTaskTemplate(actorId, template.createdBy, action + "需要创建人或系统管理员权限");
   }
 
   /** 公共任务模板维护：系统管理员，或至少管理一个有效项目的项目经理；任务负责人只读。 */

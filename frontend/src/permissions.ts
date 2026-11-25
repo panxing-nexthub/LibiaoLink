@@ -195,9 +195,18 @@ export function canEditTaskTemplates(permissions: MyPermissions | null): boolean
   return permissions !== null && permissions.taskTemplateManage;
 }
 
-/** 单份公共任务模板维护：管理员，或仍为有效项目经理的创建人；系统预置模板仅管理员可维护。 */
-export function canEditTaskTemplate(permissions: MyPermissions | null, createdBy: string | null): boolean {
-  if (permissions === null || !permissions.taskTemplateManage) return false;
+/**
+ * 单份模板维护：本人私有模板（个人模版）任何登录账号都可编辑；公共模板仍只给管理员，
+ * 或仍为有效项目经理的创建人。
+ */
+export function canEditTaskTemplate(
+  permissions: MyPermissions | null,
+  createdBy: string | null,
+  visibility?: "private" | "public",
+): boolean {
+  if (permissions === null) return false;
+  if (visibility === "private" && createdBy !== null && createdBy === permissions.userId) return true;
+  if (!permissions.taskTemplateManage) return false;
   return permissions.groupAccessAdmin || (createdBy !== null && createdBy === permissions.userId);
 }
 

@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ApiError } from "../api";
+import { mediumCardBorderOf, mediumCardTintOf, vividCardBorderOf, vividCardTintOf, type TintedTier } from "../backgroundTier";
 import {
   createMaterialReissueTracking,
-  ensurePreviewOutcome,
   fetchProjectChanges,
-  recordPreviewView,
   uploadFile,
   type ApiChangeRequest,
   type MaterialReissueSnapshot,
@@ -19,6 +18,8 @@ import { formatDateTime } from "../projectApi";
 import { lockBodyScroll } from "../scrollLock";
 import { useLiveRefresh } from "../useLiveRefresh";
 import { ChangeDetailModal, stageLabelOf } from "./ChangeDetailModal";
+import { PhotoStrip } from "./ReportIssuePanel";
+import type { ReportPhoto } from "../data/reports";
 import { Loader } from "./Loader";
 import { DateRangePicker } from "./DateRangePicker";
 import { SearchInput } from "./SearchInput";
@@ -123,6 +124,28 @@ function textOrDash(value: string | null): string {
 
 function statusBadgeClass(status: MaterialReissueTrackingStatus): string {
   return status === "received" ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700";
+}
+
+type MaterialRowStatus = MaterialReissueTrackingStatus | "pending";
+
+/** 补发追踪 / 全部补发的行铺色色相：未发货蓝、已发货绿、已签收天蓝。 */
+const MATERIAL_ROW_TINT_BASE: Record<MaterialRowStatus, string> = {
+  pending: "#3b82f6",
+  shipped: "#10b981",
+  received: "#0ea5e9",
+};
+
+/** 按背景档位取行底色 / 悬停色（适中 / 炫彩）。 */
+function materialRowTintOf(tier: TintedTier, status: MaterialRowStatus): { tint: string; hover: string } {
+  const base = MATERIAL_ROW_TINT_BASE[status];
+  return tier === "vivid"
+    ? { tint: vividCardTintOf(base) ?? "", hover: vividCardBorderOf(base) ?? "" }
+    : { tint: mediumCardTintOf(base) ?? "", hover: mediumCardBorderOf(base) ?? "" };
+}
+
+/** 铺色档下状态字色（行底色已承载颜色，徽标撤底只留深色字）。 */
+function materialStatusTextClass(status: MaterialRowStatus): string {
+  return status === "pending" ? "text-blue-800" : status === "received" ? "text-sky-800" : "text-emerald-800";
 }
 
 type GalleryImage = { url: string; name: string };
@@ -233,6 +256,7 @@ export function MaterialReissuePanel({
   canViewAll = false,
   canMark = false,
   canMarkAll = false,
+  tierTint = false,
 }: {
   projectId: string;
   tasks: readonly ProjectTask[];
@@ -245,6 +269,8 @@ export function MaterialReissuePanel({
   canMark?: boolean;
   /** 是否可对本项目全部物料行登记发货；false = 只能选择本人负责任务的行。 */
   canMarkAll?: boolean;
+  /** 背景档位铺色档：simple = false；适中 / 炫彩 = 行铺色。 */
+  tierTint?: TintedTier | false;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -289,7 +315,6 @@ export function MaterialReissuePanel({
   const [shipmentError, setShipmentError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [imageGallery, setImageGallery] = useState<{ items: GalleryImage[]; index: number } | null>(null);
-  const [previewBusyKey, setPreviewBusyKey] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -698,34 +723,6 @@ export function MaterialReissuePanel({
     }
   };
 
-  const openTrackingImages = async (row: TrackingRow): Promise<void> => {
-    const imageIds = imageIdsOf(row.entry);
-    if (imageIds.length === 0 || previewBusyKey !== null) {
-      return;
-    }
-    setPreviewBusyKey(row.key);
-    try {
-      const items: GalleryImage[] = [];
-      for (const imageId of imageIds) {
-        const outcome = await ensurePreviewOutcome(imageId);
-        if (outcome.kind === "url") {
-          items.push({ url: outcome.url, name: t("pd.material.imageN", { n: items.length + 1 }) });
-        }
-      }
-      if (items.length === 0) {
-        setNotice({ kind: "error", text: t("pd.material.imageUnavailable") });
-        return;
-      }
-      const firstId = imageIds[0];
-      if (firstId !== undefined) {
-        void recordPreviewView(firstId);
-      }
-      setImageGallery({ items, index: 0 });
-    } finally {
-      setPreviewBusyKey(null);
-    }
-  };
-
   const pager = (total: number, current: number, pages: number, onPage: (page: number) => void) => (
     <footer
       data-project-material-reissue-pagination=""
@@ -958,25 +955,42 @@ export function MaterialReissuePanel({
                               material.materials.map((line, index) => {
                                 const row = allRowByKey.get(trackingKey(application.id, index));
                                 const tracked = row?.tracking !== null && row?.tracking !== undefined;
+                                const rowStatus: MaterialRowStatus = row?.tracking?.status ?? "pending";
+                                const rowTint = tierTint === false ? null : materialRowTintOf(tierTint, rowStatus);
                                 return (
                                   <tr
                                     key={row?.key ?? String(index)}
                                     data-material-reissue-line={String(index + 1)}
-                                    className={tracked ? "bg-zinc-50/40 text-zinc-400" : "bg-white text-blue-600"}
+                                    data-material-reissue-row-status={rowStatus}
+                                    className={
+                                      rowTint === null
+                                        ? tracked
+                                          ? "bg-zinc-50/40 text-zinc-400"
+                                          : "bg-white text-blue-600"
+                                        : "task-row-tint text-zinc-800"
+                                    }
+                                    style={rowTint === null ? undefined : ({ "--row-tint": rowTint.tint, "--row-tint-hover": rowTint.hover } as CSSProperties)}
                                   >
                                     <td className="border border-zinc-200 px-2 py-2 text-center align-middle">
-                                      <input
-                                        type="checkbox"
-                                        checked={row !== undefined && selectedKeys.has(row.key)}
-                                        disabled={row === undefined || !row.canSelect}
-                                        aria-label={line.materialName}
-                                        onChange={() => {
-                                          if (row !== undefined) {
-                                            toggleRowSelection(row);
-                                          }
-                                        }}
-                                        className="h-4 w-4 cursor-pointer rounded border-zinc-300 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
-                                      />
+                                      <div className="flex flex-col items-center gap-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={row !== undefined && selectedKeys.has(row.key)}
+                                          disabled={row === undefined || !row.canSelect}
+                                          aria-label={line.materialName}
+                                          onChange={() => {
+                                            if (row !== undefined) {
+                                              toggleRowSelection(row);
+                                            }
+                                          }}
+                                          className="h-4 w-4 cursor-pointer rounded border-zinc-300 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                        />
+                                        {rowTint === null ? null : (
+                                          <span className={"text-[10px] font-semibold " + materialStatusTextClass(rowStatus)}>
+                                            {rowStatus === "pending" ? t("pd.material.status.pending") : statusLabel(rowStatus)}
+                                          </span>
+                                        )}
+                                      </div>
                                     </td>
                                     <td className="border border-zinc-200 px-2 py-2 text-center align-middle tabular-nums">{index + 1}</td>
                                     <td className="break-words border border-zinc-200 px-2 py-2 align-middle">{textOrDash(line.materialCode)}</td>
@@ -1043,8 +1057,15 @@ export function MaterialReissuePanel({
                   {trackingPageRows.map((row) => {
                     const sourceTitle = row.application.material.taskTitle !== "" ? row.application.material.taskTitle : row.task?.title ?? "—";
                     const imageIds = imageIdsOf(row.entry);
+                    const rowTint = tierTint === false ? null : materialRowTintOf(tierTint, row.entry.status);
                     return (
-                      <tr key={row.key} data-material-reissue-tracking-row={row.key} className="border-b border-zinc-100 last:border-b-0">
+                      <tr
+                        key={row.key}
+                        data-material-reissue-tracking-row={row.key}
+                        data-material-reissue-row-status={row.entry.status}
+                        className={"border-b border-zinc-100 last:border-b-0" + (rowTint === null ? "" : " task-row-tint")}
+                        style={rowTint === null ? undefined : ({ "--row-tint": rowTint.tint, "--row-tint-hover": rowTint.hover } as CSSProperties)}
+                      >
                         <td className="px-3 py-2 align-middle">
                           <div className="font-medium text-zinc-800">{textOrDash(row.line.materialName)}</div>
                           <div className="mt-0.5 text-[11px] text-zinc-400">{textOrDash(row.line.materialCode)}</div>
@@ -1055,28 +1076,29 @@ export function MaterialReissuePanel({
                         <td className="whitespace-nowrap px-3 py-2 align-middle text-zinc-700">{row.entry.estimatedArrivalDate === null ? "—" : row.entry.estimatedArrivalDate.replace(/-/g, "/")}</td>
                         <td className="break-words px-3 py-2 align-middle text-zinc-600">{textOrDash(row.entry.note)}</td>
                         <td className="px-3 py-2 text-center align-middle">
-                          <span className={"inline-block rounded px-1.5 py-0.5 text-[11px] font-medium " + statusBadgeClass(row.entry.status)}>
+                          <span
+                            className={
+                              rowTint === null
+                                ? "inline-block rounded px-1.5 py-0.5 text-[11px] font-medium " + statusBadgeClass(row.entry.status)
+                                : "text-[11px] font-bold " + materialStatusTextClass(row.entry.status)
+                            }
+                          >
                             {statusLabel(row.entry.status)}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-center align-middle">
+                        <td className="px-3 py-2 align-middle">
                           {imageIds.length === 0 ? (
                             <span className="text-zinc-400">—</span>
                           ) : (
-                            <button
-                              type="button"
-                              disabled={previewBusyKey !== null}
-                              onClick={() => {
-                                void openTrackingImages(row);
-                              }}
-                              className="rounded-md border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {previewBusyKey === row.key
-                                ? t("common.loading")
-                                : imageIds.length > 1
-                                  ? t("pd.material.viewImages", { n: imageIds.length })
-                                  : t("pd.material.viewImage")}
-                            </button>
+                            <PhotoStrip
+                              items={imageIds.map((fileId, index): ReportPhoto => ({
+                                fileId,
+                                name: t("pd.material.imageN", { n: index + 1 }),
+                                url: null,
+                              }))}
+                              size="lg"
+                              strip={"material-reissue-" + row.key}
+                            />
                           )}
                         </td>
                         <td className="px-3 py-2 align-middle text-zinc-600">

@@ -845,7 +845,7 @@ export function MaterialReissuePanel({
     // 全部补发追求紧凑：内容列最大 1140px，表格只留备注列吸收少量余量；补发追踪列更多，放宽到 1680px 并随窗口自适应。
     // 小屏时随容器收窄，表格自身横向滚动兜底（2026-11-25 口径「整体表格长度缩减」）。
     <section data-project-material-reissue="" className="mx-auto w-full max-w-[1680px] space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header data-files-tabs-sticky="true" className="sticky top-[123px] z-10 flex flex-wrap items-end justify-between gap-3 border-b border-zinc-200/70 bg-[#f5f6f8]/95 py-2 backdrop-blur">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           {tabs ?? <h2 className="text-lg font-semibold text-zinc-900">{t("pd.material.title")}</h2>}
         </div>

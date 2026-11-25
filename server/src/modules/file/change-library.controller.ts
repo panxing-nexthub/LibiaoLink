@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import {
   ChangeRequestListQuerySchema,
   ChangeRequestListResponseSchema,
@@ -6,6 +6,7 @@ import {
   CreateMaterialReissueTrackingBodySchema,
   MaterialReissueResultSchema,
   MaterialReissueTrackingResultSchema,
+  UpdateMaterialReissueTrackingBodySchema,
   UuidSchema,
   z,
 } from "@libiaolink/contracts";
@@ -19,10 +20,12 @@ import { MaterialReissueTrackingService } from "./material-reissue-tracking.serv
 type ChangeListQuery = z.infer<typeof ChangeRequestListQuerySchema>;
 type CreateMaterialReissueBody = z.infer<typeof CreateMaterialReissueBodySchema>;
 type CreateMaterialReissueTrackingBody = z.infer<typeof CreateMaterialReissueTrackingBodySchema>;
+type UpdateMaterialReissueTrackingBody = z.infer<typeof UpdateMaterialReissueTrackingBodySchema>;
 
 const uuidParam = new ZodValidationPipe(UuidSchema);
 const createMaterialReissueBody = new ZodValidationPipe(CreateMaterialReissueBodySchema);
 const createMaterialReissueTrackingBody = new ZodValidationPipe(CreateMaterialReissueTrackingBodySchema);
+const updateMaterialReissueTrackingBody = new ZodValidationPipe(UpdateMaterialReissueTrackingBodySchema);
 
 /**
  * 项目变更记录列表（M4-04 读面 · A4-15）：契约 shared/src/modules/files.ts 的 `GET /projects/{id}/change-requests`。
@@ -62,6 +65,16 @@ export class ChangeRequestLibraryController {
     @CurrentActorId() actorId: string,
   ): Promise<z.infer<typeof MaterialReissueTrackingResultSchema>> {
     return this.materialReissueTracking.register(id, body, actorId);
+  }
+
+  /** PATCH /projects/{id}/change-requests/material-reissue/tracking（2026-11-25）：修改单条已登记发货信息。 */
+  @Patch(":id/change-requests/material-reissue/tracking")
+  updateMaterialReissueTracking(
+    @Param("id", uuidParam) id: string,
+    @Body(updateMaterialReissueTrackingBody) body: UpdateMaterialReissueTrackingBody,
+    @CurrentActorId() actorId: string,
+  ): Promise<z.infer<typeof MaterialReissueTrackingResultSchema>> {
+    return this.materialReissueTracking.update(id, body, actorId);
   }
 
   @Get(":id/change-requests")

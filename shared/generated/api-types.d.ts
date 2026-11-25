@@ -8459,7 +8459,61 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** 物料补发单行发货信息修改（快递单号 / 预计到货 / 发货备注 / 状态） */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateMaterialReissueTrackingBody"];
+                };
+            };
+            responses: {
+                /** @description 修改后的发货记录 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MaterialReissueTrackingResult"];
+                    };
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/api/v1/permissions/me": {
@@ -17330,6 +17384,21 @@ export interface components {
         TranslateResponse: {
             /** @description 译文（译文库命中或引擎产出后落库） */
             translatedText: string;
+        };
+        /** @description 物料补发单行发货信息修改 */
+        UpdateMaterialReissueTrackingBody: {
+            changeRequestId: components["schemas"]["Uuid"];
+            lineIndex: number;
+            status?: components["schemas"]["MaterialReissueTrackingStatus"] & unknown;
+            /** @description 快递单号（null = 清空；不传 = 保持不变） */
+            trackingNo?: string | null;
+            /**
+             * Format: date
+             * @description 预计到货时间（null = 清空；不传 = 保持不变）
+             */
+            estimatedArrivalDate?: string | null;
+            /** @description 发货备注（null = 清空；不传 = 保持不变） */
+            note?: string | null;
         };
         UploadAbortResponse: {
             upload: components["schemas"]["UploadSession"] & unknown;

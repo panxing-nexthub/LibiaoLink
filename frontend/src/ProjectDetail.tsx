@@ -34,7 +34,7 @@ import { prefetchOverviewExportTranslations } from "./translateApi";
 import { ExportProgressOverlay, type ExportTranslateProgress } from "./components/ExportProgressOverlay";
 import { useBackgroundTier, type TintedTier } from "./backgroundTier";
 import type { MeResponse, Project } from "./types";
-import { replaceProjectSubView, replaceProjectView, type DailySubView, type ProjectFocus, type ProjectView } from "./useHashRoute";
+import { replaceProjectMaterialSubView, replaceProjectSubView, replaceProjectView, type DailySubView, type MaterialReissueSubView, type ProjectFocus, type ProjectView } from "./useHashRoute";
 import { ApiError } from "./api";
 import { hasAllProjectAccess, useMyPermissions } from "./permissions";
 import {
@@ -92,6 +92,8 @@ type ProjectDetailProps = {
   view: ProjectView;
   /** 「日报及问题」的页内子视图（Push 214 起由地址 `?view=daily&sub=` 派生，缺省「日报填写」form）；其它标签下无意义。 */
   dailySub: DailySubView;
+  /** 「物料补发」的页内子视图（`?view=material-reissue&sub=tracking`；缺省 all）。 */
+  materialSub: MaterialReissueSubView;
   /** 企微日报查询深链的当天日期（YYYY-MM-DD）；null = 不筛选。 */
   dailyDate: string | null;
   /** 站内信深链的精确落点：任务自动开抽屉 / 日报定位行 / 问题自动开抽屉。 */
@@ -125,7 +127,7 @@ type ProjectDetailProps = {
   readOnly?: boolean;
 };
 
-export default function ProjectDetail({ me, project, view, dailySub, dailyDate, focus, onClearFocus, onClearDailyDate, customDeliverableTypes, onCreateDeliverableType, members, managerMembers, onTaskEdited, taskHiddenColumns, onTaskHiddenColumnsChange, canManageStakeholders, canManageProjectManagers, onSendCompletionPoster, readOnly = false }: ProjectDetailProps) {
+export default function ProjectDetail({ me, project, view, dailySub, materialSub, dailyDate, focus, onClearFocus, onClearDailyDate, customDeliverableTypes, onCreateDeliverableType, members, managerMembers, onTaskEdited, taskHiddenColumns, onTaskHiddenColumnsChange, canManageStakeholders, canManageProjectManagers, onSendCompletionPoster, readOnly = false }: ProjectDetailProps) {
   /** 顶部视图（Push 82 / 121）：阶段标签收进「项目总览」，另两块是看板视图，最后一块是「日报及问题」；Push 154 起当前标签由地址 `?view=` 派生。 */
   const locale = useLocale();
   const t = useT();
@@ -1366,7 +1368,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             <ProjectFilesPanel projectId={project.id} tasks={tasks} canEdit={projectWritable} />
           ) : activeView === "物料补发" ? (
             // 物料补发（2026-11-25）：物料变更补发提交时固化的《补发物料清单》按申请单汇总；只读。
-            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} canMark={canMarkMaterialReissue} canMarkAll={canMarkAllMaterialReissue} tierTint={tintRows} />
+            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} canMark={canMarkMaterialReissue} canMarkAll={canMarkAllMaterialReissue} tierTint={tintRows} view={materialSub} onChangeView={(next) => { replaceProjectMaterialSubView(project.id, next); }} />
           ) : activeView === "权限管理" ? (
             <ProjectViewGrantsPanel key={project.id} projectId={project.id} />
           ) : (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "../api";
 import {
   createMaterialReissueTracking,
@@ -125,6 +125,25 @@ function statusBadgeClass(status: MaterialReissueTrackingStatus): string {
   return status === "received" ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700";
 }
 
+/** 直接读取剪贴板中的第一张图片（HTTPS + 用户点击手势下可用）；不支持或无图返回 null。 */
+async function readClipboardImageFile(): Promise<File | null> {
+  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  if (clipboard === undefined || typeof clipboard.read !== "function") {
+    return null;
+  }
+  const items = await clipboard.read();
+  for (const item of items) {
+    const type = item.types.find((value) => value.startsWith("image/"));
+    if (type === undefined) {
+      continue;
+    }
+    const blob = await item.getType(type);
+    const extension = type.split("/")[1]?.split("+")[0] ?? "png";
+    return new File([blob], "clipboard-" + String(Date.now()) + "." + extension, { type });
+  }
+  return null;
+}
+
 export function MaterialReissuePanel({
   projectId,
   tasks,
@@ -168,7 +187,6 @@ export function MaterialReissuePanel({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
   const [previewBusyKey, setPreviewBusyKey] = useState<string | null>(null);
-  const pasteSinkRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -494,6 +512,23 @@ export function MaterialReissuePanel({
     setShipmentNote("");
     setShipmentImage(null);
     setShipmentError(null);
+  };
+
+  const pasteFromClipboard = async (): Promise<void> => {
+    if (shipmentBusy) {
+      return;
+    }
+    setShipmentError(null);
+    try {
+      const file = await readClipboardImageFile();
+      if (file === null) {
+        setShipmentError(t("pd.material.clipboardNoImage"));
+        return;
+      }
+      setShipmentImage(file);
+    } catch {
+      setShipmentError(t("pd.material.clipboardReadFailed"));
+    }
   };
 
   const openShipment = (): void => {
@@ -984,7 +1019,7 @@ export function MaterialReissuePanel({
                     type="button"
                     disabled={shipmentBusy}
                     onClick={() => {
-                      pasteSinkRef.current?.focus();
+                      void pasteFromClipboard();
                     }}
                     className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
@@ -1007,14 +1042,6 @@ export function MaterialReissuePanel({
                       className="sr-only"
                     />
                   </label>
-                  <input
-                    ref={pasteSinkRef}
-                    value=""
-                    onChange={() => {}}
-                    tabIndex={-1}
-                    aria-label={t("pd.material.pasteImage")}
-                    className="pointer-events-none absolute h-px w-px opacity-0"
-                  />
                 </div>
                 {shipmentImageUrl === null ? null : (
                   <div className="mt-2 flex items-start gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-2">

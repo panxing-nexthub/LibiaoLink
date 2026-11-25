@@ -907,30 +907,6 @@ export function MaterialReissuePanel({
             {t("lib.clear")}
           </button>
         ) : null}
-        <div className="ml-auto flex flex-wrap items-center gap-1.5" role="group" aria-label={t("pd.material.tabsAria")}>
-          {(["tracking", "all"] as const).map((view) => {
-            const active = activeView === view;
-            return (
-              <button
-                key={view}
-                type="button"
-                data-material-reissue-view={view}
-                aria-pressed={active}
-                onClick={() => {
-                  changeActiveView(view);
-                }}
-                className={
-                  "rounded-lg border px-3 py-1.5 text-xs font-medium transition " +
-                  (active
-                    ? "border-zinc-900 bg-zinc-900 text-white"
-                    : "border-zinc-300 bg-white text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-900")
-                }
-              >
-                {view === "tracking" ? t("pd.material.tracking") : t("pd.material.allMaterials")}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       {state.kind === "loading" ? (

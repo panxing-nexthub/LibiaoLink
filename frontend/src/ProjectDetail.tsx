@@ -1202,7 +1202,17 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
     );
   }
 
-  /** 「项目文件 / 物料补发」内部切换（2026-11-25：物料补发不再占顶部标签，收进项目文件页标题右侧）。 */
+  /** 「项目文件 / 物料补发 / 补发追踪」内部切换（2026-11-25：物料补发不再占顶部标签）。 */
+  const openMaterialSub = (sub: "all" | "tracking"): void => {
+    if (view !== "material-reissue") {
+      replaceProjectView(project.id, "material-reissue");
+      if (sub === "tracking") {
+        replaceProjectMaterialSubView(project.id, "tracking");
+      }
+      return;
+    }
+    replaceProjectMaterialSubView(project.id, sub);
+  };
   const filesTabs = canSeeMaterialReissue ? (
     <div role="group" aria-label={t("pd.files.tabsAria")} className="inline-flex items-center rounded-lg border border-zinc-300 bg-white p-0.5">
       <button
@@ -1220,16 +1230,29 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
       </button>
       <button
         type="button"
-        aria-pressed={activeView === "物料补发"}
+        aria-pressed={activeView === "物料补发" && materialSub === "all"}
         onClick={() => {
-          replaceProjectView(project.id, "material-reissue");
+          openMaterialSub("all");
         }}
         className={
           "rounded-md px-3 py-1.5 text-xs font-medium transition " +
-          (activeView === "物料补发" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-100")
+          (activeView === "物料补发" && materialSub === "all" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-100")
         }
       >
         {t("pd.material.title")}
+      </button>
+      <button
+        type="button"
+        aria-pressed={activeView === "物料补发" && materialSub === "tracking"}
+        onClick={() => {
+          openMaterialSub("tracking");
+        }}
+        className={
+          "rounded-md px-3 py-1.5 text-xs font-medium transition " +
+          (activeView === "物料补发" && materialSub === "tracking" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-100")
+        }
+      >
+        {t("pd.material.tracking")}
       </button>
     </div>
   ) : undefined;

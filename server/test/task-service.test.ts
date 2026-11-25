@@ -247,9 +247,6 @@ class FakeTaskRepository {
   async countStageTasks(): Promise<{ total: number; done: number; deliveryReady: number }> {
     return this.stageCounts;
   }
-  async wasTaskCreatedBy(): Promise<boolean> {
-    return false;
-  }
   async findTaskBrief(): Promise<{ id: string; projectId: string; stageKey: string | null; sortIndex: number } | null> {
     return this.task === null
       ? null

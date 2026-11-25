@@ -755,7 +755,7 @@ export function MaterialReissuePanel({
   );
 
   return (
-    <section data-project-material-reissue="" className={"mx-auto w-full space-y-4 " + (activeView === "tracking" ? "max-w-[1320px]" : "max-w-[1000px]")}>
+    <section data-project-material-reissue="" className="w-full space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-zinc-900">{t("pd.material.title")}</h2>

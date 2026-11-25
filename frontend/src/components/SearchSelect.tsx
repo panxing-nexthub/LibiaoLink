@@ -17,6 +17,8 @@ type SearchSelectBaseProps = {
   /** 搜索无命中的提示（缺省「没有匹配的选项。」）。 */
   emptyText?: string;
   disabled?: boolean;
+  /** 浮层层级（默认 z-50；弹窗内使用时传更高层级，避免被弹窗遮住）。 */
+  menuZClass?: string;
 };
 
 /** 单选：点选项 = 选中并关闭浮层。 */
@@ -192,7 +194,7 @@ export function SearchSelect(props: SearchSelectProps) {
               ref={popoverRef}
               data-select-popover="true"
               data-search-select="true"
-              className="fixed z-50 flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.18)]"
+              className={"fixed " + (props.menuZClass ?? "z-50") + " flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.18)]"}
               style={{ top: position.top, left: position.left, width: position.width, maxHeight: popoverMaxHeight }}
             >
               <div className="shrink-0 border-b border-zinc-100 p-1.5">

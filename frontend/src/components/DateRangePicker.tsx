@@ -25,6 +25,8 @@ type DateRangePickerProps = {
    * `single` = 单选一天（日报「时间」这类单日期字段用）——点哪天就只选哪天，触发器只显示一个日期。
    */
   mode?: "range" | "single";
+  /** 浮层层级（默认 z-50；弹窗内使用时传更高层级，避免被弹窗遮住）。 */
+  popoverZClass?: string;
 };
 
 const WEEKDAYS_ZH = ["一", "二", "三", "四", "五", "六", "日"];
@@ -44,7 +46,7 @@ const toDate = (key: string) => {
 
 const formatKey = (key: string) => key.replace(/-/g, "/");
 
-export function DateRangePicker({ value, onChange, hintDate, latestStart = "", allowScheduleShift = false, placeholder, ariaLabel, triggerClassName, mode = "range" }: DateRangePickerProps) {
+export function DateRangePicker({ value, onChange, hintDate, latestStart = "", allowScheduleShift = false, placeholder, ariaLabel, triggerClassName, mode = "range", popoverZClass = "z-50" }: DateRangePickerProps) {
   const locale = useLocale();
   const t = useT();
   const placeholderText = placeholder ?? t("picker.allTime");
@@ -161,7 +163,7 @@ export function DateRangePicker({ value, onChange, hintDate, latestStart = "", a
             <div
               ref={popoverRef}
               data-focus-scope="true"
-              className="fixed z-50 w-[264px] rounded-xl border border-zinc-200 bg-white p-3 shadow-[0_16px_40px_rgba(0,0,0,0.18)]"
+              className={"fixed " + popoverZClass + " w-[264px] rounded-xl border border-zinc-200 bg-white p-3 shadow-[0_16px_40px_rgba(0,0,0,0.18)]"}
               style={{ top: position.top, left: position.left }}
             >
           <CalendarMonthHeader

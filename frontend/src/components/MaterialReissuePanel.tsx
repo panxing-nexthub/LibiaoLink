@@ -11,7 +11,7 @@ import {
   type MaterialReissueTrackingEntry,
   type MaterialReissueTrackingStatus,
 } from "../fileApi";
-import { memberNameOf, type Member } from "../data/members";
+import type { Member } from "../data/members";
 import type { ProjectTask } from "../data/tasks";
 import { fieldText, textOf, useLocale, useT } from "../i18n";
 import { materialReissueReasonText } from "../materialReissue";
@@ -861,29 +861,27 @@ export function MaterialReissuePanel({
         ) : (
           <>
             <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-              <table className="w-full min-w-[1200px] table-fixed border-collapse text-xs">
+              <table className="w-full min-w-[1180px] table-fixed border-collapse text-xs">
                 <colgroup>
-                  <col className="w-[76px]" />
-                  <col className="w-[160px]" />
-                  <col className="w-[120px]" />
-                  <col className="w-[80px]" />
-                  <col className="w-[110px]" />
-                  <col className="w-[100px]" />
-                  <col className="w-[150px]" />
+                  <col className="w-[180px]" />
                   <col className="w-[140px]" />
                   <col className="w-[80px]" />
+                  <col className="w-[120px]" />
+                  <col className="w-[110px]" />
+                  <col className="w-[180px]" />
+                  <col className="w-[90px]" />
+                  <col className="w-[90px]" />
                   <col />
                 </colgroup>
                 <thead className="bg-zinc-50 text-zinc-500">
                   <tr>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-center font-medium">{t("pd.material.col.status")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{fieldText(locale, "物料名称")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{fieldText(locale, "规格型号")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-right font-medium">{fieldText(locale, "数量")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.trackingNo")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.eta")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.shipNote")}</th>
-                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.shippedAt")}</th>
+                    <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-center font-medium">{t("pd.material.col.status")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-center font-medium">{t("pd.material.col.image")}</th>
                     <th className="whitespace-nowrap border-b border-zinc-200 px-3 py-3 text-left font-medium">{t("pd.material.col.source")}</th>
                   </tr>
@@ -891,14 +889,8 @@ export function MaterialReissuePanel({
                 <tbody>
                   {trackingPageRows.map((row) => {
                     const sourceTitle = row.application.material.taskTitle !== "" ? row.application.material.taskTitle : row.task?.title ?? "—";
-                    const shipper = memberNameOf(members, row.entry.shippedBy) ?? row.entry.shippedBy;
                     return (
                       <tr key={row.key} data-material-reissue-tracking-row={row.key} className="border-b border-zinc-100 last:border-b-0">
-                        <td className="px-3 py-2 text-center align-middle">
-                          <span className={"inline-block rounded px-1.5 py-0.5 text-[11px] font-medium " + statusBadgeClass(row.entry.status)}>
-                            {statusLabel(row.entry.status)}
-                          </span>
-                        </td>
                         <td className="px-3 py-2 align-middle">
                           <div className="font-medium text-zinc-800">{textOrDash(row.line.materialName)}</div>
                           <div className="mt-0.5 text-[11px] text-zinc-400">{textOrDash(row.line.materialCode)}</div>
@@ -908,9 +900,10 @@ export function MaterialReissuePanel({
                         <td className="break-words px-3 py-2 align-middle text-zinc-700">{textOrDash(row.entry.trackingNo)}</td>
                         <td className="whitespace-nowrap px-3 py-2 align-middle text-zinc-700">{row.entry.estimatedArrivalDate === null ? "—" : row.entry.estimatedArrivalDate.replace(/-/g, "/")}</td>
                         <td className="break-words px-3 py-2 align-middle text-zinc-600">{textOrDash(row.entry.note)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 align-middle text-zinc-600">
-                          <div>{formatDateTime(row.entry.shippedAt)}</div>
-                          <div className="mt-0.5 text-[11px] text-zinc-400">{shipper}</div>
+                        <td className="px-3 py-2 text-center align-middle">
+                          <span className={"inline-block rounded px-1.5 py-0.5 text-[11px] font-medium " + statusBadgeClass(row.entry.status)}>
+                            {statusLabel(row.entry.status)}
+                          </span>
                         </td>
                         <td className="px-3 py-2 text-center align-middle">
                           {row.entry.imageFileId === null ? (
@@ -1023,7 +1016,6 @@ export function MaterialReissuePanel({
                     className="pointer-events-none absolute h-px w-px opacity-0"
                   />
                 </div>
-                <p className="mt-1 text-[11px] text-zinc-400">{t("pd.material.pasteHint")}</p>
                 {shipmentImageUrl === null ? null : (
                   <div className="mt-2 flex items-start gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-2">
                     <img src={shipmentImageUrl} alt={t("pd.material.imageAlt")} className="max-h-28 max-w-[180px] rounded object-contain" />
@@ -1058,6 +1050,7 @@ export function MaterialReissuePanel({
                       placeholder={t("pd.material.shipmentStatus")}
                       searchPlaceholder={t("lib.filter.status.search")}
                       disabled={shipmentBusy}
+                      menuZClass="z-[90]"
                     />
                   </div>
                 </div>
@@ -1072,6 +1065,7 @@ export function MaterialReissuePanel({
                       }}
                       placeholder={t("pd.material.shipmentEta")}
                       ariaLabel={t("pd.material.shipmentEta")}
+                      popoverZClass="z-[90]"
                     />
                   </div>
                 </div>

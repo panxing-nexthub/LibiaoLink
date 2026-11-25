@@ -1572,6 +1572,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "pd.material.trackingSummary": "再発注追跡 {n} 件",
   "pd.material.col.source": "発生元",
   "pd.material.col.status": "状態",
+  "pd.material.col.reissueNo": "再発注番号",
   "pd.material.col.trackingNo": "追跡番号",
   "pd.material.col.eta": "到着予定",
   "pd.material.col.shipNote": "発送メモ",

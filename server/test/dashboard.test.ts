@@ -25,6 +25,7 @@ import {
   buildIssues,
   deliveryBucketOf,
   emptyTaskAggregate,
+  projectStartupDate,
   taskSummaryOf,
   tokenizeChangeReason,
 } from "../src/modules/dashboard/dashboard.rules.js";
@@ -316,6 +317,37 @@ describe("全部项目维度聚合", () => {
     expect(planning?.people.find((person) => person.isUnassigned)?.stageCounts[10]).toBe(1);
   });
 
+  it("启动时间：实际完成优先，缺失回退计划开始 / 计划结束，三者全缺才为未记录", () => {
+    expect(projectStartupDate({ projectId: PROJECT_A, startupCompletedAt: "2026-03-02", startupPlannedStart: "2026-02-01", startupPlannedEnd: "2026-02-05" })).toBe("2026-03-02");
+    expect(projectStartupDate({ projectId: PROJECT_A, startupCompletedAt: null, startupPlannedStart: "2026-11-25", startupPlannedEnd: "2026-11-25" })).toBe("2026-11-25");
+    expect(projectStartupDate({ projectId: PROJECT_A, startupCompletedAt: null, startupPlannedStart: null, startupPlannedEnd: "2026-11-25" })).toBe("2026-11-25");
+    expect(projectStartupDate({ projectId: PROJECT_A, startupCompletedAt: null, startupPlannedStart: null, startupPlannedEnd: null })).toBeNull();
+    expect(projectStartupDate({ projectId: PROJECT_A, startupCompletedAt: null })).toBeNull();
+  });
+
+  it("只有计划启动日期时计入启动年份分组，不再落「未记录」", () => {
+    const projects: DashboardAnalyticsProjectRow[] = [
+      {
+        id: PROJECT_A,
+        code: "DEMO-PLANNED",
+        name: "计划启动项目",
+        projectType: "T-sort",
+        additionalProjectTypes: [],
+        stageKey: "presale",
+        status: "active",
+        managerIds: [],
+        managerNames: [],
+      },
+    ];
+    const startups: DashboardProjectStartupRow[] = [
+      { projectId: PROJECT_A, startupCompletedAt: null, startupPlannedStart: "2026-11-25", startupPlannedEnd: "2026-11-26" },
+    ];
+    const result = buildProjectAnalytics(projects, [], startups, []);
+    expect(result.projects[0]).toMatchObject({ startupAt: "2026-11-25", startupYear: 2026 });
+    expect(result.typeByYear).toEqual([{ year: 2026, counts: [1, 0, 0], total: 1 }]);
+    expect(result.startYearStages).toEqual([{ year: 2026, stageCounts: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], total: 1 }]);
+    expect(() => DashboardProjectAnalyticsResponseSchema.parse(result)).not.toThrow();
+  });
   it("无可见项目返回固定阶段桶 / 类型 / 三类空角色（九阶段 + 暂停 + 归档-移交售后）", async () => {
     const repo = new FakeDashboardRepository();
     const permission = new FakePermissionService();

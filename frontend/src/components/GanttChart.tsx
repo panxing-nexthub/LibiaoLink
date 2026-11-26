@@ -99,7 +99,6 @@ const ROW_H = 36;
 
 /** 任务条 / 阶段汇总条高度；条两端的热区宽与进度圆点直径（拖拽交互用）。 */
 const BAR_H = 20;
-const GROUP_BAR_H = 10;
 const EDGE_ZONE_W = 6;
 const KNOB_SIZE = 10;
 
@@ -115,25 +114,62 @@ const DAY_MS = 86400000;
 /** 时间轴两端各留的余量（天）。 */
 const PAD_DAYS = 2;
 
-/** 条色对齐参考样例：青 = 已完成进度、橙 = 剩余工期。 */
-const BAR_DONE_CLASS = "bg-[#7fd1cb]";
-const BAR_TODO_CLASS = "bg-[#f7a63c]";
+/**
+ * 分阶段色彩体系（参考现代甘特图按阶段分色 + 括弧汇总样式）：
+ * 每个施工阶段拥有一套协调色（主色 accent 用于阶段括弧与已完成进度、浅底 tint 用于剩余工期底色、
+ * 淡雾 shade 用于阶段展开时的背景包络、深字 text 用于条内清晰可读性）。
+ * 未完成部分采用同色系浅底（而非高对比亮橙），已完成部分用饱和主色填充，整体干净通透。
+ */
+type StagePalette = {
+  /** 阶段主色（括弧、已完成进度条、单日菱形默认态、阶段色点）。 */
+  accent: string;
+  /** 剩余工期底色（同色系浅底，与主色构成柔和对比）。 */
+  track: string;
+  /** 阶段展开时包住子任务区域的极淡背景底色（图二样式）。 */
+  envelope: string;
+  /** 阶段括弧及汇总条上的深色字 / 边框辅助。 */
+  text: string;
+};
+
+const STAGE_PALETTE: Record<string, StagePalette> = {
+  售前规划: { accent: "#2563eb", track: "#dbeafe", envelope: "rgba(37, 99, 235, 0.045)", text: "#1e3a8a" },
+  设计开发: { accent: "#0891b2", track: "#cffafe", envelope: "rgba(8, 145, 178, 0.045)", text: "#164e63" },
+  加工采购: { accent: "#0d9488", track: "#ccfbf1", envelope: "rgba(13, 148, 136, 0.045)", text: "#134e4a" },
+  组装发货: { accent: "#65a30d", track: "#ecfccb", envelope: "rgba(101, 163, 13, 0.05)", text: "#365314" },
+  硬件实施: { accent: "#d97706", track: "#fef3c7", envelope: "rgba(217, 119, 6, 0.05)", text: "#78350f" },
+  软件部署: { accent: "#ea580c", track: "#ffedd5", envelope: "rgba(234, 88, 12, 0.045)", text: "#7c2d12" },
+  试运行:   { accent: "#7c3aed", track: "#ede9fe", envelope: "rgba(124, 58, 237, 0.045)", text: "#4c1d95" },
+  投产阶段: { accent: "#c026d3", track: "#fae8ff", envelope: "rgba(192, 38, 211, 0.045)", text: "#701a75" },
+  验收:     { accent: "#059669", track: "#d1fae5", envelope: "rgba(5, 150, 105, 0.045)", text: "#064e3b" },
+};
+
+const DEFAULT_STAGE_PALETTE: StagePalette = {
+  accent: "#64748b",
+  track: "#e2e8f0",
+  envelope: "rgba(100, 116, 139, 0.045)",
+  text: "#334155",
+};
+
+function stagePaletteOf(stage: string): StagePalette {
+  return STAGE_PALETTE[stage] ?? DEFAULT_STAGE_PALETTE;
+}
+
+/** 图例示例色（取典型阶段的清亮色调）。 */
+const BAR_DONE_CLASS = "bg-[#0891b2]";
+const BAR_TODO_CLASS = "bg-[#cffafe]";
 
 /**
- * 条上不画描边（业务口径「末端 / 两色交接的地方还有橙色的边框」）：参考样例的条是平的，我们之前那圈
- * `ring-amber-600/40` 只压在橙色段上（青色进度是子层、盖住了它），看着就像给橙色块单独镶了个边。
- * 已延期按 B3-05「已延期变红」改成**条头一段红内嵌色条**（App 里「当前阶段」行也是这种内嵌色条），
- * 不再用红描边。色条要画成独立子层并抬到进度层之上 —— 直接给条挂 inset 阴影会被上面的青色进度层盖住。
+ * 已延期按 B3-05「已延期变红」保持**条头一段红内嵌色条**（独立子层抬到进度层之上）。
  * 选中态另见 BAR_SELECTED_CLASS。
  */
-const BAR_OVERDUE_STRIPE_CLASS = "pointer-events-none absolute inset-y-0 left-0 z-10 w-[3px] bg-red-500";
+const BAR_OVERDUE_STRIPE_CLASS = "pointer-events-none absolute inset-y-0 left-0 z-10 w-[3px] bg-rose-500";
 
 /** 选中条的描边（官方 taskBar.selectable 的选中态）。 */
 const BAR_SELECTED_CLASS = "ring-2 ring-blue-600 shadow-[0_0_0_2px_rgba(37,99,235,0.25)]";
 
 /** 逐日网格线（1px 线 + 空白，周期 = 每天宽度）；周末底纹块套同一套，免得盖住底下的日线。 */
 function dayLineStyle(dayWidth: number): { backgroundImage: string } {
-  return { backgroundImage: "repeating-linear-gradient(to right, #f1f2f4 0 1px, transparent 1px " + String(dayWidth) + "px)" };
+  return { backgroundImage: "repeating-linear-gradient(to right, #f1f5f9 0 1px, transparent 1px " + String(dayWidth) + "px)" };
 }
 
 /** 左表「开始 / 结束」单元格：拖动中（预览值）加一档强调，平时与「进展」同色。 */
@@ -300,6 +336,8 @@ function shortDateTextOf(utc: number): string {
 
 type GanttBar = {
   task: ProjectTask;
+  /** 所属规范阶段名（用于按阶段取色）。 */
+  stage: string;
   status: TaskStatus;
   /** 0~100（task.progress 是 0~1 的四档小数）。 */
   percent: number;
@@ -316,12 +354,16 @@ type GanttBar = {
 type GanttGroup = {
   stage: string;
   bars: GanttBar[];
-  /** 组内任务的工期并集（画阶段汇总条）；组内没有「开始 + 预计完成」都齐的任务 = null。 */
+  /** 组内任务的工期并集（画阶段括弧汇总）；组内没有「开始 + 预计完成」都齐的任务 = null。 */
   start: number | null;
   end: number | null;
   doneCount: number;
   /** 完成度（已完成 / 组内任务数）—— 与项目总览阶段头的「已完成 N/M」同口径。 */
   percent: number;
+  /** 该阶段是否处于折叠态。 */
+  collapsed: boolean;
+  /** 阶段内展开显示的子任务数（折叠态为 0，用于计算阶段包络底框高度）。 */
+  expandedCount: number;
 };
 
 type GanttRow =
@@ -400,7 +442,8 @@ function buildBar(locale: Locale, task: ProjectTask): GanttBar {
   ]
     .filter((line) => line !== "")
     .join("\n");
-  return { task, status, percent, start, end, done, milestone: start !== null && end !== null && start === end, label };
+  const stage = STAGE_ORDER.includes(task.stage) ? task.stage : UNGROUPED;
+  return { task, stage, status, percent, start, end, done, milestone: start !== null && end !== null && start === end, label };
 }
 
 /**
@@ -536,7 +579,7 @@ function buildModel(
     if (isCollapsed) {
       collapsedCount += 1;
     }
-    rows.push({ kind: "group", key: "stage:" + stage, no, group: { stage, bars: items, start, end, doneCount, percent } });
+    rows.push({ kind: "group", key: "stage:" + stage, no, group: { stage, bars: items, start, end, doneCount, percent, collapsed: isCollapsed, expandedCount: isCollapsed ? 0 : items.length } });
     if (isCollapsed) {
       continue;
     }
@@ -1345,7 +1388,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             {t("gantt.legend.remaining")}
           </li>
           <li className="flex items-center gap-1.5">
-            <span className="h-2.5 w-4 rounded-[3px] bg-[#f7a63c] shadow-[inset_3px_0_0_0_#ef4444]" aria-hidden="true" />
+            <span className="h-2.5 w-4 rounded-[3px] bg-slate-200 shadow-[inset_3px_0_0_0_#f43f5e]" aria-hidden="true" />
             {t("gantt.legend.overdue")}
           </li>
           <li className="flex items-center gap-1.5" title={t("gantt.legend.singleDayHint")}>
@@ -1666,10 +1709,10 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
       const size = 14;
       // 单日任务的菱形按状态取色（业务 2026-09-22）：已完成 / 提前完成 = 绿、未完成 = 灰、已延期 = 红。
       const tone = isCompleteStatus(bar.status)
-        ? "bg-emerald-500 ring-emerald-700/60"
+        ? "bg-emerald-500 ring-emerald-700/50 shadow-sm"
         : bar.status === "已延期"
-          ? "bg-red-500 ring-red-700/60"
-          : "bg-zinc-400 ring-zinc-500/60";
+          ? "bg-rose-500 ring-rose-700/50 shadow-sm"
+          : "bg-slate-400 ring-slate-500/50 shadow-sm";
       return (
         <>
           <span
@@ -1700,19 +1743,26 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
       );
     }
 
+    const palette = stagePaletteOf(bar.stage);
     const overdue = bar.status === "已延期";
+    // 已完成进度 >= 55% 时深色主色铺过半条，文字切换白色提升对比度；未完成浅底段用同色系深字。
+    const labelColor = live.percent >= 55 ? "#ffffff" : palette.text;
     return (
       <>
         <div
           className={
-            "absolute flex touch-none select-none items-center overflow-hidden rounded-[4px] " +
+            "absolute flex touch-none select-none items-center overflow-hidden rounded-[5px] shadow-[0_1px_2px_rgba(15,23,42,0.06)] " +
             (selected ? BAR_SELECTED_CLASS : " ") +
-            " " +
-            BAR_TODO_CLASS +
             " " +
             (dragging ? "cursor-grabbing shadow-md" : barCursor)
           }
-          style={{ left: box.left, width: box.width, height: BAR_H, top: (ROW_H - BAR_H) / 2 }}
+          style={{
+            left: box.left,
+            width: box.width,
+            height: BAR_H,
+            top: (ROW_H - BAR_H) / 2,
+            backgroundColor: palette.track,
+          }}
           title={barTitle}
           onPointerDown={(event) => {
             beginDrag(event, bar, "move");
@@ -1731,15 +1781,24 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             setSelectedId(bar.task.id);
           }}
         >
-          <span className={"absolute inset-y-0 left-0 " + BAR_DONE_CLASS} style={{ width: String(live.percent) + "%" }} aria-hidden="true" />
+          <span
+            className="absolute inset-y-0 left-0 transition-[width] duration-150"
+            style={{ width: String(live.percent) + "%", backgroundColor: palette.accent }}
+            aria-hidden="true"
+          />
           {overdue ? <span className={BAR_OVERDUE_STRIPE_CLASS} aria-hidden="true" /> : null}
-          {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 bg-zinc-900/10" aria-hidden="true" /> : null}
+          {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 bg-slate-900/10" aria-hidden="true" /> : null}
           {box.width < 40 ? null : (
-            <span className="relative truncate pl-1.5 pr-1 text-[11px] font-semibold text-zinc-900">{barLabel}</span>
+            <span
+              className="relative truncate pl-2 pr-1.5 text-[11px] font-semibold"
+              style={{ color: labelColor, textShadow: live.percent >= 55 ? "0 1px 1px rgba(15,23,42,0.22)" : "none" }}
+            >
+              {barLabel}
+            </span>
           )}
           {doneLeft === null ? null : (
             <span
-              className="absolute inset-y-0 w-[2px] bg-zinc-900/60"
+              className="absolute inset-y-0 w-[2px] bg-slate-900/65"
               style={{ left: doneLeft }}
               title={t("gantt.tip.done", { date: bar.task.doneDate === "" ? "—" : mdText(locale, bar.task.doneDate) })}
             />
@@ -1748,13 +1807,13 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             <>
               {/* 拖两端 = 改工期（官方 taskBar.resizable）：热区只在悬停 / 拖动时显形，平时不噪。 */}
               <span
-                className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-ew-resize bg-white/40"
+                className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-ew-resize bg-white/45"
                 onPointerDown={(event) => {
                   beginDrag(event, bar, "start");
                 }}
               />
               <span
-                className="absolute inset-y-0 right-0 z-20 w-1.5 cursor-ew-resize bg-white/40"
+                className="absolute inset-y-0 right-0 z-20 w-1.5 cursor-ew-resize bg-white/45"
                 onPointerDown={(event) => {
                   beginDrag(event, bar, "end");
                 }}
@@ -1764,7 +1823,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
           {showProgressHandle && box.width >= 60 ? (
             // 进度圆点 = 改进度（四档吸附）；左右各让开 6px，免得压住两端的改工期热区。
             <span
-              className="absolute z-30 cursor-ew-resize rounded-full border border-zinc-400 bg-white shadow"
+              className="absolute z-30 cursor-ew-resize rounded-full border border-slate-400 bg-white shadow"
               style={{
                 width: KNOB_SIZE,
                 height: KNOB_SIZE,
@@ -1783,19 +1842,100 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     );
   };
 
-  /** 阶段行：组内任务工期并集的汇总条（比任务条细），进度 = 完成度（已完成 / 组内任务数）。 */
+  /**
+   * 阶段行（图二/图三样式的「顶部括弧统计」+ 展开时包络底框）：
+   * - 折叠态（或组内 0 任务有排期时只画无）：画紧凑的圆角括弧横条；
+   * - 展开态：画带左右向下折钩的「门型括弧 [‾‾‾]」，并在括弧下方铺一层淡色半透明包络底框罩住本阶段所有子任务行；
+   * - 括弧上内嵌「已完成 done/total · 百分比% · 共 N 天」统计，工期并集实时跟着正在拖动的子任务预览值走。
+   */
   const renderGroupBar = (group: GanttGroup) => {
-    if (group.start === null || group.end === null) {
+    // 计算阶段并集：若组内某任务正在被拖动，括弧范围实时跟着 live 预览走
+    let liveStart: number | null = null;
+    let liveEnd: number | null = null;
+    for (const bar of group.bars) {
+      if (bar.start === null || bar.end === null) {
+        continue;
+      }
+      const live = liveOf(bar);
+      liveStart = liveStart === null ? live.start : Math.min(liveStart, live.start);
+      liveEnd = liveEnd === null ? live.end : Math.max(liveEnd, live.end);
+    }
+    if (liveStart === null || liveEnd === null) {
       return null;
     }
-    const box = barBox(group.start, group.end);
+    const palette = stagePaletteOf(group.stage);
+    const box = barBox(liveStart, liveEnd);
+    const spanDays = dayDiff(liveStart, liveEnd) + 1;
+    const expandedHeight = group.expandedCount > 0 ? group.expandedCount * ROW_H : 0;
+    const summaryText = t("board.stage.done", { done: group.doneCount, total: group.bars.length }) + " · " + String(group.percent) + "% · " + t("pm.gantt.days", { n: spanDays });
+    const bracketTop = 18;
+    const barThickness = 6;
+    const legH = 7;
+
     return (
       <div
-        className={"absolute rounded-full " + BAR_TODO_CLASS}
-        style={{ left: box.left, width: box.width, height: GROUP_BAR_H, top: (ROW_H - GROUP_BAR_H) / 2 }}
-        title={t("gantt.groupSpan.tip", { text: String(group.doneCount) + "/" + String(group.bars.length) + " · " + String(group.percent) + "%" })}
+        className="pointer-events-none absolute inset-y-0 left-0 right-0"
+        style={{ zIndex: 2 }}
       >
-        <span className={"absolute inset-y-0 left-0 rounded-full " + BAR_DONE_CLASS} style={{ width: group.percent + "%" }} aria-hidden="true" />
+        {/* 阶段展开时包住子任务区域的淡色包络底框（参考图二） */}
+        {expandedHeight > 0 ? (
+          <div
+            data-gantt-stage-envelope={group.stage}
+            className="pointer-events-none absolute rounded-b-[6px] border-x border-b"
+            style={{
+              left: box.left,
+              width: box.width,
+              top: bracketTop + barThickness,
+              height: ROW_H - (bracketTop + barThickness) + expandedHeight - 2,
+              backgroundColor: palette.envelope,
+              borderColor: palette.track,
+            }}
+            aria-hidden="true"
+          />
+        ) : null}
+
+        {/* 括弧上方统计标签（落在同一行上半部 2..16px，绝不越界挡住上一行或吸顶表头） */}
+        <div
+          className="pointer-events-none absolute flex items-center gap-1.5 whitespace-nowrap text-[10px] font-semibold leading-[14px] tabular-nums"
+          style={{ left: box.left + 2, top: 2, color: palette.text }}
+        >
+          <span>{stageText(locale, group.stage)}</span>
+          <span className="rounded px-1 py-0 text-[10px] font-medium" style={{ backgroundColor: palette.track, color: palette.text }}>
+            {summaryText}
+          </span>
+        </div>
+
+        {/* 括弧横梁（顶横杠 + 左下折钩 + 右下折钩；未完成段用同色系浅底、已完成段用阶段主色） */}
+        <div
+          data-gantt-stage-bracket={group.stage}
+          className="pointer-events-auto absolute"
+          style={{ left: box.left, width: box.width, top: bracketTop, height: barThickness + legH }}
+          title={t("gantt.groupSpan.tip", { text: String(group.doneCount) + "/" + String(group.bars.length) + " · " + String(group.percent) + "%" })}
+        >
+          {/* 括弧横梁本体 */}
+          <div
+            className="relative w-full overflow-hidden rounded-t-[4px]"
+            style={{ height: barThickness, backgroundColor: palette.track }}
+          >
+            <span
+              className="absolute inset-y-0 left-0 transition-[width] duration-150"
+              style={{ width: String(group.percent) + "%", backgroundColor: palette.accent }}
+              aria-hidden="true"
+            />
+          </div>
+          {/* 左端向下折钩 */}
+          <span
+            className="absolute left-0 block w-[4px] rounded-b-[2px]"
+            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent > 0 ? palette.accent : palette.track }}
+            aria-hidden="true"
+          />
+          {/* 右端向下折钩 */}
+          <span
+            className="absolute right-0 block w-[4px] rounded-b-[2px]"
+            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent >= 100 ? palette.accent : palette.track }}
+            aria-hidden="true"
+          />
+        </div>
       </div>
     );
   };
@@ -1815,7 +1955,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
           data-live-date-origin={model === null ? undefined : model.rangeStart}
           data-live-date-width={dayWidth}
           className={
-            "scrollbar-hidden h-[calc(100vh-15rem)] min-h-[22rem] max-h-[52rem] overflow-auto rounded-xl border border-zinc-200 bg-white " +
+            "scrollbar-hidden h-[calc(100vh-15rem)] min-h-[22rem] max-h-[52rem] overflow-auto rounded-xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)] " +
             (panActive ? "cursor-grabbing select-none" : "cursor-grab")
           }
           onPointerDown={beginPan}
@@ -1839,7 +1979,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                 style={{ width: leftWidth, clipPath: "inset(0)" }}
               >
                 <div
-                  className="flex items-center border-b border-zinc-200 bg-zinc-50 text-[11px] font-medium text-zinc-500"
+                  className="sticky top-0 z-10 flex items-center border-b border-slate-200 bg-slate-50/95 text-[11px] font-medium text-slate-500"
                   style={{ height: HEADER_TOTAL_H, width: LEFT_W_NATURAL }}
                 >
                   <div className="flex h-full items-center justify-center" style={{ width: COL_INDEX_W }}>
@@ -1871,10 +2011,19 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                         setHovered(null);
                       }}
                       onClick={clearSelection}
-                      className={"flex items-center border-b border-zinc-100 " + (isHovered ? "bg-zinc-50" : "bg-white")}
+                      className={
+                        "flex items-center border-b border-slate-100 " +
+                        (row.kind === "group"
+                          ? isHovered
+                            ? "bg-slate-100/80"
+                            : "bg-slate-50/70"
+                          : isHovered
+                            ? "bg-slate-50/80"
+                            : "bg-white")
+                      }
                       style={{ height: ROW_H, width: LEFT_W_NATURAL }}
                     >
-                      <div className="flex items-center justify-center text-[11px] tabular-nums text-zinc-400" style={{ width: COL_INDEX_W }}>
+                      <div className="flex items-center justify-center text-[11px] tabular-nums text-slate-400" style={{ width: COL_INDEX_W }}>
                         {row.no}
                       </div>
                       {row.kind === "group" ? (
@@ -1890,15 +2039,20 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                           <svg
                             viewBox="0 0 12 12"
                             className={
-                              "h-2.5 w-2.5 shrink-0 text-zinc-400 transition-transform " +
+                              "h-2.5 w-2.5 shrink-0 text-slate-400 transition-transform " +
                               (collapsed[row.group.stage] === true ? "" : "rotate-90")
                             }
                             aria-hidden="true"
                           >
                             <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
-                          <span className="truncate text-[13px] font-semibold text-zinc-800">{stageText(locale, row.group.stage)}</span>
-                          <span className="ml-auto shrink-0 pr-1 text-[11px] text-zinc-400">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-[2px]"
+                            style={{ backgroundColor: stagePaletteOf(row.group.stage).accent }}
+                            aria-hidden="true"
+                          />
+                          <span className="truncate text-[13px] font-semibold text-slate-800">{stageText(locale, row.group.stage)}</span>
+                          <span className="ml-auto shrink-0 pr-1 text-[11px] text-slate-500">
                             {row.group.bars.length === 0
                               ? t("board.stage.empty")
                               : t("board.stage.done", { done: row.group.doneCount, total: row.group.bars.length })}
@@ -1967,7 +2121,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
               {/* 表头两排（官方 timelineHeader.scales）：上排 = 月粒度下写年份、日 / 周粒度下写月份；
                   下排 = 日粒度逐日、周粒度逐周（「M/D」）、月粒度逐月（「5月」）。今天那一列整列加蓝底。 */}
               <div className="sticky top-0 z-10 bg-white">
-                <div className="flex border-b border-zinc-200 bg-zinc-50" style={{ height: HEADER_H }}>
+                <div className="flex border-b border-slate-200 bg-slate-50/90" style={{ height: HEADER_H }}>
                   {(scale === "month" ? model.years : model.months).map((unit) => (
                     <div
                       key={unit.key}
@@ -1988,7 +2142,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                             key={"day-" + String(index)}
                             className={
                               "flex items-center justify-center text-[10px] tabular-nums " +
-                              (isToday ? "bg-blue-50 font-semibold text-blue-600" : isWeekend ? "bg-zinc-50 text-zinc-400" : "text-zinc-600")
+                              (isToday ? "bg-blue-50 font-semibold text-blue-600" : isWeekend ? "bg-slate-50/80 text-slate-400" : "text-slate-600")
                             }
                             style={{ width: dayWidth }}
                           >
@@ -2022,7 +2176,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                   : model.weekends.map((index) => (
                       <span
                         key={"weekend-" + String(index)}
-                        className="absolute inset-y-0 bg-zinc-50"
+                        className="absolute inset-y-0 bg-slate-50/70"
                         style={{ left: index * dayWidth, width: dayWidth, ...dayLineStyle(dayWidth) }}
                         aria-hidden="true"
                       />
@@ -2032,7 +2186,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                   : model.weekStarts.map((index) => (
                       <span
                         key={"week-" + String(index)}
-                        className={"absolute inset-y-0 border-l " + (scale === "week" ? "border-zinc-300" : "border-zinc-200")}
+                        className={"absolute inset-y-0 border-l " + (scale === "week" ? "border-slate-300/80" : "border-slate-200/80")}
                         style={{ left: index * dayWidth }}
                         aria-hidden="true"
                       />
@@ -2040,7 +2194,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                 {model.monthStarts.map((index) => (
                   <span
                     key={"month-line-" + String(index)}
-                    className="absolute inset-y-0 border-l border-zinc-300"
+                    className="absolute inset-y-0 border-l border-slate-300/80"
                     style={{ left: index * dayWidth }}
                     aria-hidden="true"
                   />
@@ -2050,13 +2204,14 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                   : model.yearStarts.map((index) => (
                       <span
                         key={"year-line-" + String(index)}
-                        className="absolute inset-y-0 border-l border-zinc-400"
+                        className="absolute inset-y-0 border-l border-slate-400/80"
                         style={{ left: index * dayWidth }}
                         aria-hidden="true"
                       />
                     ))}
                 {model.rows.map((row) => {
                   const isHovered = hovered === row.key;
+                  const isGroup = row.kind === "group";
                   return (
                     <div
                       key={row.key}
@@ -2067,16 +2222,25 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                         setHovered(null);
                       }}
                       onClick={clearSelection}
-                      className={"relative border-b border-zinc-100 " + (isHovered ? "bg-zinc-50/70" : "")}
+                      className={
+                        "relative border-b border-slate-100 " +
+                        (isGroup
+                          ? isHovered
+                            ? "z-[1] bg-slate-100/55"
+                            : "z-[1] bg-slate-50/45"
+                          : isHovered
+                            ? "z-[3] bg-slate-50/60"
+                            : "z-[3]")
+                      }
                       style={{ height: ROW_H }}
                     >
-                      {row.kind === "group" ? renderGroupBar(row.group) : renderTaskBar(row.bar)}
+                      {isGroup ? renderGroupBar(row.group) : renderTaskBar(row.bar)}
                     </div>
                   );
                 })}
                 {todayLeft === null ? null : (
                   <span
-                    className="pointer-events-none absolute inset-y-0 border-l border-dashed border-blue-500"
+                    className="pointer-events-none absolute inset-y-0 z-[4] border-l border-dashed border-blue-500/80"
                     style={{ left: todayLeft }}
                     aria-hidden="true"
                   />

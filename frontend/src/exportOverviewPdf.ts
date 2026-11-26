@@ -571,8 +571,8 @@ function groupSectionHtml(
     '<tr class="grp__head"><td colspan="' + String(visibleColumns.length + 1) + '"><div class="grp__heading">' +
     '<span class="grp__name">' + stageName + '</span>' +
     (showCount ? '<span class="grp__count">' + countText + '</span>' : '') +
-    metaHtml +
     noteHtml +
+    metaHtml +
     '</div></td></tr>';
 
   if (collapsed && group.total > 0) {

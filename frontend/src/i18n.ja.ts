@@ -931,7 +931,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "board.additionalStage.addTask": "「{stage}」にタスクを追加",
   "board.additionalStage.manualTask": "タスクを手動で追加",
   "board.additionalStage.submit": "追加",
-  "board.stageNote.add": "メモを追加",
+  "board.stageNote.add": "メモ",
   "board.stageNote.edit": "メモを編集",
   "board.stageNote.title": "{stage} · ステージメモ",
   "board.stageNote.expand": "展開",

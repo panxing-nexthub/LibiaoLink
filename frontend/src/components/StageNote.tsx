@@ -15,12 +15,6 @@ const GLASS_SURFACE =
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.95),inset_0_-1px_0_rgba(255,255,255,0.5),0_10px_24px_-12px_rgba(15,23,42,0.35)] " +
   "transition-opacity duration-200 group-hover/note:opacity-100 group-focus-visible/note:opacity-100";
 
-/** 悬停时滑入的短横线（与设计稿一致）：不加文字、不做图标按钮。 */
-const DASH_MARK =
-  "h-[2px] w-0 shrink-0 rounded-full bg-zinc-500/70 opacity-0 transition-[width,opacity,margin] duration-200 " +
-  "group-hover/note:mr-1.5 group-hover/note:w-3.5 group-hover/note:opacity-100 " +
-  "group-focus-visible/note:mr-1.5 group-focus-visible/note:w-3.5 group-focus-visible/note:opacity-100";
-
 export function StageNote({ stageName, note, onSave }: Props) {
   const t = useT();
   const [draft, setDraft] = useState<string | null>(null);
@@ -95,7 +89,6 @@ export function StageNote({ stageName, note, onSave }: Props) {
               : "px-1 py-0.5 hover:text-zinc-900 focus-visible:text-zinc-900")}
         >
           <span className={GLASS_SURFACE} aria-hidden="true" />
-          <span className={DASH_MARK} aria-hidden="true" />
           <span
             id={noteId}
             ref={noteRef}

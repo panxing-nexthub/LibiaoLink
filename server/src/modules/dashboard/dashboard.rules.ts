@@ -160,7 +160,12 @@ export interface DashboardProjectRoleTaskInput {
 
 export interface DashboardProjectStartupInput {
   projectId: string;
+  /** 项目启动任务实际完成日期（多条取最晚）。 */
   startupCompletedAt: string | null;
+  /** 计划开始日期（多条取最早）；实际未填时回退。 */
+  startupPlannedStart?: string | null;
+  /** 计划结束日期（多条取最晚）；计划开始也缺时回退。 */
+  startupPlannedEnd?: string | null;
 }
 
 interface PersonAccumulator {
@@ -234,6 +239,15 @@ export function projectStartupYear(startupCompletedAt: string | null): number | 
   return Number.isInteger(year) && year >= 1900 && year <= 9999 ? year : null;
 }
 
+/**
+ * 项目启动时间：实际完成日期 → 计划开始日期 → 计划结束日期，全缺 = null。
+ * 2026-11-26 口径：项目启动任务已排计划但还没点完成时，业务上启动时间已经明确，
+ * 不再整条落到「未记录」（曾出现项目在项目过程里已有计划启动日期、仪表盘却显示未记录）。
+ */
+export function projectStartupDate(startup: DashboardProjectStartupInput): string | null {
+  return startup.startupCompletedAt ?? startup.startupPlannedStart ?? startup.startupPlannedEnd ?? null;
+}
+
 /** 合同签署 → 销售负责人；技术协议定档 → 规划负责人；其它任务 = null。 */
 export function projectRoleOfTask(title: string, titleEn: string | null): "sales" | "planning" | null {
   const zh = title.trim();
@@ -268,7 +282,7 @@ function addRoleOwner(map: Map<ProjectRole, Map<string, string | null>>, role: P
  * - 项目数量：多类型项目在每个项目类型各计一次；
  * - 负责人：同一项目同一人只计一次，未配置某角色时落「待分配」；
  * - 最新阶段：归档项目统一为「归档-移交售后」，暂停项目统一为「暂停」；其余项目取项目空间「最新阶段」（已动工任务中阶段序最靠后者），无动工任务回落 projects.stage_key；
- * - 年份：项目启动任务实际完成日期所属年份，未记录归 null 并置末。
+ * - 年份：项目启动时间（实际完成日期优先，缺失回退计划开始 / 计划结束）所属年份，三者全缺归 null 并置末。
  */
 export function buildProjectAnalytics(
   projects: readonly DashboardAnalyticsProjectInput[],
@@ -281,7 +295,8 @@ export function buildProjectAnalytics(
   const latestStageByProjectId = latestStageByProject(taskBuckets);
   const startupByProject = new Map<string, string | null>();
   for (const startup of startups) {
-    if (startup.startupCompletedAt !== null) startupByProject.set(startup.projectId, startup.startupCompletedAt);
+    const startupDate = projectStartupDate(startup);
+    if (startupDate !== null) startupByProject.set(startup.projectId, startupDate);
   }
 
   const ownersByProject = new Map<string, Map<ProjectRole, Map<string, string | null>>>();

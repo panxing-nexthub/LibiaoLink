@@ -32,11 +32,11 @@ export type DashboardProjectStageBucket = (typeof DASHBOARD_PROJECT_STAGE_BUCKET
 export const DASHBOARD_PROJECT_ROLES = ["manager", "sales", "planning"] as const;
 export type DashboardProjectRole = (typeof DASHBOARD_PROJECT_ROLES)[number];
 
-/** 项目类型配色：沿用现有仪表盘柱状图的蓝 / 黄 / 绿三色。 */
+/** 项目类型配色：沿用仪表盘蓝 / 黄 / 绿三色，且与项目空间卡片同口径 —— T-sort 蓝 / 3D分拣 绿 / 飞箱 黄（2026-11-26 对齐业务口径）。 */
 export const DASHBOARD_PROJECT_TYPE_COLORS: Readonly<Record<DashboardProjectTypeCode, string>> = {
   "T-sort": "#5aa9f7",
-  "3D分拣": "#f5c443",
-  飞箱: "#6cc46a",
+  "3D分拣": "#6cc46a",
+  飞箱: "#f5c443",
 };
 
 /** 十一个最新阶段桶的固定配色（暂停沿用项目状态橙色，归档移交售后用深蓝色）。 */

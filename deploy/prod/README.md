@@ -1,3 +1,10 @@
+> **2026-11-26 14:05–14:07 项目总览 PDF 阶段统计改中英双语并加段间距（仅测试机 · frontend-only · test-20261126-1405-px-stage-effort-bilingual-2443ff68）**：代码来源 `codex/test-release-stage-notes-20261126` @ `2443ff68`。previousRelease / previousManifestRelease = `test-20261126-1401-px-stage-effort-wrap-566f847b`。
+> **改动 / 验收**：阶段标题统计改为双语 —— 每段（起止 / 历时、单日最多人天、平均每天人天）主文案用导出主体语言，后跟另一语种小字（中文主体补英文，其它主体补中文）；段与段之间 14px 间距，段内不拆行；统计整体放不下时按段换行；备注仍只在超宽时整段换到下一行。frontend typecheck / build 通过。
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,679,121 B / `db45a686…`（678 文件）、`frontend-files.sha256` 92,437 B / `53266078…`、`deploy-test.sh` 3,253 B / `77cd7747…`；测试机前端 700 → 702 文件，重建 web。
+> **验证 / 清单**：`/`、`/healthz`、`/readyz` 均 200；web healthy、RestartCount 0、OOM false；线上 `index.html` `ac961699…`、CSS `f8affd40…`、ES `85750ff1…`，主包 `assets/index-YJGvCTNV.js` 2,779,567 B / `e7a0e75b…`（构建 2,779,539 B + guard 28 字节）；产物命中 `grp__meta-item` 与 `本阶段自`；manifest 4,127 B / `0d3dcb83…`，root:root 644。
+> **备份 / 回滚**：`/srv/data/backups/before-test-20261126-1405-px-stage-effort-bilingual-2443ff68`（4 文件 / 54,137,538 B / SHA256SUMS `fb38a701…`）。回滚：恢复 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`，再重建 web。
+> **边界**：仅测试机前端 dist、staging 与 release manifest；无 server / shared / API / 数据库 / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变更。
+
 > **2026-11-26 14:01–14:03 阶段标题统计与备注同一行、备注超宽才换行（仅测试机 · frontend-only · test-20261126-1401-px-stage-effort-wrap-566f847b）**：代码来源 `codex/test-release-stage-notes-20261126` @ `566f847b`。previousRelease / previousManifestRelease = `test-20261126-1400-px-stage-effort-inline-22c30268`。
 > **改动 / 验收**：阶段标题行改为 `flex-wrap: wrap` —— 阶段名 / 完成数 / 本阶段起止与历时 / 单日最多人天 / 平均每天人天默认同一行且统计不拆行；仅在加入备注后超出可用宽度时，备注整段换到下一行并按宽度折行（`grp__note` 不压缩、`max-width: calc(100% - 10px)`）。frontend typecheck / build 通过。
 > **发布件 / 安装**：`frontend-dist.tar.gz` 22,679,087 B / `47d444c4…`（678 文件）、`frontend-files.sha256` 92,437 B / `4a6cd00e…`、`deploy-test.sh` 3,249 B / `c4197cbd…`；测试机前端 698 → 700 文件，重建 web。

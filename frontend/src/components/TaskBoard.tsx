@@ -499,7 +499,8 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
   const dueIso = task.dueDate;
   const doneIso = task.doneDate;
   const actualToday = dateOnlyText(new Date().toISOString());
-  const latestStart = dueIso === "" || (doneIso !== "" && doneIso < dueIso) ? doneIso : dueIso;
+  /** 开始日期的可选上界（2026-11-26 业务口径「开始日期随便选」）：预计完成日期不再是上界 —— 选到更晚会清空预计完成日期、由用户重新排期；只剩实际完成日期这一物理上界（已完成任务不能出现开工晚于完工）。 */
+  const latestStart = doneIso;
   const canShiftFollowing = allowScheduleShift && task.stageKey !== null && capabilities.source === "project_edit";
   const startText = mdText(locale, startIso);
   const dueText = mdText(locale, dueIso);
@@ -779,7 +780,10 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
           triggerClassName="tabular-nums text-zinc-600"
           display={startText === "" ? <span className="text-zinc-300">—</span> : startText}
           onChange={(iso, shiftFollowing) => {
-            patchRange(iso, dueIso, shiftFollowing);
+            // 2026-11-26 业务口径：开始日期晚于当前预计完成日期 = 清空预计完成日期（天数随之归零），
+            // 不拦选、也不自动改另一头；实际完成日期仍作为上界（见 latestStart）。
+            const clearsDue = iso !== "" && dueIso !== "" && iso > dueIso;
+            patchRange(iso, clearsDue ? "" : dueIso, shiftFollowing);
           }}
         />
       ),

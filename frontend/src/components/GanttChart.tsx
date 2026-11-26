@@ -159,10 +159,11 @@ const BAR_DONE_CLASS = "bg-[#0891b2]";
 const BAR_TODO_CLASS = "bg-[#cffafe]";
 
 /**
- * 已延期按 B3-05「已延期变红」保持**条头一段红内嵌色条**（独立子层抬到进度层之上）。
+ * 已延期不再用条头 3px 红竖杠（业务 2026-11-26「去掉条头的 3px 红竖杠」）：
+ * 改为条体极细 1px 玫瑰红描边 + 条外「超期滞留区」斜纹 / 右侧小签，见 renderTaskBar。
  * 选中态另见 BAR_SELECTED_CLASS。
  */
-const BAR_OVERDUE_STRIPE_CLASS = "pointer-events-none absolute inset-y-0 left-0 z-10 w-[3px] bg-rose-500";
+const BAR_OVERDUE_OUTLINE = "inset 0 0 0 1px rgba(251,113,133,0.8)";
 
 /** 选中条的描边（官方 taskBar.selectable 的选中态）。 */
 const BAR_SELECTED_CLASS = "ring-2 ring-blue-600 shadow-[0_0_0_2px_rgba(37,99,235,0.25)]";
@@ -1388,15 +1389,22 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             {t("gantt.legend.remaining")}
           </li>
           <li className="flex items-center gap-1.5">
-            <span className="h-2.5 w-4 rounded-[3px] bg-slate-200 shadow-[inset_3px_0_0_0_#f43f5e]" aria-hidden="true" />
+            <span
+              className="h-2.5 w-4 rounded-[3px] border border-rose-300"
+              style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(244,63,94,0.35) 0 3px, rgba(244,63,94,0.08) 3px 6px)" }}
+              aria-hidden="true"
+            />
             {t("gantt.legend.overdue")}
           </li>
           <li className="flex items-center gap-1.5" title={t("gantt.legend.singleDayHint")}>
             <span className="h-2.5 w-4 rounded-[3px] bg-[#64748b]" aria-hidden="true" />
             {t("gantt.legend.singleDay")}
           </li>
-          <li className="flex items-center gap-1.5">
-            <span className="h-3 w-[2px] bg-zinc-900/60" aria-hidden="true" />
+          <li className="flex items-center gap-1.5" title={t("gantt.legend.doneDateHint")}>
+            <span className="relative h-2.5 w-5" aria-hidden="true">
+              <span className="absolute left-0 right-1 top-1/2 border-t border-dashed border-slate-400" />
+              <span className="absolute right-0 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-slate-600 ring-1 ring-white" />
+            </span>
             {t("gantt.legend.doneDate")}
           </li>
           <li className="flex items-center gap-1.5">
@@ -1698,18 +1706,90 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     const percent = Math.round(live.percent);
     // 条内标签对齐官方 labelText「{title} {progress}%」：条够宽写全，窄条只写百分比、再窄就不写。
     const barLabel = box.width >= 84 ? ganttTitle(bar.task) + " " + String(percent) + "%" : String(percent) + "%";
-    // 实际完成日期刻度（B3-01）：按绝对日期落点，拖出条外就不画（免得贴边误导）。
+    const palette = stagePaletteOf(bar.stage);
+    const overdue = bar.status === "已延期";
     const done = bar.done;
-    const doneLeft =
-      done === null || done < live.start || done > live.end
-        ? null
-        : clampNumber((dayDiff(live.start, done) + 0.5) * dayWidth - 1, 0, Math.max(box.width - 2, 0));
+    /** 计划条右端（行坐标系）。 */
+    const barRight = box.left + box.width;
+    /** 实际完成点中心（行坐标系）。 */
+    const doneX = done === null ? null : (dayDiff(live.start, done) + 0.5) * dayWidth;
+    const doneTip = t("gantt.tip.done", { date: bar.task.doneDate === "" ? "—" : mdText(locale, bar.task.doneDate) });
+    /** 未完成且已过预计完成：从条右端到今天的「超期滞留区」斜纹延伸段。 */
+    const overdueDays = overdue && done === null && live.end < today ? dayDiff(live.end, today) : 0;
+    const overdueExtensionWidth = overdueDays > 0 && todayLeft !== null ? Math.max(todayLeft - barRight - 0.5, 0) : 0;
+    const showOverdueExtension = overdueExtensionWidth >= 3;
+    /** 预计完成还没到（或今天不在范围内）但状态是已延期：条右侧挂一枚轻量「延期」小签。 */
+    const showOverdueTag = overdue && done === null && !showOverdueExtension;
+
+    /** 已延期条外标记：超期滞留区斜纹 + 天数 / 或右侧小签（条头不再画红竖杠）。 */
+    const overdueMarks = (left: number, width: number) => (
+      <>
+        {showOverdueExtension ? (
+          <>
+            <span
+              className="pointer-events-none absolute rounded-r-[3px] border border-l-0 border-rose-200"
+              style={{
+                left: left + width,
+                width: overdueExtensionWidth,
+                height: BAR_H - 4,
+                top: (ROW_H - (BAR_H - 4)) / 2,
+                backgroundImage: "repeating-linear-gradient(45deg, rgba(244,63,94,0.16) 0 4px, rgba(244,63,94,0.05) 4px 8px)",
+              }}
+              title={t("gantt.overdue.extensionTip", { n: overdueDays })}
+              aria-hidden="true"
+            />
+            <span
+              className="pointer-events-none absolute whitespace-nowrap text-[10px] font-semibold leading-none text-rose-600"
+              style={{ left: left + width + overdueExtensionWidth + 4, top: (ROW_H - 10) / 2 }}
+            >
+              {t("gantt.overdue.days", { n: overdueDays })}
+            </span>
+          </>
+        ) : null}
+        {showOverdueTag ? (
+          <span
+            className="pointer-events-none absolute whitespace-nowrap rounded border border-rose-200 bg-rose-50 px-1 text-[10px] font-semibold leading-[15px] text-rose-600"
+            style={{ left: left + width + 4, top: (ROW_H - 17) / 2 }}
+          >
+            {t("gantt.overdue.tag")}
+          </span>
+        ) : null}
+      </>
+    );
+
+    /** 实际完成标记（B3-01）：按时 / 提前 = 条内底部 4px 小圆点；延期完成 = 条右端虚线延伸到实际完成日并落实心点。 */
+    const doneMarks = (left: number, width: number) => {
+      if (done === null || doneX === null) {
+        return null;
+      }
+      if (done > live.end) {
+        return (
+          <>
+            <span
+              className="pointer-events-none absolute border-t border-dashed border-slate-500/70"
+              style={{ left: left + width, width: Math.max(doneX - (left + width), 0), top: ROW_H / 2 }}
+              aria-hidden="true"
+            />
+            <span
+              className="absolute z-10 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-600 shadow-sm ring-2 ring-white"
+              style={{ left: doneX, top: ROW_H / 2 }}
+              title={doneTip}
+            />
+          </>
+        );
+      }
+      return (
+        <span
+          className="absolute z-10 h-1 w-1 -translate-x-1/2 rounded-full bg-white ring-1 ring-slate-900/45"
+          style={{ left: clampNumber(doneX - left, 3, Math.max(width - 3, 3)), bottom: 1 }}
+          title={doneTip}
+        />
+      );
+    };
 
     if (bar.milestone) {
-      // 单日任务（业务 2026-11-26）：画成与普通任务条同高、同圆角的 1 天条，颜色跟随所属阶段
-      // （「颜色不要单独的 和整个阶段统一即可」），不再按状态单独取绿 / 灰 / 红；
-      // 已延期仍在条头保留 3px 玫瑰红内嵌色条，避免丢失延期信号。只给整条平移。
-      const palette = stagePaletteOf(bar.stage);
+      // 单日任务（业务 2026-11-26）：画成与普通任务条同高、同圆角的 1 天条，颜色跟随所属阶段；
+      // 已延期不再画条头红竖杠，改为 1px 玫瑰红描边 + 条外超期延伸 / 小签。只给整条平移。
       return (
         <>
           <span
@@ -1725,7 +1805,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
               width: box.width,
               height: BAR_H,
               backgroundColor: palette.accent,
-              boxShadow: selected ? undefined : "inset 0 0 0 1px rgba(15,23,42,0.08)",
+              boxShadow: selected ? undefined : overdue ? BAR_OVERDUE_OUTLINE : "inset 0 0 0 1px rgba(15,23,42,0.08)",
             }}
             title={barTitle}
             onPointerDown={(event) => {
@@ -1745,18 +1825,15 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
               setSelectedId(bar.task.id);
             }}
           >
-            {bar.status === "已延期" ? (
-              <span className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-l-[5px] bg-rose-500" aria-hidden="true" />
-            ) : null}
             {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 rounded-[5px] bg-slate-900/10" aria-hidden="true" /> : null}
           </span>
+          {done !== null && done > live.end ? doneMarks(box.left, box.width) : null}
+          {overdueMarks(box.left, box.width)}
           {dragBubble(box.left, dragging)}
         </>
       );
     }
 
-    const palette = stagePaletteOf(bar.stage);
-    const overdue = bar.status === "已延期";
     // 已完成进度 >= 55% 时深色主色铺过半条，文字切换白色提升对比度；未完成浅底段用同色系深字。
     const labelColor = live.percent >= 55 ? "#ffffff" : palette.text;
     return (
@@ -1798,7 +1875,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             style={{ width: String(live.percent) + "%", backgroundColor: palette.accent }}
             aria-hidden="true"
           />
-          {overdue ? <span className={BAR_OVERDUE_STRIPE_CLASS} aria-hidden="true" /> : null}
+          {overdue ? <span className="pointer-events-none absolute inset-0 rounded-[5px]" style={{ boxShadow: BAR_OVERDUE_OUTLINE }} aria-hidden="true" /> : null}
           {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 bg-slate-900/10" aria-hidden="true" /> : null}
           {box.width < 40 ? null : (
             <span
@@ -1808,13 +1885,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
               {barLabel}
             </span>
           )}
-          {doneLeft === null ? null : (
-            <span
-              className="absolute inset-y-0 w-[2px] bg-slate-900/65"
-              style={{ left: doneLeft }}
-              title={t("gantt.tip.done", { date: bar.task.doneDate === "" ? "—" : mdText(locale, bar.task.doneDate) })}
-            />
-          )}
+          {done !== null && done <= live.end ? doneMarks(box.left, box.width) : null}
           {showHandles ? (
             <>
               {/* 拖两端 = 改工期（官方 taskBar.resizable）：热区只在悬停 / 拖动时显形，平时不噪。 */}
@@ -1849,6 +1920,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             />
           ) : null}
         </div>
+        {done !== null && done > live.end ? doneMarks(box.left, box.width) : null}
+        {overdueMarks(box.left, box.width)}
         {dragBubble(box.left, dragging)}
       </>
     );

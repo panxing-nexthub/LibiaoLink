@@ -172,7 +172,7 @@ describe("R05 任务超时提醒（T+1 · 负责人 + 项目经理单聊）", ()
     expect(ownerMessage?.body).toBe(`${PROJECT}\nhello，张三，你的任务「**安装摄像头**」已经超时一天了，快加加油，尽快追上进度吧！`);
     expect(managerMessage?.recipient).toBe("project.manager");
     expect(managerMessage?.title).toBe("🚨！任务超时提醒");
-    expect(managerMessage?.body).toBe("hello，李四，张三的任务「**安装摄像头**」已经超时一天了，请你提醒他尽快追上进度吧！");
+    expect(managerMessage?.body).toBe(PROJECT + "\n李四，任务「**安装摄像头**」已延期 1 天，请注意跟进。");
   });
 
   it("负责人与项目经理同一人时只发一条", () => {
@@ -183,6 +183,17 @@ describe("R05 任务超时提醒（T+1 · 负责人 + 项目经理单聊）", ()
     expect(report.messages[0]?.recipientId).toBe("u-1");
     expect(report.messages[0]?.recipient).toBe("task.owner");
     expect(report.messages[0]?.body).toBe(`${PROJECT}\nhello，张三，你的任务「**安装摄像头**」已经超时一天了，快加加油，尽快追上进度吧！`);
+    expect(report.messages[0]?.dedupeKey).toBe("R05:t-1:2026-09-23");
+  });
+
+  it("负责人为空、有项目经理时只发项目经理一条（未分配口径）", () => {
+    const report = replay("2026-09-23", [
+      task({ plannedEnd: "2026-09-22", displayStatus: "overdue", ownerId: null, ownerName: null }),
+    ]);
+    expect(report.messages).toHaveLength(1);
+    expect(report.messages[0]?.recipient).toBe("project.manager");
+    expect(report.messages[0]?.recipientId).toBe("u-9");
+    expect(report.messages[0]?.body).toBe(PROJECT + "\n李四，任务「**安装摄像头**」已延期 1 天，请注意跟进。");
     expect(report.messages[0]?.dedupeKey).toBe("R05:t-1:2026-09-23");
   });
 

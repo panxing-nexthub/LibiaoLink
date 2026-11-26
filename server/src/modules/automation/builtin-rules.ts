@@ -45,7 +45,7 @@ export const BUILTIN_MESSAGE_TEMPLATES: readonly AutomationMessageTemplate[] = [
   {
     code: "R05_WECOM_MANAGER",
     title: "🚨！任务超时提醒",
-    body: "hello，{项目经理}，{任务负责人}的任务「**{任务描述}**」已经超时一天了，请你提醒他尽快追上进度吧！",
+    body: "项目：**{项目}**\n{项目经理}，任务「**{任务描述}**」已延期 1 天，请注意跟进。",
   },
   {
     code: "R06_GROUP",

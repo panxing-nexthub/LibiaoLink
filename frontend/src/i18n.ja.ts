@@ -1365,7 +1365,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "gantt.rowFilter.unscheduled": "未スケジュールのみ",
   "gantt.rowFilter.unscheduled.hint": "開始日および/または納期が未設定のタスクのみ",
   "gantt.legend.singleDay": "1日タスク",
-  "gantt.legend.singleDayHint": "1日タスク（開始 = 納期）: 当日のバーを状態色で表示 — 完了 = 緑、未完了 = グレー、期限超過 = 赤",
+  "gantt.legend.singleDayHint": "1日タスク（開始 = 納期）: ステージと同じ色の1日バー、期限超過は左端に赤帯",
   "gantt.legend.doneDate": "完了日",
   "gantt.legend.today": "今日",
   "gantt.legend.done": "完了進捗",

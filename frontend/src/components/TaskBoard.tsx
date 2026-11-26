@@ -4,7 +4,7 @@ import { mediumCardBorderOf, mediumCardTintOf, vividCardBorderOf, vividCardTintO
 import { PROJECT_STAGES } from "../data/projects";
 import { memberOptionsWithExisting, type Member } from "../data/members";
 import type { TaskFileRef } from "../fileApi";
-import { TEMP_TASK_STAGE, addedNodeIdsOf, addedNodeKeysOf, dateOnlyText, daysBetweenInclusive, lateDeliveryLabel, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskPriority, type TaskStatus } from "../data/tasks";
+import { TEMP_TASK_STAGE, addedNodeIdsOf, addedNodeKeysOf, dateOnlyText, daysBetweenInclusive, lateDeliveryLabel, ownersLabel, taskCapabilitiesOf, taskFinalizeUploadReadiness, type ProjectTask, type TaskPriority, type TaskStatus } from "../data/tasks";
 import { additionalStageName, stageNameOf, statusWriteValue, type AdditionalProjectStage, type ApiProjectSummary, type TaskUpdateInput } from "../taskApi";
 import { fieldText, isLocalizedLocale, mdText, priorityText, stageText, statusText, useLocale, useLocalizedText, useT } from "../i18n";
 import { InlineDateCell, InlineMemberMultiCell, InlineNumberCell, InlineOptionCell, InlineTextCell } from "./InlineEdit";
@@ -494,6 +494,8 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
   const completionLocked = !capabilities.canComplete || taskFinalized;
   const completionLockedHint = taskFinalized ? t("board.finalizedHint") : viewOnlyHint;
   const canManageFiles = capabilities.canUpload && !taskFinalized;
+  /** 「＋ 添加定档文件」与任务定档开关同一门禁：任务未完成时只允许普通上传，悬停提示缺什么。 */
+  const finalizeUploadReadiness = taskFinalizeUploadReadiness(task);
   /** 同一套胶囊入口覆盖编辑 / 只读：只读时仍可预览下载，仅禁用上传与删除。 */
   const showFilesPopover = files !== undefined || onUploadFiles !== undefined || onDeleteFile !== undefined;
   const canDeleteThisTask = onDelete !== undefined && capabilities.canDelete && !taskFinalized;
@@ -749,6 +751,7 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
             onDelete={canManageFiles ? onDeleteFile : undefined}
             taskFinalized={task.finalizedAt !== null}
             canFinalize={canFinalize}
+            finalizeReadiness={finalizeUploadReadiness}
             canEdit={canManageFiles}
             readOnlyHint={viewOnlyHint}
           >

@@ -41,7 +41,8 @@ import { Toast } from "./Toast";
  *
  * 数据面：GET /projects/{id}/change-requests 返回 materialReissue 快照 + materialReissueTracking；
  * 发货登记 POST /projects/{id}/change-requests/material-reissue/tracking 一次写多个申请单的物料行。
- * 本页不新增独立读接口。权限沿用标签访问范围：项目编辑者 / 任务负责人（商务助理）可登记发货。
+ * 本页不新增独立读接口。权限：项目编辑者 / 项目助理（物流任务负责人）可查看并登记全部申请；
+ * 普通任务负责人只看到并登记本人负责任务的申请。
  */
 
 type MaterialReissueLine = MaterialReissueSnapshot["materials"][number];
@@ -313,6 +314,8 @@ export function MaterialReissuePanel({
   canViewAll = false,
   canMark = false,
   canMarkAll = false,
+  projectFileUploadAllowed = false,
+  uploadTaskId = null,
   tierTint = false,
   view,
   onChangeView,
@@ -329,6 +332,10 @@ export function MaterialReissuePanel({
   canMark?: boolean;
   /** 是否可对本项目全部物料行登记发货；false = 只能选择本人负责任务的行。 */
   canMarkAll?: boolean;
+  /** 是否可上传项目级文件（项目编辑者 / 管理员 / 全部项目编辑）；false = 图片挂到 uploadTaskId。 */
+  projectFileUploadAllowed?: boolean;
+  /** 项目助理本人的物流任务；批量发货上传凭证图片时用作 taskId，避免项目级文件写权限被拒。 */
+  uploadTaskId?: string | null;
   /** 背景档位铺色档：simple = false；适中 / 炫彩 = 行铺色。 */
   tierTint?: TintedTier | false;
   /** 当前页内子视图（由地址 `?view=material-reissue&sub=` 控制）；缺省 all。 */
@@ -766,7 +773,9 @@ export function MaterialReissuePanel({
     try {
       const imageFileIds: string[] = [];
       if (shipmentImages.length > 0) {
-        const taskId = canMarkAll ? undefined : selectedRows[0]?.application.material.taskId;
+        const taskId = canMarkAll
+          ? (projectFileUploadAllowed ? undefined : uploadTaskId ?? selectedRows[0]?.application.material.taskId)
+          : selectedRows[0]?.application.material.taskId;
         for (const image of shipmentImages) {
           imageFileIds.push(await uploadFile(projectId, image.file, image.file.name, taskId === undefined ? {} : { taskId }));
         }

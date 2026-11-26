@@ -676,7 +676,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   const [drag, setDrag] = useState<GanttDrag | null>(null);
   /** 任务条编辑锁：默认锁上，防止误拖改期 / 工期 / 进度；滚动、筛选、定位等浏览操作不受影响。 */
   const [barsLocked, setBarsLocked] = useState(true);
-  const [shiftFollowing, setShiftFollowing] = useState(false);
   /** 「回到今天」把今天并进时间轴范围（今天本来就在范围里 = 无影响）；清空筛选时收回。 */
   const [includeToday, setIncludeToday] = useState(false);
   /** 刚点「回到今天」但当时今天不在范围里：等范围延出来（todayLeft 有值）再居中一次。 */
@@ -983,7 +982,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     if (!barsLocked) {
       setDrag(null);
       dragPointerRef.current = null;
-      setShiftFollowing(false);
     }
     setBarsLocked((previous) => !previous);
   };
@@ -1141,10 +1139,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
       return;
     }
     justDraggedRef.current = true;
-    const task = tasks.find((row) => row.id === session.taskId);
-    const canShift = task !== undefined && task.stageKey !== null && taskCapabilitiesOf(task).source === "project_edit";
-    setShiftFollowing(false);
-    onPatchTask?.(session.taskId, { ...rangePatch(session.start, session.end), shiftFollowing: shiftFollowing && canShift });
+    onPatchTask?.(session.taskId, rangePatch(session.start, session.end));
   };
 
   /** 拖左表右边线改左表宽度（官方 frame.verticalSplitLineMoveable）；双击复位默认宽。 */
@@ -1454,7 +1449,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                                 onSetProgress(task.id, progress);
                               }
                         }
-                        allowScheduleShift
                         onPatch={
                           onPatchTask === undefined
                             ? undefined
@@ -1653,26 +1647,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
           </>
         ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <div data-gantt-help="" className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] leading-4 text-zinc-400">
-            <span className="inline-flex shrink-0 items-center gap-1 font-medium text-zinc-500">
-              <svg viewBox="0 0 20 20" aria-hidden="true" className="h-3.5 w-3.5 shrink-0"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M10 8.4v5M10 5.8v.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-              <span>{t("gantt.help.title")}</span>
-            </span>
-            <span className="whitespace-nowrap">{t("gantt.help.move")}</span>
-            <span className="whitespace-nowrap">{t("gantt.help.resize")}</span>
-            <span className="whitespace-nowrap">{t("gantt.help.progress")}</span>
-            <span className="whitespace-nowrap">{t("gantt.help.pan")}</span>
-            <span className="whitespace-nowrap">{t("gantt.help.pick")}</span>
-            <span className="whitespace-nowrap">{t("gantt.help.splitter")}</span>
-            {!barsLocked && onPatchTask !== undefined && visibleTasks.some((task) =>
-              task.stageKey !== null && task.finalizedAt === null && taskCapabilitiesOf(task).source === "project_edit"
-            ) ? (
-              <label className="inline-flex items-center gap-1.5 text-xs text-zinc-700">
-                <input type="checkbox" checked={shiftFollowing} onChange={(event) => setShiftFollowing(event.target.checked)} />
-                {t("task.schedule.shiftFollowing")}
-              </label>
-            ) : null}
-          </div>
           <button
             type="button"
             data-gantt-lock={barsLocked ? "locked" : "unlocked"}

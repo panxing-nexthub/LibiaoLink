@@ -850,6 +850,7 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
           <InlineDateCell
             valueIso={doneIso}
             minDate={startIso}
+            placement="below"
             maxDate={actualToday}
             todayIso={actualToday}
             ariaLabel={t("board.edit.aria", { field: fieldText(locale, "实际完成日期") })}

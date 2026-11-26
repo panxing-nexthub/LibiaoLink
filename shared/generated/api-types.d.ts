@@ -2782,6 +2782,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/stage-notes/{stageRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 保存或清除阶段备注（本项目经理或系统管理员） */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                    /** @description 原阶段的字典键，或新增阶段的 ID */
+                    stageRef: components["schemas"]["StageKey"] | components["schemas"]["Uuid"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProjectStageNotePutBody"];
+                };
+            };
+            responses: {
+                /** @description 阶段备注已保存 */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 冲突（VERSION_CONFLICT / 状态不允许当前操作） */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{id}/tasks": {
         parameters: {
             query?: never;
@@ -16514,6 +16593,15 @@ export interface components {
             actualEnd: components["schemas"]["DateOnly"] & (string | null);
             nodes: components["schemas"]["ProjectNode"][];
         };
+        ProjectStageNote: {
+            /** @description 原阶段的字典键，或新增阶段的 ID */
+            stageRef: components["schemas"]["StageKey"] | components["schemas"]["Uuid"];
+            note: string;
+        };
+        ProjectStageNotePutBody: {
+            /** @description 阶段备注，留空即清除 */
+            note: string;
+        };
         /** @description 阶段状态与完成度（GET /projects/{id}/stages） */
         ProjectStageSummary: {
             id: components["schemas"]["Uuid"];
@@ -16548,6 +16636,7 @@ export interface components {
             done: number;
             total: number;
             additionalStages?: components["schemas"]["AdditionalProjectStage"][];
+            stageNotes?: components["schemas"]["ProjectStageNote"][];
             /** @description 仅归档项目返回，表示是否仍可填报日报（另需具备填报权限） */
             hasUnfinishedTemporaryTask?: boolean;
         };

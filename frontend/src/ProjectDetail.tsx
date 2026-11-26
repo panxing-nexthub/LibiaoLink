@@ -47,6 +47,7 @@ import {
   fetchProjectTasks,
   finalizeTask,
   projectTaskStageNames,
+  saveProjectStageNote,
   stageKeyOfName,
   statusWriteValue,
   taskWriteMessage,
@@ -162,7 +163,8 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
    *  （列表接口不带文件名，这里按项目走文件库列表一次拉全量，见 fileApi.fetchTaskFiles）。 */
   const [taskFiles, setTaskFiles] = useState<Map<string, TaskFileRef[]>>(new Map());
   const [summary, setSummary] = useState<ApiProjectSummary | null>(null);
-  const additionalStages = summary?.projectId === projectId ? summary?.additionalStages : undefined;
+  const currentSummary = summary?.projectId === projectId ? summary : null;
+  const additionalStages = currentSummary?.additionalStages;
   const stageNames = useMemo(() => projectTaskStageNames(additionalStages, rawTasks), [additionalStages, rawTasks]);
   const boardStages = useMemo(() => [...stageNames, TEMP_TASK_STAGE], [stageNames]);
   /** 取数版本号：换项目、或新建 / 删除 / 排序 / 版本冲突后需要整表重取时 +1。 */
@@ -949,7 +951,7 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
     }
   };
 
-  const saveAdditionalStage = async (save: () => Promise<unknown>): Promise<string | null> => {
+  const saveStageChange = async (save: () => Promise<unknown>): Promise<string | null> => {
     try {
       await save();
       afterCreate();
@@ -958,6 +960,16 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
       return error instanceof ApiError ? taskWriteMessage(locale, error) : t("pd.tasks.writeFailed");
     }
   };
+
+  const handleSaveStageNote = (id: string, stageRef: string, note: string): Promise<string | null> => saveStageChange(async () => {
+    await saveProjectStageNote(id, stageRef, note);
+    setSummary((current) => {
+      if (current?.projectId !== id) return current;
+      const stageNotes = (current.stageNotes ?? []).filter((item) => item.stageRef !== stageRef);
+      if (note !== "") stageNotes.push({ stageRef, note });
+      return { ...current, stageNotes };
+    });
+  });
 
   const handleAdditionalStageTask = async (stageId: string, values: TempTaskCreateValues): Promise<string | null> => {
     const created = await createOne({
@@ -1423,10 +1435,11 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
             <>
               {/* 汇总卡（M3-07 刀 1 后半）：最慢 / 最新阶段由服务端按任务聚合（GET /projects/{id}/summary） */}
               <ProjectSummary summary={summary} />
-              <TaskBoard tasks={tasks} members={members} managerMembers={managerMembers} customDeliverableTypes={customDeliverableTypes} onCreateDeliverableType={createDeliverableType} skeletonStages={boardStages} additionalStages={additionalStages} manageStages={canManageStages ? {
-                create: (key) => saveAdditionalStage(() => createAdditionalStage(project.id, key)),
-                remove: (id) => saveAdditionalStage(() => deleteAdditionalStage(project.id, id)),
+              <TaskBoard tasks={tasks} members={members} managerMembers={managerMembers} customDeliverableTypes={customDeliverableTypes} onCreateDeliverableType={createDeliverableType} skeletonStages={boardStages} additionalStages={additionalStages} stageNotes={currentSummary?.stageNotes} manageStages={canManageStages ? {
+                create: (key) => saveStageChange(() => createAdditionalStage(project.id, key)),
+                remove: (id) => saveStageChange(() => deleteAdditionalStage(project.id, id)),
                 createTask: handleAdditionalStageTask,
+                saveNote: (stageRef, note) => handleSaveStageNote(project.id, stageRef, note),
               } : undefined} onSetProgress={taskWritable ? handleSetProgress : undefined} onSetStatus={taskWritable ? handleSetStatus : undefined} onSetActualEnd={taskWritable ? handleSetActualEnd : undefined} visibleColumns={visibleColumns} scrollRef={tableScrollRef} collapsed={collapsedStages} onToggleStage={toggleStage} onToggleAllStages={toggleAllStages} onAddNode={projectWritable ? handleAddNode : undefined} onAddNodes={projectWritable || taskOwnerStageNames.size > 0 ? handleAddNodes : undefined} canOpenAddCard={(stage) => projectWritable || taskOwnerStageNames.has(stage)} personalOnlyStages={projectWritable ? undefined : taskOwnerStageNames} onCreateTempTask={canEditManagers ? (values) => handleQuickAdd({ ownerIds: [], status: "待开始" }, values) : undefined} viewStage="项目总览" canFinalizeTask={canFinalizeTask} onSubmitTaskEdit={taskWritable ? handleSubmitTaskEdit : undefined} onRenameTask={taskWritable ? handleRenameTask : undefined} onPatchTask={taskWritable ? handlePatchTask : undefined} onChangeManagers={canEditManagers ? handleBoardManagerChange : undefined} canEditManagers={canEditManagers} onDeleteTask={canDeleteTasks ? requestDeleteTask : undefined} onUploadFiles={taskWritable ? handleUploadTaskFiles : undefined} onDeleteFile={taskWritable && !projectArchived ? handleDeleteTaskFile : undefined} onRenameFile={taskWritable && !projectArchived ? handleRenameTaskFile : undefined} allowFileChanges={!projectArchived} onFinalize={taskWritable ? handleFinalizeTask : undefined} onUnfinalize={taskWritable ? handleUnfinalizeTask : undefined} onChanged={reloadAll} actorName={me.user.displayName ?? ""} filesByTask={taskFiles} projectId={project.id} tierTint={tintRows} focusTaskId={focus?.kind === "task" ? focus.id : null} onFocusClosed={onClearFocus} openTaskId={changesTaskRequestId} onOpenTaskOpened={() => { setChangesTaskRequestId(null); }} />
             </>
           ) : activeView === "甘特图" ? (

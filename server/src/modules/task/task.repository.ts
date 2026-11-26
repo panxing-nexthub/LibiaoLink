@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { STAGE_KEYS, type AdditionalProjectStage, type StageKey } from "@libiaolink/contracts";
-import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, max, or, sql, type SQL } from "drizzle-orm";
+import { STAGE_KEYS, type AdditionalProjectStage, type ProjectStageNote, type StageKey } from "@libiaolink/contracts";
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, max, ne, or, sql, type SQL } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
 import { auditLogs } from "../../db/schema/admin.js";
 import type { DbClient } from "../../db/db-client.js";
@@ -9,7 +9,7 @@ import { files, uploadSessions } from "../../db/schema/files.js";
 import { projectNodes } from "../../db/schema/flow.js";
 import { notifyDeliveryMessages, wecomGroups } from "../../db/schema/notify.js";
 import { users } from "../../db/schema/identity.js";
-import { projectAdditionalStages, projectStages, projects } from "../../db/schema/projects.js";
+import { projectAdditionalStages, projectStageNotes, projectStages, projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
 import { taskEvents, tasks } from "../../db/schema/tasks.js";
 import { syncProjectManagersToStageTasks } from "../../db/task-scope.js";
@@ -527,19 +527,43 @@ export class TaskRepository {
     return { id: row!.id, stageKey, number };
   }
 
-  async lockAdditionalStage(client: DbClient, projectId: string, stageId: string): Promise<AdditionalProjectStage | null> {
-    const [row] = await client.select({
+  async findAdditionalStage(client: DbClient, projectId: string, stageId: string, lock = false): Promise<AdditionalProjectStage | null> {
+    const query = client.select({
       id: projectAdditionalStages.id,
       stageKey: projectAdditionalStages.stageKey,
       number: projectAdditionalStages.number,
     }).from(projectAdditionalStages)
-      .where(and(eq(projectAdditionalStages.projectId, projectId), eq(projectAdditionalStages.id, stageId), isNull(projectAdditionalStages.deletedAt)))
-      .for("update");
+      .where(and(eq(projectAdditionalStages.projectId, projectId), eq(projectAdditionalStages.id, stageId), isNull(projectAdditionalStages.deletedAt)));
+    const [row] = await (lock ? query.for("update") : query);
     return row === undefined ? null : { ...row, stageKey: row.stageKey as StageKey };
   }
 
   async removeAdditionalStage(client: DbClient, stageId: string, at: Date): Promise<void> {
     await client.update(projectAdditionalStages).set({ deletedAt: at }).where(eq(projectAdditionalStages.id, stageId));
+  }
+
+  async listStageNotes(projectId: string): Promise<ProjectStageNote[]> {
+    return this.database.db.select({ stageRef: projectStageNotes.stageRef, note: projectStageNotes.note })
+      .from(projectStageNotes)
+      .where(eq(projectStageNotes.projectId, projectId));
+  }
+
+  async saveStageNote(client: DbClient, projectId: string, stageRef: string, note: string): Promise<boolean> {
+    if (note === "") {
+      const cleared = await client.delete(projectStageNotes)
+        .where(and(eq(projectStageNotes.projectId, projectId), eq(projectStageNotes.stageRef, stageRef)))
+        .returning({ stageRef: projectStageNotes.stageRef });
+      return cleared.length > 0;
+    }
+
+    const saved = await client.insert(projectStageNotes).values({ projectId, stageRef, note })
+      .onConflictDoUpdate({
+        target: [projectStageNotes.projectId, projectStageNotes.stageRef],
+        set: { note },
+        setWhere: ne(projectStageNotes.note, note),
+      })
+      .returning({ stageRef: projectStageNotes.stageRef });
+    return saved.length > 0;
   }
 
   /** 任务精简读（无锁；只取重排需要的字段）。 */

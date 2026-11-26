@@ -1,4 +1,4 @@
-import type { AdditionalProjectStage } from "@libiaolink/contracts";
+import { ProjectStageNotePutBodySchema, ProjectStageRefSchema, type AdditionalProjectStage } from "@libiaolink/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "../src/common/errors/app-error.js";
 import type { DatabaseService } from "../src/db/database.service.js";
@@ -122,8 +122,25 @@ class FakeTaskRepository {
   async listAdditionalStages(): Promise<AdditionalProjectStage[]> {
     return this.additionalStage === null ? [] : [this.additionalStage];
   }
-  async lockAdditionalStage(): Promise<AdditionalProjectStage | null> {
-    return this.additionalStage;
+  async findAdditionalStage(_tx: DbClient, projectId: string, stageId: string): Promise<AdditionalProjectStage | null> {
+    return projectId === this.project?.id && stageId === this.additionalStage?.id ? this.additionalStage : null;
+  }
+
+  private stageNotes = new Map<string, string>();
+
+  async listStageNotes(projectId: string) {
+    return [...this.stageNotes].flatMap(([key, note]) => {
+      const [id, stageRef] = key.split(":");
+      return id === projectId ? [{ stageRef: stageRef!, note }] : [];
+    });
+  }
+
+  async saveStageNote(_tx: DbClient, projectId: string, stageRef: string, note: string): Promise<boolean> {
+    const key = projectId + ":" + stageRef;
+    if (note === "") return this.stageNotes.delete(key);
+    if (this.stageNotes.get(key) === note) return false;
+    this.stageNotes.set(key, note);
+    return true;
   }
 
   async summaryCounts(): Promise<{ overdue: number; done: number; total: number }> {
@@ -466,6 +483,57 @@ describe("项目新增阶段", () => {
     await expect(service.create(PROJECT, { additionalStageId: stage.id, title: "调试设备" }, ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
     const task = await service.create(PROJECT, { additionalStageId: stage.id, title: "调试设备" }, MANAGER);
     expect(task).toMatchObject({ stageKey: "install", additionalStageNumber: 1, managerIds: [MANAGER] });
+  });
+});
+
+describe("项目总览阶段备注", () => {
+  it("校验阶段标识，去掉备注两端空白并允许清空", () => {
+    expect(ProjectStageRefSchema.parse("presale")).toBe("presale");
+    expect(ProjectStageRefSchema.parse(NODE)).toBe(NODE);
+    expect(ProjectStageRefSchema.safeParse("临时任务").success).toBe(false);
+    expect(ProjectStageNotePutBodySchema.parse({ note: "  等待客户确认  " })).toEqual({ note: "等待客户确认" });
+    expect(ProjectStageNotePutBodySchema.parse({ note: "  " })).toEqual({ note: "" });
+    expect(ProjectStageNotePutBodySchema.safeParse({ note: "字".repeat(201) }).success).toBe(false);
+  });
+
+  it("本项目经理和管理员可以保存，其他编辑者和归档项目不能写入", async () => {
+    const repo = new FakeTaskRepository();
+    const permission = new FakePermissionService();
+    const audit = new FakeAuditService();
+    const service = makeService(repo, permission, undefined, audit);
+    await expect(service.saveStageNote(PROJECT, "presale", "客户确认", ACTOR)).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await service.saveStageNote(PROJECT, "presale", "客户确认", MANAGER);
+    await service.saveStageNote(PROJECT, "presale", "客户确认", MANAGER);
+    expect(audit.entries).toHaveLength(1);
+    expect(audit.entries[0]).toMatchObject({ projectId: PROJECT, actorId: MANAGER, action: "update", objectType: "stage", objectId: "presale" });
+
+    permission.groupAccessAdmin = true;
+    await service.saveStageNote(PROJECT, "presale", "客户已确认", ACTOR);
+    expect((await service.summary(PROJECT)).stageNotes).toEqual([{ stageRef: "presale", note: "客户已确认" }]);
+
+    repo.project!.status = "archived";
+    await expect(service.saveStageNote(PROJECT, "presale", "", ACTOR)).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+  });
+
+  it("区分原阶段和新增阶段，清空或复用新增阶段编号时不会带出旧备注", async () => {
+    const repo = new FakeTaskRepository();
+    const service = makeService(repo);
+    const stage = await service.createAdditionalStage(PROJECT, "install", MANAGER);
+    await expect(service.saveStageNote(PROJECT, TASK, "等待安装", MANAGER)).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    await service.saveStageNote(PROJECT, "install", "先安装一楼", MANAGER);
+    await service.saveStageNote(PROJECT, stage.id, "二楼等待设备", MANAGER);
+    expect((await service.summary(PROJECT)).stageNotes).toEqual([
+      { stageRef: "install", note: "先安装一楼" },
+      { stageRef: stage.id, note: "二楼等待设备" },
+    ]);
+
+    await service.saveStageNote(PROJECT, "install", "", MANAGER);
+    expect((await service.summary(PROJECT)).stageNotes).toEqual([{ stageRef: stage.id, note: "二楼等待设备" }]);
+    await service.removeAdditionalStage(PROJECT, stage.id, MANAGER);
+    await service.createAdditionalStage(PROJECT, "install", MANAGER);
+    expect((await service.summary(PROJECT)).stageNotes).toEqual([]);
   });
 });
 
@@ -1093,6 +1161,7 @@ describe("TaskService.summary（汇总卡：最慢 / 最新阶段 + 三计数）
     expect(summary).toEqual({
       projectId: PROJECT,
       additionalStages: [],
+      stageNotes: [],
       slowestStage: "design",
       latestStage: "install",
       overdue: 2,

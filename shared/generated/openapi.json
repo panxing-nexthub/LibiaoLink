@@ -14539,6 +14539,43 @@
           "nodes"
         ]
       },
+      "ProjectStageNote": {
+        "type": "object",
+        "properties": {
+          "stageRef": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StageKey"
+              },
+              {
+                "$ref": "#/components/schemas/Uuid"
+              }
+            ],
+            "description": "原阶段的字典键，或新增阶段的 ID"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stageRef",
+          "note"
+        ]
+      },
+      "ProjectStageNotePutBody": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "阶段备注，留空即清除"
+          }
+        },
+        "required": [
+          "note"
+        ],
+        "additionalProperties": false
+      },
       "ProjectStageSummary": {
         "type": "object",
         "properties": {
@@ -14762,6 +14799,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AdditionalProjectStage"
+            }
+          },
+          "stageNotes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectStageNote"
             }
           },
           "hasUnfinishedTemporaryTask": {
@@ -22428,6 +22471,96 @@
         "responses": {
           "204": {
             "description": "阶段已删除"
+          },
+          "403": {
+            "description": "无权限（FORBIDDEN）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不可见（NOT_FOUND，统一 404 语义）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "冲突（VERSION_CONFLICT / 状态不允许当前操作）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{id}/stage-notes/{stageRef}": {
+      "put": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "保存或清除阶段备注（本项目经理或系统管理员）",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "required": true,
+            "description": "UUID（主键与关联 ID）",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StageKey"
+                },
+                {
+                  "$ref": "#/components/schemas/Uuid"
+                }
+              ],
+              "description": "原阶段的字典键，或新增阶段的 ID"
+            },
+            "required": true,
+            "description": "原阶段的字典键，或新增阶段的 ID",
+            "name": "stageRef",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectStageNotePutBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "阶段备注已保存"
+          },
+          "400": {
+            "description": "契约校验失败（VALIDATION_FAILED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "403": {
             "description": "无权限（FORBIDDEN）",

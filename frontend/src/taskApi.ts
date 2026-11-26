@@ -68,6 +68,7 @@ export type ApiTaskDetail = ApiTask & {
 export type ApiTaskListResult = { items: ApiTaskListItem[]; page: number; limit: number; total: number };
 
 export type AdditionalProjectStage = { id: string; stageKey: string; number: number };
+export type ProjectStageNote = { stageRef: string; note: string };
 
 /** 项目总览汇总卡（契约 ProjectSummary）。 */
 export type ApiProjectSummary = {
@@ -79,6 +80,7 @@ export type ApiProjectSummary = {
   total: number;
   hasUnfinishedTemporaryTask?: boolean;
   additionalStages?: AdditionalProjectStage[];
+  stageNotes?: ProjectStageNote[];
 };
 
 /** 九阶段字典（契约 STAGE_KEYS / STAGE_NAMES）：阶段名 ↔ key 的双向映射在前端本地维护。 */
@@ -273,6 +275,10 @@ export function createAdditionalStage(projectId: string, stageKey: string): Prom
 
 export function deleteAdditionalStage(projectId: string, stageId: string): Promise<void> {
   return apiSend("/api/v1/projects/" + encodeURIComponent(projectId) + "/additional-stages/" + encodeURIComponent(stageId), "DELETE");
+}
+
+export function saveProjectStageNote(projectId: string, stageRef: string, note: string): Promise<void> {
+  return apiSend("/api/v1/projects/" + encodeURIComponent(projectId) + "/stage-notes/" + encodeURIComponent(stageRef), "PUT", { note });
 }
 
 /** 创建任务（节点生成 / 手工创建）：响应 = 契约 Task（不带姓名与文件摘要，调用方随后重取列表）。 */

@@ -121,6 +121,22 @@ export const AdditionalProjectStageCreateBodySchema = z.object({
 
 export type AdditionalProjectStage = z.infer<typeof AdditionalProjectStageSchema>;
 
+export const ProjectStageRefSchema = z.union([StageKeySchema, UuidSchema])
+  .describe("原阶段的字典键，或新增阶段的 ID");
+
+export const ProjectStageNoteSchema = z.object({
+  stageRef: ProjectStageRefSchema,
+  note: z.string(),
+}).openapi("ProjectStageNote");
+
+export const ProjectStageNotePutBodySchema = z.object({
+  note: z.string().trim().max(200)
+    .refine((value) => !value.includes("\0"), "备注不能包含空字符")
+    .describe("阶段备注，留空即清除"),
+}).strict().openapi("ProjectStageNotePutBody");
+
+export type ProjectStageNote = z.infer<typeof ProjectStageNoteSchema>;
+
 /**
  * 项目总览汇总卡：最慢阶段 / 最新阶段 / 逾期 / 已完成 / 总数。
  * 2026-09-24 定案：原 `currentStage`（= projects.stage_key 项目当前阶段）随本刀下线 —— 汇总卡改用两个任务派生字段；
@@ -139,6 +155,7 @@ export const ProjectSummarySchema = z
     done: z.number().int().min(0),
     total: z.number().int().min(0),
     additionalStages: z.array(AdditionalProjectStageSchema).optional(),
+    stageNotes: z.array(ProjectStageNoteSchema).optional(),
     hasUnfinishedTemporaryTask: z.boolean().optional().openapi({ description: "仅归档项目返回，表示是否仍可填报日报（另需具备填报权限）" }),
   })
   .openapi("ProjectSummary", { description: "项目总览汇总卡统计（任务派生；口径见 v0.2 §2.4 与前端功能需求 §3.4）" });

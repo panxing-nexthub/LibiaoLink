@@ -491,19 +491,19 @@ const STAGE_META_TEXT: Record<OverviewExportLanguage, {
   unit: string;
 }> = {
   zh: {
-    span: (from, to, days) => `本阶段自${from}至${to} 历时需${String(days)}天`,
+    span: (from, to, days) => `本阶段自${from}至${to} 需持续${String(days)}天`,
     peak: "单日最多人天",
     average: "平均每天人天",
     unit: "人/天",
   },
   en: {
-    span: (from, to, days) => `Stage from ${from} to ${to} · ${String(days)} days required`,
+    span: (from, to, days) => `Stage from ${from} to ${to} · lasts ${String(days)} days`,
     peak: "Max people per day",
     average: "Average people per day",
     unit: "people/day",
   },
   ja: {
-    span: (from, to, days) => `本ステージ ${from}〜${to}・所要${String(days)}日間`,
+    span: (from, to, days) => `本ステージ ${from}〜${to}・${String(days)}日間継続`,
     peak: "単日最多人日",
     average: "平均人日",
     unit: "人/日",

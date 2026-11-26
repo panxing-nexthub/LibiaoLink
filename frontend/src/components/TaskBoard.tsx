@@ -804,6 +804,7 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
         <InlineDateCell
           valueIso={dueIso}
           minDate={startIso}
+          placement="right"
           allowScheduleShift={canShiftFollowing}
           ariaLabel={t("board.edit.aria", { field: fieldText(locale, "预计完成日期") })}
           disabled={editLocked}

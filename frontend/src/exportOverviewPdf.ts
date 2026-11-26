@@ -657,11 +657,11 @@ const REPORT_STYLE = `
   tbody.grp tr.grp__head td { padding: 3px 7px; background: #f4f4f5; border-bottom: 1px solid #e4e4e7; break-after: avoid; }
   .grp__name { font-size: 10.5px; font-weight: 700; }
   .grp__count { margin-left: 6px; font-size: 9.5px; color: #71717a; }
-  .grp__heading { display: flex; align-items: baseline; flex-wrap: nowrap; }
+  .grp__heading { display: flex; align-items: baseline; flex-wrap: wrap; row-gap: 1px; }
   .grp__meta { margin-left: 10px; font-size: 8.5px; color: #3f3f46; white-space: nowrap; flex-shrink: 0; }
   .grp__meta strong { font-weight: 700; color: #18181b; }
   .grp__heading .grp__name, .grp__heading .grp__count { flex-shrink: 0; }
-  .grp__note { min-width: 0; margin-left: 10px; color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; }
+  .grp__note { min-width: 0; max-width: calc(100% - 10px); margin-left: 10px; color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; flex-shrink: 0; }
   tbody.grp tr.grp__head--collapsed .grp__note { display: block; margin: 2px 0 0; }
   tbody.grp tr.grp__head--collapsed td { padding: 6px 5px; background: #fafafa; border: 0; border-bottom: 1px solid #e4e4e7; vertical-align: middle; }
   tbody.grp tr.grp__head--collapsed td:first-child { padding-left: 7px; border-left: 1px solid #e4e4e7; }

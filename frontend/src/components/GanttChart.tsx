@@ -225,13 +225,12 @@ function scaleForDayWidth(pxPerDay: number): ScaleKey {
   return "month";
 }
 
-/** 甘特内筛选（B3-06 余下）：负责人 + 行筛选（全部 / 只看已延期 / 只看未排期）。 */
-type RowFilterKey = "all" | "overdue" | "unscheduled";
+/** 甘特内筛选（B3-06 余下）：负责人 + 行筛选（全部 / 只看已延期）。 */
+type RowFilterKey = "all" | "overdue";
 
 const ROW_FILTERS: ReadonlyArray<{ key: RowFilterKey; label: string; hint: string }> = [
   { key: "all", label: "全部", hint: "不按行筛（只看负责人）" },
   { key: "overdue", label: "只看已延期", hint: "只出状态为「已延期」的任务（同 B3-05 的口径）" },
-  { key: "unscheduled", label: "只看未排期", hint: "只出没填齐「开始 + 预计完成」的任务" },
 ];
 
 /** 负责人筛选项：`all` = 不限；`__none__` = 待分配（与看板「待分配」列同口径）。 */
@@ -749,8 +748,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   );
   /** 粒度 / 缩放 / 行筛选的显示名（Push 301 词典；模块常量只留 key）。 */
   const scaleText = (key: ScaleKey): string => t(key === "day" ? "gantt.scale.day" : key === "week" ? "gantt.scale.week" : "gantt.scale.month");
-  const rowFilterText = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all" : key === "overdue" ? "gantt.rowFilter.overdue" : "gantt.rowFilter.unscheduled");
-  const rowFilterHint = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all.hint" : key === "overdue" ? "gantt.rowFilter.overdue.hint" : "gantt.rowFilter.unscheduled.hint");
+  const rowFilterText = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all" : "gantt.rowFilter.overdue");
+  const rowFilterHint = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all.hint" : "gantt.rowFilter.overdue.hint");
 
   /** 负责人筛选项（M3-07 刀 1 后半）：按任务出现顺序收集**负责人 id**（与看板「负责人按任务出现顺序」同口径）；有「没负责人」的任务才出「待分配」。 */
   const ownerOptions = useMemo(() => {
@@ -801,11 +800,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
         return false;
       }
       if (rowFilter === "overdue" && task.status !== "已延期") {
-        return false;
-      }
-      // 未排期 = 没填齐「开始 + 预计完成」（与条、左表日期列同一口径）—— 只看未排期时反过来：排期齐了的都筛掉。
-      const scheduled = task.startDate !== "" && task.dueDate !== "";
-      if (rowFilter === "unscheduled" && scheduled) {
         return false;
       }
       return true;
@@ -2170,7 +2164,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
       {toolbarBlock}
 
       {/* 任务列表与甘特图同屏（Push 294；Push 295 起列表按阶段标题分组可折叠；Push 313 起「全部」（未筛选）不出列表）：筛选生效且还有没排期的任务才把列表出在甘特上方；图表本身照常在下方渲染（提示条 / 空态 ② 在 model === null 的早退分支里出）。 */}
-      {filtering && hasUnscheduled && rowFilter !== "unscheduled" ? taskListBlock : null}
+      {filtering && hasUnscheduled ? taskListBlock : null}
               {/* 图表：左表（sticky left，横向不滚）+ 时间轴（表头 sticky top，纵向吸顶），两边逐行同一组行高 */}
               {/* 外面这层 relative 给自绘的竖向滑块（隐式浮在右缘）定位；下方横向那条是 fixed 在整个窗口底部的，不随页面滚 */}
               <div className="relative">

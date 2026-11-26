@@ -543,9 +543,9 @@ function stageMetaHtml(group: StageGroup, primary: OverviewExportLanguage): stri
   const mainSegments = stageMetaSegments(effort, primary, true);
   const secondarySegments = stageMetaSegments(effort, secondaryLang, false);
   const items = mainSegments.map((main, index) =>
-    '<span class="grp__meta-item">' + main +
+    '<span class="grp__effort-item">' + main +
     ' <span class="secondary" lang="' + languageAttr(secondaryLang) + '">' + secondarySegments[index] + "</span></span>");
-  return '<span class="grp__meta">' + items.join("") + "</span>";
+  return '<span class="grp__effort">' + items.join("") + "</span>";
 }
 
 /** 折叠阶段与任务行共用当前列配置；折叠行把阶段汇总值放回对应可见列，隐藏列不再占位。 */
@@ -571,7 +571,7 @@ function groupSectionHtml(
     '<tr class="grp__head"><td colspan="' + String(visibleColumns.length + 1) + '"><div class="grp__heading">' +
     '<span class="grp__name">' + stageName + '</span>' +
     (showCount ? '<span class="grp__count">' + countText + '</span>' : '') +
-    noteHtml +
+    noteHtml + " " +
     metaHtml +
     '</div></td></tr>';
 
@@ -583,7 +583,7 @@ function groupSectionHtml(
     const dateRange = groupDateRange(group);
     const fill = group.total === 0 ? "#d4d4d8" : pct === 100 ? "#10b981" : "#18181b";
     const cells: Record<OverviewTaskColumnKey, string> = {
-      title: '<td class="grp__name">' + stageName + noteHtml + metaHtml + '</td>',
+      title: '<td class="grp__name">' + stageName + noteHtml + " " + metaHtml + '</td>',
       note: '<td class="grp__count">' + countText + '</td>',
       managers: '<td class="managers"><span class="one-line">' + escapeHtml(managerText) + '</span></td>',
       owners: '<td class="owners"></td>',
@@ -674,14 +674,14 @@ const REPORT_STYLE = `
   tbody.grp tr.grp__head td { padding: 3px 7px; background: #f4f4f5; border-bottom: 1px solid #e4e4e7; break-after: avoid; }
   .grp__name { font-size: 10.5px; font-weight: 700; }
   .grp__count { margin-left: 6px; font-size: 9.5px; color: #71717a; }
-  .grp__heading { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 10px; row-gap: 2px; }
-  .grp__heading .grp__meta, .grp__heading .grp__note { margin-left: 0; }
-  .grp__meta { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 14px; row-gap: 1px; margin-left: 10px; font-size: 8.5px; color: #3f3f46; flex-shrink: 0; }
-  .grp__meta-item { white-space: nowrap; }
-  .grp__meta strong { font-weight: 700; color: #18181b; }
-  .grp__meta .secondary { margin-left: 4px; font-size: 8px; color: #a1a1aa; }
-  .grp__heading .grp__name, .grp__heading .grp__count { flex-shrink: 0; }
-  .grp__note { min-width: 0; max-width: calc(100% - 10px); margin-left: 10px; color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; flex-shrink: 0; }
+  .grp__heading { display: block; line-height: 1.55; }
+  .grp__heading .grp__name { white-space: nowrap; }
+  .grp__note { margin-left: 10px; color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; }
+  .grp__effort { font-size: 8.5px; color: #3f3f46; }
+  .grp__effort-item { display: inline-block; margin-right: 14px; white-space: nowrap; }
+  .grp__effort-item:last-child { margin-right: 0; }
+  .grp__effort strong { font-weight: 700; color: #18181b; }
+  .grp__effort .secondary { margin-left: 4px; font-size: 8px; color: #a1a1aa; }
   tbody.grp tr.grp__head--collapsed .grp__note { display: block; margin: 2px 0 0; }
   tbody.grp tr.grp__head--collapsed td { padding: 6px 5px; background: #fafafa; border: 0; border-bottom: 1px solid #e4e4e7; vertical-align: middle; }
   tbody.grp tr.grp__head--collapsed td:first-child { padding-left: 7px; border-left: 1px solid #e4e4e7; }

@@ -50,10 +50,9 @@ import { STATUS_DOT_CLASS, TaskRow, resolveColumns, tableGridTemplate, tableMinW
  * 其余口径（详见 `前端功能需求.md` §6.14）：
  * - 分组 = 施工阶段（九个阶段按项目总览顺序，空阶段照样出骨架行；非九阶段的任务落「临时任务」垫底 · Push 196）；
  * - 任务条 = 开始日期 → 预计完成日期；条内青色 = 已完成进度（`task.progress`）、橙色 = 剩余工期；
- * - 单日任务（开始 = 预计完成）画成与普通任务条同高同圆角的 1 天条（2026-11-26 起不再画菱形、也不铺满整格）—— 一期没有「是否里程碑」字段（系统功能书 A1-11 在二期），条色跟随所属阶段，已延期在条头保留红条；
- *   这里按单日派生，字段口径见 `前端功能需求.md` §3.8 A26；
- * - 深色竖线 = 实际完成日期刻度（系统功能书 B3-01「计划条 + 实际完成标注」）；
- * - 已延期 = 条头一段红内嵌色条（B3-05）；今天 = 蓝色虚线（今天落在时间轴范围内时才画）；
+ * - 单日任务（开始 = 预计完成）：不再画菱形，而是按对应日格子宽度铺满，垂直高度与多日任务条统一对齐（22px 居中），保持阶段配色体系；
+ * - 实际完成日期标注（B3-01）：条内不再画竖线，提前/按时在条内左侧或底部轻点/条外轻标，推迟则在条尾向右拉出细虚线与终点圆点直指实际完成日；
+ * - 已延期（B3-05）：去掉条头红杠，保留阶段配色，条框带轻细玫瑰红描边，超过预计完成日期向「今天」拉出半透明红色斜纹延伸段并标「+N天」（未过今天则右侧挂轻红签）；今天 = 蓝色虚线（今天落在时间轴范围内时才画）；
  * - 依赖箭头（B3-03）、关键路径（B3-04）、导出（B3-07）不在本期；B3-06 的粒度切换与筛选已在本轮补齐。
  *
  * 布局：左表与时间轴是同一个横向滚动容器里的两块并列面板 —— 左表 `sticky left-0`（横向不滚；列宽固定，
@@ -98,7 +97,7 @@ const HEADER_TOTAL_H = HEADER_H * 2;
 const ROW_H = 36;
 
 /** 任务条 / 阶段汇总条高度；条两端的热区宽与进度圆点直径（拖拽交互用）。 */
-const BAR_H = 20;
+const BAR_H = 22;
 const EDGE_ZONE_W = 6;
 const KNOB_SIZE = 10;
 
@@ -121,7 +120,7 @@ const PAD_DAYS = 2;
  * 未完成部分采用同色系浅底（而非高对比亮橙），已完成部分用饱和主色填充，整体干净通透。
  */
 type StagePalette = {
-  /** 阶段主色（括弧、已完成进度条、单日菱形默认态、阶段色点）。 */
+  /** 阶段主色（括弧、已完成进度条、阶段色点）。 */
   accent: string;
   /** 剩余工期底色（同色系浅底，与主色构成柔和对比）。 */
   track: string;
@@ -154,16 +153,13 @@ function stagePaletteOf(stage: string): StagePalette {
   return STAGE_PALETTE[stage] ?? DEFAULT_STAGE_PALETTE;
 }
 
-/** 图例示例色（取典型阶段的清亮色调）。 */
-const BAR_DONE_CLASS = "bg-[#0891b2]";
-const BAR_TODO_CLASS = "bg-[#cffafe]";
+/** 图例示例色（使用中性石板灰示范：实心 = 已完成进度，浅底 = 剩余工期，画布上按所属阶段分色）。 */
+const BAR_DONE_CLASS = "bg-slate-600";
+const BAR_TODO_CLASS = "bg-slate-200";
 
-/**
- * 已延期不再用条头 3px 红竖杠（业务 2026-11-26「去掉条头的 3px 红竖杠」）：
- * 改为条体极细 1px 玫瑰红描边 + 条外「超期滞留区」斜纹 / 右侧小签，见 renderTaskBar。
- * 选中态另见 BAR_SELECTED_CLASS。
- */
-const BAR_OVERDUE_OUTLINE = "inset 0 0 0 1px rgba(251,113,133,0.8)";
+/** 已延期超期延伸段斜纹（半透明玫瑰红斜线纹理）。 */
+const OVERDUE_TAIL_BG =
+  "repeating-linear-gradient(-45deg, rgba(244, 63, 94, 0.16) 0 4px, rgba(244, 63, 94, 0.04) 4px 8px)";
 
 /** 选中条的描边（官方 taskBar.selectable 的选中态）。 */
 const BAR_SELECTED_CLASS = "ring-2 ring-blue-600 shadow-[0_0_0_2px_rgba(37,99,235,0.25)]";
@@ -1391,19 +1387,15 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
           <li className="flex items-center gap-1.5">
             <span
               className="h-2.5 w-4 rounded-[3px] border border-rose-300"
-              style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(244,63,94,0.35) 0 3px, rgba(244,63,94,0.08) 3px 6px)" }}
+              style={{ backgroundImage: OVERDUE_TAIL_BG }}
               aria-hidden="true"
             />
             {t("gantt.legend.overdue")}
           </li>
-          <li className="flex items-center gap-1.5" title={t("gantt.legend.singleDayHint")}>
-            <span className="h-2.5 w-4 rounded-[3px] bg-[#64748b]" aria-hidden="true" />
-            {t("gantt.legend.singleDay")}
-          </li>
-          <li className="flex items-center gap-1.5" title={t("gantt.legend.doneDateHint")}>
-            <span className="relative h-2.5 w-5" aria-hidden="true">
-              <span className="absolute left-0 right-1 top-1/2 border-t border-dashed border-slate-400" />
-              <span className="absolute right-0 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-slate-600 ring-1 ring-white" />
+          <li className="flex items-center gap-1.5">
+            <span className="inline-flex items-center" aria-hidden="true">
+              <span className="h-0 w-2.5 border-t border-dashed border-slate-500" />
+              <span className="h-2 w-2 rounded-full border-[1.5px] border-white bg-slate-700 shadow-sm" />
             </span>
             {t("gantt.legend.doneDate")}
           </li>
@@ -1525,45 +1517,44 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             </button>
           </>
         ) : null}
-      </div>
-      <div className="mt-2 flex items-start justify-between gap-3 border-t border-zinc-100 pt-2">
-        <div data-gantt-help="" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] leading-4 text-zinc-500">
-          <span className="inline-flex shrink-0 items-center gap-1 font-medium text-zinc-600">
-            <svg viewBox="0 0 20 20" aria-hidden="true" className="h-3.5 w-3.5 shrink-0"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M10 8.4v5M10 5.8v.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-            <span>{t("gantt.help.title")}</span>
-          </span>
-          <span className="hidden h-3 w-px shrink-0 bg-zinc-200 sm:inline-block" aria-hidden="true" />
-          <span className="whitespace-nowrap">{t("gantt.help.move")}</span>
-          <span className="whitespace-nowrap">{t("gantt.help.resize")}</span>
-          <span className="whitespace-nowrap">{t("gantt.help.progress")}</span>
-          <span className="whitespace-nowrap">{t("gantt.help.pan")}</span>
-          <span className="whitespace-nowrap">{t("gantt.help.pick")}</span>
-          <span className="whitespace-nowrap">{t("gantt.help.splitter")}</span>
-          {!barsLocked && onPatchTask !== undefined && visibleTasks.some((task) =>
-            task.stageKey !== null && task.finalizedAt === null && taskCapabilitiesOf(task).source === "project_edit"
-          ) ? (
-            <label className="inline-flex items-center gap-1.5 text-xs text-zinc-700">
-              <input type="checkbox" checked={shiftFollowing} onChange={(event) => setShiftFollowing(event.target.checked)} />
-              {t("task.schedule.shiftFollowing")}
-            </label>
-          ) : null}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div data-gantt-help="" className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] leading-4 text-zinc-400">
+            <span className="inline-flex shrink-0 items-center gap-1 font-medium text-zinc-500">
+              <svg viewBox="0 0 20 20" aria-hidden="true" className="h-3.5 w-3.5 shrink-0"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M10 8.4v5M10 5.8v.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+              <span>{t("gantt.help.title")}</span>
+            </span>
+            <span className="whitespace-nowrap">{t("gantt.help.move")}</span>
+            <span className="whitespace-nowrap">{t("gantt.help.resize")}</span>
+            <span className="whitespace-nowrap">{t("gantt.help.progress")}</span>
+            <span className="whitespace-nowrap">{t("gantt.help.pan")}</span>
+            <span className="whitespace-nowrap">{t("gantt.help.pick")}</span>
+            <span className="whitespace-nowrap">{t("gantt.help.splitter")}</span>
+            {!barsLocked && onPatchTask !== undefined && visibleTasks.some((task) =>
+              task.stageKey !== null && task.finalizedAt === null && taskCapabilitiesOf(task).source === "project_edit"
+            ) ? (
+              <label className="inline-flex items-center gap-1.5 text-xs text-zinc-700">
+                <input type="checkbox" checked={shiftFollowing} onChange={(event) => setShiftFollowing(event.target.checked)} />
+                {t("task.schedule.shiftFollowing")}
+              </label>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            data-gantt-lock={barsLocked ? "locked" : "unlocked"}
+            aria-pressed={barsLocked}
+            aria-label={t("gantt.lock.toggleAria")}
+            title={t(barsLocked ? "gantt.lock.lockedTip" : "gantt.lock.unlockedTip")}
+            onClick={toggleBarsLocked}
+            className={
+              "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition " +
+              (barsLocked
+                ? "border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100")
+            }
+          >
+            <GanttLockIcon locked={barsLocked} />
+          </button>
         </div>
-        <button
-          type="button"
-          data-gantt-lock={barsLocked ? "locked" : "unlocked"}
-          aria-pressed={barsLocked}
-          aria-label={t("gantt.lock.toggleAria")}
-          title={t(barsLocked ? "gantt.lock.lockedTip" : "gantt.lock.unlockedTip")}
-          onClick={toggleBarsLocked}
-          className={
-            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition " +
-            (barsLocked
-              ? "border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-              : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100")
-          }
-        >
-          <GanttLockIcon locked={barsLocked} />
-        </button>
       </div>
     </div>
   );
@@ -1684,7 +1675,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   };
 
   /**
-   * 任务条：单日任务 = 与普通条同高的 1 天条（只给整条平移；条色跟随阶段、已延期条头红条）；其余 = 分阶段进度 + 同色浅底 + 实际完成刻度；
+   * 任务条：按所属阶段取协调色（主色进度 + 同色系浅底剩余工期 + 实际完成刻度）；
+   * 单日任务（开始 = 预计完成）不再画菱形，直接把对应的日格子用阶段色铺满（仍支持拖动改期 / 改工期 / 改进度）；
    * 悬停 / 拖动时条两端浮出改工期的热区与进度圆点，拖动中的那条上方浮一枚日期（进度）浮标。
    */
   const renderTaskBar = (bar: GanttBar) => {
@@ -1701,155 +1693,111 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     const canEditDates = !barsLocked && capabilities.canEditFields && bar.task.finalizedAt === null;
     const canEditProgress = !barsLocked && capabilities.canUpdateProgress && bar.task.finalizedAt === null;
     const barCursor = !canEditDates ? "cursor-default" : dragging ? "cursor-grabbing" : "cursor-grab";
-    const showHandles = canEditDates && (barHovered || dragging);
+    const showHandles = canEditDates && box.width >= 18 && (barHovered || dragging);
     const showProgressHandle = canEditProgress && (barHovered || dragging);
     const percent = Math.round(live.percent);
     // 条内标签对齐官方 labelText「{title} {progress}%」：条够宽写全，窄条只写百分比、再窄就不写。
     const barLabel = box.width >= 84 ? ganttTitle(bar.task) + " " + String(percent) + "%" : String(percent) + "%";
+
     const palette = stagePaletteOf(bar.stage);
     const overdue = bar.status === "已延期";
-    const done = bar.done;
-    /** 计划条右端（行坐标系）。 */
-    const barRight = box.left + box.width;
-    /** 实际完成点中心（行坐标系 = 距时间轴首日的天数，和 barBox 同一原点）。 */
-    const doneX = done === null ? null : (dayDiff(model.rangeStart, done) + 0.5) * dayWidth;
-    const doneTip = t("gantt.tip.done", { date: bar.task.doneDate === "" ? "—" : mdText(locale, bar.task.doneDate) });
-    /** 未完成且已过预计完成：从条右端到今天的「超期滞留区」斜纹延伸段。 */
-    const overdueDays = overdue && done === null && live.end < today ? dayDiff(live.end, today) : 0;
-    const overdueExtensionWidth = overdueDays > 0 && todayLeft !== null ? Math.max(todayLeft - barRight - 0.5, 0) : 0;
-    const showOverdueExtension = overdueExtensionWidth >= 3;
-    /** 预计完成还没到（或今天不在范围内）但状态是已延期：条右侧挂一枚轻量「延期」小签。 */
-    const showOverdueTag = overdue && done === null && !showOverdueExtension;
-
-    /** 已延期条外标记：超期滞留区斜纹 + 天数 / 或右侧小签（条头不再画红竖杠）。 */
-    const overdueMarks = (left: number, width: number) => (
-      <>
-        {showOverdueExtension ? (
-          <>
-            <span
-              className="pointer-events-none absolute rounded-r-[3px] border border-l-0 border-rose-200"
-              style={{
-                left: left + width,
-                width: overdueExtensionWidth,
-                height: BAR_H - 4,
-                top: (ROW_H - (BAR_H - 4)) / 2,
-                backgroundImage: "repeating-linear-gradient(45deg, rgba(244,63,94,0.16) 0 4px, rgba(244,63,94,0.05) 4px 8px)",
-              }}
-              title={t("gantt.overdue.extensionTip", { n: overdueDays })}
-              aria-hidden="true"
-            />
-            <span
-              className="pointer-events-none absolute whitespace-nowrap text-[10px] font-semibold leading-none text-rose-600"
-              style={{ left: left + width + overdueExtensionWidth + 4, top: (ROW_H - 10) / 2 }}
-            >
-              {t("gantt.overdue.days", { n: overdueDays })}
-            </span>
-          </>
-        ) : null}
-        {showOverdueTag ? (
-          <span
-            className="pointer-events-none absolute whitespace-nowrap rounded border border-rose-200 bg-rose-50 px-1 text-[10px] font-semibold leading-[15px] text-rose-600"
-            style={{ left: left + width + 4, top: (ROW_H - 17) / 2 }}
-          >
-            {t("gantt.overdue.tag")}
-          </span>
-        ) : null}
-      </>
-    );
-
-    /** 实际完成标记（B3-01）：按时 / 提前 = 条内底部 4px 小圆点；延期完成 = 条右端虚线延伸到实际完成日并落实心点。 */
-    const doneMarks = (left: number, width: number) => {
-      if (done === null || doneX === null) {
-        return null;
-      }
-      if (done > live.end) {
-        return (
-          <>
-            <span
-              className="pointer-events-none absolute border-t border-dashed border-slate-500/70"
-              style={{ left: left + width, width: Math.max(doneX - (left + width), 0), top: ROW_H / 2 }}
-              aria-hidden="true"
-            />
-            <span
-              className="absolute z-10 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-600 shadow-sm ring-2 ring-white"
-              style={{ left: doneX, top: ROW_H / 2 }}
-              title={doneTip}
-            />
-          </>
-        );
-      }
-      return (
-        <span
-          className="absolute z-10 h-1 w-1 -translate-x-1/2 rounded-full bg-white ring-1 ring-slate-900/45"
-          style={{ left: clampNumber(doneX - left, 3, Math.max(width - 3, 3)), bottom: 1 }}
-          title={doneTip}
-        />
-      );
-    };
-
-    if (bar.milestone) {
-      // 单日任务（业务 2026-11-26）：画成与普通任务条同高、同圆角的 1 天条，颜色跟随所属阶段；
-      // 已延期不再画条头红竖杠，改为 1px 玫瑰红描边 + 条外超期延伸 / 小签。只给整条平移。
-      return (
-        <>
-          <span
-            className={
-              "absolute touch-none select-none rounded-[5px] " +
-              (selected ? BAR_SELECTED_CLASS : "shadow-[0_1px_2px_rgba(15,23,42,0.10)]") +
-              " " +
-              barCursor
-            }
-            style={{
-              left: box.left,
-              top: (ROW_H - BAR_H) / 2,
-              width: box.width,
-              height: BAR_H,
-              backgroundColor: palette.accent,
-              boxShadow: selected ? undefined : overdue ? BAR_OVERDUE_OUTLINE : "inset 0 0 0 1px rgba(15,23,42,0.08)",
-            }}
-            title={barTitle}
-            onPointerDown={(event) => {
-              beginDrag(event, bar, "move");
-            }}
-            onPointerMove={moveDrag}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-            onMouseEnter={() => {
-              setHoveredBar(bar.task.id);
-            }}
-            onMouseLeave={() => {
-              setHoveredBar(null);
-            }}
-            onClick={(event) => {
-              event.stopPropagation();
-              setSelectedId(bar.task.id);
-            }}
-          >
-            {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 rounded-[5px] bg-slate-900/10" aria-hidden="true" /> : null}
-          </span>
-          {done !== null && done > live.end ? doneMarks(box.left, box.width) : null}
-          {overdueMarks(box.left, box.width)}
-          {dragBubble(box.left, dragging)}
-        </>
-      );
-    }
-
+    const isSingleDay = live.start === live.end;
+    // 单日任务宽度按日网格留 1px 缝，垂直高度与多日任务条统一居中（22px 高），保持水平视觉线齐整。
+    const cellLeft = isSingleDay ? box.left + 1 : box.left;
+    const cellWidth = isSingleDay ? Math.max(box.width - 1, 3) : box.width;
+    const barTop = (ROW_H - BAR_H) / 2;
+    const barHeight = BAR_H;
+    const barRight = cellLeft + cellWidth;
     // 已完成进度 >= 55% 时深色主色铺过半条，文字切换白色提升对比度；未完成浅底段用同色系深字。
     const labelColor = live.percent >= 55 ? "#ffffff" : palette.text;
+
+    // 实际完成日期（方案 A）：条内彻底不画竖线；
+    // - 推迟完成（done > live.end）：从计划条右端向外拉出虚线 + 实心终点圆点直指实际完成日；
+    // - 按时 / 提前完成（done <= live.end）：在条外右侧挂轻盈的「✓ M/D」小标（若同时超期延长，则放在延长尾端）。
+    const done = bar.done;
+    const doneLateDays = done !== null && done > live.end ? dayDiff(live.end, done) : 0;
+    const doneCenterX = done !== null && done > live.end ? (dayDiff(model.rangeStart, done) + 0.5) * dayWidth : null;
+    const doneEarlyOrOnTime = done !== null && done <= live.end;
+
+    // 已延期（方案 1）：去掉条头 3px 红竖杠，保留阶段配色；
+    // - 若预计完成日期早于今天（today > live.end）且任务未完成：向「今天」拉出半透明玫瑰红斜纹延伸段并标「+N天」；
+    // - 若尚未到今天或已标延期但预计在今天及之后：条外右侧挂轻量红色「已延期」标记（不压条内文字）。
+    const overdueTailDays = overdue && today > live.end ? dayDiff(live.end, today) : 0;
+    const overdueTailLeft = barRight;
+    const showDoneInlineDot = doneLateDays > 0 && doneCenterX !== null && doneCenterX > barRight + 2;
+    const isTaskCompleted = isTaskDone(bar.task);
+    // 已完成任务即使之前曾超期，若有实际完成日期则以实际完成连线为准，不再拉向「今天」的超期滞留条
+    const effectiveOverdueTailDays = !isTaskCompleted ? overdueTailDays : 0;
+    const effectiveOverdueTailWidth = effectiveOverdueTailDays > 0 ? Math.max(effectiveOverdueTailDays * dayWidth, 6) : 0;
+    const effectiveOverdueBadgeOnly = overdue && !isTaskCompleted && effectiveOverdueTailDays <= 0;
+
+    // 条右侧紧邻的轻量徽标起点（避开超期斜纹延伸段 / 实际完成延迟虚线点）
+    const rightAddonLeft =
+      showDoneInlineDot && doneCenterX !== null
+        ? Math.max(doneCenterX + 8, barRight + effectiveOverdueTailWidth + 6)
+        : effectiveOverdueTailWidth > 0
+          ? barRight + effectiveOverdueTailWidth + 6
+          : barRight + 6;
+
     return (
       <>
+        {/* 1. 已延期超期滞留延伸段（方案 1：半透明淡红斜纹从计划条尾拉向「今天」） */}
+        {overdue && effectiveOverdueTailWidth > 0 ? (
+          <div
+            data-gantt-overdue-tail=""
+            className="pointer-events-none absolute flex items-center rounded-r-[4px] border border-l-0 border-rose-300/90"
+            style={{
+              left: overdueTailLeft,
+              width: effectiveOverdueTailWidth,
+              top: barTop + 2,
+              height: barHeight - 4,
+              backgroundImage: OVERDUE_TAIL_BG,
+            }}
+            title={t("gantt.overdue.days", { n: effectiveOverdueTailDays })}
+            aria-hidden="true"
+          />
+        ) : null}
+
+        {/* 2. 推迟完成的实际完成日期虚线 + 实心终点圆点（方案 A：条外直指实际完成日，不劈裂条内文字） */}
+        {showDoneInlineDot && doneCenterX !== null && done !== null ? (
+          <div
+            data-gantt-done-marker="late"
+            className="pointer-events-none absolute flex items-center"
+            style={{
+              left: barRight,
+              width: Math.max(doneCenterX - barRight, 6),
+              top: barTop,
+              height: barHeight,
+            }}
+            title={t("gantt.tip.done", { date: mdText(locale, isoOf(done)) })}
+          >
+            <span className="h-0 flex-1 border-t border-dashed border-slate-500/80" aria-hidden="true" />
+            <span
+              className="-ml-1 h-2.5 w-2.5 shrink-0 rounded-full border-[1.5px] border-white bg-slate-700 shadow-sm"
+              aria-hidden="true"
+            />
+          </div>
+        ) : null}
+
+        {/* 3. 主任务条（极简干净：阶段底色 + 进度填充 + 任务名%，已延期仅加轻细玫瑰红边框不压条内） */}
         <div
+          data-gantt-single-day={isSingleDay ? "true" : undefined}
           className={
-            "absolute flex touch-none select-none items-center overflow-hidden rounded-[5px] shadow-[0_1px_2px_rgba(15,23,42,0.06)] " +
-            (selected ? BAR_SELECTED_CLASS : " ") +
+            "absolute flex touch-none select-none items-center overflow-hidden " +
+            (isSingleDay ? "rounded-[4px] " : "rounded-[5px] ") +
+            (selected
+              ? BAR_SELECTED_CLASS
+              : overdue
+                ? "ring-1 ring-rose-400/90 shadow-[0_1px_2px_rgba(244,63,94,0.12)]"
+                : "shadow-[0_1px_2px_rgba(15,23,42,0.06)]") +
             " " +
             (dragging ? "cursor-grabbing shadow-md" : barCursor)
           }
           style={{
-            left: box.left,
-            width: box.width,
-            height: BAR_H,
-            top: (ROW_H - BAR_H) / 2,
+            left: cellLeft,
+            width: cellWidth,
+            height: barHeight,
+            top: barTop,
             backgroundColor: palette.track,
           }}
           title={barTitle}
@@ -1875,7 +1823,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             style={{ width: String(live.percent) + "%", backgroundColor: palette.accent }}
             aria-hidden="true"
           />
-          {overdue ? <span className="pointer-events-none absolute inset-0 rounded-[5px]" style={{ boxShadow: BAR_OVERDUE_OUTLINE }} aria-hidden="true" /> : null}
           {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 bg-slate-900/10" aria-hidden="true" /> : null}
           {box.width < 40 ? null : (
             <span
@@ -1885,7 +1832,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
               {barLabel}
             </span>
           )}
-          {done !== null && done <= live.end ? doneMarks(box.left, box.width) : null}
           {showHandles ? (
             <>
               {/* 拖两端 = 改工期（官方 taskBar.resizable）：热区只在悬停 / 拖动时显形，平时不噪。 */}
@@ -1911,7 +1857,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                 width: KNOB_SIZE,
                 height: KNOB_SIZE,
                 left: clampNumber((live.percent / 100) * box.width - KNOB_SIZE / 2, EDGE_ZONE_W, Math.max(box.width - KNOB_SIZE - EDGE_ZONE_W, EDGE_ZONE_W)),
-                top: (BAR_H - KNOB_SIZE) / 2,
+                top: (barHeight - KNOB_SIZE) / 2,
               }}
               title={t("gantt.tip.dragProgress", { n: percent })}
               onPointerDown={(event) => {
@@ -1920,21 +1866,55 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             />
           ) : null}
         </div>
-        {done !== null && done > live.end ? doneMarks(box.left, box.width) : null}
-        {overdueMarks(box.left, box.width)}
-        {dragBubble(box.left, dragging)}
+
+        {/* 4. 条外轻量状态标注（按时/提前完成「✓ M/D」；延迟完成「+N天」；超期滞留「+N天」；已延期小签） */}
+        {!dragging && (effectiveOverdueTailDays > 0 || effectiveOverdueBadgeOnly || doneEarlyOrOnTime || doneLateDays > 0) ? (
+          <div
+            className="pointer-events-none absolute flex items-center gap-1.5 whitespace-nowrap text-[10px] font-medium leading-none"
+            style={{ left: rightAddonLeft, top: barTop, height: barHeight }}
+          >
+            {effectiveOverdueTailDays > 0 ? (
+              <span className="rounded bg-rose-50 px-1 py-0.5 font-semibold text-rose-600 ring-1 ring-rose-200/80">
+                +{effectiveOverdueTailDays}{t("gantt.dayShort")}
+              </span>
+            ) : effectiveOverdueBadgeOnly ? (
+              <span className="rounded bg-rose-50 px-1 py-0.5 font-medium text-rose-600 ring-1 ring-rose-200/80">
+                {t("gantt.legend.overdue")}
+              </span>
+            ) : null}
+            {doneLateDays > 0 && done !== null ? (
+              <span
+                data-gantt-done-marker="late-label"
+                className="text-slate-500"
+                title={t("gantt.tip.done", { date: mdText(locale, isoOf(done)) })}
+              >
+                {mdText(locale, isoOf(done))} (+{doneLateDays}{t("gantt.dayShort")})
+              </span>
+            ) : doneEarlyOrOnTime && done !== null ? (
+              <span
+                data-gantt-done-marker="ontime"
+                className="inline-flex items-center gap-0.5 text-slate-400"
+                title={t("gantt.tip.done", { date: mdText(locale, isoOf(done)) })}
+              >
+                <span aria-hidden="true">✓</span>
+                <span>{mdText(locale, isoOf(done))}</span>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {dragBubble(cellLeft, dragging)}
       </>
     );
   };
 
   /**
-   * 阶段行（图二/图三样式的「顶部括弧统计」+ 展开时包络底框）：
-   * - 折叠态（或组内 0 任务有排期时只画无）：画紧凑的圆角括弧横条；
-   * - 展开态：画带左右向下折钩的「门型括弧 [‾‾‾]」，并在括弧下方铺一层淡色半透明包络底框罩住本阶段所有子任务行；
-   * - 括弧上内嵌「已完成 done/total · 百分比% · 共 N 天」统计，工期并集实时跟着正在拖动的子任务预览值走。
+   * 阶段行（顶部括弧统计 + 展开包络）：
+   * - 门型括弧（顶部进度横梁 + 左右向下折钩）包住本阶段工期跨度；
+   * - 统计标签放到括弧紧右侧（而非骑在横梁上方），彻底避免与上一行或吸顶表头碰撞；
+   * - 展开时在括弧下方铺一层淡色半透明包络底框罩住本阶段所有子任务行。
    */
   const renderGroupBar = (group: GanttGroup) => {
-    // 计算阶段并集：若组内某任务正在被拖动，括弧范围实时跟着 live 预览走
     let liveStart: number | null = null;
     let liveEnd: number | null = null;
     for (const bar of group.bars) {
@@ -1953,8 +1933,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     const spanDays = dayDiff(liveStart, liveEnd) + 1;
     const expandedHeight = group.expandedCount > 0 ? group.expandedCount * ROW_H : 0;
     const summaryText = t("board.stage.done", { done: group.doneCount, total: group.bars.length }) + " · " + String(group.percent) + "% · " + t("pm.gantt.days", { n: spanDays });
-    const bracketTop = 18;
-    const barThickness = 6;
+    const bracketTop = Math.round((ROW_H - 12) / 2);
+    const barThickness = 5;
     const legH = 7;
 
     return (
@@ -1962,7 +1942,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
         className="pointer-events-none absolute inset-y-0 left-0 right-0"
         style={{ zIndex: 2 }}
       >
-        {/* 阶段展开时包住子任务区域的淡色包络底框（参考图二） */}
+        {/* 阶段展开时包住子任务区域的淡色包络底框 */}
         {expandedHeight > 0 ? (
           <div
             data-gantt-stage-envelope={group.stage}
@@ -1979,17 +1959,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
           />
         ) : null}
 
-        {/* 括弧上方统计标签（落在同一行上半部 2..16px，绝不越界挡住上一行或吸顶表头） */}
-        <div
-          className="pointer-events-none absolute flex items-center gap-1.5 whitespace-nowrap text-[10px] font-semibold leading-[14px] tabular-nums"
-          style={{ left: box.left + 2, top: 2, color: palette.text }}
-        >
-          <span>{stageText(locale, group.stage)}</span>
-          <span className="rounded px-1 py-0 text-[10px] font-medium" style={{ backgroundColor: palette.track, color: palette.text }}>
-            {summaryText}
-          </span>
-        </div>
-
         {/* 括弧横梁（顶横杠 + 左下折钩 + 右下折钩；未完成段用同色系浅底、已完成段用阶段主色） */}
         <div
           data-gantt-stage-bracket={group.stage}
@@ -1997,9 +1966,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
           style={{ left: box.left, width: box.width, top: bracketTop, height: barThickness + legH }}
           title={t("gantt.groupSpan.tip", { text: String(group.doneCount) + "/" + String(group.bars.length) + " · " + String(group.percent) + "%" })}
         >
-          {/* 括弧横梁本体 */}
           <div
-            className="relative w-full overflow-hidden rounded-t-[4px]"
+            className="relative w-full overflow-hidden rounded-t-[3px]"
             style={{ height: barThickness, backgroundColor: palette.track }}
           >
             <span
@@ -2008,18 +1976,27 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
               aria-hidden="true"
             />
           </div>
-          {/* 左端向下折钩 */}
           <span
-            className="absolute left-0 block w-[4px] rounded-b-[2px]"
+            className="absolute left-0 block w-[3px] rounded-b-[2px]"
             style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent > 0 ? palette.accent : palette.track }}
             aria-hidden="true"
           />
-          {/* 右端向下折钩 */}
           <span
-            className="absolute right-0 block w-[4px] rounded-b-[2px]"
+            className="absolute right-0 block w-[3px] rounded-b-[2px]"
             style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent >= 100 ? palette.accent : palette.track }}
             aria-hidden="true"
           />
+        </div>
+
+        {/* 统计标签放在括弧紧右侧，不占上方高度，彻底杜绝与表头/上一行碰撞 */}
+        <div
+          className="pointer-events-none absolute flex items-center gap-1.5 whitespace-nowrap text-[10px] font-semibold leading-none tabular-nums"
+          style={{ left: box.left + box.width + 8, top: 0, height: ROW_H, color: palette.text }}
+        >
+          <span>{stageText(locale, group.stage)}</span>
+          <span className="rounded px-1.5 py-0.5 text-[10px] font-medium" style={{ backgroundColor: palette.track, color: palette.text }}>
+            {summaryText}
+          </span>
         </div>
       </div>
     );

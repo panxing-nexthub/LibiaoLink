@@ -18,7 +18,7 @@ import { and, desc, eq, gt, gte, isNotNull, ne, sql } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { users } from "../../db/schema/identity.js";
-import { notifyDeliveries, wecomAibotDmActivations, wecomIdBindingCodes } from "../../db/schema/notify.js";
+import { notifyDeliveries, wecomAibotDmActivations, wecomAibotWelcomeSent, wecomIdBindingCodes } from "../../db/schema/notify.js";
 
 /** 单聊收件人（用户生命周期判定用；发送地址不在此结构 —— 见绑定行）。 */
 export interface WecomDmContact {
@@ -582,5 +582,21 @@ export class NotifyDmRepository {
       error: input.error,
       sentAt: input.sentAt,
     });
+  }
+
+  /**
+   * 欢迎语一次性领取（0124 · 2026-11-26）：登记 (bot_id, wecom_userid)，返回 true = 首次（本次应回欢迎语）。
+   * 并发安全：on conflict do nothing + returning —— 只有真正插入成功的调用拿到行；重复 enter_chat 拿不到。
+   */
+  async claimWelcomeOnce(
+    input: { botId: string; wecomUserid: string; at: Date },
+    client: DbClient = this.database.db,
+  ): Promise<boolean> {
+    const rows = await client
+      .insert(wecomAibotWelcomeSent)
+      .values({ botId: input.botId, wecomUserid: input.wecomUserid, sentAt: input.at })
+      .onConflictDoNothing({ target: [wecomAibotWelcomeSent.botId, wecomAibotWelcomeSent.wecomUserid] })
+      .returning({ botId: wecomAibotWelcomeSent.botId });
+    return rows.length > 0;
   }
 }

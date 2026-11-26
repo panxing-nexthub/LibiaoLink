@@ -1,3 +1,10 @@
+> **2026-11-26 14:22–14:23 阶段标题改内联流修复空隙与第二行错位（仅测试机 · frontend-only · test-20261126-1422-px-stage-header-inline-18aadcb5）**：代码来源 `codex/test-release-stage-notes-20261126` @ `18aadcb5`。previousRelease / previousManifestRelease = `test-20261126-1417-px-stage-note-first-e7252449`。
+> **问题 / 修复**：上一版用 flex + gap 排版，PDF 渲染器（html2canvas）对 `gap` / 嵌套 flex 支持差 —— 第一列「阶段名 → 完成数」出现大空隙、第二行统计与换行文字重叠。本版改为**普通内联流**：阶段名 / 完成数 / 备注 / 统计全部内联，统计段用 `inline-block + margin-right: 14px`，换行自然左对齐；统计类名由 `grp__meta` 改为 `grp__effort` 避开旧样式冲突；阶段名加 `white-space: nowrap`。本地 Chrome 在 1000 / 900 / 700px 宽度下用同款 HTML+CSS 复现验证：阶段名、13 / 19、备注同一行且无空隙，统计换行左对齐无重叠。
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,677,732 B / `bb4965fd…`（678 文件）、`frontend-files.sha256` 92,437 B / `8aaba4d4…`、`deploy-test.sh` 3,172 B / `de4071f5…`；测试机前端 706 → 708 文件，重建 web。
+> **验证 / 清单**：`/`、`/healthz`、`/readyz` 均 200；web healthy、RestartCount 0、OOM false；线上 `index.html` `e8c9e4d1…`、CSS `f8affd40…`、ES `70cb6481…`，主包 `assets/index-BR40uh-C.js` 2,779,444 B / `c5a4d5de…`（构建 2,779,416 B + guard 28 字节）；产物命中 `grp__effort-item`；manifest 4,292 B / `a261e17e…`，root:root 644。
+> **备份 / 回滚**：`/srv/data/backups/before-test-20261126-1422-px-stage-header-inline-18aadcb5`（4 文件 / 57,014,170 B / SHA256SUMS `27cbe1f8…`）。回滚：恢复 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`，再重建 web。
+> **边界**：仅测试机前端 dist、staging 与 release manifest；无 server / shared / API / 数据库 / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变更。
+
 > **2026-11-26 14:17–14:18 阶段标题备注优先第一行（仅测试机 · frontend-only · test-20261126-1417-px-stage-note-first-e7252449）**：代码来源 `codex/test-release-stage-notes-20261126` @ `e7252449`。previousRelease / previousManifestRelease = `test-20261126-1415-px-stage-meta-align-a7141ee8`。
 > **改动 / 验收**：阶段标题渲染顺序改为「阶段名 → 完成数 → 备注 → 统计」—— 备注优先紧跟「完成」放在第一行，统计（起止 / 历时、单日最多人天、平均每天人天，双语）随后；统计放不下时按段换到下一行并左对齐，尽量把原来 3 行压回 2 行、节约纵向空间。frontend typecheck / build 通过。
 > **发布件 / 安装**：`frontend-dist.tar.gz` 22,677,850 B / `10c73530…`（678 文件）、`frontend-files.sha256` 92,437 B / `ad8f073a…`、`deploy-test.sh` 3,167 B / `87eee131…`；测试机前端 704 → 706 文件，重建 web。

@@ -11,7 +11,7 @@
 | 契约 | `shared/src/modules/translate.ts`（POST /api/v1/translate · POST /api/v1/translate/batch） |
 | 数据 | `content_translations`（迁移 0047；键 = source_lang + target_lang + sha256(source_text)，source_text = 原文） |
 | 通道 | `TRANSLATE_PROVIDER=openai` = OpenAI 兼容 API（`TRANSLATE_API_BASE_URL` / `TRANSLATE_API_MODEL` / `TRANSLATE_API_KEY`，公司 New API 网关；Push 309 起默认接入）；`local` = 本地 / 内网引擎（`TRANSLATE_ORIGIN`，默认 `http://127.0.0.1:5008`）；`TRANSLATE_FALLBACK_ORIGIN`（可选）= 主通道失败时的本地兜底 |
-| 文本加工 | `translate.text.ts`：术语保护 / 回换（11 条词表，按目标语言固定译法）+ 英文整句全大写 / 句首大写规整（Push 311）+ 日韩空白与标点清理 —— 原前端 translateApi.ts 逻辑内聚到服务端 |
+| 文本加工 | `translate.text.ts`：术语保护 / 回换（内置 11 条词表 + 官方产品名 + 节点库 `task_nodes.title → title_en`，节点库词条优先、长词优先，按目标语言固定译法）+ 英文整句全大写 / 句首大写规整（Push 311）+ 日韩空白与标点清理 —— 原前端 translateApi.ts 逻辑内聚到服务端 |
 | 前端 | `frontend/src/translateApi.ts`（会话缓存 L1；服务端译文库 L2；单条 L3）+ 保存链路预热挂点（task / project 控制器） |
 
 ## 行为
@@ -33,6 +33,7 @@
 ## 键口径（重要）
 
 - `q` = **原文**（所有通路统一：前端单条 / 批量查库 / 保存链路预热）—— 术语保护 / 回换 / 规整只在服务端做一次；
+- **专业名词字典**：`TranslateService.nodeGlossary()` 每 5 分钟从 `task_nodes` 读 `title / title_en`（公共 + 模板私有节点），与内置术语 / 官方产品名合并后统一保护；界面切换、保存预热、导出 PDF 同一口径。
 - 换引擎 / 提质量：按 engine 列可批量重翻（切 API 后存量行仍是旧 engine 标记，可按需重翻，旧行自然被覆盖）。
 
 ## 与前端旧口径的差异（Push 301 内变更）

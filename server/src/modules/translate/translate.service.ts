@@ -22,7 +22,7 @@ import { AppError } from "../../common/errors/app-error.js";
 import { AppConfig } from "../../config/config.module.js";
 import { ModelConfigService, type ActiveModelConnection } from "../model-config/index.js";
 import { TranslateRepository } from "./translate.repository.js";
-import { finalizeTranslation, protectGlossary } from "./translate.text.js";
+import { finalizeTranslation, protectGlossary, type GlossaryTerm } from "./translate.text.js";
 
 /** 译文库行的引擎标识（换引擎后按此列可批量重翻）。 */
 export const TRANSLATE_ENGINE = "hy-mt-1.5-1.8b";
@@ -53,6 +53,10 @@ export class TranslateService {
   private readonly logger = new Logger(TranslateService.name);
   /** 预热去重表（目标语言 + 原文 → 最近排队时间）。 */
   private readonly warmupRecent = new Map<string, number>();
+  /** 专业名词字典缓存（节点库中英对照；5 分钟内复用，避免每条翻译都查库）。 */
+  private glossaryCache: { at: number; terms: readonly GlossaryTerm[] } | null = null;
+  private glossaryLoading: Promise<readonly GlossaryTerm[]> | null = null;
+  private static readonly GLOSSARY_TTL_MS = 300000;
 
   constructor(
     private readonly config: AppConfig,
@@ -171,18 +175,50 @@ export class TranslateService {
   }
 
   /**
+   * 专业名词字典（节点库 title → title_en；公共 + 模板私有节点）：
+   * 全局机翻（界面切换 / 保存预热 / 导出 PDF）出引擎前统一先读这里，术语按官方英文回换。
+   * 读库失败时沿用旧缓存（无缓存则只用内置术语），不阻断翻译。
+   */
+  private async nodeGlossary(): Promise<readonly GlossaryTerm[]> {
+    const now = Date.now();
+    if (this.glossaryCache !== null && now - this.glossaryCache.at < TranslateService.GLOSSARY_TTL_MS) {
+      return this.glossaryCache.terms;
+    }
+    if (this.glossaryLoading !== null) {
+      return this.glossaryLoading;
+    }
+    this.glossaryLoading = (async () => {
+      try {
+        const rows = await this.repository.listNodeGlossary();
+        const terms = rows.map((row) => ({ zh: row.zh, en: row.en }));
+        this.glossaryCache = { at: Date.now(), terms };
+        return terms;
+      } catch (error) {
+        this.logger.warn("专业名词字典读取失败，沿用上次缓存：" + (error instanceof Error ? error.message : String(error)));
+        const stale = this.glossaryCache?.terms ?? [];
+        this.glossaryCache = { at: Date.now(), terms: stale };
+        return stale;
+      } finally {
+        this.glossaryLoading = null;
+      }
+    })();
+    return this.glossaryLoading;
+  }
+
+  /**
    * 调翻译通道（Push 309/310 · provider 可插拔）：`openai` = API 主通道（主模型 → 备用模型两跳；仍失败且配置了 TRANSLATE_FALLBACK_ORIGIN 时改调本地引擎）；
    * `local` = 本地引擎直连（TRANSLATE_ORIGIN）。术语保护对两种通道一致：出引擎前占位符化（translate.text.ts），回包规整 + 回换。
    */
   private async callEngine(q: string, source: TranslateLang, target: TranslateLang): Promise<EngineOutput> {
+    const glossary = await this.nodeGlossary();
     const active = await this.models.active();
     if (active !== null) {
-      const translatedText = await this.callOpenAiModel(active.modelId, q, source, target, active);
+      const translatedText = await this.callOpenAiModel(active.modelId, q, source, target, active, glossary);
       return { translatedText, engine: "api:" + active.modelId };
     }
     if (this.config.env.TRANSLATE_PROVIDER === "openai") {
       try {
-        const result = await this.callOpenAiApi(q, source, target);
+        const result = await this.callOpenAiApi(q, source, target, glossary);
         return { translatedText: result.translatedText, engine: "api:" + result.model };
       } catch (error) {
         const fallback = this.config.env.TRANSLATE_FALLBACK_ORIGIN ?? "";
@@ -190,17 +226,17 @@ export class TranslateService {
           throw error;
         }
         this.logger.warn("翻译 API 失败，改走本地兜底引擎：" + (error instanceof Error ? error.message : String(error)));
-        const translatedText = await this.callLocalEngine(fallback, q, source, target);
+        const translatedText = await this.callLocalEngine(fallback, q, source, target, glossary);
         return { translatedText, engine: TRANSLATE_ENGINE };
       }
     }
-    const translatedText = await this.callLocalEngine(this.config.env.TRANSLATE_ORIGIN, q, source, target);
+    const translatedText = await this.callLocalEngine(this.config.env.TRANSLATE_ORIGIN, q, source, target, glossary);
     return { translatedText, engine: TRANSLATE_ENGINE };
   }
 
   /** 本地引擎（LibreTranslate 兼容 POST /translate：{q, source, target, format} → {translatedText}）。失败一律 AppError INTERNAL。 */
-  private async callLocalEngine(origin: string, q: string, source: TranslateLang, target: TranslateLang): Promise<string> {
-    const { protectedText, tokens } = protectGlossary(q, target);
+  private async callLocalEngine(origin: string, q: string, source: TranslateLang, target: TranslateLang, glossary: readonly GlossaryTerm[]): Promise<string> {
+    const { protectedText, tokens } = protectGlossary(q, target, glossary);
     let response: Response;
     try {
       response = await fetch(new URL("/translate", origin), {
@@ -231,28 +267,28 @@ export class TranslateService {
    * OpenAI 兼容 API（Push 310：主模型 → 备用模型两跳）。主模型失败（网络 / HTTP / 解析）时，
    * 若配置了 TRANSLATE_API_MODEL_FALLBACK 且不同于主模型 → 改调备用模型（如 deepseek 断流 → gemini-3.8-flash）。
    */
-  private async callOpenAiApi(q: string, source: TranslateLang, target: TranslateLang): Promise<{ translatedText: string; model: string }> {
+  private async callOpenAiApi(q: string, source: TranslateLang, target: TranslateLang, glossary: readonly GlossaryTerm[]): Promise<{ translatedText: string; model: string }> {
     const env = this.config.env;
     if ((env.TRANSLATE_API_BASE_URL ?? "") === "" || (env.TRANSLATE_API_MODEL ?? "") === "") {
       throw new AppError("INTERNAL", "翻译 API 未配置（TRANSLATE_API_BASE_URL / TRANSLATE_API_MODEL）");
     }
     const primary = env.TRANSLATE_API_MODEL;
     try {
-      return { translatedText: await this.callOpenAiModel(primary, q, source, target), model: primary };
+      return { translatedText: await this.callOpenAiModel(primary, q, source, target, undefined, glossary), model: primary };
     } catch (error) {
       const fallbackModel = env.TRANSLATE_API_MODEL_FALLBACK ?? "";
       if (fallbackModel === "" || fallbackModel === primary) {
         throw error;
       }
       this.logger.warn("翻译 API 主模型失败，改走备用模型 " + fallbackModel + "：" + (error instanceof Error ? error.message : String(error)));
-      return { translatedText: await this.callOpenAiModel(fallbackModel, q, source, target), model: fallbackModel };
+      return { translatedText: await this.callOpenAiModel(fallbackModel, q, source, target, undefined, glossary), model: fallbackModel };
     }
   }
 
   /** 单次 OpenAI 兼容请求（POST {base}/chat/completions；密钥 = TRANSLATE_API_KEY 可空）。失败一律 AppError INTERNAL。 */
-  private async callOpenAiModel(model: string, q: string, source: TranslateLang, target: TranslateLang, active?: ActiveModelConnection): Promise<string> {
+  private async callOpenAiModel(model: string, q: string, source: TranslateLang, target: TranslateLang, active: ActiveModelConnection | undefined, glossary: readonly GlossaryTerm[]): Promise<string> {
     const env = this.config.env;
-    const { protectedText, tokens } = protectGlossary(q, target);
+    const { protectedText, tokens } = protectGlossary(q, target, glossary);
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     const apiKey = active?.apiKey ?? env.TRANSLATE_API_KEY ?? "";
     if (apiKey !== "") headers["Authorization"] = "Bearer " + apiKey;

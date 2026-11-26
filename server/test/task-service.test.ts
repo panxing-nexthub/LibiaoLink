@@ -489,6 +489,7 @@ describe("项目新增阶段", () => {
 describe("项目总览阶段备注", () => {
   it("校验阶段标识，去掉备注两端空白并允许清空", () => {
     expect(ProjectStageRefSchema.parse("presale")).toBe("presale");
+    expect(ProjectStageRefSchema.parse("__temp__")).toBe("__temp__");
     expect(ProjectStageRefSchema.parse(NODE)).toBe(NODE);
     expect(ProjectStageRefSchema.safeParse("临时任务").success).toBe(false);
     expect(ProjectStageNotePutBodySchema.parse({ note: "  等待客户确认  " })).toEqual({ note: "等待客户确认" });
@@ -514,6 +515,15 @@ describe("项目总览阶段备注", () => {
 
     repo.project!.status = "archived";
     await expect(service.saveStageNote(PROJECT, "presale", "", ACTOR)).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+  });
+
+  it("临时任务分组也可以保存和清空备注", async () => {
+    const repo = new FakeTaskRepository();
+    const service = makeService(repo);
+    await service.saveStageNote(PROJECT, "__temp__", "临时任务也要备注", MANAGER);
+    expect((await service.summary(PROJECT)).stageNotes).toEqual([{ stageRef: "__temp__", note: "临时任务也要备注" }]);
+    await service.saveStageNote(PROJECT, "__temp__", "", MANAGER);
+    expect((await service.summary(PROJECT)).stageNotes).toEqual([]);
   });
 
   it("区分原阶段和新增阶段，清空或复用新增阶段编号时不会带出旧备注", async () => {

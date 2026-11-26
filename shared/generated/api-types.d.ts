@@ -2798,8 +2798,8 @@ export interface paths {
                 path: {
                     /** @description UUID（主键与关联 ID） */
                     id: components["schemas"]["Uuid"];
-                    /** @description 原阶段的字典键，或新增阶段的 ID */
-                    stageRef: components["schemas"]["StageKey"] | components["schemas"]["Uuid"];
+                    /** @description 原阶段的字典键、新增阶段的 ID，或临时任务分组（__temp__） */
+                    stageRef: components["schemas"]["StageKey"] | components["schemas"]["Uuid"] | "__temp__";
                 };
                 cookie?: never;
             };
@@ -16594,8 +16594,8 @@ export interface components {
             nodes: components["schemas"]["ProjectNode"][];
         };
         ProjectStageNote: {
-            /** @description 原阶段的字典键，或新增阶段的 ID */
-            stageRef: components["schemas"]["StageKey"] | components["schemas"]["Uuid"];
+            /** @description 原阶段的字典键、新增阶段的 ID，或临时任务分组（__temp__） */
+            stageRef: components["schemas"]["StageKey"] | components["schemas"]["Uuid"] | "__temp__";
             note: string;
         };
         ProjectStageNotePutBody: {

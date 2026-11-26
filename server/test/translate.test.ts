@@ -24,6 +24,7 @@ class FakeTranslationRepository {
   rows = new Map<string, { sourceText: string; translatedText: string; engine: string }>();
   upsertCalls: ContentTranslationUpsert[] = [];
   lookupCalls: string[][] = [];
+  nodeGlossary: Array<{ zh: string; en: string }> = [];
 
   private key(sourceLang: string, targetLang: string, hash: string): string {
     return sourceLang + "|" + targetLang + "|" + hash;
@@ -44,6 +45,10 @@ class FakeTranslationRepository {
       }
     }
     return out;
+  }
+
+  async listNodeGlossary(): Promise<Array<{ zh: string; en: string }>> {
+    return this.nodeGlossary;
   }
 
   async upsert(input: ContentTranslationUpsert, _at: Date): Promise<void> {
@@ -170,6 +175,24 @@ describe("TranslateService.translate（库优先 + 引擎兜底落库）", () =>
     const { service } = makeService();
     stubEngineReply(() => ({ payload: {} }));
     await expect(service.translate("任务四", "zh", "en")).rejects.toMatchObject({ code: "INTERNAL" });
+  });
+
+  it("全局翻译先读专业名词字典：节点库词条与官方产品名先保护再回换", async () => {
+    const { repository, service } = makeService();
+    repository.nodeGlossary = [
+      { zh: "整箱输送", en: "Carton Conveying" },
+      { zh: "飞箱", en: "AirRob" },
+    ];
+    const engine = stubEngineReply((q) => ({ payload: { translatedText: q } }));
+    const final = await service.translate("飞箱整箱输送线", "zh", "en");
+    expect(engine.calls).toHaveLength(1);
+    expect(engine.calls[0]).not.toContain("飞箱");
+    expect(engine.calls[0]).not.toContain("整箱输送");
+    expect(engine.calls[0]).toContain("Xq");
+    expect(final).toContain("AirRob");
+    expect(final).toContain("Carton Conveying");
+    expect(final).not.toContain("Xq");
+    expect(repository.upsertCalls[0]?.translatedText).toBe(final);
   });
 
   it("目标日文：术语按日文回换，落库 targetLang=ja（不做英文大小写规整）", async () => {

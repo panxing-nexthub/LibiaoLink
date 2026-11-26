@@ -1711,8 +1711,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     const done = bar.done;
     /** 计划条右端（行坐标系）。 */
     const barRight = box.left + box.width;
-    /** 实际完成点中心（行坐标系）。 */
-    const doneX = done === null ? null : (dayDiff(live.start, done) + 0.5) * dayWidth;
+    /** 实际完成点中心（行坐标系 = 距时间轴首日的天数，和 barBox 同一原点）。 */
+    const doneX = done === null ? null : (dayDiff(model.rangeStart, done) + 0.5) * dayWidth;
     const doneTip = t("gantt.tip.done", { date: bar.task.doneDate === "" ? "—" : mdText(locale, bar.task.doneDate) });
     /** 未完成且已过预计完成：从条右端到今天的「超期滞留区」斜纹延伸段。 */
     const overdueDays = overdue && done === null && live.end < today ? dayDiff(live.end, today) : 0;

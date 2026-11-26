@@ -198,6 +198,23 @@ export function taskFinalizeReadiness(
 }
 
 /**
+ * 「＋ 添加定档文件」入口就绪（2026-11-26）：与任务定档开关同一门禁，但不要求先有文件 ——
+ * 本次上传的文件本身就是成果文件，传完即满足文件条件；未完成 / 未配置成果类型时禁用入口，
+ * 悬停使用与任务定档开关同一个 FinalizeHoverTip 组件说明原因。
+ */
+export function taskFinalizeUploadReadiness(
+  task: Pick<ProjectTask, "status" | "deliverableTypes">,
+): TaskFinalizeReadiness {
+  if (task.deliverableTypes.length === 0) {
+    return { ready: false, blocker: "no-deliverables", missingDocTypes: [] };
+  }
+  if (!isCompleteStatus(task.status)) {
+    return { ready: false, blocker: "not-complete", missingDocTypes: [] };
+  }
+  return { ready: true, blocker: null, missingDocTypes: [] };
+}
+
+/**
  * 「是否按时交付」列的逾期标注（Push 67 业务定案；M3-07 刀 1 后半起口径来自服务端）：
  * 展示态 = 已延期（未完成且过了预计完成日期）→ 「逾期未交付」；已完成但 onTime = false → 「逾期已交付」；
  * 其余返回 null（照常显示「按时交付」或「—」）。

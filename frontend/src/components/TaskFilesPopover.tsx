@@ -8,6 +8,8 @@ import { RowDeleteButton } from "./RowDeleteButton";
 import { UploadProgressOverlay } from "./UploadProgressOverlay";
 import { usePopover } from "./usePopover";
 import { useT } from "../i18n";
+import { FinalizeHoverTip, finalizeBlockedTextOf } from "./FinalizeHoverTip";
+import type { TaskFinalizeReadiness } from "../data/tasks";
 
 /** 任务列表「文件」列下拉（Push 246 · 业务口径 2026-10-08「这里点击后出现右侧下拉框吧 最上方是添加文件
  *  下方是已有文件 点击即可预览 也有删除按钮」）：
@@ -24,13 +26,15 @@ import { useT } from "../i18n";
  *    「这里直接取消按钮 直接在最上方改 改成 添加定档文件 和添加文件 在一行上」+「添加文件放前 定档文件放后 按钮」）：顶部并排两钮，
  *    「＋ 添加文件」在前 = 普通 draft 直传、「＋ 添加定档文件」在后 = 直接开选文件框、传完即对该文件定档（files.finalize），
  *    任务随文件定档一并锁定（服务端同事务）：此后任务不支持任何修改、修改走变更（两者都不再出一问、无取消按钮）；
+ *    2026-11-26：定档上传入口改为与任务定档开关同一门禁 —— 任务未完成时按钮禁用、只保留普通上传；
+ *    悬停复用同一 FinalizeHoverTip 组件提示「暂不能定档」及缺少条件。
  *    任务已定档（taskFinalized）时两个添加入口关闭并落一行提示、下拉顶出常驻提示（文案含「删除」口径）、删除入口下架；
  *  - Push 248 的行尾「替换」入口已在 Push 251 撤销（业务口径「取消这个替换按钮」）：入口与整套替换流程整体撤除 ——
  *    接口层保留（fileApi.replaceFileContent 未接线，服务端变更通道不动）；
  *  - 上传 / 进度 / 删除确认都托管在本组件：关掉下拉后台上传继续、重开还在；预览打开时收起下拉；
  *  - 点击冒泡（2026-10-08 修正 · 业务口径「点击这部分内容现在抽屉也会出来 是bug」）：portal 的 click 按 **React 树**冒泡 ——
  *    根节点拦一道 stopPropagation，点下拉里的空白 / 图标 / 提示条不再冒到任务行（行点击 = 开详情抽屉）。 */
-export function TaskFilesPopover({ taskId, taskTitle, files, onUpload, onDelete, taskFinalized = false, canFinalize = false, canEdit, readOnlyHint, children }: {
+export function TaskFilesPopover({ taskId, taskTitle, files, onUpload, onDelete, taskFinalized = false, canFinalize = false, finalizeReadiness, canEdit, readOnlyHint, children }: {
   taskId: string;
   taskTitle: string;
   files: readonly TaskFileRef[];
@@ -41,6 +45,8 @@ export function TaskFilesPopover({ taskId, taskTitle, files, onUpload, onDelete,
   taskFinalized?: boolean;
   /** 任务负责人 / 项目经理可定档且任务已设定输出成果文件：false 时不渲染「添加定档文件」入口。 */
   canFinalize?: boolean;
+  /** 「＋ 添加定档文件」就绪（与任务定档开关同一门禁 / 同一悬停组件）：未就绪时按钮禁用，仅普通上传可用。 */
+  finalizeReadiness: TaskFinalizeReadiness;
   /** 上传 / 删除写入口；false = 只读账号仍看同款文件胶囊与清单，但添加和删除禁用。 */
   canEdit?: boolean;
   /** 只读态说明（与任务行其它禁用单元格同一句）。 */
@@ -48,6 +54,8 @@ export function TaskFilesPopover({ taskId, taskTitle, files, onUpload, onDelete,
   children: ReactNode;
 }) {
   const t = useT();
+  const finalizeReady = finalizeReadiness.ready;
+  const finalizeBlockedText = finalizeBlockedTextOf(t, finalizeReadiness);
   const editable = (canEdit ?? onUpload !== undefined) && onUpload !== undefined;
   const measuredHeight = Math.min(430, 84 + Math.max(files.length, 1) * 30);
   const { open, setOpen, position, triggerRef, popoverRef } = usePopover(276, measuredHeight, "right");
@@ -92,7 +100,7 @@ export function TaskFilesPopover({ taskId, taskTitle, files, onUpload, onDelete,
   const beginAddFlow = (finalize: boolean) => {
     setPreviewNote(null);
     setPendingDelete(null);
-    if (finalize && !canFinalize) {
+    if (finalize && (!canFinalize || !finalizeReady)) {
       return;
     }
     if (taskFinalized) {
@@ -209,7 +217,7 @@ export function TaskFilesPopover({ taskId, taskTitle, files, onUpload, onDelete,
             // portal 的点击按 React 树冒泡：不拦的话，点下拉里的空白 / 图标 / 提示条会冒到任务行、连带开详情抽屉（同 InlineEdit / FilePreviewOverlay 口径）
             event.stopPropagation();
           }}
-          className="fixed z-50 flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.18)]"
+          className="fixed z-50 flex flex-col rounded-xl border border-zinc-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.18)]"
         >
           <div className="flex items-center gap-1 px-2 py-1.5">
             <button
@@ -223,16 +231,25 @@ export function TaskFilesPopover({ taskId, taskTitle, files, onUpload, onDelete,
               {t("files.add")}
             </button>
             {canFinalize ? (
-              <button
-                type="button"
-                data-task-files-add-finalize="true"
-                onClick={() => { beginAddFlow(true); }}
-                disabled={uploading !== null || !editable}
-                title={editable ? t("files.addFinalTitle") : (readOnlyHint ?? t("board.viewOnlyHint"))}
-                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-zinc-400 disabled:hover:bg-transparent"
-              >
-                {t("files.addFinal")}
-              </button>
+              <span className="group/finalize relative inline-flex">
+                <button
+                  type="button"
+                  data-task-files-add-finalize="true"
+                  data-task-files-add-finalize-state={finalizeReady ? "ready" : "blocked"}
+                  onClick={() => { beginAddFlow(true); }}
+                  disabled={uploading !== null || !editable || !finalizeReady}
+                  title={finalizeReady && editable ? t("files.addFinalTitle") : undefined}
+                  aria-label={finalizeReady ? t("files.addFinalTitle") : finalizeBlockedText}
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-zinc-400 disabled:hover:bg-transparent"
+                >
+                  {t("files.addFinal")}
+                </button>
+                {finalizeReady && editable ? (
+                  <FinalizeHoverTip ready title={t("drawer.finalize.hoverReadyTitle")} body={t("drawer.finalize.hoverReadyBody")} />
+                ) : (
+                  <FinalizeHoverTip ready={false} title={t("drawer.finalize.hoverBlockedTitle")} body={editable ? finalizeBlockedText : (readOnlyHint ?? t("board.viewOnlyHint"))} />
+                )}
+              </span>
             ) : null}
             {uploading === null ? null : (
               <span className="ml-auto text-[11px] tabular-nums text-zinc-400">

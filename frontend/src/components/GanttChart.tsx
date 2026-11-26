@@ -13,7 +13,7 @@ import { STATUS_DOT_CLASS, TaskRow, resolveColumns, tableGridTemplate, tableMinW
  * 第二轮业务口径「维持手绘尽量还原官方的功能」）。
  *
  * 形态与交互参考 VTable 甘特图基本用法（https://visactor.io/vtable/demo/gantt/gantt-basic?version=1.26.6）：
- * 左侧固定任务列表（行号 / 任务 / 开始 / 结束 / 进展）+ 右侧时间轴（月份 + 日期两级表头、逐日网格、周末底纹、
+ * 左侧固定任务列表（行号 / 任务 / 开始 / 预计完成 / 施工人数 / 进展）+ 右侧时间轴（月份 + 日期两级表头、逐日网格、周末底纹、
  * 任务条、里程碑菱形、今天虚线）。用 Tailwind + 绝对定位手绘，不引入第三方图表库 ——
  * 本仓库前端目前零图表依赖，而 VTable 的甘特图要真实 Date 记录与自有表格实例，和现有任务数据模型对不上。
  *
@@ -75,19 +75,19 @@ const FALLBACK_TASK_MIN_W = tableMinWidth(FALLBACK_TASK_COLUMNS);
 /**
  * 左表列宽 / 行高：左表与时间轴靠这一组常量逐行对齐。**列宽固定、不随可见宽度变** ——
  * 分隔线是「右侧时间轴盖住左表多少」的边界（业务口径「右侧看板是遮挡 不是压缩左侧」，对齐官方样例：
- * 拖窄了列是被裁掉，不是被挤窄）。「开始日期 / 预计完成日期」两列对齐官方样例左表的 start / end
- * （业务口径「我这个移动也要有这些信息」）：任务行 = 这条任务的开始 / 预计完成日期、阶段行 = 组内任务工期并集，
- * 拖动中的那条跟着预览值走。列宽按列头汉字数定：「预计完成日期」= 6 字 × 11px + 左右各 12px 内边距 = 90px，取 96。
+ * 拖窄了列是被裁掉，不是被挤窄）。紧凑布局以尽可能给右侧时间轴留出视野：
+ * 行号 34 + 任务 188 + 开始 58 + 预计完成 72 + 施工人数 56 + 进展 48 = 456px（较原先 572px 腾出 116px）。
  */
-const COL_INDEX_W = 48;
-const COL_TITLE_W = 284;
-const COL_START_W = 72;
-const COL_END_W = 96;
-const COL_PROGRESS_W = 72;
+const COL_INDEX_W = 34;
+const COL_TITLE_W = 188;
+const COL_START_W = 58;
+const COL_END_W = 72;
+const COL_HEADCOUNT_W = 56;
+const COL_PROGRESS_W = 48;
 /** 「任务」列至少要露出来的宽度：分隔线最窄只遮到这儿。 */
-const COL_TITLE_MIN_W = 140;
+const COL_TITLE_MIN_W = 112;
 /** 左表自然宽 = 各列固定宽之和：分隔线拖到最宽 = 各列全露出来（再宽也没东西可露）。 */
-const LEFT_W_NATURAL = COL_INDEX_W + COL_TITLE_W + COL_START_W + COL_END_W + COL_PROGRESS_W;
+const LEFT_W_NATURAL = COL_INDEX_W + COL_TITLE_W + COL_START_W + COL_END_W + COL_HEADCOUNT_W + COL_PROGRESS_W;
 /** 分隔线可拖范围：最窄 = 行号 + 一截任务列，最宽 = 左表自然宽。 */
 const LEFT_W_MIN = COL_INDEX_W + COL_TITLE_MIN_W;
 const LEFT_W_MAX = LEFT_W_NATURAL;
@@ -171,7 +171,7 @@ function dayLineStyle(dayWidth: number): { backgroundImage: string } {
 
 /** 左表「开始 / 结束」单元格：拖动中（预览值）加一档强调，平时与「进展」同色。 */
 function dateCellClass(live: boolean): string {
-  return "px-3 text-[11px] tabular-nums " + (live ? "font-medium text-zinc-900" : "text-zinc-500");
+  return "px-1.5 text-[11px] tabular-nums " + (live ? "font-medium text-zinc-900" : "text-zinc-500");
 }
 
 /**
@@ -376,6 +376,8 @@ type GanttGroup = {
   collapsed: boolean;
   /** 阶段内展开显示的子任务数（折叠态为 0，用于计算阶段包络底框高度）。 */
   expandedCount: number;
+  /** 阶段内各任务预计所需施工人数合计（全部未填时为 0）。 */
+  headcountTotal: number;
 };
 
 type GanttRow =
@@ -587,6 +589,7 @@ function buildModel(
       end = end === null ? bar.end : Math.max(end, bar.end);
     }
     const doneCount = items.filter((bar) => isTaskDone(bar.task)).length;
+    const headcountTotal = items.reduce((sum, bar) => sum + (bar.task.headcount > 0 ? bar.task.headcount : 0), 0);
     const percent = items.length === 0 ? 0 : Math.round((doneCount / items.length) * 100);
     const isCollapsed = collapsed[stage] === true;
     // 行号：阶段行也占一个号（与参考样例的行号列一致）。
@@ -594,7 +597,7 @@ function buildModel(
     if (isCollapsed) {
       collapsedCount += 1;
     }
-    rows.push({ kind: "group", key: "stage:" + stage, no, group: { stage, bars: items, start, end, doneCount, percent, collapsed: isCollapsed, expandedCount: isCollapsed ? 0 : items.length } });
+    rows.push({ kind: "group", key: "stage:" + stage, no, group: { stage, bars: items, start, end, doneCount, percent, collapsed: isCollapsed, expandedCount: isCollapsed ? 0 : items.length, headcountTotal } });
     if (isCollapsed) {
       continue;
     }
@@ -2179,16 +2182,19 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                   <div className="flex h-full items-center justify-center" style={{ width: COL_INDEX_W }}>
                     {fieldText(locale, "行号")}
                   </div>
-                  <div className="flex h-full items-center px-3" style={{ width: COL_TITLE_W }}>
+                  <div className="flex h-full items-center px-2" style={{ width: COL_TITLE_W }}>
                     {fieldText(locale, "任务")}
                   </div>
-                  <div className="flex h-full items-center px-3" style={{ width: COL_START_W }}>
+                  <div className="flex h-full items-center px-1.5" style={{ width: COL_START_W }}>
                     {fieldText(locale, "开始日期")}
                   </div>
-                  <div className="flex h-full items-center px-3" style={{ width: COL_END_W }}>
+                  <div className="flex h-full items-center px-1.5" style={{ width: COL_END_W }}>
                     {fieldText(locale, "预计完成日期")}
                   </div>
-                  <div className="flex h-full items-center justify-end pr-3" style={{ width: COL_PROGRESS_W }}>
+                  <div className="flex h-full items-center justify-end px-1.5" style={{ width: COL_HEADCOUNT_W }}>
+                    {fieldText(locale, "施工人数")}
+                  </div>
+                  <div className="flex h-full items-center justify-end pr-2" style={{ width: COL_PROGRESS_W }}>
                     {fieldText(locale, "进展")}
                   </div>
                 </div>
@@ -2227,7 +2233,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                             toggleStage(row.group.stage);
                           }}
                           title={collapsed[row.group.stage] === true ? t("board.stage.expand") : t("board.stage.collapse")}
-                          className="flex h-full min-w-0 items-center gap-1.5 px-2 text-left"
+                          className="flex h-full min-w-0 items-center gap-1 px-1.5 text-left"
                           style={{ width: COL_TITLE_W }}
                         >
                           <svg
@@ -2245,11 +2251,11 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                             style={{ backgroundColor: stagePaletteOf(row.group.stage).accent }}
                             aria-hidden="true"
                           />
-                          <span className="truncate text-[13px] font-semibold text-slate-800">{stageText(locale, row.group.stage)}</span>
-                          <span className="ml-auto shrink-0 pr-1 text-[11px] text-slate-500">
+                          <span className="truncate text-[12px] font-semibold text-slate-800">{stageText(locale, row.group.stage)}</span>
+                          <span className="ml-auto shrink-0 pr-0.5 text-[10px] tabular-nums text-slate-400">
                             {row.group.bars.length === 0
                               ? t("board.stage.empty")
-                              : t("board.stage.done", { done: row.group.doneCount, total: row.group.bars.length })}
+                              : String(row.group.doneCount) + "/" + String(row.group.bars.length)}
                           </span>
                         </button>
                       ) : (
@@ -2260,11 +2266,11 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                             locateBar(row.bar);
                           }}
                           title={barTitleOf(row.bar) + "\n" + t("gantt.tip.selectTip")}
-                          className="flex h-full min-w-0 items-center gap-1.5 pl-6 pr-2 text-left"
+                          className="flex h-full min-w-0 items-center gap-1.5 pl-4 pr-1.5 text-left"
                           style={{ width: COL_TITLE_W }}
                         >
                           <span className={"h-1.5 w-1.5 shrink-0 rounded-full " + STATUS_DOT_CLASS[row.bar.status]} aria-hidden="true" />
-                          <span className={"truncate text-[13px] " + (selectedId === row.bar.task.id ? "font-semibold text-zinc-900" : "text-zinc-700")}>
+                          <span className={"truncate text-[12px] " + (selectedId === row.bar.task.id ? "font-semibold text-zinc-900" : "text-zinc-700")}>
                             {ganttTitle(row.bar.task)}
                           </span>
                         </button>
@@ -2275,7 +2281,16 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                       <div className={dateCellClass(range.live)} style={{ width: COL_END_W }}>
                         {range.end}
                       </div>
-                      <div className="pr-3 text-right text-[11px] tabular-nums text-zinc-500" style={{ width: COL_PROGRESS_W }}>
+                      <div className="px-1.5 text-right text-[11px] tabular-nums text-zinc-500" style={{ width: COL_HEADCOUNT_W }}>
+                        {row.kind === "group"
+                          ? row.group.headcountTotal > 0
+                            ? t("drawer.headcount.value", { n: row.group.headcountTotal })
+                            : "—"
+                          : row.bar.task.headcount > 0
+                            ? t("drawer.headcount.value", { n: row.bar.task.headcount })
+                            : "—"}
+                      </div>
+                      <div className="pr-2 text-right text-[11px] tabular-nums text-zinc-500" style={{ width: COL_PROGRESS_W }}>
                         {row.kind === "group"
                           ? String(row.group.percent) + "%"
                           : row.bar.start === null

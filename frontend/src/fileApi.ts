@@ -521,6 +521,15 @@ export type CreateMaterialReissueTrackingInput = {
   imageFileIds?: string[];
 };
 
+export type UpdateMaterialReissueTrackingInput = {
+  changeRequestId: string;
+  lineIndex: number;
+  status?: MaterialReissueTrackingStatus;
+  trackingNo?: string | null;
+  estimatedArrivalDate?: string | null;
+  note?: string | null;
+};
+
 
 /** 变更记录详情（契约 ChangeRequestDetail · M4-04 读面 A4-15）：变更本体 + 变更后文件 + 变更后版本（本文件只需用到的字段）；
  *  Push 319：导入表导入变更暂无变更后文件（源文件在微盘）→ fileId / versionId / versionSeq / file / version 可为 null。 */
@@ -601,6 +610,18 @@ export function createMaterialReissueTracking(
   return apiSend(
     "/api/v1/projects/" + encodeURIComponent(projectId) + "/change-requests/material-reissue/tracking",
     "POST",
+    input,
+  );
+}
+
+/** 修改单条已登记发货信息（2026-11-25）：快递单号 / 预计到货 / 发货备注 / 状态。 */
+export function updateMaterialReissueTracking(
+  projectId: string,
+  input: UpdateMaterialReissueTrackingInput,
+): Promise<{ items: MaterialReissueTrackingEntry[] }> {
+  return apiSend(
+    "/api/v1/projects/" + encodeURIComponent(projectId) + "/change-requests/material-reissue/tracking",
+    "PATCH",
     input,
   );
 }

@@ -45,6 +45,9 @@ export type ProjectView = "overview" | "gantt" | "owners" | "progress" | "daily"
  */
 export type DailySubView = "form" | "records" | "issues" | "board";
 
+/** 「物料补发」页内子视图：`?view=material-reissue&sub=tracking`（缺省 all 不落参数）。 */
+export type MaterialReissueSubView = "all" | "tracking";
+
 /**
  * 工作台「我的任务」页的标签（Push 230 两枚 / Push 234 增加「我的计划」）在地址里的取值：`#/my-tasks?tab=`。
  * 取值 = tasks（我的任务，缺省，不落参数）/ raised（我提出的问题）/ plan（我的计划）；缺省不落参数与顶部标签 / 列表筛选态同一口径。
@@ -126,7 +129,7 @@ export type Route =
   | { kind: "workspace"; tab: WorkspaceTab; sub: WorkspaceIssueView }
   | { kind: "list"; filters: ListQueryState }
   /** `date` = 日报查询深链的单日筛选（YYYY-MM-DD）；null = 不筛选。 */
-  | { kind: "project"; id: string; view: ProjectView; sub: DailySubView; focus: ProjectFocus | null; date: string | null }
+  | { kind: "project"; id: string; view: ProjectView; sub: DailySubView; materialSub: MaterialReissueSubView; focus: ProjectFocus | null; date: string | null }
   | { kind: "placeholder"; page: PlaceholderPage; section: string | null }
   | { kind: "audit"; query: AuditQueryState }
   | { kind: "access" }
@@ -350,6 +353,25 @@ function parseProjectSub(search: string): DailySubView {
   return "records";
 }
 
+/** 「物料补发」页内子视图参数（`?sub=`）：只认 all / tracking，非法值 / 缺省回落 all。 */
+const MATERIAL_SUB_KEYS: readonly MaterialReissueSubView[] = ["all", "tracking"];
+
+function parseMaterialSub(search: string): MaterialReissueSubView {
+  for (const chunk of search.split("&")) {
+    if (chunk === "") {
+      continue;
+    }
+    const separator = chunk.indexOf("=");
+    const key = safeDecode(separator === -1 ? chunk : chunk.slice(0, separator));
+    if (key !== "sub") {
+      continue;
+    }
+    const value = safeDecode(separator === -1 ? "" : chunk.slice(separator + 1)).trim();
+    return MATERIAL_SUB_KEYS.find((sub) => sub === value) ?? "all";
+  }
+  return "all";
+}
+
 /** 日报查询深链的 `date=`：只对「日报记录 / 问题追踪」生效，非法值在路由层清理。 */
 function parseProjectDate(search: string, sub: DailySubView): string | null {
   return sub === "records" || sub === "issues" ? parseDailyDateParam(search) : null;
@@ -525,12 +547,27 @@ export function replaceProjectView(id: string, view: ProjectView): void {
   if (currentRoute.kind !== "project" || currentRoute.id !== id || currentRoute.view === view) {
     return;
   }
-  currentRoute = { ...currentRoute, view, sub: "records", focus: null, date: null };
+  currentRoute = { ...currentRoute, view, sub: "records", materialSub: "all", focus: null, date: null };
   emit();
   try {
     window.history.replaceState(null, "", projectViewHref(id, view));
   } catch {
     // URL 只是当前标签的投影：写不进去也不影响页面（个别浏览器对 history 调用限流）
+  }
+}
+
+/** 切换「物料补发」页内子视图：`?view=material-reissue&sub=tracking`；缺省 all 不落参数。 */
+export function replaceProjectMaterialSubView(id: string, sub: MaterialReissueSubView): void {
+  if (currentRoute.kind !== "project" || currentRoute.id !== id || currentRoute.view !== "material-reissue" || currentRoute.materialSub === sub) {
+    return;
+  }
+  currentRoute = { ...currentRoute, materialSub: sub };
+  emit();
+  try {
+    const href = projectViewHref(id, "material-reissue") + (sub === "tracking" ? "&sub=tracking" : "");
+    window.history.replaceState(null, "", href);
+  } catch {
+    // URL 只是当前子视图的投影：写不进去也不影响页面（个别浏览器对 history 调用限流）
   }
 }
 
@@ -715,7 +752,8 @@ export function parseHash(hash: string): Route {
     const view: ProjectView = focus === null ? parseProjectView(search) : focus.kind === "task" ? "overview" : "daily";
     const sub: DailySubView = view !== "daily" ? "form" : focus?.kind === "issue" || focus?.kind === "issueLocate" ? "issues" : focus?.kind === "report" ? "records" : parseProjectSub(search);
     const date = view === "daily" ? parseProjectDate(search, sub) : null;
-    return { kind: "project", id: safeDecode(match[1] ?? ""), view, sub, focus, date };
+    const materialSub: MaterialReissueSubView = view === "material-reissue" ? parseMaterialSub(search) : "all";
+    return { kind: "project", id: safeDecode(match[1] ?? ""), view, sub, materialSub, focus, date };
   }
   return { kind: "list", filters: parseListQuery(search) };
 }

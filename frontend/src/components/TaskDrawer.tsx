@@ -37,6 +37,7 @@ import { InlineDateCell } from "./InlineEdit";
 import { MemberMultiSelect } from "./MemberSelect";
 import { RowDeleteButton } from "./RowDeleteButton";
 import { UploadProgressOverlay } from "./UploadProgressOverlay";
+import { FinalizeHoverTip, finalizeBlockedTextOf } from "./FinalizeHoverTip";
 import { DeliverableCell, docTypeChip } from "./DeliverablePicker";
 import { ScrollArea } from "./ScrollArea";
 import { SelectMenu, type SelectOption } from "./SelectMenu";
@@ -159,24 +160,6 @@ const FIELD_CLASS =
 
 const CAPTION_CLASS = "mt-1 block text-[11px] leading-4 text-zinc-400";
 
-function FinalizeHoverTip({ ready, title, body }: { ready: boolean; title: string; body: string }) {
-  return (
-    <span
-      role="tooltip"
-      data-task-finalize-tip={ready ? "ready" : "blocked"}
-      className="pointer-events-none invisible absolute left-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-3rem)] translate-y-1 rounded-[10px] border border-zinc-200/80 bg-white px-3 py-2 text-left opacity-0 shadow-[0_1px_2px_rgba(15,23,42,0.08),0_12px_28px_-14px_rgba(15,23,42,0.35)] transition-[opacity,transform,visibility] duration-200 ease-out group-hover/finalize:visible group-hover/finalize:translate-y-0 group-hover/finalize:opacity-100 group-focus-within/finalize:visible group-focus-within/finalize:translate-y-0 group-focus-within/finalize:opacity-100"
-    >
-      <span className="flex items-start gap-2">
-        <span className={"mt-1 h-1.5 w-1.5 shrink-0 rounded-full " + (ready ? "bg-emerald-500" : "bg-amber-400")} aria-hidden="true" />
-        <span className="min-w-0">
-          <span className="block text-[11px] font-semibold text-zinc-800">{title}</span>
-          <span className="mt-0.5 block text-[11px] leading-4 text-zinc-500">{body}</span>
-        </span>
-      </span>
-    </span>
-  );
-}
-
 /**
  * 「任务描述」整格一个框（业务口径 2026-10-13：「抽屉里面加英文的翻译」→ 追订「加在框里面好吗」）：
  * 中文编辑区 + 英文译文同框显示；焦点样式从内部 textarea 移到框上（focus-within），观感与 FIELD_CLASS 一致。
@@ -198,6 +181,8 @@ export type TaskEditSubmit = {
   startDate?: string;
   dueDate?: string;
   shiftFollowing?: boolean;
+  /** 开始日期晚于实际完成日期时随本次改期写「进行中」：服务端同事务清空实际完成日期并把进度退回 75%（2026-11-26）。 */
+  status?: TaskStatus;
   days?: number;
   headcount: number;
   priority: TaskPriority;
@@ -729,6 +714,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
             startDate: next.range?.from ?? "",
             dueDate: next.range?.to ?? "",
             shiftFollowing,
+            status: next.range !== null && current.doneDate !== "" && next.range.from > current.doneDate ? "进行中" : undefined,
             days: next.range === null ? 0 : daysBetweenInclusive(next.range.from, next.range.to),
           } : {}),
           headcount: headcountText === "" || Number.isNaN(headcountValue) ? 0 : Math.floor(headcountValue),
@@ -787,14 +773,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
   const ownerEditable = editable && capabilities.canAssignOwners;
   const canFinalize = canFinalizeProp && capabilities.canFinalize && hasOutputDeliverables(task);
   const finalizeReadiness = taskFinalizeReadiness(task, files);
-  const finalizeBlockedText =
-    finalizeReadiness.blocker === "not-complete"
-      ? t("drawer.finalize.blockedNotComplete")
-      : finalizeReadiness.blocker === "files-loading"
-        ? t("drawer.finalize.blockedFilesLoading")
-        : finalizeReadiness.blocker === "missing-files"
-          ? t("drawer.finalize.blockedMissingFiles", { types: finalizeReadiness.missingDocTypes.join("、") })
-          : null;
+  const finalizeBlockedText = finalizeBlockedTextOf(t, finalizeReadiness);
   const unfinalizeLockedByPlannedEnd = isTaskOwnerUnfinalizeLockedByPlannedEnd(task);
   const unfinalizeAria = unfinalizeLockedByPlannedEnd ? t("drawer.finalize.afterDueAria") : onUnfinalize === undefined ? t("drawer.finalize.onAria") : t("drawer.finalize.offAria");
   const unfinalizeTitle = unfinalizeLockedByPlannedEnd ? t("drawer.finalize.afterDueTitle") : onUnfinalize === undefined ? t("drawer.finalize.onTitle") : t("drawer.finalize.offTitle");
@@ -1521,7 +1500,6 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
         <>
           <DateRangePicker
             value={draft.range}
-            latestStart={task.doneDate}
             allowScheduleShift={allowScheduleShift && task.stageKey !== null && capabilities.source === "project_edit"}
             onChange={(next, shiftFollowing) => {
               commit({ range: next }, shiftFollowing);

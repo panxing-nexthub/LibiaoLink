@@ -1074,6 +1074,7 @@ export default function App() {
           project={detail}
           view={route.view}
           dailySub={route.sub}
+          materialSub={route.materialSub}
           dailyDate={route.date}
           focus={route.focus}
           onClearFocus={clearProjectFocus}

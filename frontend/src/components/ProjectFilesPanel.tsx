@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ApiError } from "../api";
 import { PROJECT_STAGES } from "../data/projects";
 import { TEMP_TASK_STAGE, type ProjectTask } from "../data/tasks";
@@ -298,7 +298,7 @@ async function loadProjectFileRows(projectId: string): Promise<ProjectFileRow[]>
   return visibleFiles.flatMap((file) => rowsByFileId.get(file.id) ?? []);
 }
 
-export function ProjectFilesPanel({ projectId, tasks, canEdit = false }: { projectId: string; tasks: readonly ProjectTask[]; canEdit?: boolean }) {
+export function ProjectFilesPanel({ projectId, tasks, canEdit = false, tabs }: { projectId: string; tasks: readonly ProjectTask[]; canEdit?: boolean; tabs?: ReactNode }) {
   const t = useT();
   const locale = useLocale();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
@@ -795,9 +795,9 @@ export function ProjectFilesPanel({ projectId, tasks, canEdit = false }: { proje
 
   return (
     <section data-project-files="" className="space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-zinc-900">{t("pd.files.title")}</h2>
+      <header data-files-tabs-sticky="true" className="sticky top-[123px] z-10 flex flex-wrap items-end justify-between gap-3 border-b border-zinc-200/70 bg-[#f5f6f8]/95 py-2 backdrop-blur">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          {tabs ?? <h2 className="text-lg font-semibold text-zinc-900">{t("pd.files.title")}</h2>}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
           <span data-project-files-summary="">{t("pd.files.summary", { stage: stageFileCount, changed: changedFileCount })}</span>
@@ -805,7 +805,7 @@ export function ProjectFilesPanel({ projectId, tasks, canEdit = false }: { proje
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5">
+      <div className="sticky top-[171px] z-[9] flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white/95 px-3 py-2.5 backdrop-blur">
         <span data-project-files-filter="keyword" className="w-72 shrink-0">
           <SearchInput
             value={keyword}

@@ -1008,6 +1008,26 @@ describe("阶段内任务改期与日期校验", () => {
     expect(repo.relatedTasks).toEqual([valid, conflict]);
   });
 
+  it("shiftTaskIds 只平移勾选的任务，未勾选 / 非法 id 不落库", async () => {
+    const repo = new FakeTaskRepository();
+    const anchor = makeRow({ plannedStart: "2026-09-01", plannedEnd: "2026-09-04" });
+    const first = makeRow({ id: "first", sortIndex: 1, plannedStart: "2026-09-04", plannedEnd: "2026-09-08" });
+    const second = makeRow({ id: "second", sortIndex: 2, plannedStart: "2026-09-09", plannedEnd: "2026-09-12" });
+    repo.task = anchor;
+    repo.relatedTasks = [first, second];
+    const service = makeService(repo);
+    await expect(
+      service.update(PROJECT, TASK, { version: 3, plannedEnd: "2026-09-06", shiftFollowing: true, shiftTaskIds: ["first"] }, ACTOR),
+    ).resolves.toMatchObject({ plannedEnd: "2026-09-06" });
+    expect(repo.relatedTasks[0]).toMatchObject({ plannedStart: "2026-09-06", plannedEnd: "2026-09-10" });
+    expect(repo.relatedTasks[1]).toMatchObject({ plannedStart: "2026-09-09", plannedEnd: "2026-09-12" });
+    repo.task = makeRow({ plannedStart: "2026-09-01", plannedEnd: "2026-09-04" });
+    repo.relatedTasks = [first, second];
+    await expect(
+      service.update(PROJECT, TASK, { version: 3, plannedEnd: "2026-09-06", shiftFollowing: true, shiftTaskIds: ["missing"] }, ACTOR),
+    ).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+  });
+
   it("校验预计和实际完成日期，允许与开始日期及上海业务今天同日", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-23T16:30:00Z"));

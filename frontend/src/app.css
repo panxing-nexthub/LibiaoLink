@@ -664,6 +664,17 @@ body {
   background-color: var(--row-tint-hover, var(--row-tint, transparent));
 }
 
+/* 补发追踪：合并单元格下不做整行 hover 变色（跨行单元格会形成斑块），只保留静态行色； */
+/* 不同发货批次之间用更粗的上边框明显分隔。 */
+.task-row-tint-static {
+  background-color: var(--row-tint, transparent);
+}
+
+.tracking-batch-start > td {
+  border-top-width: 3px !important;
+  border-top-color: #d4d4d8 !important;
+}
+
 
 /* 背景档位 · 适中档的问题行色（Push 290 统一口径）：问题追踪 / 工作台「我提出的问题」整行铺该问题状态的行色
    —— 同样由行内注入 --row-tint / --row-tint-hover（与任务行 / 项目空间卡片同一套便签同款兑白配方）。 */

@@ -12,6 +12,7 @@ import { tasks } from "../../db/schema/tasks.js";
 import { hasUnfinishedTemporaryTask } from "../../db/task-scope.js";
 import type { ChangeRequestListFilter, ChangeRequestSort } from "./change.query.js";
 import type { FileListFilter, FileListSort } from "./file.query.js";
+import { MATERIAL_REISSUE_PROJECT_ASSISTANT_TASK_TITLES } from "./material-reissue-assistant.js";
 
 /**
  * file 模块数据访问（M4-01 上传管道 · M4-02 版本 / 定档 / 回溯 / 回收站）。
@@ -350,6 +351,31 @@ export class FileRepository {
       .limit(1);
     const rows = await (lock ? query.for("no key update") : query);
     return rows[0] ?? null;
+  }
+
+  /**
+   * 物料补发项目助理判定（2026-11-26）：项目内任一物流任务
+   * （运输及送仓 / 清关 / 送仓 / 运输）的当前负责人。
+   * file 模块只读 tasks 表，不跨模块调用 task 服务；与前端同口径。
+   */
+  async isMaterialReissueProjectAssistant(
+    projectId: string,
+    actorId: string,
+    client: DbClient = this.database.db,
+  ): Promise<boolean> {
+    const rows = await client
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.projectId, projectId),
+          isNull(tasks.deletedAt),
+          sql`${tasks.ownerIds} @> array[${actorId}]::uuid[]`,
+          inArray(sql`trim(${tasks.title})`, [...MATERIAL_REISSUE_PROJECT_ASSISTANT_TASK_TITLES]),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
   }
 
   /**

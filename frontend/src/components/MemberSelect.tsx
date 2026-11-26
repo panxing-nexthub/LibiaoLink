@@ -451,3 +451,95 @@ export function MemberMultiSelect({ values, onChange, options, placeholder: plac
     </div>
   );
 }
+
+type MemberCompactMultiSelectProps = {
+  values: string[];
+  onChange: (memberIds: string[]) => void;
+  options: readonly Member[];
+  placeholder?: string;
+  ariaLabel: string;
+  /** 选择框内左侧常驻说明（如「项目助理」）。 */
+  inlineLabel?: string;
+  /** 外层根节点附加类（宽度 / 对齐）。 */
+  className?: string;
+};
+
+/**
+ * 紧凑人员多选（2026-11-26 物料补发表单页脚）：
+ * 单行摘要「项目助理 潘兴、王明杰」+ 搜索多选浮层；点击框体打开浮层，勾选 / 取消即增删，
+ * 适合与「清空当前所填 / 提交」放在同一行并保持同高。
+ */
+export function MemberCompactMultiSelect({
+  values,
+  onChange,
+  options,
+  placeholder: placeholderProp,
+  ariaLabel,
+  inlineLabel,
+  className,
+}: MemberCompactMultiSelectProps) {
+  const { open, setOpen, position, triggerRef, popoverRef } = usePopover(280, 286, "right");
+  const t = useT();
+  const placeholder = placeholderProp ?? t("ms.choose");
+  const selected = values
+    .map((id) => options.find((member) => member.id === id))
+    .filter((member): member is Member => member !== undefined);
+  const names = selected.map((member) => member.name).join("、");
+  const toggle = (member: Member) => {
+    onChange(values.includes(member.id) ? values.filter((id) => id !== member.id) : [...values, member.id]);
+  };
+
+  return (
+    <div className={"relative inline-flex min-w-0 max-w-[340px]" + (className === undefined ? "" : " " + className)}>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        title={names === "" ? undefined : names}
+        onClick={() => {
+          setOpen((previous) => !previous);
+        }}
+        className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-left text-xs transition hover:border-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-300"
+      >
+        {inlineLabel === undefined ? null : (
+          <span className="shrink-0 text-xs font-medium leading-5 text-zinc-500">{inlineLabel}：</span>
+        )}
+        <span
+          className={
+            "min-w-0 max-w-[220px] truncate text-xs leading-5 " +
+            (selected.length === 0 ? "text-zinc-400" : "text-zinc-700")
+          }
+        >
+          {selected.length === 0 ? placeholder : names}
+        </span>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-4 w-4 shrink-0 -rotate-90 text-zinc-400">
+          <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open && position !== null
+        ? createPortal(
+            <div
+              ref={popoverRef}
+              data-focus-scope="true"
+              className="fixed z-50 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.18)]"
+              style={{ top: position.top, left: position.left, width: position.width }}
+            >
+              <MemberSearchList
+                options={options}
+                value=""
+                selectedIds={values}
+                ariaLabel={ariaLabel}
+                onPick={(member) => {
+                  toggle(member);
+                }}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}

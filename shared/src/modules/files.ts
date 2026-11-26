@@ -241,6 +241,18 @@ export const MaterialReissueTrackingResultSchema = z
   .object({ items: z.array(MaterialReissueTrackingEntrySchema) })
   .openapi("MaterialReissueTrackingResult", { description: "本次新增的发货登记行" });
 
+/** PATCH /projects/{id}/change-requests/material-reissue/tracking：修改单条已登记物料行的快递单号 / 预计到货 / 发货备注 / 状态。 */
+export const UpdateMaterialReissueTrackingBodySchema = z
+  .object({
+    changeRequestId: UuidSchema,
+    lineIndex: z.number().int().min(0),
+    status: MaterialReissueTrackingStatusSchema.optional().openapi({ description: "状态（不传 = 保持不变）" }),
+    trackingNo: z.string().trim().max(120).nullable().optional().openapi({ description: "快递单号（null = 清空；不传 = 保持不变）" }),
+    estimatedArrivalDate: z.iso.date().nullable().optional().openapi({ description: "预计到货时间（null = 清空；不传 = 保持不变）" }),
+    note: z.string().trim().max(1000).nullable().optional().openapi({ description: "发货备注（null = 清空；不传 = 保持不变）" }),
+  })
+  .openapi("UpdateMaterialReissueTrackingBody", { description: "物料补发单行发货信息修改" });
+
 export const MaterialReissueSnapshotSchema = MaterialReissueBodySchema.extend({
   taskId: UuidSchema,
   taskTitle: z.string(),
@@ -264,6 +276,7 @@ export type MaterialReissueTrackingStatus = z.infer<typeof MaterialReissueTracki
 export type MaterialReissueTrackingEntry = z.infer<typeof MaterialReissueTrackingEntrySchema>;
 export type MaterialReissueTrackingSelection = z.infer<typeof MaterialReissueTrackingSelectionSchema>;
 export type CreateMaterialReissueTrackingBody = z.infer<typeof CreateMaterialReissueTrackingBodySchema>;
+export type UpdateMaterialReissueTrackingBody = z.infer<typeof UpdateMaterialReissueTrackingBodySchema>;
 export type MaterialReissueTrackingResult = z.infer<typeof MaterialReissueTrackingResultSchema>;
 export type MaterialReissueResult = z.infer<typeof MaterialReissueResultSchema>;
 

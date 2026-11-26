@@ -2,9 +2,10 @@ import { Injectable } from "@nestjs/common";
 import {
   CreateMaterialReissueTrackingBodySchema,
   MaterialReissueTrackingResultSchema,
+  UpdateMaterialReissueTrackingBodySchema,
   z,
 } from "@libiaolink/contracts";
-import type { MaterialReissueTrackingEntry } from "@libiaolink/contracts";
+import type { MaterialReissueTrackingEntry, UpdateMaterialReissueTrackingBody } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import { ClockService } from "../../common/clock/clock.service.js";
 import { DatabaseService } from "../../db/database.service.js";
@@ -13,6 +14,7 @@ import { PermissionService, isProjectEditor } from "../permission/index.js";
 import { FileRepository } from "./file.repository.js";
 
 type CreateBody = z.infer<typeof CreateMaterialReissueTrackingBodySchema>;
+type UpdateBody = UpdateMaterialReissueTrackingBody;
 type Result = z.infer<typeof MaterialReissueTrackingResultSchema>;
 
 function textOrNull(value: string | undefined): string | null {
@@ -20,11 +22,20 @@ function textOrNull(value: string | undefined): string | null {
   return text === "" ? null : text;
 }
 
+function textOrNullValue(value: string | null): string | null {
+  if (value === null) {
+    return null;
+  }
+  const text = value.trim();
+  return text === "" ? null : text;
+}
+
 /**
  * 物料补发发货登记（2026-11-25）：补发页跨申请单勾选物料行后，一次写入已发货 / 已签收状态、
  * 快递单号、预计到货时间、发货备注与凭证图片；读面随 change_requests.materialReissueTracking 返回。
  *
- * 权限与发起补发同一口径：项目编辑者，或该补发申请来源任务的当前负责人；
+ * 权限：项目编辑者、项目助理（物流任务负责人）或该补发申请来源任务的当前负责人；
+ * 项目助理与项目编辑者一样可登记本项目全部申请单；
  * 一次批量可跨多张申请单，逐张变更行在事务内锁行，已登记过的物料行拒绝重复登记。
  */
 @Injectable()
@@ -66,6 +77,8 @@ export class MaterialReissueTrackingService {
     const at = this.clock.now();
     const entries: MaterialReissueTrackingEntry[] = [];
     await this.database.db.transaction(async (tx) => {
+      const editor = isProjectEditor(access);
+      const projectAssistant = !editor && await this.repository.isMaterialReissueProjectAssistant(projectId, actorId, tx);
       for (const [changeRequestId, lineIndexes] of groups) {
         const change = await this.repository.lockChangeRequest(changeRequestId, tx);
         if (change === null || change.projectId !== projectId) {
@@ -74,10 +87,10 @@ export class MaterialReissueTrackingService {
         if (change.changeType !== "material_reissue" || change.materialReissue === null) {
           throw new AppError("VALIDATION_FAILED", "仅物料补发记录可以登记发货");
         }
-        if (!isProjectEditor(access)) {
+        if (!editor && !projectAssistant) {
           const task = await this.repository.findTaskReissueBrief(change.materialReissue.taskId, tx);
           if (task === null || task.deletedAt !== null || task.projectId !== projectId || !task.ownerIds.includes(actorId)) {
-            throw new AppError("FORBIDDEN", "仅项目编辑者或当前任务负责人可登记发货");
+            throw new AppError("FORBIDDEN", "仅项目编辑者、项目助理或当前任务负责人可登记发货");
           }
         }
         const materials = change.materialReissue.materials;
@@ -134,5 +147,70 @@ export class MaterialReissueTrackingService {
       }
     });
     return { items: entries };
+  }
+
+  /** 修改单条已登记发货行（快递单号 / 预计到货 / 发货备注 / 状态）；权限与登记一致。 */
+  async update(projectId: string, body: UpdateBody, actorId: string): Promise<Result> {
+    const access = await this.permission.assertProjectVisible(actorId, projectId);
+    const at = this.clock.now();
+    let updated: MaterialReissueTrackingEntry | null = null;
+    await this.database.db.transaction(async (tx) => {
+      const editor = isProjectEditor(access);
+      const projectAssistant = !editor && await this.repository.isMaterialReissueProjectAssistant(projectId, actorId, tx);
+      const change = await this.repository.lockChangeRequest(body.changeRequestId, tx);
+      if (change === null || change.projectId !== projectId) {
+        throw new AppError("NOT_FOUND", "变更记录不存在或不属于当前项目");
+      }
+      if (change.changeType !== "material_reissue" || change.materialReissue === null) {
+        throw new AppError("VALIDATION_FAILED", "仅物料补发记录可以修改发货信息");
+      }
+      if (!editor && !projectAssistant) {
+        const task = await this.repository.findTaskReissueBrief(change.materialReissue.taskId, tx);
+        if (task === null || task.deletedAt !== null || task.projectId !== projectId || !task.ownerIds.includes(actorId)) {
+          throw new AppError("FORBIDDEN", "仅项目编辑者、项目助理或当前任务负责人可修改发货信息");
+        }
+      }
+      if (body.lineIndex >= change.materialReissue.materials.length) {
+        throw new AppError("VALIDATION_FAILED", "补发物料行不存在", [
+          { code: "invalid_line", message: "lineIndex 超出补发清单范围", path: "lineIndex" },
+        ]);
+      }
+      const existing = change.materialReissueTracking ?? [];
+      const index = existing.findIndex((entry) => entry.lineIndex === body.lineIndex);
+      if (index < 0) {
+        throw new AppError("NOT_FOUND", "该物料行尚未登记发货");
+      }
+      const entry = existing[index];
+      if (entry === undefined) {
+        throw new AppError("NOT_FOUND", "该物料行尚未登记发货");
+      }
+      const next: MaterialReissueTrackingEntry = {
+        ...entry,
+        status: body.status ?? entry.status,
+        trackingNo: body.trackingNo === undefined ? entry.trackingNo : textOrNullValue(body.trackingNo),
+        estimatedArrivalDate: body.estimatedArrivalDate === undefined ? entry.estimatedArrivalDate : body.estimatedArrivalDate,
+        note: body.note === undefined ? entry.note : textOrNullValue(body.note),
+        updatedAt: at.toISOString(),
+      };
+      const tracking = existing.map((item, itemIndex) => (itemIndex === index ? next : item));
+      await this.repository.updateChangeRequestTracking(body.changeRequestId, tracking, tx);
+      updated = next;
+      await this.audit.record(tx, {
+        actorId,
+        action: "update",
+        objectType: "change",
+        objectId: body.changeRequestId,
+        projectId,
+        summary: "物料补发发货信息修改：1 项",
+        metadata: {
+          lineIndex: next.lineIndex,
+          status: next.status,
+          trackingNo: next.trackingNo,
+          estimatedArrivalDate: next.estimatedArrivalDate,
+          note: next.note,
+        },
+      });
+    });
+    return { items: updated === null ? [] : [updated] };
   }
 }

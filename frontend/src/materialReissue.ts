@@ -49,6 +49,58 @@ export const MATERIAL_REISSUE_APPROVAL_OPTIONS: ReadonlyArray<{ value: MaterialR
   { value: "not_applicable", label: "不涉及" },
 ];
 
+/**
+ * 项目助理任务口径（2026-11-26）：项目内「运输及送仓 / 清关 / 送仓 / 运输」任一任务的负责人
+ * 视为项目助理，可查看并登记本项目全部物料补发申请。
+ * 与 server/src/modules/file/material-reissue-assistant.ts 保持同步；任务改名或新增物流任务时两处一起改。
+ */
+export const MATERIAL_REISSUE_PROJECT_ASSISTANT_TASK_TITLES = ["运输及送仓", "清关", "送仓", "运输"] as const;
+
+const MATERIAL_REISSUE_PROJECT_ASSISTANT_TASK_TITLE_SET: ReadonlySet<string> = new Set(
+  MATERIAL_REISSUE_PROJECT_ASSISTANT_TASK_TITLES,
+);
+
+export function findMaterialReissueProjectAssistantTask<T extends { title: string; ownerIds: readonly string[] }>(
+  viewerId: string | null,
+  tasks: readonly T[],
+): T | null {
+  if (viewerId === null) {
+    return null;
+  }
+  return tasks.find(
+    (task) => task.ownerIds.includes(viewerId) && MATERIAL_REISSUE_PROJECT_ASSISTANT_TASK_TITLE_SET.has(task.title.trim()),
+  ) ?? null;
+}
+
+export function isMaterialReissueProjectAssistant(
+  viewerId: string | null,
+  tasks: readonly { title: string; ownerIds: readonly string[] }[],
+): boolean {
+  return findMaterialReissueProjectAssistantTask(viewerId, tasks) !== null;
+}
+
+/**
+ * 自动识别项目助理（物料补发表单页脚展示）：项目内「运输及送仓 / 清关 / 送仓 / 运输」任一任务的
+ * 负责人去重后按任务顺序返回。与 isMaterialReissueProjectAssistant 同一口径，
+ * 仅用于表单提示与本机草稿记忆，不改变服务端权限或提交快照。
+ */
+export function materialReissueProjectAssistantIds(
+  tasks: readonly { title: string; ownerIds: readonly string[] }[],
+): string[] {
+  const ids: string[] = [];
+  for (const task of tasks) {
+    if (!MATERIAL_REISSUE_PROJECT_ASSISTANT_TASK_TITLE_SET.has(task.title.trim())) {
+      continue;
+    }
+    for (const ownerId of task.ownerIds) {
+      if (ownerId !== "" && !ids.includes(ownerId)) {
+        ids.push(ownerId);
+      }
+    }
+  }
+  return ids;
+}
+
 export function materialReissueDefaultEmailTitle(projectCode: string, projectName: string): string {
   return "项目【补发申请】" + projectCode + " " + projectName + "项目/ 紧急";
 }

@@ -9,6 +9,7 @@ import { ExportOverviewButton } from "./components/ExportOverviewButton";
 import { GanttChart } from "./components/GanttChart";
 import { ProjectChangesPopover } from "./components/ProjectChangesPopover";
 import { MaterialReissuePanel } from "./components/MaterialReissuePanel";
+import { findMaterialReissueProjectAssistantTask, isMaterialReissueProjectAssistant } from "./materialReissue";
 import { ProjectFilesPanel } from "./components/ProjectFilesPanel";
 import { ProjectViewGrantsPanel } from "./components/ProjectViewGrantsPanel";
 import { ReportIssuePanel } from "./components/ReportIssuePanel";
@@ -34,7 +35,7 @@ import { prefetchOverviewExportTranslations } from "./translateApi";
 import { ExportProgressOverlay, type ExportTranslateProgress } from "./components/ExportProgressOverlay";
 import { useBackgroundTier, type TintedTier } from "./backgroundTier";
 import type { MeResponse, Project } from "./types";
-import { replaceProjectSubView, replaceProjectView, type DailySubView, type ProjectFocus, type ProjectView } from "./useHashRoute";
+import { replaceProjectMaterialSubView, replaceProjectSubView, replaceProjectView, type DailySubView, type MaterialReissueSubView, type ProjectFocus, type ProjectView } from "./useHashRoute";
 import { ApiError } from "./api";
 import { hasAllProjectAccess, useMyPermissions } from "./permissions";
 import {
@@ -93,6 +94,8 @@ type ProjectDetailProps = {
   view: ProjectView;
   /** 「日报及问题」的页内子视图（Push 214 起由地址 `?view=daily&sub=` 派生，缺省「日报填写」form）；其它标签下无意义。 */
   dailySub: DailySubView;
+  /** 「物料补发」的页内子视图（`?view=material-reissue&sub=tracking`；缺省 all）。 */
+  materialSub: MaterialReissueSubView;
   /** 企微日报查询深链的当天日期（YYYY-MM-DD）；null = 不筛选。 */
   dailyDate: string | null;
   /** 站内信深链的精确落点：任务自动开抽屉 / 日报定位行 / 问题自动开抽屉。 */
@@ -126,7 +129,7 @@ type ProjectDetailProps = {
   readOnly?: boolean;
 };
 
-export default function ProjectDetail({ me, project, view, dailySub, dailyDate, focus, onClearFocus, onClearDailyDate, customDeliverableTypes, onCreateDeliverableType, members, managerMembers, onTaskEdited, taskHiddenColumns, onTaskHiddenColumnsChange, canManageStakeholders, canManageProjectManagers, onSendCompletionPoster, readOnly = false }: ProjectDetailProps) {
+export default function ProjectDetail({ me, project, view, dailySub, materialSub, dailyDate, focus, onClearFocus, onClearDailyDate, customDeliverableTypes, onCreateDeliverableType, members, managerMembers, onTaskEdited, taskHiddenColumns, onTaskHiddenColumnsChange, canManageStakeholders, canManageProjectManagers, onSendCompletionPoster, readOnly = false }: ProjectDetailProps) {
   /** 顶部视图（Push 82 / 121）：阶段标签收进「项目总览」，另两块是看板视图，最后一块是「日报及问题」；Push 154 起当前标签由地址 `?view=` 派生。 */
   const locale = useLocale();
   const t = useT();
@@ -414,23 +417,51 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
   );
 
   /**
-   * 「物料补发」页访问口径（2026-11-25）：
-   * 仅项目经理 / 系统管理员 / 拥有全部项目仅浏览或编辑范围 / 本任务负责人（商务助理）可看到入口；
-   * 非项目经理、非全项目范围的商务助理只看到自己负责任务的补发清单。
+   * 「物料补发」页访问口径（2026-11-26）：
+   * 项目经理 / 系统管理员 / 拥有全部项目仅浏览或编辑范围 / 本任务负责人（商务助理）/
+   * 项目助理（项目内「运输及送仓 / 清关 / 送仓 / 运输」任一任务的负责人）可看到入口；
+   * 项目助理与项目经理 / 管理员 / 全项目范围账号可见并登记本项目全部申请单，
+   * 其余任务负责人只看到自己负责任务的申请单。
    * 权限画像未取到按无权限处理（与 permissions.ts 的入口收敛口径一致），服务端逐请求仍是最终裁决。
    */
   const viewerUserId = permissions?.userId ?? null;
+  const materialReissueProjectAssistantTask = findMaterialReissueProjectAssistantTask(viewerUserId, rawTasks);
+  const isMaterialReissueProjectAssistantAccount = isMaterialReissueProjectAssistant(viewerUserId, rawTasks);
+  /** 项目助理不是项目编辑者，发货凭证图片需挂到本人负责且未定档的物流任务上才能通过文件写权限。 */
+  const materialReissueUploadTask =
+    findMaterialReissueProjectAssistantTask(viewerUserId, rawTasks.filter((task) => task.finalizedAt === null)) ??
+    materialReissueProjectAssistantTask;
+  const materialReissueUploadTaskId =
+    isMaterialReissueProjectAssistantAccount && !projectEditable ? (materialReissueUploadTask?.id ?? null) : null;
+  const materialReissueProjectFileUploadAllowed =
+    projectEditable || permissions?.groupAccessAdmin === true || permissions?.groupAllEdit === true;
   const canViewAllMaterialReissue =
     hasAllProjectAccess(permissions) ||
+    isMaterialReissueProjectAssistantAccount ||
     (viewerUserId !== null && project !== null && project.managerIds.includes(viewerUserId));
   const isMaterialReissueTaskOwner =
     viewerUserId !== null && rawTasks.some((task) => task.ownerIds.includes(viewerUserId));
   const canSeeMaterialReissue = canViewAllMaterialReissue || isMaterialReissueTaskOwner;
-  /** 发货登记写权限：项目编辑者（项目经理 / 管理员 / 全部项目编辑）或任务负责人；归档 / 应急只读关闭。 */
-  const canMarkMaterialReissue = !readOnly && !projectArchived && (projectEditable || isMaterialReissueTaskOwner);
+  /** 发货登记写权限：项目编辑者（项目经理 / 管理员 / 全部项目编辑）、项目助理或任务负责人；归档项目沿用同一写权限，应急只读关闭。 */
+  const canMarkMaterialReissue =
+    !readOnly &&
+    (projectEditable ||
+      isMaterialReissueProjectAssistantAccount ||
+      isMaterialReissueTaskOwner ||
+      permissions?.groupAccessAdmin === true ||
+      permissions?.groupAllEdit === true);
+  /** 可对本项目全部补发申请登记发货：项目编辑者 / 管理员 / 全部项目编辑 / 项目助理；普通任务负责人只可登记本人任务。 */
+  const canMarkAllMaterialReissue =
+    !readOnly &&
+    (projectEditable ||
+      isMaterialReissueProjectAssistantAccount ||
+      permissions?.groupAccessAdmin === true ||
+      permissions?.groupAllEdit === true);
   const visibleTabs = (project?.canManageViewGrants === true ? VIEW_TABS : VIEW_TABS.filter((tab) => tab !== "权限管理"))
     .filter((tab) => tab !== "物料补发" || canSeeMaterialReissue);
   const activeView = visibleTabs.find((tab) => VIEW_KEYS[tab] === view) ?? VIEW_TABS[0];
+  // 物料补发已收进「项目文件」页作为内部切换，顶部标签栏不再单列。
+  const tabBarTabs = visibleTabs.filter((tab) => tab !== "物料补发");
 
   useEffect(() => {
     setChangesTaskRequestId(null);
@@ -785,6 +816,7 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
       startDate: values.startDate,
       dueDate: values.dueDate,
       shiftFollowing: values.shiftFollowing,
+      status: values.status,
       days: values.days,
       headcount: values.headcount,
       priority: values.priority,
@@ -1201,6 +1233,61 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
     );
   }
 
+  /** 「项目文件 / 物料补发 / 补发追踪」内部切换（2026-11-25：物料补发不再占顶部标签）。 */
+  const openMaterialSub = (sub: "all" | "tracking"): void => {
+    if (view !== "material-reissue") {
+      replaceProjectView(project.id, "material-reissue");
+      if (sub === "tracking") {
+        replaceProjectMaterialSubView(project.id, "tracking");
+      }
+      return;
+    }
+    replaceProjectMaterialSubView(project.id, sub);
+  };
+  const filesTabs = canSeeMaterialReissue ? (
+    <div role="group" aria-label={t("pd.files.tabsAria")} className="inline-flex items-center rounded-lg border border-zinc-300 bg-white p-0.5">
+      <button
+        type="button"
+        aria-pressed={activeView === "项目文件"}
+        onClick={() => {
+          replaceProjectView(project.id, "files");
+        }}
+        className={
+          "rounded-md px-3 py-1.5 text-xs font-medium transition " +
+          (activeView === "项目文件" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-100")
+        }
+      >
+        {t("pd.files.title")}
+      </button>
+      <button
+        type="button"
+        aria-pressed={activeView === "物料补发" && materialSub === "all"}
+        onClick={() => {
+          openMaterialSub("all");
+        }}
+        className={
+          "rounded-md px-3 py-1.5 text-xs font-medium transition " +
+          (activeView === "物料补发" && materialSub === "all" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-100")
+        }
+      >
+        {t("pd.material.title")}
+      </button>
+      <button
+        type="button"
+        aria-pressed={activeView === "物料补发" && materialSub === "tracking"}
+        onClick={() => {
+          openMaterialSub("tracking");
+        }}
+        className={
+          "rounded-md px-3 py-1.5 text-xs font-medium transition " +
+          (activeView === "物料补发" && materialSub === "tracking" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-100")
+        }
+      >
+        {t("pd.material.tracking")}
+      </button>
+    </div>
+  ) : undefined;
+
   /** 顶部确认 Toast 上的那一行（从最新任务列表里取标题 / 版本；任务已被别处删除时自动为 undefined = 不显示确认）。 */
   const pendingDeleteTask = pendingDeleteTaskId === null ? undefined : rowOf(pendingDeleteTaskId);
 
@@ -1215,8 +1302,8 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
         <div ref={maintabsRef} data-maintabs="true" className="sticky top-16 z-20 -mx-6 -mt-3 border-b border-zinc-200 bg-[#f5f6f8]/95 px-6 pt-3 backdrop-blur">
           <div className="flex items-center gap-3">
             <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto" onScroll={submenuOpen ? closeSubmenu : undefined}>
-              {visibleTabs.map((tab) => {
-                const active = tab === activeView;
+              {tabBarTabs.map((tab) => {
+                const active = tab === activeView || (tab === "项目文件" && activeView === "物料补发");
                 // 子菜单父项（业务口径 2026-09-30「日报及问题页面的导航栏按钮集成到页面导航栏 如图一的效果」）：
                 // 四块子视图收进这枚标签的下拉面板；悬停即展开；点击时已在该视图 = 切换展开态，否则照旧先切视图。
                 const withSubmenu = tab === "日报及问题";
@@ -1367,10 +1454,10 @@ export default function ProjectDetail({ me, project, view, dailySub, dailyDate, 
             <StakeholderPanel projectId={project.id} projectCode={project.code} projectName={project.description} canManage={canManageStakeholders && projectWritable} scrollRef={tableScrollRef} />
           ) : activeView === "项目文件" ? (
             // 项目文件（2026-10-29）：阶段任务文件 + 变更记录关联文件的并集；日报 / 问题附图不进入。
-            <ProjectFilesPanel projectId={project.id} tasks={tasks} canEdit={projectWritable} />
+            <ProjectFilesPanel projectId={project.id} tasks={tasks} canEdit={projectWritable} tabs={filesTabs} />
           ) : activeView === "物料补发" ? (
             // 物料补发（2026-11-25）：物料变更补发提交时固化的《补发物料清单》按申请单汇总；只读。
-            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} canMark={canMarkMaterialReissue} canMarkAll={projectWritable} tierTint={tintRows} />
+            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} canMark={canMarkMaterialReissue} canMarkAll={canMarkAllMaterialReissue} projectFileUploadAllowed={materialReissueProjectFileUploadAllowed} uploadTaskId={materialReissueUploadTaskId} tierTint={tintRows} tabs={filesTabs} view={materialSub} onChangeView={(next) => { replaceProjectMaterialSubView(project.id, next); }} />
           ) : activeView === "权限管理" ? (
             <ProjectViewGrantsPanel key={project.id} projectId={project.id} />
           ) : (

@@ -9,6 +9,18 @@ type Props = {
   onSave?: (note: string) => Promise<string | null>;
 };
 
+/** 液体玻璃底：默认全透明，仅鼠标悬停 / 键盘聚焦时淡入（正常状态只留文字）。 */
+const GLASS_SURFACE =
+  "pointer-events-none absolute inset-0 rounded-[16px] bg-white/55 opacity-0 ring-1 ring-white/80 backdrop-blur-xl backdrop-saturate-150 " +
+  "shadow-[inset_0_1px_0_rgba(255,255,255,0.95),inset_0_-1px_0_rgba(255,255,255,0.5),0_10px_24px_-12px_rgba(15,23,42,0.35)] " +
+  "transition-opacity duration-200 group-hover/note:opacity-100 group-focus-visible/note:opacity-100";
+
+/** 悬停时滑入的短横线（与设计稿一致）：不加文字、不做图标按钮。 */
+const DASH_MARK =
+  "h-[2px] w-0 shrink-0 rounded-full bg-zinc-500/70 opacity-0 transition-[width,opacity,margin] duration-200 " +
+  "group-hover/note:mr-1.5 group-hover/note:w-3.5 group-hover/note:opacity-100 " +
+  "group-focus-visible/note:mr-1.5 group-focus-visible/note:w-3.5 group-focus-visible/note:opacity-100";
+
 export function StageNote({ stageName, note, onSave }: Props) {
   const t = useT();
   const [draft, setDraft] = useState<string | null>(null);
@@ -41,8 +53,12 @@ export function StageNote({ stageName, note, onSave }: Props) {
   if (note === "" && onSave === undefined) return null;
 
   const title = t("board.stageNote.title", { stage: stageName });
-  const buttonText = t(note === "" ? "board.stageNote.add" : "common.edit");
+  const addText = t("board.stageNote.add");
+  const editText = t("board.stageNote.edit");
+  const actionText = note === "" ? addText : editText;
   const toggleText = t(showFullNote ? "board.stageNote.collapse" : "board.stageNote.expand");
+  const noteTextClassName = "min-w-0 max-w-[30rem] whitespace-pre-wrap break-words text-sm leading-5 text-zinc-700"
+    + (showFullNote ? "" : " line-clamp-2");
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (draft === null || onSave === undefined || saving) return;
@@ -63,12 +79,33 @@ export function StageNote({ stageName, note, onSave }: Props) {
 
   return (
     <div className="flex min-w-0 items-center gap-1.5">
-      {note !== "" ? (
-        <span
-          id={noteId}
-          ref={noteRef}
-          className={"min-w-0 max-w-[30rem] whitespace-pre-wrap break-words text-sm leading-5 text-zinc-700" + (showFullNote ? "" : " line-clamp-2")}
+      {onSave !== undefined ? (
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-label={actionText + " · " + stageName}
+          title={actionText}
+          onClick={() => {
+            setError(null);
+            setDraft(note);
+          }}
+          className={"group/note relative flex min-w-0 items-center rounded-[16px] text-left outline-none transition-colors "
+            + (note === ""
+              ? "shrink-0 whitespace-nowrap px-1.5 py-1 text-xs text-zinc-600 hover:text-zinc-900 focus-visible:text-zinc-900"
+              : "px-1 py-0.5 hover:text-zinc-900 focus-visible:text-zinc-900")}
         >
+          <span className={GLASS_SURFACE} aria-hidden="true" />
+          <span className={DASH_MARK} aria-hidden="true" />
+          <span
+            id={noteId}
+            ref={noteRef}
+            className={"relative " + (note === "" ? "whitespace-nowrap" : noteTextClassName)}
+          >
+            {note === "" ? addText : note}
+          </span>
+        </button>
+      ) : note !== "" ? (
+        <span id={noteId} ref={noteRef} className={noteTextClassName}>
           {note}
         </span>
       ) : null}
@@ -82,17 +119,6 @@ export function StageNote({ stageName, note, onSave }: Props) {
           className="shrink-0 whitespace-nowrap rounded-md px-2 py-1 text-xs text-zinc-600 transition hover:bg-zinc-200 hover:text-zinc-900"
         >
           {toggleText}
-        </button>
-      ) : null}
-      {onSave !== undefined ? (
-        <button
-          type="button"
-          aria-haspopup="dialog"
-          aria-label={buttonText + " · " + stageName}
-          onClick={() => { setError(null); setDraft(note); }}
-          className="shrink-0 whitespace-nowrap rounded-md px-2 py-1 text-xs text-zinc-600 transition hover:bg-zinc-200 hover:text-zinc-900"
-        >
-          {buttonText}
         </button>
       ) : null}
       {draft !== null && onSave !== undefined ? createPortal(

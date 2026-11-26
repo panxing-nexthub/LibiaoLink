@@ -932,6 +932,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "board.additionalStage.manualTask": "작업 직접 추가",
   "board.additionalStage.submit": "추가",
   "board.stageNote.add": "메모 추가",
+  "board.stageNote.edit": "메모 편집",
   "board.stageNote.title": "{stage} · 단계 메모",
   "board.stageNote.expand": "펼치기",
   "board.stageNote.collapse": "접기",

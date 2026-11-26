@@ -674,7 +674,8 @@ const REPORT_STYLE = `
   tbody.grp tr.grp__head td { padding: 3px 7px; background: #f4f4f5; border-bottom: 1px solid #e4e4e7; break-after: avoid; }
   .grp__name { font-size: 10.5px; font-weight: 700; }
   .grp__count { margin-left: 6px; font-size: 9.5px; color: #71717a; }
-  .grp__heading { display: flex; align-items: baseline; flex-wrap: wrap; row-gap: 1px; }
+  .grp__heading { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 10px; row-gap: 2px; }
+  .grp__heading .grp__meta, .grp__heading .grp__note { margin-left: 0; }
   .grp__meta { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 14px; row-gap: 1px; margin-left: 10px; font-size: 8.5px; color: #3f3f46; flex-shrink: 0; }
   .grp__meta-item { white-space: nowrap; }
   .grp__meta strong { font-weight: 700; color: #18181b; }

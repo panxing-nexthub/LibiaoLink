@@ -51,7 +51,7 @@ import notoSansJpCss from "@fontsource-variable/noto-sans-jp/index.css?inline";
 import notoSansKrCss from "@fontsource-variable/noto-sans-kr/index.css?inline";
 import notoSansScCss from "@fontsource-variable/noto-sans-sc/index.css?inline";
 import { TEMP_TASK_STAGE, daysBetweenInclusive, type ProjectTask, type TaskStatus } from "./data/tasks";
-import { additionalStageName, projectTaskStageNames, stageKeyOfName, stageNameOf } from "./taskApi";
+import { TEMP_TASK_STAGE_REF, additionalStageName, projectTaskStageNames, stageKeyOfName, stageNameOf } from "./taskApi";
 import { translateZhTo, type TranslationTarget } from "./translateApi";
 import overviewPreviewPagedCss from "./overviewPreviewPaged.css?inline";
 import overviewPreviewPagedScriptUrl from "./overviewPreviewPaged.js?url";
@@ -781,7 +781,7 @@ export function buildOverviewReportHtml(
   const managerText = projectManagerText(project);
   const collapsed = new Set(collapsedStages);
   const detailRows = shownGroups.map((group) => {
-    const stageRef = additionalIds.get(group.name) ?? stageKeyOfName(group.name);
+    const stageRef = additionalIds.get(group.name) ?? stageKeyOfName(group.name) ?? (group.name === TEMP_TASK_STAGE ? TEMP_TASK_STAGE_REF : null);
     const note = stageRef === null ? undefined : notesByRef.get(stageRef);
     if (group.total === 0 && note === undefined) return "";
     return groupSectionHtml(counter, group, note, managerText, translationMap, primary, collapsed.has(group.name), columns);

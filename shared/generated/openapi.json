@@ -14549,9 +14549,15 @@
               },
               {
                 "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "__temp__"
+                ]
               }
             ],
-            "description": "原阶段的字典键，或新增阶段的 ID"
+            "description": "原阶段的字典键、新增阶段的 ID，或临时任务分组（__temp__）"
           },
           "note": {
             "type": "string"
@@ -22529,12 +22535,18 @@
                 },
                 {
                   "$ref": "#/components/schemas/Uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "__temp__"
+                  ]
                 }
               ],
-              "description": "原阶段的字典键，或新增阶段的 ID"
+              "description": "原阶段的字典键、新增阶段的 ID，或临时任务分组（__temp__）"
             },
             "required": true,
-            "description": "原阶段的字典键，或新增阶段的 ID",
+            "description": "原阶段的字典键、新增阶段的 ID，或临时任务分组（__temp__）",
             "name": "stageRef",
             "in": "path"
           }

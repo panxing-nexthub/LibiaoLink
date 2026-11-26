@@ -392,9 +392,11 @@ type GanttMonthUnit = GanttHeaderUnit & { short: string };
 
 type GanttModel = {
   rows: GanttRow[];
-  /** 时间轴首日（UTC 零点毫秒）与总天数。 */
+  /** 时间轴首日（UTC 零点毫秒）与总天数（含右侧「无限延伸」余量）。 */
   rangeStart: number;
   days: number;
+  /** 不含右侧无限延伸余量的天数（「全览」按它计算）。 */
+  coreDays: number;
   /** 今天在时间轴里的下标（今天不在范围内 = null，不画今天虚线）。 */
   todayIndex: number | null;
   /** 表头分段：月份 / 年份 / 周 —— 粒度决定用哪一套渲染（官方 timelineHeader.scales）。 */
@@ -473,6 +475,8 @@ function buildModel(
   collapsed: Record<string, boolean>,
   hideEmptyGroups: boolean,
   includeToday: boolean,
+  /** 右侧无限延伸的额外天数（滚动到右缘时累加）。 */
+  extraEndDays: number,
   viewport?: { start: number; end: number },
 ): GanttModel | null {
   const bars = tasks.map((task) => buildBar(locale, task));
@@ -500,8 +504,11 @@ function buildModel(
   }
 
   const rangeStart = Math.min(shiftDays(min, -PAD_DAYS), viewport?.start ?? Number.POSITIVE_INFINITY);
-  const rangeEnd = Math.max(shiftDays(max, PAD_DAYS), viewport?.end ?? Number.NEGATIVE_INFINITY);
+  /** 任务真实跨度末端（含 2 天余量 / 当前可视区右缘）—— 右侧无限延伸从它继续往右加。 */
+  const rangeEndCore = Math.max(shiftDays(max, PAD_DAYS), viewport?.end ?? Number.NEGATIVE_INFINITY);
+  const rangeEnd = shiftDays(rangeEndCore, Math.max(0, extraEndDays));
   const days = dayDiff(rangeStart, rangeEnd) + 1;
+  const coreDays = dayDiff(rangeStart, rangeEndCore) + 1;
   const todayIndex = today >= rangeStart && today <= rangeEnd ? dayDiff(rangeStart, today) : null;
 
   // 表头三套分段（日 / 周 / 月粒度各取所需）：月份、年份、周 —— 每段记下首日下标与跨的天数，列宽 = 天数 × 每天宽度。
@@ -611,6 +618,7 @@ function buildModel(
     rows,
     rangeStart,
     days,
+    coreDays,
     todayIndex,
     months,
     years,
@@ -680,6 +688,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   const [includeToday, setIncludeToday] = useState(false);
   /** 刚点「回到今天」但当时今天不在范围里：等范围延出来（todayLeft 有值）再居中一次。 */
   const [pendingToday, setPendingToday] = useState(false);
+  /** 时间轴右侧无限延伸的天数：滚动接近右缘时按 120 天加长（仅前端渲染，不写库）。 */
+  const [extraEndDays, setExtraEndDays] = useState(0);
   /** 左表宽度（官方 frame.verticalSplitLineMoveable：拖左表右边线改宽窄），双击复位默认宽。 */
   const [leftWidth, setLeftWidth] = useState(LEFT_W_DEFAULT);
   const [splitHover, setSplitHover] = useState(false);
@@ -799,6 +809,10 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
 
   const filtering = ownerFilter !== OWNER_ANY || rowFilter !== "all";
   const viewportKey = [ownerFilter, rowFilter, scale, Math.round(dayWidth * 100), leftWidth, includeToday].join("|");
+  /** 筛选 / 缩放 / 左表宽度 / 回到今天 变化时收回右侧延伸，回到紧致时间轴。 */
+  useEffect(() => {
+    setExtraEndDays(0);
+  }, [viewportKey]);
   const viewportKeyRef = useRef(viewportKey);
   const model = useMemo(() => {
     const node = scrollRef.current;
@@ -814,8 +828,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
         end: origin + Math.ceil((node.scrollLeft + Math.max(0, node.clientWidth - leftWidth)) / previousDayWidth) * DAY_MS,
       }
       : undefined;
-    return buildModel(locale, visibleTasks, stageOrder, today, collapsed, filtering, includeToday, viewport);
-  }, [visibleTasks, stageOrder, today, collapsed, filtering, includeToday, viewportKey, leftWidth, locale]);
+    return buildModel(locale, visibleTasks, stageOrder, today, collapsed, filtering, includeToday, extraEndDays, viewport);
+  }, [visibleTasks, stageOrder, today, collapsed, filtering, includeToday, extraEndDays, viewportKey, leftWidth, locale]);
   const weekendSet = useMemo(() => new Set(model === null ? [] : model.weekends), [model]);
 
   /**
@@ -946,7 +960,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     const node = scrollRef.current;
     const visibleTimelineWidth = node === null ? 680 : Math.max(node.clientWidth - leftWidth - 24, 180);
     // 估算实际任务跨度（略去两端余量后留出右侧标签空间）
-    const fittedDayWidth = visibleTimelineWidth / Math.max(model.days, 1);
+    const fittedDayWidth = visibleTimelineWidth / Math.max(model.coreDays, 1);
     const clamped = clampNumber(Math.round(fittedDayWidth * 100) / 100, DAY_WIDTH_MIN, DAY_WIDTH_MAX);
     pendingScrollLeftRef.current = 0;
     setDayWidthRaw(clamped);
@@ -1265,9 +1279,17 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
       return undefined;
     }
     syncScrollbars();
+    /** 上次因「接近右缘」而延伸的时间戳：节流到 500ms，避免同一段滚动反复加长。 */
+    let lastExtendAt = 0;
     const onScroll = () => {
       syncScrollbars();
       revealScrollbars();
+      // 右侧无限延伸：滚到接近右缘（320px 内）就再追加 120 天，继续往右渲染。
+      const now = Date.now();
+      if (now - lastExtendAt > 500 && node.scrollLeft + node.clientWidth >= node.scrollWidth - 320) {
+        lastExtendAt = now;
+        setExtraEndDays((days) => days + 120);
+      }
     };
     node.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", syncScrollbars);

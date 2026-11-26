@@ -516,19 +516,36 @@ const STAGE_META_TEXT: Record<OverviewExportLanguage, {
   },
 };
 
-/** 阶段标题内联统计：本阶段自 A 至 B 历时 N 天 + 单日最多人天 / 平均每天人天（同一行）。 */
+/** 阶段统计分段（按语言生成；标签是否加粗由主 / 次文案决定）。 */
+function stageMetaSegments(effort: StageEffort, lang: OverviewExportLanguage, emphasize: boolean): string[] {
+  const text = STAGE_META_TEXT[lang];
+  const peakLabel = emphasize ? "<strong>" + escapeHtml(text.peak) + "</strong>" : escapeHtml(text.peak);
+  const averageLabel = emphasize ? "<strong>" + escapeHtml(text.average) + "</strong>" : escapeHtml(text.average);
+  const segments = [escapeHtml(text.span(stageDateText(effort.start), stageDateText(effort.end), effort.days))];
+  if (effort.hasHeadcount) {
+    segments.push(peakLabel + " " + String(effort.peak) + " " + escapeHtml(text.unit));
+    segments.push(averageLabel + " " + String(effort.average) + " " + escapeHtml(text.unit));
+  }
+  return segments;
+}
+
+/**
+ * 阶段标题内联统计（2026-11-26 追订「要双语 然后要有适当间距」）：
+ * 主体语言（导出语言，中文主体为中文）+ 次要语言（中文主体补英文，其它主体补中文）逐段对照，
+ * 段与段之间留 14px 间距；统计整体在同一行，放不下时按段换行，不拆段内文字。
+ */
 function stageMetaHtml(group: StageGroup, primary: OverviewExportLanguage): string {
   const effort = stageEffortOf(group);
   if (effort === null) {
     return "";
   }
-  const text = STAGE_META_TEXT[primary];
-  const parts = [escapeHtml(text.span(stageDateText(effort.start), stageDateText(effort.end), effort.days))];
-  if (effort.hasHeadcount) {
-    parts.push("<strong>" + escapeHtml(text.peak) + "</strong> " + String(effort.peak) + " " + escapeHtml(text.unit));
-    parts.push("<strong>" + escapeHtml(text.average) + "</strong> " + String(effort.average) + " " + escapeHtml(text.unit));
-  }
-  return '<span class="grp__meta">' + parts.join("  ") + "</span>";
+  const secondaryLang: OverviewExportLanguage = primary === "zh" ? "en" : "zh";
+  const mainSegments = stageMetaSegments(effort, primary, true);
+  const secondarySegments = stageMetaSegments(effort, secondaryLang, false);
+  const items = mainSegments.map((main, index) =>
+    '<span class="grp__meta-item">' + main +
+    ' <span class="secondary" lang="' + languageAttr(secondaryLang) + '">' + secondarySegments[index] + "</span></span>");
+  return '<span class="grp__meta">' + items.join("") + "</span>";
 }
 
 /** 折叠阶段与任务行共用当前列配置；折叠行把阶段汇总值放回对应可见列，隐藏列不再占位。 */
@@ -658,8 +675,10 @@ const REPORT_STYLE = `
   .grp__name { font-size: 10.5px; font-weight: 700; }
   .grp__count { margin-left: 6px; font-size: 9.5px; color: #71717a; }
   .grp__heading { display: flex; align-items: baseline; flex-wrap: wrap; row-gap: 1px; }
-  .grp__meta { margin-left: 10px; font-size: 8.5px; color: #3f3f46; white-space: nowrap; flex-shrink: 0; }
+  .grp__meta { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 14px; row-gap: 1px; margin-left: 10px; font-size: 8.5px; color: #3f3f46; flex-shrink: 0; }
+  .grp__meta-item { white-space: nowrap; }
   .grp__meta strong { font-weight: 700; color: #18181b; }
+  .grp__meta .secondary { margin-left: 4px; font-size: 8px; color: #a1a1aa; }
   .grp__heading .grp__name, .grp__heading .grp__count { flex-shrink: 0; }
   .grp__note { min-width: 0; max-width: calc(100% - 10px); margin-left: 10px; color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; flex-shrink: 0; }
   tbody.grp tr.grp__head--collapsed .grp__note { display: block; margin: 2px 0 0; }

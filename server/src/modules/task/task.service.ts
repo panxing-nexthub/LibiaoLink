@@ -179,6 +179,7 @@ export class TaskService {
     return {
       projectId,
       additionalStages: await this.repository.listAdditionalStages(projectId),
+      stageNotes: await this.repository.listStageNotes(projectId),
       slowestStage,
       latestStage,
       overdue: counts.overdue,
@@ -215,6 +216,7 @@ export class TaskService {
       for (const task of group) await this.assertTaskDeletable(tx, task);
       for (const task of group) await this.softDeleteTask(tx, task, actorId, at, stage.id);
       await this.repository.removeAdditionalStage(tx, stage.id, at);
+      await this.repository.saveStageNote(tx, projectId, stage.id, "");
       await this.repository.touchProject(projectId, at, tx);
       await this.audit.record(tx, {
         actorId, projectId, action: "delete", objectType: "stage", objectId: stage.id,
@@ -223,8 +225,34 @@ export class TaskService {
     });
   }
 
+  async saveStageNote(projectId: string, stageRef: string, note: string, actorId: string): Promise<void> {
+    await this.database.db.transaction(async (tx) => {
+      const project = await this.loadProjectForWrite(projectId, false, tx);
+      await this.permission.assertCanManageProjectManagers(actorId, project, tx, "修改阶段备注");
+
+      const stageKey = STAGE_KEYS.find((key) => key === stageRef);
+      let name: string;
+      if (stageKey === undefined) {
+        // 新增阶段在持有项目行锁时才写入或删除，这里读取即可。
+        const stage = await this.repository.findAdditionalStage(tx, projectId, stageRef);
+        if (stage === null) throw new AppError("NOT_FOUND", "新增阶段不存在");
+        stageRef = stage.id;
+        name = STAGE_NAMES[stage.stageKey] + stage.number;
+      } else {
+        name = STAGE_NAMES[stageKey];
+      }
+
+      if (!await this.repository.saveStageNote(tx, projectId, stageRef, note)) return;
+      await this.repository.touchProject(projectId, new Date(), tx);
+      await this.audit.record(tx, {
+        actorId, projectId, action: "update", objectType: "stage", objectId: stageRef,
+        summary: (note === "" ? "清空阶段备注：" : "保存阶段备注：") + name,
+      });
+    });
+  }
+
   private async requireAdditionalStage(tx: DbClient, projectId: string, stageId: string): Promise<AdditionalProjectStage> {
-    const stage = await this.repository.lockAdditionalStage(tx, projectId, stageId);
+    const stage = await this.repository.findAdditionalStage(tx, projectId, stageId, true);
     if (stage === null) throw new AppError("NOT_FOUND", "新增阶段不存在");
     return stage;
   }

@@ -35,6 +35,8 @@ import {
   ProjectSchema,
   AdditionalProjectStageCreateBodySchema,
   AdditionalProjectStageSchema,
+  ProjectStageNotePutBodySchema,
+  ProjectStageRefSchema,
   ProjectSummarySchema,
   ProjectUpdateBodySchema,
   ProjectViewGrantAddBodySchema,
@@ -873,6 +875,21 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     request: { params: z.object({ id: UuidSchema, stageId: UuidSchema }) },
     responses: {
       204: { description: "阶段已删除" },
+      403: commonErrors[403],
+      404: commonErrors[404],
+      409: commonErrors[409],
+    },
+  });
+
+  registry.registerPath({
+    method: "put",
+    path: "/api/v1/projects/{id}/stage-notes/{stageRef}",
+    tags: ["projects"],
+    summary: "保存或清除阶段备注（本项目经理或系统管理员）",
+    request: { params: idParams.extend({ stageRef: ProjectStageRefSchema }), body: json(ProjectStageNotePutBodySchema) },
+    responses: {
+      204: { description: "阶段备注已保存" },
+      400: commonErrors[400],
       403: commonErrors[403],
       404: commonErrors[404],
       409: commonErrors[409],

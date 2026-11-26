@@ -51,7 +51,7 @@ import notoSansJpCss from "@fontsource-variable/noto-sans-jp/index.css?inline";
 import notoSansKrCss from "@fontsource-variable/noto-sans-kr/index.css?inline";
 import notoSansScCss from "@fontsource-variable/noto-sans-sc/index.css?inline";
 import { TEMP_TASK_STAGE, type ProjectTask, type TaskStatus } from "./data/tasks";
-import { projectTaskStageNames, stageNameOf } from "./taskApi";
+import { additionalStageName, projectTaskStageNames, stageKeyOfName, stageNameOf } from "./taskApi";
 import { translateZhTo, type TranslationTarget } from "./translateApi";
 import overviewPreviewPagedCss from "./overviewPreviewPaged.css?inline";
 import overviewPreviewPagedScriptUrl from "./overviewPreviewPaged.js?url";
@@ -413,6 +413,7 @@ function groupDateRange(group: StageGroup): { start: string; due: string } {
 function groupSectionHtml(
   counter: { value: number },
   group: StageGroup,
+  note: string | undefined,
   managerText: string,
   translationMap: ReadonlyMap<string, string>,
   primary: OverviewExportLanguage,
@@ -420,10 +421,20 @@ function groupSectionHtml(
   columns: OverviewTaskColumns,
 ): string {
   const visibleColumns = visibleOverviewTaskColumns(columns);
-  const countText =
-    String(group.done) + " / " + String(group.total) + " " + escapeHtml(localizedValue("完成", primary)) + " · " +
-    (primary === "zh" ? secondaryText("completed", "en") : secondaryText("完成", "zh"));
-  if (collapsed) {
+  const stageName = fixedText(group.name, primary);
+  const noteHtml = note === undefined ? "" : `<span class="grp__note">${escapeHtml(note)}</span>`;
+  const countText = group.total === 0
+    ? fixedText("暂无任务", primary)
+    : String(group.done) + " / " + String(group.total) + " " + escapeHtml(localizedValue("完成", primary)) + " · " +
+      (primary === "zh" ? secondaryText("completed", "en") : secondaryText("完成", "zh"));
+  const groupHeading = (showCount = true) =>
+    '<tr class="grp__head"><td colspan="' + String(visibleColumns.length + 1) + '"><div class="grp__heading">' +
+    '<span class="grp__name">' + stageName + '</span>' +
+    (showCount ? '<span class="grp__count">' + countText + '</span>' : '') +
+    noteHtml +
+    '</div></td></tr>';
+
+  if (collapsed && group.total > 0) {
     counter.value += group.tasks.length;
     const pct = group.total === 0 ? 0 : Math.round((group.done / group.total) * 100);
     const status = stageOverallStatus(group);
@@ -431,7 +442,7 @@ function groupSectionHtml(
     const dateRange = groupDateRange(group);
     const fill = group.total === 0 ? "#d4d4d8" : pct === 100 ? "#10b981" : "#18181b";
     const cells: Record<OverviewTaskColumnKey, string> = {
-      title: '<td class="grp__name">' + fixedText(group.name, primary) + '</td>',
+      title: '<td class="grp__name">' + stageName + noteHtml + '</td>',
       note: '<td class="grp__count">' + countText + '</td>',
       managers: '<td class="managers"><span class="one-line">' + escapeHtml(managerText) + '</span></td>',
       owners: '<td class="owners"></td>',
@@ -443,6 +454,7 @@ function groupSectionHtml(
     };
     return (
       '<tbody class="grp">' +
+      (!columns.title && note !== undefined ? groupHeading(false) : "") +
       '<tr class="grp__head grp__head--collapsed">' +
       '<td class="num"></td>' +
       visibleColumns.map((column) => cells[column.key]).join("") +
@@ -458,10 +470,7 @@ function groupSectionHtml(
     .join("");
   return (
     '<tbody class="grp">' +
-    '<tr class="grp__head"><td colspan="' + String(visibleColumns.length + 1) + '">' +
-    '<span class="grp__name">' + fixedText(group.name, primary) + '</span>' +
-    '<span class="grp__count">' + countText + '</span>' +
-    '</td></tr>' +
+    groupHeading() +
     rows +
     '</tbody>'
   );
@@ -524,6 +533,10 @@ const REPORT_STYLE = `
   tbody.grp tr.grp__head td { padding: 3px 7px; background: #f4f4f5; border-bottom: 1px solid #e4e4e7; break-after: avoid; }
   .grp__name { font-size: 10.5px; font-weight: 700; }
   .grp__count { margin-left: 6px; font-size: 9.5px; color: #71717a; }
+  .grp__heading { display: flex; align-items: baseline; }
+  .grp__heading .grp__name, .grp__heading .grp__count { flex-shrink: 0; }
+  .grp__note { min-width: 0; margin-left: 10px; color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; }
+  tbody.grp tr.grp__head--collapsed .grp__note { display: block; margin: 2px 0 0; }
   tbody.grp tr.grp__head--collapsed td { padding: 6px 5px; background: #fafafa; border: 0; border-bottom: 1px solid #e4e4e7; vertical-align: middle; }
   tbody.grp tr.grp__head--collapsed td:first-child { padding-left: 7px; border-left: 1px solid #e4e4e7; }
   tbody.grp tr.grp__head--collapsed td:last-child { padding-right: 7px; border-right: 1px solid #e4e4e7; }
@@ -616,13 +629,17 @@ export function buildOverviewReportHtml(
   const shownGroups = groups.filter((group) => !hidden.has(group.name));
   const reportGroups = shownGroups.filter((group) => group.tasks.length > 0 || group.name !== TEMP_TASK_STAGE);
   const stageCells = reportGroups.map((group) => stageCellHtml(group, primary)).join("");
-  const detailGroups = shownGroups.filter((group) => group.tasks.length > 0);
+  const notesByRef = new Map(summary?.stageNotes?.map(({ stageRef, note }) => [stageRef, note]));
+  const additionalIds = new Map(summary?.additionalStages?.map((stage) => [additionalStageName(stage), stage.id]));
   const counter = { value: 0 };
   const managerText = projectManagerText(project);
   const collapsed = new Set(collapsedStages);
-  const detailRows = detailGroups
-    .map((group) => groupSectionHtml(counter, group, managerText, translationMap, primary, collapsed.has(group.name), columns))
-    .join("");
+  const detailRows = shownGroups.map((group) => {
+    const stageRef = additionalIds.get(group.name) ?? stageKeyOfName(group.name);
+    const note = stageRef === null ? undefined : notesByRef.get(stageRef);
+    if (group.total === 0 && note === undefined) return "";
+    return groupSectionHtml(counter, group, note, managerText, translationMap, primary, collapsed.has(group.name), columns);
+  }).join("");
   const fetchedCount = String(tasks.length);
   let clippedNote = "";
   if (counts.total > tasks.length) {

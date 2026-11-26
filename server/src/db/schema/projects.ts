@@ -156,6 +156,17 @@ export const projectAdditionalStages = pgTable(
   ],
 );
 
+/** 项目总览的阶段备注，stageRef 为原阶段字典键或新增阶段 ID。 */
+export const projectStageNotes = pgTable(
+  "project_stage_notes",
+  {
+    projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    stageRef: text("stage_ref").notNull(),
+    note: text("note").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.stageRef], name: "project_stage_notes_pkey" })],
+);
+
 /** project_stages（导入蓝图时生成）。 */
 export const projectStages = pgTable(
   "project_stages",

@@ -5,7 +5,7 @@ import { PROJECT_STAGES } from "../data/projects";
 import { memberOptionsWithExisting, type Member } from "../data/members";
 import type { TaskFileRef } from "../fileApi";
 import { TEMP_TASK_STAGE, addedNodeIdsOf, addedNodeKeysOf, dateOnlyText, daysBetweenInclusive, lateDeliveryLabel, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskPriority, type TaskStatus } from "../data/tasks";
-import { additionalStageName, stageNameOf, type AdditionalProjectStage, type ApiProjectSummary, type TaskUpdateInput } from "../taskApi";
+import { additionalStageName, stageKeyOfName, stageNameOf, type AdditionalProjectStage, type ApiProjectSummary, type ProjectStageNote, type TaskUpdateInput } from "../taskApi";
 import { fieldText, isLocalizedLocale, mdText, priorityText, stageText, statusText, useLocale, useLocalizedText, useT } from "../i18n";
 import { InlineDateCell, InlineMemberMultiCell, InlineNumberCell, InlineOptionCell, InlineTextCell } from "./InlineEdit";
 import type { SelectOption } from "./SelectMenu";
@@ -19,6 +19,7 @@ import { RowDeleteButton } from "./RowDeleteButton";
 import { DeliverableCell, docTypeCapsule } from "./DeliverablePicker";
 import { AdditionalStageDialog } from "./AdditionalStageDialog";
 import { StageAddCard } from "./StageAddCard";
+import { StageNote } from "./StageNote";
 import type { StagePlacement } from "./StageAddCard";
 import { TempTaskCreateForm, type TempTaskCreateValues } from "./TempTaskCreateForm";
 import type { TemplatePresetNode } from "../data/templatePresets";
@@ -339,10 +340,12 @@ type TaskBoardProps = {
   /** 没有数据也要出分组头的阶段（还没有任务的项目：只出阶段骨架，展开后没有任务行）。 */
   skeletonStages?: readonly string[];
   additionalStages?: readonly AdditionalProjectStage[];
+  stageNotes?: readonly ProjectStageNote[];
   manageStages?: {
     create: (stageKey: string) => Promise<string | null>;
     remove: (id: string) => Promise<string | null>;
     createTask: (id: string, values: TempTaskCreateValues) => Promise<string | null>;
+    saveNote: (stageRef: string, note: string) => Promise<string | null>;
   };
   /** 「添加任务」：从任务模板预设里挑节点加进项目（不传 = 阶段标签点不开右侧卡片）。 */
   onAddNode?: (stage: string, node: TemplatePresetNode, additionalStage?: AdditionalProjectStage) => void;
@@ -955,7 +958,7 @@ export function ProjectSummary({ summary }: { summary: ApiProjectSummary | null 
   );
 }
 
-export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes, onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, additionalStages, manageStages, onAddNode, onAddNodes, canOpenAddCard, personalOnlyStages, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, filesByTask, projectId, tierTint }: TaskBoardProps) {
+export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId = null, onOpenTaskOpened, onSetProgress, onSetStatus, onSetActualEnd, members, managerMembers, customDeliverableTypes, onCreateDeliverableType, visibleColumns, scrollRef, collapsed, onToggleStage, onToggleAllStages, skeletonStages, additionalStages, stageNotes, manageStages, onAddNode, onAddNodes, canOpenAddCard, personalOnlyStages, onCreateTempTask, viewStage, canEditManagers, canFinalizeTask, onSubmitTaskEdit, onRenameTask, onPatchTask, onDeleteTask, onChangeManagers, onUploadFiles, onDeleteFile, onRenameFile, onFinalize, onUnfinalize, onChanged, actorName, allowFileChanges, filesByTask, projectId, tierTint }: TaskBoardProps) {
   const t = useT();
   const locale = useLocale();
   /**
@@ -1111,6 +1114,7 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
    */
   const stageOf = (task: ProjectTask) => (task.stage === "" ? TEMP_TASK_STAGE : task.stage);
   const additionalStageByName = new Map(additionalStages?.map((stage) => [additionalStageName(stage), stage]));
+  const notesByStage = new Map(stageNotes?.map(({ stageRef, note }) => [stageRef, note]));
   const cardNodeTasks = tasks.filter((task) => cardAdditionalStage === undefined
     ? task.additionalStageNumber === undefined
     : task.stage === cardStage);
@@ -1193,14 +1197,14 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
             const isCollapsed = collapsed[group.stage] === true;
             /** 只读关系用户没有新增回调：阶段头退化为普通标签，不出现「＋」和可展开卡片。 */
             const additionalStage = additionalStageByName.get(group.stage);
+            const stageRef = additionalStage?.id ?? stageKeyOfName(group.stage);
             const canAddToStage = group.stage === TEMP_TASK_STAGE
               ? onCreateTempTask !== undefined
               : (additionalStage !== undefined || STAGE_ORDER.includes(group.stage)) && (onAddNode !== undefined || onAddNodes !== undefined) && (canOpenAddCard === undefined || canOpenAddCard(group.stage));
             return (
               <section key={additionalStage?.id ?? group.stage} className="border-b border-zinc-100 last:border-b-0">
-                {/* 阶段分组头（业务口径 2026-09-24）：整行不再是点击区域 —— 只有左侧「折叠箭头 + 阶段标签」这一小片可点，
-                    右边那一段空行点不动（原来整行是 role=button 的折叠开关，点在空白处也会折叠，容易被误触）。 */}
-                <div data-stage-header={group.stage} className="flex w-full items-center gap-2.5 bg-zinc-100 px-5 py-3">
+                {/* 阶段分组头的折叠、任务添加和阶段管理都通过各自的按钮触发。 */}
+                <div data-stage-header={group.stage} className="flex w-full items-center gap-2.5 bg-zinc-100 px-5 py-3 [&>button]:shrink-0 [&>span]:shrink-0">
                   {/* 折叠开关只留这枚箭头（原先点整行也能折叠） */}
                   <button
                     type="button"
@@ -1284,6 +1288,13 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
                     </svg>
                   </button>
                   )}
+                  {stageRef !== null && stageNotes !== undefined ? (
+                    <StageNote
+                      stageName={stageText(locale, group.stage)}
+                      note={notesByStage.get(stageRef) ?? ""}
+                      onSave={manageStages === undefined ? undefined : (note) => manageStages.saveNote(stageRef, note)}
+                    />
+                  ) : null}
                   {additionalStage !== undefined && manageStages !== undefined ? (
                     <RowDeleteButton
                       persistent

@@ -1,7 +1,9 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
 import {
   AdditionalProjectStageCreateBodySchema,
   type AdditionalProjectStage,
+  ProjectStageNotePutBodySchema,
+  ProjectStageRefSchema,
   ProjectSummarySchema,
   TaskBatchBodySchema,
   TaskBatchResponseSchema,
@@ -43,6 +45,7 @@ type TaskBatchBody = z.infer<typeof TaskBatchBodySchema>;
 type TaskLockedFieldsAdjustBody = z.infer<typeof TaskLockedFieldsAdjustBodySchema>;
 
 const uuidParam = new ZodValidationPipe(UuidSchema);
+const stageRefParam = new ZodValidationPipe(ProjectStageRefSchema);
 
 /**
  * 任务接口（h4 · S6·task）：契约 shared/src/modules/tasks.ts。
@@ -101,6 +104,18 @@ export class TaskController {
     @CurrentActorId() actorId: string,
   ): Promise<void> {
     return this.tasks.removeAdditionalStage(id, stageId, actorId);
+  }
+
+  @Put(":id/stage-notes/:stageRef")
+  @RequirePermission("project.update")
+  @HttpCode(204)
+  saveStageNote(
+    @Param("id", uuidParam) id: string,
+    @Param("stageRef", stageRefParam) stageRef: string,
+    @Body(new ZodValidationPipe(ProjectStageNotePutBodySchema)) body: z.infer<typeof ProjectStageNotePutBodySchema>,
+    @CurrentActorId() actorId: string,
+  ): Promise<void> {
+    return this.tasks.saveStageNote(id, stageRef, body.note, actorId);
   }
 
   /** 任务列表：分页 + 阶段 / 负责人 / 展示态筛选 + 关键字 + 白名单排序（TaskListItem 随行摘要）。 */

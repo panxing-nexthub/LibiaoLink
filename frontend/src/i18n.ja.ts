@@ -943,6 +943,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "kanban.drag.title": "押したまま別の列へドラッグしてタスクを移動（担当者 / ステータスも連動）。ホイールでカードをスクロール、Shift + ホイールで列をスクロール。クリックで詳細を開く",
   "drawer.overdue": "納期を過ぎています（{date}）。まだ完了していません。",
   "gantt.unscheduled": "未スケジュール",
+  "gantt.unscheduled.hint": "タイムラインの空白セルをダブルクリックすると、その日付で1日バーを作成します（編集ロック解除が必要）",
   "continent.asia": "アジア",
   "continent.europe": "ヨーロッパ",
   "continent.africa": "アフリカ",

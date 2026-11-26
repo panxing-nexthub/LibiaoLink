@@ -1767,6 +1767,32 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     element.scrollTo({ left: Math.max(0, box.left + box.width / 2 - (element.clientWidth - leftWidth) / 2), behavior: "smooth" });
   };
 
+  /**
+   * 未排期任务：在时间轴空白格双击 = 以该日新建 1 天任务条（已有条的任务不响应）。
+   * 新建后即可按普通任务条拖动改期 / 拖两端改工期（锁定态或无权编辑时不生效）。
+   */
+  const createBarOnDoubleClick = (event: ReactMouseEvent<HTMLDivElement>, bar: GanttBar) => {
+    if (bar.start !== null || bar.end !== null) {
+      return;
+    }
+    if (model === null || onPatchTask === undefined || barsLocked) {
+      return;
+    }
+    const capabilities = taskCapabilitiesOf(bar.task);
+    if (!capabilities.canEditFields || bar.task.finalizedAt !== null) {
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left;
+    if (offsetX < 0) {
+      return;
+    }
+    const dayIndex = clampNumber(Math.floor(offsetX / dayWidth), 0, Math.max(model.days - 1, 0));
+    const day = model.rangeStart + dayIndex * DAY_MS;
+    setSelectedId(bar.task.id);
+    onPatchTask(bar.task.id, rangePatch(day, day));
+  };
+
   /** 拖动中的浮标（贴在条上方，行坐标系）：改期 / 改工期写新日期区间与天数，改进度写新百分比。 */
   const dragBubble = (left: number, dragging: boolean) => {
     if (!dragging || drag === null) {
@@ -1790,7 +1816,11 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
    */
   const renderTaskBar = (bar: GanttBar) => {
     if (bar.start === null || bar.end === null) {
-      return <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400">{t("gantt.unscheduled")}</span>;
+      return (
+        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400" title={t("gantt.unscheduled.hint")}>
+          {t("gantt.unscheduled")}
+        </span>
+      );
     }
     const live = liveOf(bar);
     const box = barBox(live.start, live.end);
@@ -2411,6 +2441,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                         setHovered(null);
                       }}
                       onClick={clearSelection}
+                      onDoubleClick={isGroup ? undefined : (event) => createBarOnDoubleClick(event, row.bar)}
                       className={
                         "relative border-b border-slate-100 " +
                         (isGroup

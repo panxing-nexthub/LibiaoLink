@@ -943,6 +943,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "kanban.drag.title": "작업을 다른 열로 끌어 이동(담당자/상태도 함께 변경); 휠로 카드 스크롤, Shift+휠로 열 스크롤; 클릭하여 상세 열기",
   "drawer.overdue": "납기일 초과({date}); 아직 완료되지 않음.",
   "gantt.unscheduled": "일정 없음",
+  "gantt.unscheduled.hint": "타임라인 빈 칸을 더블클릭하면 해당 날짜로 하루 막대를 만듭니다(편집 잠금 해제 필요)",
   "continent.asia": "아시아",
   "continent.europe": "유럽",
   "continent.africa": "아프리카",

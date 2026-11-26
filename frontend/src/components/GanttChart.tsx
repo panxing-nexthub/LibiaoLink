@@ -76,12 +76,12 @@ const FALLBACK_TASK_MIN_W = tableMinWidth(FALLBACK_TASK_COLUMNS);
  * 左表列宽 / 行高：左表与时间轴靠这一组常量逐行对齐。**列宽固定、不随可见宽度变** ——
  * 分隔线是「右侧时间轴盖住左表多少」的边界（业务口径「右侧看板是遮挡 不是压缩左侧」，对齐官方样例：
  * 拖窄了列是被裁掉，不是被挤窄）。紧凑布局以尽可能给右侧时间轴留出视野：
- * 行号 34 + 任务 188 + 开始 58 + 预计完成 72 + 施工人数 56 + 进展 48 = 456px（较原先 572px 腾出 116px）。
+ * 行号 36 + 任务 180 + 开始 60 + 预计完成 80 + 施工人数 56 + 进展 48 = 460px（较原先 572px 腾出 112px，保证表头单行不换行、数值居中对齐）。
  */
-const COL_INDEX_W = 34;
-const COL_TITLE_W = 188;
-const COL_START_W = 58;
-const COL_END_W = 72;
+const COL_INDEX_W = 36;
+const COL_TITLE_W = 180;
+const COL_START_W = 60;
+const COL_END_W = 80;
 const COL_HEADCOUNT_W = 56;
 const COL_PROGRESS_W = 48;
 /** 「任务」列至少要露出来的宽度：分隔线最窄只遮到这儿。 */
@@ -171,7 +171,7 @@ function dayLineStyle(dayWidth: number): { backgroundImage: string } {
 
 /** 左表「开始 / 结束」单元格：拖动中（预览值）加一档强调，平时与「进展」同色。 */
 function dateCellClass(live: boolean): string {
-  return "px-1.5 text-[11px] tabular-nums " + (live ? "font-medium text-zinc-900" : "text-zinc-500");
+  return "px-1 text-center whitespace-nowrap text-[11px] tabular-nums " + (live ? "font-medium text-zinc-900" : "text-zinc-500");
 }
 
 /**
@@ -2179,22 +2179,22 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                   className="sticky top-0 z-10 flex items-center border-b border-slate-200 bg-slate-50/95 text-[11px] font-medium text-slate-500"
                   style={{ height: HEADER_TOTAL_H, width: LEFT_W_NATURAL }}
                 >
-                  <div className="flex h-full items-center justify-center" style={{ width: COL_INDEX_W }}>
+                  <div className="flex h-full items-center justify-center whitespace-nowrap" style={{ width: COL_INDEX_W }}>
                     {fieldText(locale, "行号")}
                   </div>
-                  <div className="flex h-full items-center px-2" style={{ width: COL_TITLE_W }}>
+                  <div className="flex h-full items-center whitespace-nowrap px-2" style={{ width: COL_TITLE_W }}>
                     {fieldText(locale, "任务")}
                   </div>
-                  <div className="flex h-full items-center px-1.5" style={{ width: COL_START_W }}>
+                  <div className="flex h-full items-center justify-center whitespace-nowrap px-1" style={{ width: COL_START_W }}>
                     {fieldText(locale, "开始日期")}
                   </div>
-                  <div className="flex h-full items-center px-1.5" style={{ width: COL_END_W }}>
+                  <div className="flex h-full items-center justify-center whitespace-nowrap px-1" style={{ width: COL_END_W }}>
                     {fieldText(locale, "预计完成日期")}
                   </div>
-                  <div className="flex h-full items-center justify-end px-1.5" style={{ width: COL_HEADCOUNT_W }}>
+                  <div className="flex h-full items-center justify-center whitespace-nowrap px-1" style={{ width: COL_HEADCOUNT_W }}>
                     {fieldText(locale, "施工人数")}
                   </div>
-                  <div className="flex h-full items-center justify-end pr-2" style={{ width: COL_PROGRESS_W }}>
+                  <div className="flex h-full items-center justify-center whitespace-nowrap px-1" style={{ width: COL_PROGRESS_W }}>
                     {fieldText(locale, "进展")}
                   </div>
                 </div>
@@ -2276,21 +2276,21 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                         </button>
                       )}
                       <div className={dateCellClass(range.live)} style={{ width: COL_START_W }}>
-                        {range.start}
+                        {range.start === "—" ? <span className="text-slate-300">—</span> : range.start}
                       </div>
                       <div className={dateCellClass(range.live)} style={{ width: COL_END_W }}>
-                        {range.end}
+                        {range.end === "—" ? <span className="text-slate-300">—</span> : range.end}
                       </div>
-                      <div className="px-1.5 text-right text-[11px] tabular-nums text-zinc-500" style={{ width: COL_HEADCOUNT_W }}>
+                      <div className="px-1 text-center whitespace-nowrap text-[11px] tabular-nums text-zinc-500" style={{ width: COL_HEADCOUNT_W }}>
                         {row.kind === "group"
                           ? row.group.headcountTotal > 0
                             ? t("drawer.headcount.value", { n: row.group.headcountTotal })
-                            : "—"
+                            : <span className="text-slate-300">—</span>
                           : row.bar.task.headcount > 0
                             ? t("drawer.headcount.value", { n: row.bar.task.headcount })
-                            : "—"}
+                            : <span className="text-slate-300">—</span>}
                       </div>
-                      <div className="pr-2 text-right text-[11px] tabular-nums text-zinc-500" style={{ width: COL_PROGRESS_W }}>
+                      <div className="px-1 text-center whitespace-nowrap text-[11px] tabular-nums text-zinc-500" style={{ width: COL_PROGRESS_W }}>
                         {row.kind === "group"
                           ? String(row.group.percent) + "%"
                           : row.bar.start === null

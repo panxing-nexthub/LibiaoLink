@@ -50,7 +50,7 @@
 import notoSansJpCss from "@fontsource-variable/noto-sans-jp/index.css?inline";
 import notoSansKrCss from "@fontsource-variable/noto-sans-kr/index.css?inline";
 import notoSansScCss from "@fontsource-variable/noto-sans-sc/index.css?inline";
-import { TEMP_TASK_STAGE, type ProjectTask, type TaskStatus } from "./data/tasks";
+import { TEMP_TASK_STAGE, daysBetweenInclusive, type ProjectTask, type TaskStatus } from "./data/tasks";
 import { additionalStageName, projectTaskStageNames, stageKeyOfName, stageNameOf } from "./taskApi";
 import { translateZhTo, type TranslationTarget } from "./translateApi";
 import overviewPreviewPagedCss from "./overviewPreviewPaged.css?inline";
@@ -180,6 +180,10 @@ const FIXED_TEXT: Record<string, LanguageStrings> = {
   完成: { en: "completed", ja: "完了", ko: "완료" },
   全部完成: { en: "All Completed", ja: "すべて完了", ko: "모두 완료" },
   暂无任务: { en: "No tasks", ja: "タスクなし", ko: "작업 없음" },
+  天: { en: "days", ja: "日", ko: "일" },
+  峰值: { en: "Peak", ja: "ピーク", ko: "최대" },
+  平均: { en: "Avg", ja: "平均", ko: "평균" },
+  "人/天": { en: "people/day", ja: "人/日", ko: "명/일" },
   待分配: { en: "Unassigned", ja: "未割当", ko: "미배정" },
   项目编号: { en: "Project Code", ja: "プロジェクト番号", ko: "프로젝트 번호" },
   项目经理: { en: "Project Manager", ja: "プロジェクト責任者", ko: "프로젝트 관리자" },
@@ -409,6 +413,89 @@ function groupDateRange(group: StageGroup): { start: string; due: string } {
   return { start, due };
 }
 
+/** 阶段投入统计：开始 / 实际结束（缺实际结束用预计完成）、含首尾天数、单日峰值与平均每天人天。 */
+type StageEffort = {
+  start: string;
+  end: string;
+  days: number;
+  peak: number;
+  average: number;
+  hasHeadcount: boolean;
+};
+
+/**
+ * 阶段起止与人力统计（业务口径 2026-11-26「大阶段标题显示开始时间到实际结束时间、历时多少天；
+ * 设计施工人数按日期汇总：一个任务 22-24 号 4 人 + 下一个任务 23-24 号 4 人 → 23 / 24 号 = 8 人/天；
+ * 还要统计平均每天多少人天」）：单日人数 = 当天在做的所有任务 headcount 之和（含首尾），
+ * 平均 = 阶段总人天 ÷ 阶段日历天数（含首尾）。
+ */
+function stageEffortOf(group: StageGroup): StageEffort | null {
+  let start = "";
+  let end = "";
+  for (const task of group.tasks) {
+    if (task.startDate !== "" && (start === "" || task.startDate < start)) {
+      start = task.startDate;
+    }
+    const finish = task.doneDate !== "" ? task.doneDate : task.dueDate;
+    if (finish !== "" && (end === "" || finish > end)) {
+      end = finish;
+    }
+  }
+  if (start === "" || end === "" || end < start) {
+    return null;
+  }
+  const days = daysBetweenInclusive(start, end);
+  if (days <= 0) {
+    return null;
+  }
+  const covered = group.tasks.filter((task) => task.headcount > 0
+    && task.startDate !== ""
+    && (task.doneDate !== "" || task.dueDate !== ""));
+  let peak = 0;
+  let total = 0;
+  if (covered.length > 0) {
+    const startMs = Date.parse(start + "T00:00:00Z");
+    for (let index = 0; index < days; index += 1) {
+      const day = new Date(startMs + index * 86400000).toISOString().slice(0, 10);
+      let sum = 0;
+      for (const task of covered) {
+        const finish = task.doneDate !== "" ? task.doneDate : task.dueDate;
+        if (task.startDate <= day && day <= finish) {
+          sum += task.headcount;
+        }
+      }
+      peak = Math.max(peak, sum);
+      total += sum;
+    }
+  }
+  return {
+    start,
+    end,
+    days,
+    peak,
+    average: covered.length === 0 ? 0 : Math.round((total / days) * 10) / 10,
+    hasHeadcount: covered.length > 0,
+  };
+}
+
+/** 阶段标题第二行：起止 / 历时 / 峰值 / 平均人天（无日期或人数时只显示能算出的部分）。 */
+function stageMetaHtml(group: StageGroup, primary: OverviewExportLanguage): string {
+  const effort = stageEffortOf(group);
+  if (effort === null) {
+    return "";
+  }
+  const parts = [
+    escapeHtml(effort.start) + " → " + escapeHtml(effort.end),
+    String(effort.days) + " " + escapeHtml(localizedValue("天", primary)),
+  ];
+  if (effort.hasHeadcount) {
+    const unit = escapeHtml(localizedValue("人/天", primary));
+    parts.push(escapeHtml(localizedValue("峰值", primary)) + " " + String(effort.peak) + " " + unit);
+    parts.push(escapeHtml(localizedValue("平均", primary)) + " " + String(effort.average) + " " + unit);
+  }
+  return "<div class=\"grp__meta\">" + parts.join(" · ") + "</div>";
+}
+
 /** 折叠阶段与任务行共用当前列配置；折叠行把阶段汇总值放回对应可见列，隐藏列不再占位。 */
 function groupSectionHtml(
   counter: { value: number },
@@ -423,6 +510,7 @@ function groupSectionHtml(
   const visibleColumns = visibleOverviewTaskColumns(columns);
   const stageName = fixedText(group.name, primary);
   const noteHtml = note === undefined ? "" : `<span class="grp__note">${translatedText(note, translationMap.get(note), primary)}</span>`;
+  const metaHtml = stageMetaHtml(group, primary);
   const countText = group.total === 0
     ? fixedText("暂无任务", primary)
     : String(group.done) + " / " + String(group.total) + " " + escapeHtml(localizedValue("完成", primary)) + " · " +
@@ -432,7 +520,7 @@ function groupSectionHtml(
     '<span class="grp__name">' + stageName + '</span>' +
     (showCount ? '<span class="grp__count">' + countText + '</span>' : '') +
     noteHtml +
-    '</div></td></tr>';
+    '</div>' + metaHtml + '</td></tr>';
 
   if (collapsed && group.total > 0) {
     counter.value += group.tasks.length;
@@ -442,7 +530,7 @@ function groupSectionHtml(
     const dateRange = groupDateRange(group);
     const fill = group.total === 0 ? "#d4d4d8" : pct === 100 ? "#10b981" : "#18181b";
     const cells: Record<OverviewTaskColumnKey, string> = {
-      title: '<td class="grp__name">' + stageName + noteHtml + '</td>',
+      title: '<td class="grp__name">' + stageName + noteHtml + metaHtml + '</td>',
       note: '<td class="grp__count">' + countText + '</td>',
       managers: '<td class="managers"><span class="one-line">' + escapeHtml(managerText) + '</span></td>',
       owners: '<td class="owners"></td>',
@@ -534,6 +622,7 @@ const REPORT_STYLE = `
   .grp__name { font-size: 10.5px; font-weight: 700; }
   .grp__count { margin-left: 6px; font-size: 9.5px; color: #71717a; }
   .grp__heading { display: flex; align-items: baseline; }
+  .grp__meta { margin: 1px 0 0; font-size: 8.5px; color: #52525b; }
   .grp__heading .grp__name, .grp__heading .grp__count { flex-shrink: 0; }
   .grp__note { min-width: 0; margin-left: 10px; color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; }
   tbody.grp tr.grp__head--collapsed .grp__note { display: block; margin: 2px 0 0; }

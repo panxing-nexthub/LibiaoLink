@@ -5,7 +5,7 @@ import { MemberSearchList } from "./MemberSelect";
 import { MultiOptionList, OptionList, type SelectOption } from "./SelectMenu";
 import { Toast } from "./Toast";
 import { usePopover, type PopoverPlacement } from "./usePopover";
-import { useLocale, useMachineText, useT } from "../i18n";
+import { mdText, useLocale, useMachineText, useT } from "../i18n";
 import { CalendarMonthHeader } from "./CalendarMonthHeader";
 
 const WEEKDAYS_ZH = ["一", "二", "三", "四", "五", "六", "日"];
@@ -44,6 +44,8 @@ type InlineCellProps = {
   disabledHint?: string;
   /** 浮层落点（2026-11-26 新增 leftEdge）：默认 below；日期单元格传 leftEdge = 向左侧弹出。 */
   placement?: PopoverPlacement;
+  /** 允许内容溢出到浮层外（2026-11-26）：日期单元格的「同步后续任务」卡片挂在浮层左侧，需要 overflow-visible。 */
+  overflowVisible?: boolean;
   /** 浮层内容；`close` 用于选完即关。 */
   render: (close: () => void) => ReactNode;
 };
@@ -54,7 +56,7 @@ type InlineCellProps = {
  * Push 264（P1-1 定档锁定）：加 disabled 锁定态 —— 入口保留可点、样式与可编辑态全等，点击改为弹出站点同款底部
  *  Toast（2026-10-10 业务追订「点击后显示弹出即可 不要红色的圆提示」+「都用这个即可」；见 InlineCellProps.disabled）。
  */
-export function InlineCell({ ariaLabel, title, display, width, height, triggerClassName, bare = false, wrapContent = false, disabled = false, disabledHint, placement = "below", render }: InlineCellProps) {
+export function InlineCell({ ariaLabel, title, display, width, height, triggerClassName, bare = false, wrapContent = false, disabled = false, disabledHint, placement = "below", overflowVisible = false, render }: InlineCellProps) {
   const { open, setOpen, position, triggerRef, popoverRef } = usePopover(width, height, placement);
   /** 锁定说明 Toast（Push 264 续 · 2026-10-10 业务口径「都用这个即可」）：点击锁定入口 → 站点同款底部浮空 Toast
    *  （error 档：rose 边框 / 浅底 + 「关闭」按钮，2s 自动消失）；tick 只增不减 —— 连点同一格也以新 key 重新计时。 */
@@ -140,7 +142,10 @@ export function InlineCell({ ariaLabel, title, display, width, height, triggerCl
               onKeyDown={(event) => {
                 event.stopPropagation();
               }}
-              className="fixed z-50 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.18)]"
+              className={
+                "fixed z-50 rounded-xl border border-zinc-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.18)] " +
+                (overflowVisible ? "overflow-visible" : "overflow-hidden")
+              }
               style={{ top: position.top, left: position.left, width: position.width }}
             >
               {render(() => {
@@ -361,13 +366,14 @@ export function InlineDateCell({
   todayIso,
   allowScheduleShift = false,
   placement = "leftEdge",
+  shiftTargets,
   disabled = false,
   disabledHint,
 }: {
   valueIso: string;
   display: ReactNode;
   ariaLabel: string;
-  onChange: (iso: string, shiftFollowing?: boolean) => void;
+  onChange: (iso: string, shiftTaskIds?: string[]) => void;
   triggerClassName?: string;
   bare?: boolean;
   showAuto?: boolean;
@@ -377,6 +383,8 @@ export function InlineDateCell({
   allowScheduleShift?: boolean;
   /** 浮层落点（2026-11-26）：默认 leftEdge = 向左侧弹出（日期列靠右，向左弹不压右侧列）；传 below 可回落旧口径。 */
   placement?: PopoverPlacement;
+  /** 「同步后续任务」可勾选的任务（同阶段位次在后的任务）：传了才出左侧卡片。 */
+  shiftTargets?: readonly ScheduleShiftTarget[];
   /** 锁定入口（Push 264 · P1-1 定档锁定）：透传 InlineCell —— 定档任务的行内入口不弹编辑浮层，点击改弹站点同款顶部 Toast。 */
   disabled?: boolean;
   /** 锁定说明文案（定档口径同 409 TASK_FINALIZED 提示文案；悬停 title 与点击 Toast 共用）。 */
@@ -390,6 +398,7 @@ export function InlineDateCell({
       width={264}
       height={allowScheduleShift && valueIso !== "" ? 370 : 336}
       placement={placement}
+      overflowVisible
       disabled={disabled}
       disabledHint={disabledHint}
       bare={bare}
@@ -403,8 +412,9 @@ export function InlineDateCell({
           maxDate={maxDate}
           todayIso={todayIso}
           allowScheduleShift={allowScheduleShift && valueIso !== ""}
-          onChange={(iso, shiftFollowing) => {
-            onChange(iso, shiftFollowing);
+          shiftTargets={shiftTargets}
+          onChange={(iso, shiftTaskIds) => {
+            onChange(iso, shiftTaskIds);
             close();
           }}
         />
@@ -412,6 +422,14 @@ export function InlineDateCell({
     />
   );
 }
+
+/** 同步后续任务卡片里的单条任务（2026-11-26）：原开始 / 原预计完成 → 按本次改期差值平移后的日期。 */
+export type ScheduleShiftTarget = {
+  id: string;
+  title: string;
+  startDate: string;
+  dueDate: string;
+};
 
 function MiniCalendar({
   value,
@@ -421,20 +439,43 @@ function MiniCalendar({
   maxDate,
   todayIso = toKey(new Date()),
   allowScheduleShift,
+  shiftTargets = [],
 }: {
   value: string;
-  onChange: (iso: string, shiftFollowing?: boolean) => void;
+  onChange: (iso: string, shiftTaskIds?: string[]) => void;
   showAuto: boolean;
   minDate: string;
   maxDate: string;
   todayIso?: string;
   allowScheduleShift: boolean;
+  shiftTargets?: readonly ScheduleShiftTarget[];
 }) {
   const t = useT();
   const locale = useLocale();
-  const [shiftFollowing, setShiftFollowing] = useState(false);
+  const [shiftChecked, setShiftChecked] = useState(false);
+  const [pickedIds, setPickedIds] = useState<readonly string[]>([]);
+  const [pendingIso, setPendingIso] = useState<string | null>(null);
   const isAllowed = (iso: string) => (minDate === "" || iso >= minDate) && (maxDate === "" || iso <= maxDate);
-  const pick = (iso: string) => onChange(iso, shiftFollowing && iso !== value);
+  const canSync = allowScheduleShift && shiftTargets.length > 0;
+  /** 勾了「同步后续任务」时先挂起，等用户在左侧卡片里确认要同步哪些任务（2026-11-26 业务口径）。 */
+  const pick = (iso: string) => {
+    if (shiftChecked && canSync) {
+      setPendingIso(iso);
+      return;
+    }
+    onChange(iso);
+  };
+  /** 本次改期的自然日差值：只用于左侧卡片预览；确认后服务端按同一差值平移被勾选的任务。 */
+  const deltaDays =
+    pendingIso === null || value === ""
+      ? null
+      : Math.round((Date.parse(pendingIso + "T00:00:00Z") - Date.parse(value + "T00:00:00Z")) / 86_400_000);
+  const shiftedText = (iso: string): string => {
+    if (iso === "" || deltaDays === null) {
+      return "—";
+    }
+    return mdText(locale, toKey(new Date(Date.parse(iso + "T00:00:00Z") + deltaDays * 86_400_000)));
+  };
   const [view, setView] = useState(() => {
     const base = toDate(value === "" ? todayIso : value);
     return new Date(base.getFullYear(), base.getMonth(), 1);
@@ -451,7 +492,69 @@ function MiniCalendar({
   }, [view]);
 
   return (
-    <div className="p-3">
+    <div className="relative p-3">
+      {shiftChecked && canSync ? (
+        <div
+          data-schedule-shift-card="true"
+          className="absolute right-full top-0 mr-2 w-[320px] rounded-xl border border-zinc-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.18)]"
+        >
+          <div className="border-b border-zinc-100 px-3 py-2">
+            <p className="text-xs font-semibold text-zinc-800">{t("task.schedule.card.title")}</p>
+            <p className="mt-0.5 text-[11px] text-zinc-400">{t("task.schedule.card.pick")}</p>
+          </div>
+          <div className="max-h-[268px] space-y-1.5 overflow-auto p-2">
+            {shiftTargets.map((target) => {
+              const checked = pickedIds.includes(target.id);
+              return (
+                <label key={target.id} className="flex cursor-pointer items-start gap-2 rounded-lg border border-zinc-100 px-2 py-1.5 hover:bg-zinc-50">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={checked}
+                    onChange={(event) => {
+                      const next = event.target.checked;
+                      setPickedIds((previous) => (next ? [...previous, target.id] : previous.filter((id) => id !== target.id)));
+                    }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs text-zinc-800">{target.title}</span>
+                    <span className="mt-0.5 block text-[11px] text-zinc-500">
+                      {t("task.schedule.card.start")} {target.startDate === "" ? "—" : mdText(locale, target.startDate)} → {shiftedText(target.startDate)}
+                    </span>
+                    <span className="block text-[11px] text-zinc-500">
+                      {t("task.schedule.card.due")} {target.dueDate === "" ? "—" : mdText(locale, target.dueDate)} → {shiftedText(target.dueDate)}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          <div className="flex items-center justify-end gap-1.5 border-t border-zinc-100 px-2 py-2">
+            <button
+              type="button"
+              onClick={() => {
+                setPendingIso(null);
+              }}
+              className="rounded-lg px-2.5 py-1.5 text-xs text-zinc-500 transition hover:bg-zinc-100"
+            >
+              {t("task.schedule.card.cancel")}
+            </button>
+            <button
+              type="button"
+              disabled={pendingIso === null || pickedIds.length === 0}
+              onClick={() => {
+                if (pendingIso !== null) {
+                  onChange(pendingIso, pickedIds.slice());
+                }
+              }}
+              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:opacity-40"
+            >
+              {t("task.schedule.card.confirm")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <CalendarMonthHeader
         view={view}
         onViewChange={setView}
@@ -459,9 +562,18 @@ function MiniCalendar({
         nextLabel={t("ie.nextMonth")}
       />
 
-      {allowScheduleShift ? (
+      {canSync ? (
         <label className="mt-2 flex items-center gap-2 px-1 text-xs text-zinc-700">
-          <input type="checkbox" checked={shiftFollowing} onChange={(event) => setShiftFollowing(event.target.checked)} />
+          <input
+            type="checkbox"
+            checked={shiftChecked}
+            onChange={(event) => {
+              const next = event.target.checked;
+              setShiftChecked(next);
+              setPendingIso(null);
+              setPickedIds(next ? shiftTargets.map((target) => target.id) : []);
+            }}
+          />
           {t("task.schedule.shiftFollowing")}
         </label>
       ) : null}
@@ -478,9 +590,11 @@ function MiniCalendar({
           const base = "flex h-8 w-full items-center justify-center rounded-lg text-xs transition ";
           const tone = !selectable
             ? "text-zinc-300 "
-            : cell.key === value
+            : cell.key === (pendingIso ?? value)
               ? "bg-zinc-900 font-semibold text-white "
-              : "text-zinc-600 hover:bg-zinc-100 ";
+              : pendingIso !== null && cell.key === pendingIso
+                ? "bg-zinc-400 font-semibold text-white "
+                : "text-zinc-600 hover:bg-zinc-100 ";
           return (
             <button
               key={cell.key}
@@ -511,6 +625,7 @@ function MiniCalendar({
           <button
             type="button"
             onClick={() => {
+              setPendingIso(null);
               onChange("");
             }}
             className="rounded-lg px-2.5 py-1.5 text-xs text-zinc-500 transition hover:bg-zinc-100"

@@ -490,8 +490,13 @@ function buildModel(
     min = Math.min(min, bar.start, bar.end);
     max = Math.max(max, bar.start, bar.end);
   }
-  if (min === Number.POSITIVE_INFINITY) {
+  if (bars.length === 0) {
     return null;
+  }
+  if (min === Number.POSITIVE_INFINITY) {
+    // 全部未排期：仍画出甘特图（默认以今天为中心的窗口），未排期行在时间轴上只显示小图标。
+    min = shiftDays(today, -14);
+    max = shiftDays(today, 45);
   }
   /*
    * 时间轴范围默认 = 筛选后任务的范围（业务口径「时间轴范围跟着筛完剩下的任务走」）—— 所以筛到一个任务全在过去（或全在将来）
@@ -1693,12 +1698,13 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   // 空态 ② / ③：工具条（含筛选栏）常驻 —— ② 筛选到一条不剩出提示卡；③ 画不出时间轴出提示条 + 任务列表
   // （列表与甘特图同屏的口径见 taskListBlock 注释）。此分支不进入下面的图表区 —— 那边的常量 / 闭包按 model 非空写。
   if (model === null) {
+    // 任务列表为空（项目无任务，或筛选后一条不剩）：只出提示卡。
     return (
       <div className="space-y-3">
         {toolbarBlock}
-        {visibleTasks.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-14 text-center text-sm text-zinc-500">
-            <p>{t("gantt.empty.filtered", { n: tasks.length })}</p>
+        <div className="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-14 text-center text-sm text-zinc-500">
+          <p>{tasks.length === 0 ? t("gantt.empty.project") : t("gantt.empty.filtered", { n: tasks.length })}</p>
+          {tasks.length === 0 ? null : (
             <button
               type="button"
               onClick={clearFilters}
@@ -1706,19 +1712,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             >
               {t("gantt.filter.clear")}
             </button>
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-xs text-zinc-500">
-              {filtering ? (
-                <p>{t("gantt.empty.unscheduledFiltered", { n: visibleTasks.length })}</p>
-              ) : (
-                <p>{t("gantt.empty.unscheduledProject", { n: tasks.length })}</p>
-              )}
-            </div>
-            {taskListBlock}
-          </>
-        )}
+          )}
+        </div>
       </div>
     );
   }
@@ -1839,8 +1834,15 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   const renderTaskBar = (bar: GanttBar) => {
     if (bar.start === null || bar.end === null) {
       return (
-        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400" title={t("gantt.unscheduled.hint")}>
-          {t("gantt.unscheduled")}
+        <span
+          className="absolute left-2 top-1/2 inline-flex -translate-y-1/2 items-center text-slate-300"
+          title={t("gantt.unscheduled.hint")}
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4">
+            <rect x="2.5" y="4" width="15" height="13" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M2.5 8h15M6.5 2.5v3M13.5 2.5v3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            <path d="M4.5 16.5l11-11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
         </span>
       );
     }
@@ -2168,7 +2170,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
       {toolbarBlock}
 
       {/* 任务列表与甘特图同屏（Push 294；Push 295 起列表按阶段标题分组可折叠；Push 313 起「全部」（未筛选）不出列表）：筛选生效且还有没排期的任务才把列表出在甘特上方；图表本身照常在下方渲染（提示条 / 空态 ② 在 model === null 的早退分支里出）。 */}
-      {filtering && hasUnscheduled ? taskListBlock : null}
+      {filtering && hasUnscheduled && rowFilter !== "unscheduled" ? taskListBlock : null}
               {/* 图表：左表（sticky left，横向不滚）+ 时间轴（表头 sticky top，纵向吸顶），两边逐行同一组行高 */}
               {/* 外面这层 relative 给自绘的竖向滑块（隐式浮在右缘）定位；下方横向那条是 fixed 在整个窗口底部的，不随页面滚 */}
               <div className="relative">

@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { memberNameOf, type Member } from "../data/members";
 import type { ProjectTask } from "../data/tasks";
+import { fetchProjectTasks } from "../taskApi";
+import { MemberCompactMultiSelect } from "./MemberSelect";
 import {
   createMaterialReissue,
   type MaterialReissueApplicationDepartment,
@@ -22,6 +24,7 @@ import {
   MATERIAL_REISSUE_REASON_OPTIONS,
   MATERIAL_REISSUE_RESPONSIBLE_DEPARTMENT_OPTIONS,
   materialReissueDefaultEmailTitle,
+  materialReissueProjectAssistantIds,
 } from "../materialReissue";
 
 type MaterialDraft = MaterialReissueLine & { id: number };
@@ -39,6 +42,159 @@ function blankMaterial(id: number): MaterialDraft {
 
 function slashDate(value: string): string {
   return value.trim() === "" ? "" : value.replace(/-/g, "/");
+}
+
+/** 草稿版本：字段口径变化时 +1，旧版本草稿直接丢弃（不让半旧数据回填到新表单）。 */
+const MATERIAL_REISSUE_DRAFT_VERSION = 1;
+const MATERIAL_REISSUE_DRAFT_KEY_PREFIX = "libiaolink.material-reissue.draft.";
+const MATERIAL_REISSUE_ASSISTANT_KEY_PREFIX = "libiaolink.material-reissue.assistants.";
+
+const MATERIAL_REISSUE_REASON_VALUES = MATERIAL_REISSUE_REASON_OPTIONS.map((option) => option.value);
+const MATERIAL_REISSUE_APPLICATION_DEPARTMENT_VALUES = MATERIAL_REISSUE_APPLICATION_DEPARTMENT_OPTIONS.map((option) => option.value);
+const MATERIAL_REISSUE_APPROVAL_VALUES = MATERIAL_REISSUE_APPROVAL_OPTIONS.map((option) => option.value);
+const MATERIAL_REISSUE_RESPONSIBLE_DEPARTMENT_VALUES = MATERIAL_REISSUE_RESPONSIBLE_DEPARTMENT_OPTIONS.map((option) => option.value);
+const MATERIAL_REISSUE_FREIGHT_VALUES = MATERIAL_REISSUE_FREIGHT_OPTIONS.map((option) => option.value);
+
+type MaterialReissueDraft = {
+  version: number;
+  emailTitleDraft: string | null;
+  customerNameDraft: string | null;
+  reason: MaterialReissueReason;
+  reasonOther: string;
+  applicationDepartment: MaterialReissueApplicationDepartment;
+  applicationDepartmentOther: string;
+  accepted: boolean;
+  inWarranty: boolean;
+  freeReissue: boolean;
+  approved: MaterialReissueApproval;
+  responsibleDepartment: MaterialReissueDepartment;
+  responsibleDepartmentOther: string;
+  requiredOutDate: string;
+  oldPartReturn: boolean;
+  freightBearer: MaterialReissueFreight;
+  recipient: string;
+  phone: string;
+  address: string;
+  description: string;
+  materials: MaterialReissueLine[];
+  savedAt: string;
+};
+
+function materialReissueDraftKey(userId: string, projectId: string, taskId: string): string {
+  return MATERIAL_REISSUE_DRAFT_KEY_PREFIX + userId + ":" + projectId + ":" + taskId;
+}
+
+/** localStorage 只在本机：关闭抽屉 / 刷新 / 切换页面后仍可回填；读写失败不影响表单继续使用。 */
+function storageRead(key: string): unknown {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw === null ? null : JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function storageWrite(key: string, value: unknown): boolean {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function storageRemove(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // 浏览器禁用存储时忽略：表单仍可填写与提交。
+  }
+}
+
+function textValue(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function boolValue(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+function readStoredDraft(key: string): MaterialReissueDraft | null {
+  const raw = storageRead(key);
+  if (typeof raw !== "object" || raw === null) {
+    return null;
+  }
+  const value = raw as Record<string, unknown>;
+  if (value.version !== MATERIAL_REISSUE_DRAFT_VERSION) {
+    return null;
+  }
+  const materials: MaterialReissueLine[] = Array.isArray(value.materials)
+    ? value.materials.flatMap((item) => {
+        if (typeof item !== "object" || item === null) {
+          return [];
+        }
+        const row = item as Record<string, unknown>;
+        return [
+          {
+            materialCode: textValue(row.materialCode),
+            materialName: textValue(row.materialName),
+            specification: textValue(row.specification),
+            quantity: typeof row.quantity === "number" && Number.isFinite(row.quantity) ? row.quantity : 1,
+            unit: textValue(row.unit, "个"),
+            remark: textValue(row.remark),
+          },
+        ];
+      })
+    : [];
+  if (materials.length === 0) {
+    materials.push({ materialCode: "", materialName: "", specification: "", quantity: 1, unit: "个", remark: "" });
+  }
+  const requiredOutDate = textValue(value.requiredOutDate);
+  return {
+    version: MATERIAL_REISSUE_DRAFT_VERSION,
+    emailTitleDraft: typeof value.emailTitleDraft === "string" ? value.emailTitleDraft : null,
+    customerNameDraft: typeof value.customerNameDraft === "string" ? value.customerNameDraft : null,
+    reason: oneOf(value.reason, MATERIAL_REISSUE_REASON_VALUES, "missing_list"),
+    reasonOther: textValue(value.reasonOther),
+    applicationDepartment: oneOf(value.applicationDepartment, MATERIAL_REISSUE_APPLICATION_DEPARTMENT_VALUES, "project"),
+    applicationDepartmentOther: textValue(value.applicationDepartmentOther),
+    accepted: boolValue(value.accepted, true),
+    inWarranty: boolValue(value.inWarranty, true),
+    freeReissue: boolValue(value.freeReissue, true),
+    approved: oneOf(value.approved, MATERIAL_REISSUE_APPROVAL_VALUES, "yes"),
+    responsibleDepartment: oneOf(value.responsibleDepartment, MATERIAL_REISSUE_RESPONSIBLE_DEPARTMENT_VALUES, "project"),
+    responsibleDepartmentOther: textValue(value.responsibleDepartmentOther),
+    requiredOutDate: /^\d{4}-\d{2}-\d{2}$/.test(requiredOutDate) ? requiredOutDate : "",
+    oldPartReturn: boolValue(value.oldPartReturn, false),
+    freightBearer: oneOf(value.freightBearer, MATERIAL_REISSUE_FREIGHT_VALUES, "libiao"),
+    recipient: textValue(value.recipient),
+    phone: textValue(value.phone),
+    address: textValue(value.address),
+    description: textValue(value.description),
+    materials,
+    savedAt: textValue(value.savedAt),
+  };
+}
+
+/** 项目助理手动调整结果按项目记忆；null = 没有手动调整过，继续用任务自动识别结果。 */
+function readStoredAssistantIds(key: string): string[] | null {
+  const raw = storageRead(key);
+  if (!Array.isArray(raw)) {
+    return null;
+  }
+  return raw.filter((id): id is string => typeof id === "string" && id !== "");
+}
+
+function draftTimeText(iso: string | null): string {
+  if (iso === null || iso === "") {
+    return "";
+  }
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? "" : at.toLocaleTimeString(undefined, { hour12: false });
 }
 
 function TemplateCheck({
@@ -128,6 +284,14 @@ function ChoiceGroup({
   );
 }
 
+/**
+ * 物料补发表单（2026-11-26）：
+ * - 所有输入按「用户 + 项目 + 任务」即时写入 localStorage 草稿；关闭抽屉、刷新或切换页面后自动回填，
+ *   提交成功 / 二次确认清空时删除草稿。
+ * - 页脚显示自动识别的项目助理：项目内「运输及送仓 / 清关 / 送仓 / 运输」任一任务的负责人，
+ *   与服务端「项目助理可查看物料补发并登记发货」同一口径；可在本机手动增删多选，
+ *   手动结果按项目记忆，仅影响表单草稿展示，不改变服务端权限或提交快照。
+ */
 export function MaterialReissueForm({ projectId, task, members, onSubmitted }: {
   projectId: string;
   task: ProjectTask;
@@ -164,6 +328,271 @@ export function MaterialReissueForm({ projectId, task, members, onSubmitted }: {
   const [materials, setMaterials] = useState<MaterialDraft[]>(() => [blankMaterial(1)]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detectedAssistantIds, setDetectedAssistantIds] = useState<string[] | null>(null);
+  const [assistantIds, setAssistantIds] = useState<string[]>([]);
+  const [assistantCustomized, setAssistantCustomized] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<"idle" | "restored" | "saved" | "cleared" | "failed">("idle");
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [clearArmed, setClearArmed] = useState(false);
+  const draftKey =
+    permissions === null || projectId === ""
+      ? null
+      : materialReissueDraftKey(permissions.userId, projectId, task.id);
+  const assistantKey =
+    permissions === null || projectId === ""
+      ? null
+      : MATERIAL_REISSUE_ASSISTANT_KEY_PREFIX + permissions.userId + ":" + projectId;
+  const hydratedDraftKeyRef = useRef<string | null>(null);
+  /**
+   * 只有用户真正改过字段才写草稿：打开表单、回填草稿、切换任务本身都不写，
+   * 避免一进页面就生成一份默认值草稿，也避免换任务时把上一任务的旧状态写进新任务。
+   */
+  const userTouchedRef = useRef(false);
+  const submittedRef = useRef(false);
+  const lastDraftStatusAtRef = useRef(0);
+
+  const resetFormState = useCallback(() => {
+    setEmailTitleDraft(null);
+    setCustomerNameDraft(null);
+    setReason("missing_list");
+    setReasonOther("");
+    setApplicationDepartment("project");
+    setApplicationDepartmentOther("");
+    setAccepted(true);
+    setInWarranty(true);
+    setFreeReissue(true);
+    setApproved("yes");
+    setResponsibleDepartment("project");
+    setResponsibleDepartmentOther("");
+    setRequiredOutDate("");
+    setOldPartReturn(false);
+    setFreightBearer("libiao");
+    setRecipient("");
+    setPhone("");
+    setAddress("");
+    setDescription("");
+    const id = nextMaterialId.current;
+    nextMaterialId.current += 1;
+    setMaterials([blankMaterial(id)]);
+    setError(null);
+  }, []);
+
+  const applyDraft = useCallback((draft: MaterialReissueDraft) => {
+    setEmailTitleDraft(draft.emailTitleDraft);
+    setCustomerNameDraft(draft.customerNameDraft);
+    setReason(draft.reason);
+    setReasonOther(draft.reasonOther);
+    setApplicationDepartment(draft.applicationDepartment);
+    setApplicationDepartmentOther(draft.applicationDepartmentOther);
+    setAccepted(draft.accepted);
+    setInWarranty(draft.inWarranty);
+    setFreeReissue(draft.freeReissue);
+    setApproved(draft.approved);
+    setResponsibleDepartment(draft.responsibleDepartment);
+    setResponsibleDepartmentOther(draft.responsibleDepartmentOther);
+    setRequiredOutDate(draft.requiredOutDate);
+    setOldPartReturn(draft.oldPartReturn);
+    setFreightBearer(draft.freightBearer);
+    setRecipient(draft.recipient);
+    setPhone(draft.phone);
+    setAddress(draft.address);
+    setDescription(draft.description);
+    nextMaterialId.current = draft.materials.length + 1;
+    setMaterials(draft.materials.map((line, index) => ({ ...line, id: index + 1 })));
+    setError(null);
+  }, []);
+
+  /** 每次进入某任务：先复位，再回填本机草稿；只有用户真正改过字段才会写草稿。 */
+  useEffect(() => {
+    if (draftKey === null) {
+      hydratedDraftKeyRef.current = null;
+      return;
+    }
+    if (hydratedDraftKeyRef.current === draftKey) {
+      return;
+    }
+    const previousKey = hydratedDraftKeyRef.current;
+    hydratedDraftKeyRef.current = draftKey;
+    submittedRef.current = false;
+    if (previousKey === null && userTouchedRef.current) {
+      // 权限 / 草稿键就绪前用户已开始填写：保留输入，交给保存 effect 直接写入新键。
+      return;
+    }
+    userTouchedRef.current = false;
+    resetFormState();
+    const draft = readStoredDraft(draftKey);
+    if (draft === null) {
+      setDraftStatus("idle");
+      setDraftSavedAt(null);
+    } else {
+      applyDraft(draft);
+      setDraftSavedAt(draft.savedAt);
+      setDraftStatus("restored");
+    }
+    lastDraftStatusAtRef.current = 0;
+  }, [draftKey, resetFormState, applyDraft]);
+
+  /** 项目助理手动调整结果按项目记忆；没有手动调整时继续用自动识别。 */
+  useEffect(() => {
+    if (assistantKey === null) {
+      setAssistantIds([]);
+      setAssistantCustomized(false);
+      return;
+    }
+    const stored = readStoredAssistantIds(assistantKey);
+    setAssistantIds(stored ?? []);
+    setAssistantCustomized(stored !== null);
+  }, [assistantKey]);
+
+  useEffect(() => {
+    if (projectId === "") {
+      setDetectedAssistantIds([]);
+      return;
+    }
+    let alive = true;
+    setDetectedAssistantIds(null);
+    void fetchProjectTasks(projectId)
+      .then((result) => {
+        if (alive) {
+          setDetectedAssistantIds(materialReissueProjectAssistantIds(result.items));
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setDetectedAssistantIds([]);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (assistantCustomized || detectedAssistantIds === null) {
+      return;
+    }
+    setAssistantIds(detectedAssistantIds);
+  }, [assistantCustomized, detectedAssistantIds]);
+
+  /** 填写即保存：字段一变就整体写回本机草稿（不做延迟，刷新 / 关闭也不丢最后一笔）。 */
+  useEffect(() => {
+    if (draftKey === null || submittedRef.current || !userTouchedRef.current) {
+      return;
+    }
+    const draft: MaterialReissueDraft = {
+      version: MATERIAL_REISSUE_DRAFT_VERSION,
+      emailTitleDraft,
+      customerNameDraft,
+      reason,
+      reasonOther,
+      applicationDepartment,
+      applicationDepartmentOther,
+      accepted,
+      inWarranty,
+      freeReissue,
+      approved,
+      responsibleDepartment,
+      responsibleDepartmentOther,
+      requiredOutDate,
+      oldPartReturn,
+      freightBearer,
+      recipient,
+      phone,
+      address,
+      description,
+      materials: materials.map((row) => ({
+        materialCode: row.materialCode,
+        materialName: row.materialName,
+        specification: row.specification,
+        quantity: row.quantity,
+        unit: row.unit,
+        remark: row.remark,
+      })),
+      savedAt: new Date().toISOString(),
+    };
+    if (!storageWrite(draftKey, draft)) {
+      setDraftStatus("failed");
+      return;
+    }
+    const now = Date.now();
+    if (now - lastDraftStatusAtRef.current >= 1000) {
+      lastDraftStatusAtRef.current = now;
+      setDraftSavedAt(draft.savedAt);
+      setDraftStatus("saved");
+    }
+  }, [
+    draftKey,
+    emailTitleDraft,
+    customerNameDraft,
+    reason,
+    reasonOther,
+    applicationDepartment,
+    applicationDepartmentOther,
+    accepted,
+    inWarranty,
+    freeReissue,
+    approved,
+    responsibleDepartment,
+    responsibleDepartmentOther,
+    requiredOutDate,
+    oldPartReturn,
+    freightBearer,
+    recipient,
+    phone,
+    address,
+    description,
+    materials,
+  ]);
+
+  useEffect(() => {
+    if (!clearArmed) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setClearArmed(false);
+    }, 4000);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [clearArmed]);
+
+  const markTouched = () => {
+    userTouchedRef.current = true;
+  };
+
+  const updateAssistants = (ids: string[]) => {
+    setAssistantIds(ids);
+    setAssistantCustomized(true);
+    if (assistantKey !== null) {
+      storageWrite(assistantKey, ids);
+    }
+  };
+
+  /** 清空 = 二次确认；同时删除本任务草稿并把项目助理恢复为自动识别。 */
+  const clearForm = () => {
+    if (busy) {
+      return;
+    }
+    if (!clearArmed) {
+      setClearArmed(true);
+      return;
+    }
+    setClearArmed(false);
+    submittedRef.current = false;
+    userTouchedRef.current = false;
+    resetFormState();
+    if (draftKey !== null) {
+      storageRemove(draftKey);
+    }
+    if (assistantKey !== null) {
+      storageRemove(assistantKey);
+    }
+    setAssistantCustomized(false);
+    setAssistantIds(detectedAssistantIds ?? []);
+    setDraftSavedAt(null);
+    setDraftStatus("cleared");
+    lastDraftStatusAtRef.current = 0;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -201,10 +630,12 @@ export function MaterialReissueForm({ projectId, task, members, onSubmitted }: {
   };
 
   const removeMaterial = (id: number) => {
+    userTouchedRef.current = true;
     setMaterials((current) => (current.length <= 1 ? current : current.filter((row) => row.id !== id)));
   };
 
   const addMaterial = () => {
+    userTouchedRef.current = true;
     const id = nextMaterialId.current;
     nextMaterialId.current += 1;
     setMaterials((current) => [...current, blankMaterial(id)]);
@@ -298,6 +729,10 @@ export function MaterialReissueForm({ projectId, task, members, onSubmitted }: {
     setError(null);
     try {
       const result = await createMaterialReissue(projectId, task.id, input);
+      submittedRef.current = true;
+      if (draftKey !== null) {
+        storageRemove(draftKey);
+      }
       onSubmitted(result);
     } catch (caught) {
       setError(caught instanceof Error && caught.message !== "" ? caught.message : t("mr.err.submit"));
@@ -318,9 +753,59 @@ export function MaterialReissueForm({ projectId, task, members, onSubmitted }: {
     value: option.value,
     label: fieldText(locale, option.label),
   }));
+  /**
+   * 是否有用户填写内容：用于「清空当前所填」禁用态。
+   * 自动带入的邮件标题 / 客户名称 / 申请人 / 默认勾选不算；项目助理选择不在表单草稿内，也不触发启用。
+   */
+  const hasFilledContent =
+    emailTitleDraft !== null ||
+    customerNameDraft !== null ||
+    reason !== "missing_list" ||
+    reasonOther.trim() !== "" ||
+    applicationDepartment !== "project" ||
+    applicationDepartmentOther.trim() !== "" ||
+    !accepted ||
+    !inWarranty ||
+    !freeReissue ||
+    approved !== "yes" ||
+    responsibleDepartment !== "project" ||
+    responsibleDepartmentOther.trim() !== "" ||
+    requiredOutDate !== "" ||
+    oldPartReturn ||
+    freightBearer !== "libiao" ||
+    recipient.trim() !== "" ||
+    phone.trim() !== "" ||
+    address.trim() !== "" ||
+    description.trim() !== "" ||
+    materials.length > 1 ||
+    materials.some(
+      (row) =>
+        row.materialCode.trim() !== "" ||
+        row.materialName.trim() !== "" ||
+        row.specification.trim() !== "" ||
+        row.quantity !== 1 ||
+        row.unit.trim() !== "个" ||
+        row.remark.trim() !== "",
+    );
+  const draftTime = draftTimeText(draftSavedAt);
+  const draftStatusText =
+    draftStatus === "failed"
+      ? t("mr.draft.failed")
+      : draftStatus === "restored"
+        ? t("mr.draft.restored")
+        : draftStatus === "saved"
+          ? t("mr.draft.saved", { time: draftTime })
+          : draftStatus === "cleared"
+            ? t("mr.draft.cleared")
+            : "";
 
   return (
-    <div data-material-reissue-form="true" className="flex flex-col gap-4 py-4">
+    <div
+      data-material-reissue-form="true"
+      className="flex flex-col gap-4 py-4"
+      onChange={markTouched}
+      onInput={markTouched}
+    >
       <section className="rounded-xl border border-zinc-200 bg-white p-3 sm:p-5">
         <div className="flex items-center justify-between gap-3 border-b border-zinc-300 pb-2">
           <img src="/libiao-logo.svg" alt="Libiao Robotics" className="h-7 w-auto max-w-[150px]" />
@@ -656,17 +1141,60 @@ export function MaterialReissueForm({ projectId, task, members, onSubmitted }: {
 
         <div className="mt-4 flex flex-col gap-2 border-t border-zinc-200 pt-3">
           {error === null ? null : <p data-material-reissue-error="true" className="rounded-lg bg-red-50 px-3 py-2 text-xs leading-5 text-red-600">{error}</p>}
-          <div className="flex flex-col items-stretch justify-between gap-2 sm:flex-row sm:items-center">
-            <p className="text-[10px] leading-4 text-zinc-400">{t("mr.footnote")}</p>
+          <div className="flex flex-wrap items-stretch justify-end gap-2">
+            <div data-material-reissue-assistants="true" className="shrink-0">
+              <MemberCompactMultiSelect
+                values={assistantIds}
+                onChange={updateAssistants}
+                options={members}
+                inlineLabel={t("mr.assistant.label")}
+                placeholder={t("mr.assistant.placeholder")}
+                ariaLabel={t("mr.assistant.aria")}
+              />
+            </div>
+            <button
+              type="button"
+              data-material-reissue-clear="true"
+              onClick={clearForm}
+              disabled={busy || !hasFilledContent}
+              className={
+                "inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border px-4 text-sm font-medium transition disabled:cursor-not-allowed " +
+                (clearArmed && hasFilledContent
+                  ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                  : "border-zinc-300 bg-white text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-900 disabled:border-zinc-200 disabled:bg-zinc-50 disabled:text-zinc-300")
+              }
+            >
+              {clearArmed && hasFilledContent ? t("mr.clear.confirm") : t("mr.clear")}
+            </button>
             <button
               type="button"
               data-material-reissue-submit="true"
               onClick={() => { void submit(); }}
               disabled={busy || project === null}
-              className="shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+              className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
             >
               {busy ? t("mr.submitting") : t("mr.submit")}
             </button>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[10px] leading-4 text-zinc-400">
+            <p className="min-w-0">{t("mr.footnote")}</p>
+            {draftStatusText === "" ? null : (
+              <span
+                data-material-reissue-draft-status="true"
+                data-material-reissue-draft-mode={draftStatus}
+                data-material-reissue-draft-saved-at={draftSavedAt ?? ""}
+                className={
+                  "shrink-0 " +
+                  (draftStatus === "failed"
+                    ? "text-rose-600"
+                    : draftStatus === "restored"
+                      ? "text-amber-600"
+                      : "text-emerald-600")
+                }
+              >
+                {draftStatusText}
+              </span>
+            )}
           </div>
         </div>
       </section>

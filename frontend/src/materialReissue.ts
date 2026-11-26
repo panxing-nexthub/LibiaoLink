@@ -79,6 +79,28 @@ export function isMaterialReissueProjectAssistant(
   return findMaterialReissueProjectAssistantTask(viewerId, tasks) !== null;
 }
 
+/**
+ * 自动识别项目助理（物料补发表单页脚展示）：项目内「运输及送仓 / 清关 / 送仓 / 运输」任一任务的
+ * 负责人去重后按任务顺序返回。与 isMaterialReissueProjectAssistant 同一口径，
+ * 仅用于表单提示与本机草稿记忆，不改变服务端权限或提交快照。
+ */
+export function materialReissueProjectAssistantIds(
+  tasks: readonly { title: string; ownerIds: readonly string[] }[],
+): string[] {
+  const ids: string[] = [];
+  for (const task of tasks) {
+    if (!MATERIAL_REISSUE_PROJECT_ASSISTANT_TASK_TITLE_SET.has(task.title.trim())) {
+      continue;
+    }
+    for (const ownerId of task.ownerIds) {
+      if (ownerId !== "" && !ids.includes(ownerId)) {
+        ids.push(ownerId);
+      }
+    }
+  }
+  return ids;
+}
+
 export function materialReissueDefaultEmailTitle(projectCode: string, projectName: string): string {
   return "项目【补发申请】" + projectCode + " " + projectName + "项目/ 紧急";
 }

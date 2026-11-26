@@ -546,5 +546,8 @@ export const wecomAibotWelcomeSent = pgTable(
     wecomUserid: text("wecom_userid").notNull(),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [primaryKey({ name: "pk_wecom_aibot_welcome_sent", columns: [table.botId, table.wecomUserid] })],
+  (table) => [
+    primaryKey({ name: "pk_wecom_aibot_welcome_sent", columns: [table.botId, table.wecomUserid] }),
+    check("ck_wecom_aibot_welcome_sent_userid", sql`${table.wecomUserid} ~ '^[A-Za-z0-9_.@-]{1,64}$'`),
+  ],
 );

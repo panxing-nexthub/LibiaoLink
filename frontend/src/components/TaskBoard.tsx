@@ -5,7 +5,7 @@ import { PROJECT_STAGES } from "../data/projects";
 import { memberOptionsWithExisting, type Member } from "../data/members";
 import type { TaskFileRef } from "../fileApi";
 import { TEMP_TASK_STAGE, addedNodeIdsOf, addedNodeKeysOf, dateOnlyText, daysBetweenInclusive, lateDeliveryLabel, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskPriority, type TaskStatus } from "../data/tasks";
-import { additionalStageName, stageNameOf, type AdditionalProjectStage, type ApiProjectSummary, type TaskUpdateInput } from "../taskApi";
+import { additionalStageName, stageNameOf, statusWriteValue, type AdditionalProjectStage, type ApiProjectSummary, type TaskUpdateInput } from "../taskApi";
 import { fieldText, isLocalizedLocale, mdText, priorityText, stageText, statusText, useLocale, useLocalizedText, useT } from "../i18n";
 import { InlineDateCell, InlineMemberMultiCell, InlineNumberCell, InlineOptionCell, InlineTextCell } from "./InlineEdit";
 import type { SelectOption } from "./SelectMenu";
@@ -258,7 +258,7 @@ function statusOptionsOf(statusOf: (value: string) => string): SelectOption[] {
 }
 
 /** 行内编辑能改的任务字段（项目经理是项目级字段，修改会同步整个项目）。 */
-export type TaskPatch = Partial<Pick<ProjectTask, "title" | "titleEn" | "ownerIds" | "managerIds" | "startDate" | "dueDate" | "days" | "headcount" | "priority" | "deliverableTypes" | "note">> & {
+export type TaskPatch = Partial<Pick<ProjectTask, "title" | "titleEn" | "ownerIds" | "managerIds" | "startDate" | "dueDate" | "days" | "headcount" | "priority" | "deliverableTypes" | "note" | "status">> & {
   shiftFollowing?: boolean;
 };
 /**
@@ -287,6 +287,9 @@ export function taskPatchBody(version: number, patch: TaskPatch): TaskUpdateInpu
   }
   if (patch.shiftFollowing === true) {
     body.shiftFollowing = true;
+  }
+  if (patch.status !== undefined) {
+    body.status = statusWriteValue(patch.status);
   }
   if (patch.days !== undefined) {
     body.estimatedDays = patch.days;
@@ -499,18 +502,18 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
   const dueIso = task.dueDate;
   const doneIso = task.doneDate;
   const actualToday = dateOnlyText(new Date().toISOString());
-  /** 开始日期的可选上界（2026-11-26 业务口径「开始日期随便选」）：预计完成日期不再是上界 —— 选到更晚会清空预计完成日期、由用户重新排期；只剩实际完成日期这一物理上界（已完成任务不能出现开工晚于完工）。 */
-  const latestStart = doneIso;
+  /** 开始日期不再有任何可选上界（2026-11-26 业务口径「开始日期随便选」）：晚于预计完成日期 → 清空预计完成日期；晚于实际完成日期 → 一并清空实际完成日期（任务退回进行中）。 */
   const canShiftFollowing = allowScheduleShift && task.stageKey !== null && capabilities.source === "project_edit";
   const startText = mdText(locale, startIso);
   const dueText = mdText(locale, dueIso);
   const doneText = mdText(locale, doneIso);
   /** 行内改任一日期时，把两个显示日期与联动天数一起写回（含首尾）。 */
-  const patchRange = (nextStartIso: string, nextDueIso: string, shiftFollowing?: boolean) => {
+  const patchRange = (nextStartIso: string, nextDueIso: string, shiftFollowing?: boolean, status?: TaskStatus) => {
     onPatch?.({
       startDate: nextStartIso,
       dueDate: nextDueIso,
       shiftFollowing,
+      status,
       days: nextStartIso !== "" && nextDueIso !== "" ? daysBetweenInclusive(nextStartIso, nextDueIso) : 0,
     });
   };
@@ -772,7 +775,6 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
       ) : (
         <InlineDateCell
           valueIso={startIso}
-          maxDate={latestStart}
           allowScheduleShift={canShiftFollowing}
           ariaLabel={t("board.edit.aria", { field: fieldText(locale, "开始日期") })}
           disabled={editLocked}
@@ -780,10 +782,12 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
           triggerClassName="tabular-nums text-zinc-600"
           display={startText === "" ? <span className="text-zinc-300">—</span> : startText}
           onChange={(iso, shiftFollowing) => {
-            // 2026-11-26 业务口径：开始日期晚于当前预计完成日期 = 清空预计完成日期（天数随之归零），
-            // 不拦选、也不自动改另一头；实际完成日期仍作为上界（见 latestStart）。
+            // 2026-11-26 业务口径：开始日期完全自由选、不设上限。
+            // 晚于预计完成日期 → 清空预计完成日期（天数归零）；晚于实际完成日期 → 同一次 PATCH 写「进行中」，
+            // 服务端同事务清空实际完成日期并把进度退回 75%，不留下「完成早于开工」的矛盾数据。
             const clearsDue = iso !== "" && dueIso !== "" && iso > dueIso;
-            patchRange(iso, clearsDue ? "" : dueIso, shiftFollowing);
+            const clearsDone = iso !== "" && doneIso !== "" && iso > doneIso;
+            patchRange(iso, clearsDue ? "" : dueIso, shiftFollowing, clearsDone ? "进行中" : undefined);
           }}
         />
       ),

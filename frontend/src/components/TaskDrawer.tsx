@@ -198,6 +198,8 @@ export type TaskEditSubmit = {
   startDate?: string;
   dueDate?: string;
   shiftFollowing?: boolean;
+  /** 开始日期晚于实际完成日期时随本次改期写「进行中」：服务端同事务清空实际完成日期并把进度退回 75%（2026-11-26）。 */
+  status?: TaskStatus;
   days?: number;
   headcount: number;
   priority: TaskPriority;
@@ -729,6 +731,7 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
             startDate: next.range?.from ?? "",
             dueDate: next.range?.to ?? "",
             shiftFollowing,
+            status: next.range !== null && current.doneDate !== "" && next.range.from > current.doneDate ? "进行中" : undefined,
             days: next.range === null ? 0 : daysBetweenInclusive(next.range.from, next.range.to),
           } : {}),
           headcount: headcountText === "" || Number.isNaN(headcountValue) ? 0 : Math.floor(headcountValue),
@@ -1521,7 +1524,6 @@ export function TaskDrawer({ task, canFinalize: canFinalizeProp = false, canEdit
         <>
           <DateRangePicker
             value={draft.range}
-            latestStart={task.doneDate}
             allowScheduleShift={allowScheduleShift && task.stageKey !== null && capabilities.source === "project_edit"}
             onChange={(next, shiftFollowing) => {
               commit({ range: next }, shiftFollowing);

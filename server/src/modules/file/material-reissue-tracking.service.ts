@@ -34,7 +34,8 @@ function textOrNullValue(value: string | null): string | null {
  * 物料补发发货登记（2026-11-25）：补发页跨申请单勾选物料行后，一次写入已发货 / 已签收状态、
  * 快递单号、预计到货时间、发货备注与凭证图片；读面随 change_requests.materialReissueTracking 返回。
  *
- * 权限与发起补发同一口径：项目编辑者，或该补发申请来源任务的当前负责人；
+ * 权限：项目编辑者、项目助理（物流任务负责人）或该补发申请来源任务的当前负责人；
+ * 项目助理与项目编辑者一样可登记本项目全部申请单；
  * 一次批量可跨多张申请单，逐张变更行在事务内锁行，已登记过的物料行拒绝重复登记。
  */
 @Injectable()
@@ -76,6 +77,8 @@ export class MaterialReissueTrackingService {
     const at = this.clock.now();
     const entries: MaterialReissueTrackingEntry[] = [];
     await this.database.db.transaction(async (tx) => {
+      const editor = isProjectEditor(access);
+      const projectAssistant = !editor && await this.repository.isMaterialReissueProjectAssistant(projectId, actorId, tx);
       for (const [changeRequestId, lineIndexes] of groups) {
         const change = await this.repository.lockChangeRequest(changeRequestId, tx);
         if (change === null || change.projectId !== projectId) {
@@ -84,10 +87,10 @@ export class MaterialReissueTrackingService {
         if (change.changeType !== "material_reissue" || change.materialReissue === null) {
           throw new AppError("VALIDATION_FAILED", "仅物料补发记录可以登记发货");
         }
-        if (!isProjectEditor(access)) {
+        if (!editor && !projectAssistant) {
           const task = await this.repository.findTaskReissueBrief(change.materialReissue.taskId, tx);
           if (task === null || task.deletedAt !== null || task.projectId !== projectId || !task.ownerIds.includes(actorId)) {
-            throw new AppError("FORBIDDEN", "仅项目编辑者或当前任务负责人可登记发货");
+            throw new AppError("FORBIDDEN", "仅项目编辑者、项目助理或当前任务负责人可登记发货");
           }
         }
         const materials = change.materialReissue.materials;
@@ -152,6 +155,8 @@ export class MaterialReissueTrackingService {
     const at = this.clock.now();
     let updated: MaterialReissueTrackingEntry | null = null;
     await this.database.db.transaction(async (tx) => {
+      const editor = isProjectEditor(access);
+      const projectAssistant = !editor && await this.repository.isMaterialReissueProjectAssistant(projectId, actorId, tx);
       const change = await this.repository.lockChangeRequest(body.changeRequestId, tx);
       if (change === null || change.projectId !== projectId) {
         throw new AppError("NOT_FOUND", "变更记录不存在或不属于当前项目");
@@ -159,10 +164,10 @@ export class MaterialReissueTrackingService {
       if (change.changeType !== "material_reissue" || change.materialReissue === null) {
         throw new AppError("VALIDATION_FAILED", "仅物料补发记录可以修改发货信息");
       }
-      if (!isProjectEditor(access)) {
+      if (!editor && !projectAssistant) {
         const task = await this.repository.findTaskReissueBrief(change.materialReissue.taskId, tx);
         if (task === null || task.deletedAt !== null || task.projectId !== projectId || !task.ownerIds.includes(actorId)) {
-          throw new AppError("FORBIDDEN", "仅项目编辑者或当前任务负责人可修改发货信息");
+          throw new AppError("FORBIDDEN", "仅项目编辑者、项目助理或当前任务负责人可修改发货信息");
         }
       }
       if (body.lineIndex >= change.materialReissue.materials.length) {

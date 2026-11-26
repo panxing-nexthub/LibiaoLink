@@ -1,3 +1,5 @@
+> **2026-11-26 物料补发项目助理权限（无 DDL / 迁移）**：项目内「运输及送仓 / 清关 / 送仓 / 运输」任一任务的当前负责人视为项目助理；发货登记 / 修改接口对项目助理放行本项目全部补发申请，普通任务负责人仍只能操作来源任务属于本人的申请。任务标题为当前固定口径，改名需同步 `material-reissue-assistant.ts` 与前端 `materialReissue.ts`。只读 `tasks` 表判定，不新增契约、字段或迁移。
+
 > **2026-11-12 项目文件批量 ZIP（无 DDL / 迁移）**：新增 `POST /api/v1/projects/{id}/files/download-archive`（`file.download`），复用 `SessionGuard` / `CsrfGuard` / `ProjectAccessGuard`。服务端按 `(fileId, versionId)` 去重并保持首次顺序，限制 50 个唯一版本、单文件 200 MB、解压后总量 2 GB；逐项校验项目 / 回收站 / 版本归属，流式写临时 ZIP 并校验实际大小与 SHA-256，全有或全无。上传到 `temp/file-archives/{batchId}.zip` 后返回单次短时签名地址；同账号 advisory lock 保证同时只有一个打包任务。生成超时 4 分钟，客户端断开通过 `AbortSignal` 中止，临时目录与已上传对象立即 best-effort 清理，`jobs` 清理任务在签名 TTL + 10 分钟兜底删除。每个入包版本写一条 `download` 审计，metadata 含 `versionId` / `batchId` / `archive=true` / `itemCount`；日志和清理任务留痕不输出对象键或服务器绝对路径。
 
 > **2026-11-10 Pro 逐人文件权限（无迁移）**：项目编辑者可写整个项目的任务文件；当前任务负责人仅可写挂接在本人未删除任务上的文件（上传、追加版本、改名、删除、定档 / 取消定档联动任务），项目级无任务归属文件不向任务负责人开放。任务负责人只读浏览项目其他文件；文件定档与任务定档同口径，由项目编辑者或该任务当前负责人裁决。

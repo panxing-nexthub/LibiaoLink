@@ -9,6 +9,7 @@ import { ExportOverviewButton } from "./components/ExportOverviewButton";
 import { GanttChart } from "./components/GanttChart";
 import { ProjectChangesPopover } from "./components/ProjectChangesPopover";
 import { MaterialReissuePanel } from "./components/MaterialReissuePanel";
+import { findMaterialReissueProjectAssistantTask, isMaterialReissueProjectAssistant } from "./materialReissue";
 import { ProjectFilesPanel } from "./components/ProjectFilesPanel";
 import { ProjectViewGrantsPanel } from "./components/ProjectViewGrantsPanel";
 import { ReportIssuePanel } from "./components/ReportIssuePanel";
@@ -414,29 +415,46 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
   );
 
   /**
-   * 「物料补发」页访问口径（2026-11-25）：
-   * 仅项目经理 / 系统管理员 / 拥有全部项目仅浏览或编辑范围 / 本任务负责人（商务助理）可看到入口；
-   * 非项目经理、非全项目范围的商务助理只看到自己负责任务的补发清单。
+   * 「物料补发」页访问口径（2026-11-26）：
+   * 项目经理 / 系统管理员 / 拥有全部项目仅浏览或编辑范围 / 本任务负责人（商务助理）/
+   * 项目助理（项目内「运输及送仓 / 清关 / 送仓 / 运输」任一任务的负责人）可看到入口；
+   * 项目助理与项目经理 / 管理员 / 全项目范围账号可见并登记本项目全部申请单，
+   * 其余任务负责人只看到自己负责任务的申请单。
    * 权限画像未取到按无权限处理（与 permissions.ts 的入口收敛口径一致），服务端逐请求仍是最终裁决。
    */
   const viewerUserId = permissions?.userId ?? null;
+  const materialReissueProjectAssistantTask = findMaterialReissueProjectAssistantTask(viewerUserId, rawTasks);
+  const isMaterialReissueProjectAssistantAccount = isMaterialReissueProjectAssistant(viewerUserId, rawTasks);
+  /** 项目助理不是项目编辑者，发货凭证图片需挂到本人负责且未定档的物流任务上才能通过文件写权限。 */
+  const materialReissueUploadTask =
+    findMaterialReissueProjectAssistantTask(viewerUserId, rawTasks.filter((task) => task.finalizedAt === null)) ??
+    materialReissueProjectAssistantTask;
+  const materialReissueUploadTaskId =
+    isMaterialReissueProjectAssistantAccount && !projectEditable ? (materialReissueUploadTask?.id ?? null) : null;
+  const materialReissueProjectFileUploadAllowed =
+    projectEditable || permissions?.groupAccessAdmin === true || permissions?.groupAllEdit === true;
   const canViewAllMaterialReissue =
     hasAllProjectAccess(permissions) ||
+    isMaterialReissueProjectAssistantAccount ||
     (viewerUserId !== null && project !== null && project.managerIds.includes(viewerUserId));
   const isMaterialReissueTaskOwner =
     viewerUserId !== null && rawTasks.some((task) => task.ownerIds.includes(viewerUserId));
   const canSeeMaterialReissue = canViewAllMaterialReissue || isMaterialReissueTaskOwner;
-  /** 发货登记写权限：项目编辑者（项目经理 / 管理员 / 全部项目编辑）或任务负责人；归档项目沿用同一写权限，应急只读关闭。 */
+  /** 发货登记写权限：项目编辑者（项目经理 / 管理员 / 全部项目编辑）、项目助理或任务负责人；归档项目沿用同一写权限，应急只读关闭。 */
   const canMarkMaterialReissue =
     !readOnly &&
     (projectEditable ||
+      isMaterialReissueProjectAssistantAccount ||
       isMaterialReissueTaskOwner ||
       permissions?.groupAccessAdmin === true ||
       permissions?.groupAllEdit === true);
-  /** 可对本项目全部补发申请登记发货：项目编辑者 / 管理员 / 全部项目编辑；任务负责人只可登记本人任务。 */
+  /** 可对本项目全部补发申请登记发货：项目编辑者 / 管理员 / 全部项目编辑 / 项目助理；普通任务负责人只可登记本人任务。 */
   const canMarkAllMaterialReissue =
     !readOnly &&
-    (projectEditable || permissions?.groupAccessAdmin === true || permissions?.groupAllEdit === true);
+    (projectEditable ||
+      isMaterialReissueProjectAssistantAccount ||
+      permissions?.groupAccessAdmin === true ||
+      permissions?.groupAllEdit === true);
   const visibleTabs = (project?.canManageViewGrants === true ? VIEW_TABS : VIEW_TABS.filter((tab) => tab !== "权限管理"))
     .filter((tab) => tab !== "物料补发" || canSeeMaterialReissue);
   const activeView = visibleTabs.find((tab) => VIEW_KEYS[tab] === view) ?? VIEW_TABS[0];
@@ -1425,7 +1443,7 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
             <ProjectFilesPanel projectId={project.id} tasks={tasks} canEdit={projectWritable} tabs={filesTabs} />
           ) : activeView === "物料补发" ? (
             // 物料补发（2026-11-25）：物料变更补发提交时固化的《补发物料清单》按申请单汇总；只读。
-            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} canMark={canMarkMaterialReissue} canMarkAll={canMarkAllMaterialReissue} tierTint={tintRows} tabs={filesTabs} view={materialSub} onChangeView={(next) => { replaceProjectMaterialSubView(project.id, next); }} />
+            <MaterialReissuePanel projectId={project.id} tasks={tasks} members={members} viewerId={viewerUserId} canViewAll={canViewAllMaterialReissue} canMark={canMarkMaterialReissue} canMarkAll={canMarkAllMaterialReissue} projectFileUploadAllowed={materialReissueProjectFileUploadAllowed} uploadTaskId={materialReissueUploadTaskId} tierTint={tintRows} tabs={filesTabs} view={materialSub} onChangeView={(next) => { replaceProjectMaterialSubView(project.id, next); }} />
           ) : activeView === "权限管理" ? (
             <ProjectViewGrantsPanel key={project.id} projectId={project.id} />
           ) : (

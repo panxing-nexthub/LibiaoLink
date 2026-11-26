@@ -34,6 +34,11 @@ class FakeRepository {
   changes = new Map<string, ReturnType<typeof changeRow>>();
   tasks = new Map<string, { id: string; projectId: string; ownerIds: string[]; deletedAt: Date | null }>();
   updated: Array<{ id: string; tracking: unknown[] }> = [];
+  projectAssistant = false;
+
+  async isMaterialReissueProjectAssistant(): Promise<boolean> {
+    return this.projectAssistant;
+  }
 
   async lockChangeRequest(id: string): Promise<unknown> {
     return this.changes.get(id) ?? null;
@@ -121,6 +126,54 @@ describe("MaterialReissueTrackingService", () => {
         status: "shipped",
       }, ACTOR),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("allows a project assistant to register another task's reissue", async () => {
+    const repository = new FakeRepository();
+    repository.changes.set(CHANGE_B, changeRow(CHANGE_B, TASK_B, 1));
+    repository.tasks.set(TASK_B, { id: TASK_B, projectId: PROJECT, ownerIds: ["someone-else"], deletedAt: null });
+    repository.projectAssistant = true;
+    const { service } = buildService(repository, { accessLevel: "view", projectManager: false });
+
+    const result = await service.register(PROJECT, {
+      items: [{ changeRequestId: CHANGE_B, lineIndex: 0 }],
+      status: "shipped",
+    }, ACTOR);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.changeRequestId).toBe(CHANGE_B);
+    expect(repository.updated).toHaveLength(1);
+  });
+
+  it("allows a project assistant to update another task's tracking", async () => {
+    const repository = new FakeRepository();
+    const entry = {
+      changeRequestId: CHANGE_B,
+      lineIndex: 0,
+      status: "shipped",
+      trackingNo: "OLD",
+      estimatedArrivalDate: null,
+      note: null,
+      imageFileId: null,
+      imageFileIds: [],
+      shippedBy: ACTOR,
+      shippedAt: "2026-11-25T04:00:00.000Z",
+      updatedAt: "2026-11-25T04:00:00.000Z",
+    };
+    repository.changes.set(CHANGE_B, changeRow(CHANGE_B, TASK_B, 1, [entry]));
+    repository.tasks.set(TASK_B, { id: TASK_B, projectId: PROJECT, ownerIds: ["someone-else"], deletedAt: null });
+    repository.projectAssistant = true;
+    const { service } = buildService(repository, { accessLevel: "view", projectManager: false });
+
+    const result = await service.update(PROJECT, {
+      changeRequestId: CHANGE_B,
+      lineIndex: 0,
+      status: "received",
+    }, ACTOR);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.status).toBe("received");
+    expect(repository.updated).toHaveLength(1);
   });
 
   it("updates tracking fields without changing the registered time", async () => {

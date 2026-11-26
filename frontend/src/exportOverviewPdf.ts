@@ -180,10 +180,6 @@ const FIXED_TEXT: Record<string, LanguageStrings> = {
   完成: { en: "completed", ja: "完了", ko: "완료" },
   全部完成: { en: "All Completed", ja: "すべて完了", ko: "모두 완료" },
   暂无任务: { en: "No tasks", ja: "タスクなし", ko: "작업 없음" },
-  天: { en: "days", ja: "日", ko: "일" },
-  峰值: { en: "Peak", ja: "ピーク", ko: "최대" },
-  平均: { en: "Avg", ja: "平均", ko: "평균" },
-  "人/天": { en: "people/day", ja: "人/日", ko: "명/일" },
   待分配: { en: "Unassigned", ja: "未割当", ko: "미배정" },
   项目编号: { en: "Project Code", ja: "プロジェクト番号", ko: "프로젝트 번호" },
   项目经理: { en: "Project Manager", ja: "プロジェクト責任者", ko: "프로젝트 관리자" },
@@ -478,22 +474,61 @@ function stageEffortOf(group: StageGroup): StageEffort | null {
   };
 }
 
-/** 阶段标题第二行：起止 / 历时 / 峰值 / 平均人天（无日期或人数时只显示能算出的部分）。 */
+/** 阶段日期文本：2026-05-15 → 2026.5.15（与业务口径一致，不带前导零）。 */
+function stageDateText(iso: string): string {
+  const [year, month, day] = iso.split("-");
+  if (year === undefined || month === undefined || day === undefined) {
+    return iso;
+  }
+  return String(Number(year)) + "." + String(Number(month)) + "." + String(Number(day));
+}
+
+/** 阶段统计整句模板（中 / 英 / 日 / 韩；标签加粗，全部保持在同一行）。 */
+const STAGE_META_TEXT: Record<OverviewExportLanguage, {
+  span: (from: string, to: string, days: number) => string;
+  peak: string;
+  average: string;
+  unit: string;
+}> = {
+  zh: {
+    span: (from, to, days) => `本阶段自${from}至${to} 历时${String(days)}天`,
+    peak: "单日最多人天",
+    average: "平均每天人天",
+    unit: "人/天",
+  },
+  en: {
+    span: (from, to, days) => `Stage from ${from} to ${to} · ${String(days)} days`,
+    peak: "Max people per day",
+    average: "Average people per day",
+    unit: "people/day",
+  },
+  ja: {
+    span: (from, to, days) => `本ステージ ${from}〜${to}・${String(days)}日間`,
+    peak: "単日最多人日",
+    average: "平均人日",
+    unit: "人/日",
+  },
+  ko: {
+    span: (from, to, days) => `본 단계 ${from}~${to} · ${String(days)}일`,
+    peak: "일일 최대 인원",
+    average: "일평균 인원",
+    unit: "명/일",
+  },
+};
+
+/** 阶段标题内联统计：本阶段自 A 至 B 历时 N 天 + 单日最多人天 / 平均每天人天（同一行）。 */
 function stageMetaHtml(group: StageGroup, primary: OverviewExportLanguage): string {
   const effort = stageEffortOf(group);
   if (effort === null) {
     return "";
   }
-  const parts = [
-    escapeHtml(effort.start) + " → " + escapeHtml(effort.end),
-    String(effort.days) + " " + escapeHtml(localizedValue("天", primary)),
-  ];
+  const text = STAGE_META_TEXT[primary];
+  const parts = [escapeHtml(text.span(stageDateText(effort.start), stageDateText(effort.end), effort.days))];
   if (effort.hasHeadcount) {
-    const unit = escapeHtml(localizedValue("人/天", primary));
-    parts.push(escapeHtml(localizedValue("峰值", primary)) + " " + String(effort.peak) + " " + unit);
-    parts.push(escapeHtml(localizedValue("平均", primary)) + " " + String(effort.average) + " " + unit);
+    parts.push("<strong>" + escapeHtml(text.peak) + "</strong> " + String(effort.peak) + " " + escapeHtml(text.unit));
+    parts.push("<strong>" + escapeHtml(text.average) + "</strong> " + String(effort.average) + " " + escapeHtml(text.unit));
   }
-  return "<div class=\"grp__meta\">" + parts.join(" · ") + "</div>";
+  return '<span class="grp__meta">' + parts.join("  ") + "</span>";
 }
 
 /** 折叠阶段与任务行共用当前列配置；折叠行把阶段汇总值放回对应可见列，隐藏列不再占位。 */
@@ -519,8 +554,9 @@ function groupSectionHtml(
     '<tr class="grp__head"><td colspan="' + String(visibleColumns.length + 1) + '"><div class="grp__heading">' +
     '<span class="grp__name">' + stageName + '</span>' +
     (showCount ? '<span class="grp__count">' + countText + '</span>' : '') +
+    metaHtml +
     noteHtml +
-    '</div>' + metaHtml + '</td></tr>';
+    '</div></td></tr>';
 
   if (collapsed && group.total > 0) {
     counter.value += group.tasks.length;
@@ -621,8 +657,9 @@ const REPORT_STYLE = `
   tbody.grp tr.grp__head td { padding: 3px 7px; background: #f4f4f5; border-bottom: 1px solid #e4e4e7; break-after: avoid; }
   .grp__name { font-size: 10.5px; font-weight: 700; }
   .grp__count { margin-left: 6px; font-size: 9.5px; color: #71717a; }
-  .grp__heading { display: flex; align-items: baseline; }
-  .grp__meta { margin: 1px 0 0; font-size: 8.5px; color: #52525b; }
+  .grp__heading { display: flex; align-items: baseline; flex-wrap: nowrap; }
+  .grp__meta { margin-left: 10px; font-size: 8.5px; color: #3f3f46; white-space: nowrap; flex-shrink: 0; }
+  .grp__meta strong { font-weight: 700; color: #18181b; }
   .grp__heading .grp__name, .grp__heading .grp__count { flex-shrink: 0; }
   .grp__note { min-width: 0; margin-left: 10px; color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; }
   tbody.grp tr.grp__head--collapsed .grp__note { display: block; margin: 2px 0 0; }

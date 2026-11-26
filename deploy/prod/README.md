@@ -1,3 +1,16 @@
+> **2026-11-26 14:38–14:39 阶段历时措辞改「历时需 N 天」（正式机 · frontend-only · prod-20261126-1438-px-duration-wording-27f05953）**：代码来源 `codex/test-release-stage-notes-20261126` @ `27f05953`（PR [#1172](https://github.com/panxing-nexthub/LibiaoLink/pull/1172)）。previousRelease / previousManifestRelease = `prod-20261126-1432-px-stage-notes-a06d3a76`。
+> **改动 / 验收**：项目总览 PDF 阶段统计由「历时 N 天」改为「历时需 N 天」（en: N days required / ja: 所要N日間 / ko: N일 소요）；frontend typecheck / build 通过。
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,677,819 B / `89c4a67a…`（678 文件）、`frontend-files.sha256` 92,437 B / `9b4bd5cd…`、`deploy-prod.sh` 2,956 B / `ffddf285…`；正式机前端 681 → 683 文件，重建 web（base + CAD）。
+> **验证 / 清单**：`/`、`/healthz`、`/readyz` 均 200；web healthy；线上 `index.html` `94aec2b7…`、CSS `f8affd40…`、ES `b80bcd88…`、主包 `index-0mTj-XG9.js` 2,779,480 B / `36b600e0…`，与构建一致；产物命中 `历时需`；manifest 3,763 B / `22d3f9e6…`，root:root 644。
+> **备份 / 回滚**：`/srv/data/backups/before-prod-20261126-1438-px-duration-wording-27f05953`（4 文件 / 23,731,800 B / SHA256SUMS `818b714c…`）。回滚：恢复 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`，再重建 web（base + CAD）。
+> **边界**：仅正式机前端 dist、staging 与 release manifest；无 server / shared / API / 数据库 / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变更。
+
+> **2026-11-26 14:38 阶段历时措辞改「历时需 N 天」（仅测试机 · frontend-only · test-20261126-1438-px-duration-wording-27f05953）**：代码来源 `codex/test-release-stage-notes-20261126` @ `27f05953`。previousRelease / previousManifestRelease = `test-20261126-1428-px-temp-stage-note-afb71267`。
+> **改动 / 验收**：PDF 阶段统计措辞同步调整（中 / 英 / 日 / 韩）；frontend typecheck / build 通过。
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,677,819 B / `89c4a67a…`（678 文件）、`deploy-test.sh` 3,152 B / `b016c0c7…`；测试机前端 710 → 712 文件，重建 web。
+> **验证 / 清单**：`/`、`/healthz`、`/readyz` 均 200；web healthy；线上 `index.html` `94aec2b7…`、主包 `8db61d7e…`（构建 + guard 28 字节），产物命中 `历时需`；manifest 3,780 B / `378a178e…`。
+> **备份 / 回滚**：`/srv/data/backups/before-test-20261126-1438-px-duration-wording-27f05953`（4 文件 / 58,929,816 B / SHA256SUMS `9acc217d…`）。
+
 > **2026-11-26 14:32–14:35 阶段备注系列 + PDF 阶段人天统计 / 专业名词字典（正式机 · full-stack + 迁移 0123 · prod-20261126-1432-px-stage-notes-a06d3a76）**：代码来源 `codex/test-release-stage-notes-20261126` @ `a06d3a76`（含 main `5b49350d` 合并，PR 待合）。previousRelease / previousManifestRelease = `prod-20261126-1344-px-material-reissue-draft-autosave-fix-2da7ada1`。
 > **改动 / 验收**：阶段备注（液体玻璃触发、四语机翻、项目总览 PDF 备注译文）、临时任务分组备注（`__temp__` 契约）、PDF 阶段标题起止 / 历时 / 单日最多人天 / 平均每天人天（中英双语）、全局机翻先读专业名词字典（节点库 73 条 + 官方产品名）；一并带入 main #1170 / #1171。frontend / server typecheck 与 build 通过，`task-service.test.ts` 99 项通过。
 > **发布件 / 安装**：`server-dist.tar.gz` 1,435,257 B / `6b8ea747…`（843 文件）、`shared-dist.tar.gz` 300,839 B / `4867414b…`（126 文件）、`shared-generated.tar.gz` 233,401 B / `5f1558a5…`（4 文件）、`frontend-dist.tar.gz` 22,679,113 B / `ad9e7e69…`（678 文件）、`0123_project_stage_notes.sql` 365 B / `106186a1…`、`deploy-prod.sh` 7,340 B / `37f4daaf…`；正式机前端 678 → 681 文件，重建 api / worker / web（base + CAD compose）；staging = `/srv/data/deploy-prod-20261126-1432-px-stage-notes-a06d3a76/staging`。

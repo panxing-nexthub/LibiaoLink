@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { useT } from "../i18n";
+import { useLocalizedText, useT } from "../i18n";
 import { useFocusTrap } from "./useFocusTrap";
 
 type Props = {
@@ -17,6 +17,8 @@ const GLASS_SURFACE =
 
 export function StageNote({ stageName, note, onSave }: Props) {
   const t = useT();
+  /** 备注正文按当前界面语言机翻（中文界面原样）；编辑框始终回填原文，避免把译文存回去。 */
+  const localizedNote = useLocalizedText(note);
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export function StageNote({ stageName, note, onSave }: Props) {
       observer.disconnect();
       document.fonts.removeEventListener("loadingdone", measure);
     };
-  }, [note]);
+  }, [localizedNote]);
 
   // 打开输入框时光标自动落在已有文字末尾（点击「备注」后直接接着写，不用再点一下）。
   const editorOpen = draft !== null && onSave !== undefined;
@@ -106,12 +108,12 @@ export function StageNote({ stageName, note, onSave }: Props) {
             ref={noteRef}
             className={"relative " + (note === "" ? "whitespace-nowrap" : noteTextClassName)}
           >
-            {note === "" ? addText : note}
+            {note === "" ? addText : localizedNote}
           </span>
         </button>
       ) : note !== "" ? (
         <span id={noteId} ref={noteRef} className={noteTextClassName}>
-          {note}
+          {localizedNote}
         </span>
       ) : null}
       {note !== "" && hasOverflow ? (

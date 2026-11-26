@@ -422,7 +422,7 @@ function groupSectionHtml(
 ): string {
   const visibleColumns = visibleOverviewTaskColumns(columns);
   const stageName = fixedText(group.name, primary);
-  const noteHtml = note === undefined ? "" : `<span class="grp__note">${escapeHtml(note)}</span>`;
+  const noteHtml = note === undefined ? "" : `<span class="grp__note">${translatedText(note, translationMap.get(note), primary)}</span>`;
   const countText = group.total === 0
     ? fixedText("暂无任务", primary)
     : String(group.done) + " / " + String(group.total) + " " + escapeHtml(localizedValue("完成", primary)) + " · " +
@@ -786,9 +786,13 @@ export function overviewExportTranslationRequest(
     const stage = task.stage === "" ? "临时任务" : task.stage;
     return !collapsed.has(stage) && !hidden.has(stage);
   });
+  // 阶段备注同样按导出主体语言翻译（2026-11-26 追订）；空备注不进翻译通道。
+  const stageNoteTexts = (input.summary?.stageNotes ?? [])
+    .map((item) => item.note)
+    .filter((note) => note !== "");
   const texts = target === "en"
-    ? [input.project.description, ...visibleTasks.map((task) => task.note)]
-    : [input.project.description, ...visibleTasks.flatMap((task) => [task.title, task.note])];
+    ? [input.project.description, ...visibleTasks.map((task) => task.note), ...stageNoteTexts]
+    : [input.project.description, ...visibleTasks.flatMap((task) => [task.title, task.note]), ...stageNoteTexts];
   return { target, texts };
 }
 

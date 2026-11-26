@@ -109,13 +109,15 @@ export class TaskController {
   @Put(":id/stage-notes/:stageRef")
   @RequirePermission("project.update")
   @HttpCode(204)
-  saveStageNote(
+  async saveStageNote(
     @Param("id", uuidParam) id: string,
     @Param("stageRef", stageRefParam) stageRef: string,
     @Body(new ZodValidationPipe(ProjectStageNotePutBodySchema)) body: z.infer<typeof ProjectStageNotePutBodySchema>,
     @CurrentActorId() actorId: string,
   ): Promise<void> {
-    return this.tasks.saveStageNote(id, stageRef, body.note, actorId);
+    await this.tasks.saveStageNote(id, stageRef, body.note, actorId);
+    // 阶段备注正文保存后预热英 / 日 / 韩译文，切换语言与导出 PDF 直接读库。
+    this.translate.warmup([body.note]);
   }
 
   /** 任务列表：分页 + 阶段 / 负责人 / 展示态筛选 + 关键字 + 白名单排序（TaskListItem 随行摘要）。 */

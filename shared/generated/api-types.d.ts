@@ -17323,6 +17323,8 @@ export interface components {
         TaskUpdateBody: {
             /** @description 项目编辑者可选。为 true 时按改期的自然日差值在同一事务中移动同阶段后续任务的开始和预计完成日期。两个日期均有差值时以预计完成日期为准，实际完成日期保留原值 */
             shiftFollowing?: boolean;
+            /** @description 2026-11-26：只同步这些任务（同阶段位次在当前任务之后）。传非空数组时只平移这些任务；为空 / 不传且 shiftFollowing=true 时平移全部后续任务。不存在的 id 或不在同一阶段当前任务之后 = 400 */
+            shiftTaskIds?: components["schemas"]["Uuid"][];
             /** @description 任务描述（中文；Push 196）：仅**无来源节点**的任务可改（看板「添加 → 临时任务」手工创建）；节点 / 模板生成的任务按 A1-17 锁定，带该字段请求 400 */
             title?: string;
             /** @description 任务描述（英文；Push 196）：与 title 同一门禁；null = 清空 */

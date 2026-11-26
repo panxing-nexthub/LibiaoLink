@@ -344,6 +344,8 @@ export type TaskUpdateInput = {
   sortIndex?: number;
   status?: string;
   shiftFollowing?: boolean;
+  /** 2026-11-26：只同步这些任务（同阶段位次在当前任务之后）；非空时服务端只平移这些任务。 */
+  shiftTaskIds?: string[];
   plannedStart?: string | null;
   plannedEnd?: string | null;
   estimatedDays?: number | null;

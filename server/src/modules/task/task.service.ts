@@ -109,7 +109,7 @@ type TaskLockedFieldsAdjustBody = z.infer<typeof TaskLockedFieldsAdjustBodySchem
  */
 type TaskWriteRequest = Pick<
   TaskUpdateBody,
-  "title" | "titleEn" | "ownerIds" | "managerIds" | "status" | "plannedStart" | "plannedEnd" | "estimatedDays" | "headcount" | "priority" | "deliverableTypes" | "note" | "sortIndex" | "shiftFollowing"
+  "title" | "titleEn" | "ownerIds" | "managerIds" | "status" | "plannedStart" | "plannedEnd" | "estimatedDays" | "headcount" | "priority" | "deliverableTypes" | "note" | "sortIndex" | "shiftFollowing" | "shiftTaskIds"
 > & { expectedVersion: number | null };
 
 const EMPTY_FILE_SUMMARY: TaskFileSummaryCounts = { total: 0, draft: 0, final: 0 };
@@ -658,6 +658,7 @@ export class TaskService {
           plannedStart: body.plannedStart,
           plannedEnd: body.plannedEnd,
           shiftFollowing: body.shiftFollowing,
+          shiftTaskIds: body.shiftTaskIds,
           estimatedDays: body.estimatedDays,
           headcount: body.headcount,
           priority: body.priority,
@@ -966,12 +967,14 @@ export class TaskService {
     allowTaskOwner = false,
   ): Promise<TaskRow> {
     let stageTasks: TaskRow[] = [];
-    if (request.sortIndex !== undefined || request.shiftFollowing === true) {
+    const requestedShiftIds = request.shiftTaskIds ?? [];
+    const shiftRequested = request.shiftFollowing === true || requestedShiftIds.length > 0;
+    if (request.sortIndex !== undefined || shiftRequested) {
       const brief = await this.repository.findTaskBrief(taskId, tx);
       if (brief === null || brief.projectId !== projectId) {
         throw new AppError("NOT_FOUND", "任务不存在或不属于该项目");
       }
-      if (request.shiftFollowing === true && brief.stageKey !== null) {
+      if (shiftRequested && brief.stageKey !== null) {
         stageTasks = await this.repository.lockStageTasks(tx, projectId, brief.stageKey, brief.additionalStageNumber);
       } else if (request.sortIndex !== undefined) {
         await this.repository.listGroupOrder(projectId, brief.stageKey, tx, true, brief.additionalStageNumber);
@@ -990,7 +993,7 @@ export class TaskService {
       : undefined;
     if (projectAccess !== null) {
       const capabilities = this.assertTaskWriteAllowed(actorId, projectAccess, before, allowTaskOwner);
-      if (request.shiftFollowing === true && capabilities.source !== "project_edit") {
+      if (shiftRequested && capabilities.source !== "project_edit") {
         throw new AppError("FORBIDDEN", "仅项目编辑者可顺延阶段后续任务");
       }
       const ownersChanged =
@@ -1028,7 +1031,7 @@ export class TaskService {
       statusOverride: before.statusOverride,
     };
     const linked = request.status === undefined ? null : applyStatusWrite(current, request.status, today);
-    if (request.shiftFollowing === true && before.stageKey === null) {
+    if (shiftRequested && before.stageKey === null) {
       throw new AppError("VALIDATION_FAILED", "只有归入阶段的任务可顺延后续任务");
     }
     const plannedStart = request.plannedStart === undefined ? before.plannedStart : request.plannedStart;
@@ -1042,9 +1045,21 @@ export class TaskService {
     } else if (plannedStart !== before.plannedStart) {
       assertEndOnOrAfterStart(before.title, plannedStart, actualEnd, "实际完成日期");
     }
-    const shiftDays = request.shiftFollowing === true ? scheduleShiftDays(before, plannedStart, plannedEnd) : 0;
-    const shiftedTasks = shiftDays === 0 ? [] : stageTasks.slice(anchorIndex + 1)
-      .filter((task) => task.plannedStart !== null || task.plannedEnd !== null)
+    const shiftDays = shiftRequested ? scheduleShiftDays(before, plannedStart, plannedEnd) : 0;
+    const shiftCandidates = stageTasks.slice(anchorIndex + 1)
+      .filter((task) => task.plannedStart !== null || task.plannedEnd !== null);
+    if (requestedShiftIds.length > 0) {
+      const known = new Set(shiftCandidates.map((task) => task.id));
+      const unknown = requestedShiftIds.filter((id) => !known.has(id));
+      if (unknown.length > 0) {
+        throw new AppError("VALIDATION_FAILED", "只能同步本阶段位次在当前任务之后、且已填计划日期的任务", [
+          { code: "invalid_shift_target", message: "无效任务：" + unknown.join("、"), path: "shiftTaskIds" },
+        ]);
+      }
+    }
+    const wantedShiftIds = new Set(requestedShiftIds);
+    const shiftedTasks = shiftDays === 0 ? [] : shiftCandidates
+      .filter((task) => requestedShiftIds.length === 0 || wantedShiftIds.has(task.id))
       .map((task) => {
         const start = shiftedPlanDate(task.title, task.plannedStart, shiftDays);
         const end = shiftedPlanDate(task.title, task.plannedEnd, shiftDays);

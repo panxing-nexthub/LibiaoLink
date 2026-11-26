@@ -814,6 +814,7 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
       startDate: values.startDate,
       dueDate: values.dueDate,
       shiftFollowing: values.shiftFollowing,
+      status: values.status,
       days: values.days,
       headcount: values.headcount,
       priority: values.priority,

@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "../i18n";
 import { useFocusTrap } from "./useFocusTrap";
@@ -22,6 +22,7 @@ export function StageNote({ stageName, note, onSave }: Props) {
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useFocusTrap<HTMLDivElement>(draft !== null && onSave !== undefined);
   const noteRef = useRef<HTMLSpanElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const noteId = useId();
   const [hasOverflow, setHasOverflow] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -43,6 +44,17 @@ export function StageNote({ stageName, note, onSave }: Props) {
       document.fonts.removeEventListener("loadingdone", measure);
     };
   }, [note]);
+
+  // 打开输入框时光标自动落在已有文字末尾（点击「备注」后直接接着写，不用再点一下）。
+  const editorOpen = draft !== null && onSave !== undefined;
+  useEffect(() => {
+    if (!editorOpen) return;
+    const textarea = textareaRef.current;
+    if (textarea === null) return;
+    textarea.focus({ preventScroll: true });
+    const end = textarea.value.length;
+    textarea.setSelectionRange(end, end);
+  }, [editorOpen]);
 
   if (note === "" && onSave === undefined) return null;
 
@@ -132,6 +144,7 @@ export function StageNote({ stageName, note, onSave }: Props) {
             <h2 className="mb-3 text-sm font-semibold text-zinc-800">{title}</h2>
             <form onSubmit={(event) => { void submit(event); }} className="grid gap-3">
               <textarea
+                ref={textareaRef}
                 aria-label={title}
                 rows={3}
                 maxLength={200}

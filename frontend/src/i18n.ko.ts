@@ -1365,7 +1365,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "gantt.rowFilter.unscheduled": "일정 미정만",
   "gantt.rowFilter.unscheduled.hint": "시작일 및/또는 납기일이 없는 작업만",
   "gantt.legend.singleDay": "하루 작업",
-  "gantt.legend.singleDayHint": "하루 작업(시작 = 납기): 해당 날짜 칸을 상태 색으로 채움 — 완료 = 녹색, 미완료 = 회색, 기한 초과 = 빨간색",
+  "gantt.legend.singleDayHint": "하루 작업(시작 = 납기): 하루 막대를 상태 색으로 표시 — 완료 = 녹색, 미완료 = 회색, 기한 초과 = 빨간색",
   "gantt.legend.doneDate": "완료일",
   "gantt.legend.today": "오늘",
   "gantt.legend.done": "완료 진행률",

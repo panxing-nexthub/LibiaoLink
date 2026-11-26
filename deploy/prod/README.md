@@ -1,3 +1,15 @@
+> **2026-11-26 14:41–14:43 阶段历时措辞改「需持续 N 天」（正式机 · frontend-only · prod-20261126-1441-px-duration-continue-a259c1c5）**：代码来源 `codex/test-release-stage-notes-20261126` @ `a259c1c5`（PR [#1172](https://github.com/panxing-nexthub/LibiaoLink/pull/1172)）。previousRelease / previousManifestRelease = `prod-20261126-1438-px-duration-wording-27f05953`。
+> **改动 / 验收**：阶段统计措辞定为「本阶段自 A 至 B 需持续 N 天」（en: lasts N days / ja: N日間継続 / ko: N일 소요），去掉「历时」；frontend typecheck / build 通过。
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,679,136 B / `ab6bae9e…`（678 文件）、`frontend-files.sha256` 92,437 B / `c77c864e…`、`deploy-prod.sh` 2,904 B / `82a81200…`；正式机前端 683 → 685 文件，重建 web（base + CAD）。
+> **验证 / 清单**：`/`、`/healthz`、`/readyz` 均 200；web healthy；线上 `index.html` `b1a2825d…`、CSS `f8affd40…`、ES `b8ba0065…`、主包 `index-zeHh6gAr.js` 2,779,477 B / `91d285c9…`，与构建一致；产物命中 `需持续`；manifest 3,693 B / `c7bec7e2…`。
+> **备份 / 回滚**：`/srv/data/backups/before-prod-20261126-1441-px-duration-continue-a259c1c5`（4 文件 / 24,686,991 B / SHA256SUMS `b055702a…`）。回滚：恢复 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`，再重建 web（base + CAD）。
+> **边界**：仅正式机前端 dist、staging 与 release manifest；无 server / shared / API / 数据库 / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变更。
+
+> **2026-11-26 14:41 阶段历时措辞改「需持续 N 天」（仅测试机 · frontend-only · test-20261126-1441-px-duration-continue-a259c1c5）**：代码来源 `codex/test-release-stage-notes-20261126` @ `a259c1c5`。previousRelease / previousManifestRelease = `test-20261126-1438-px-duration-wording-27f05953`。
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,679,136 B / `ab6bae9e…`（678 文件）、`deploy-test.sh` 3,100 B / `ee64ac08…`；测试机前端 712 → 714 文件，重建 web。
+> **验证 / 清单**：`/`、`/healthz`、`/readyz` 均 200；web healthy；线上 `index.html` `b1a2825d…`、主包 `41d16478…`（构建 + guard 28 字节），产物命中 `需持续`；manifest 3,710 B / `6d3a262c…`。
+> **备份 / 回滚**：`/srv/data/backups/before-test-20261126-1441-px-duration-continue-a259c1c5`（4 文件 / 59,883,731 B / SHA256SUMS `5833e0ff…`）。
+
 > **2026-11-26 14:38–14:39 阶段历时措辞改「历时需 N 天」（正式机 · frontend-only · prod-20261126-1438-px-duration-wording-27f05953）**：代码来源 `codex/test-release-stage-notes-20261126` @ `27f05953`（PR [#1172](https://github.com/panxing-nexthub/LibiaoLink/pull/1172)）。previousRelease / previousManifestRelease = `prod-20261126-1432-px-stage-notes-a06d3a76`。
 > **改动 / 验收**：项目总览 PDF 阶段统计由「历时 N 天」改为「历时需 N 天」（en: N days required / ja: 所要N日間 / ko: N일 소요）；frontend typecheck / build 通过。
 > **发布件 / 安装**：`frontend-dist.tar.gz` 22,677,819 B / `89c4a67a…`（678 文件）、`frontend-files.sha256` 92,437 B / `9b4bd5cd…`、`deploy-prod.sh` 2,956 B / `ffddf285…`；正式机前端 681 → 683 文件，重建 web（base + CAD）。

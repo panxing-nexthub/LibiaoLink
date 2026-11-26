@@ -1437,137 +1437,105 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     </div>
   );
 
-  /** 工具条（常驻，空态 ② / ③ 也在）：图例 + 粒度 / 缩放 / 折叠 / 回到今天 + 甘特内筛选 + 两行操作提示。 */
+  /** 工具条（常驻）：一行 —— 左侧操作（粒度 / 缩放 / 折叠 / 回到今天 / 筛选 / 编辑锁），右侧图例提示。 */
   const toolbarBlock = (
     <div data-gantt-toolbar="" className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <ul data-gantt-legend="" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500">
-          <li className="flex items-center gap-1.5">
-            <span className={"h-2.5 w-4 rounded-[3px] " + BAR_DONE_CLASS} aria-hidden="true" />
-            {t("gantt.legend.done")}
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className={"h-2.5 w-4 rounded-[3px] " + BAR_TODO_CLASS} aria-hidden="true" />
-            {t("gantt.legend.remaining")}
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span
-              className="h-2.5 w-4 rounded-[3px] border border-rose-300"
-              style={{ backgroundImage: OVERDUE_TAIL_BG }}
-              aria-hidden="true"
-            />
-            {t("gantt.legend.overdue")}
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="inline-flex items-center" aria-hidden="true">
-              <span className="h-0 w-2.5 border-t border-dashed border-slate-500" />
-              <span className="h-2 w-2 rounded-full border-[1.5px] border-white bg-slate-700 shadow-sm" />
-            </span>
-            {t("gantt.legend.doneDate")}
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="h-3 border-l border-dashed border-blue-500" aria-hidden="true" />
-            {t("gantt.legend.today")}
-          </li>
-        </ul>
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
-            {SCALE_KEYS.map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => {
-                  applyDayWidth(SCALES[key].dayWidth[nearestZoomKey], undefined, key);
-                }}
-                title={t("gantt.scale.title", { name: scaleText(key) })}
-                className={
-                  "rounded-md px-2.5 py-1 text-xs font-medium transition " +
-                  (key === scale ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800")
-                }
-              >
-                {scaleText(key)}
-              </button>
-            ))}
-          </div>
-          <span className="text-[11px] text-zinc-400">{t("gantt.label.zoom")}</span>
-          <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
+          {SCALE_KEYS.map((key) => (
             <button
+              key={key}
               type="button"
-              data-gantt-zoom="out"
-              disabled={dayWidth <= DAY_WIDTH_MIN + 0.05}
               onClick={() => {
-                applyDayWidth(dayWidth / 1.25);
+                applyDayWidth(SCALES[key].dayWidth[nearestZoomKey], undefined, key);
               }}
-              title={t("gantt.zoom.outTip")}
-              className="rounded-md px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
-              aria-label={t("gantt.zoom.out")}
+              title={t("gantt.scale.title", { name: scaleText(key) })}
+              className={
+                "rounded-md px-2.5 py-1 text-xs font-medium transition " +
+                (key === scale ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800")
+              }
             >
-              −
+              {scaleText(key)}
             </button>
-            <button
-              type="button"
-              data-gantt-zoom="reset"
-              onClick={() => {
-                applyDayWidth(DAY_WIDTH_DEFAULT, undefined, "day");
-              }}
-              title={t("gantt.zoom.resetTip")}
-              className="min-w-[44px] rounded-md px-1.5 py-1 text-center text-[11px] font-medium tabular-nums text-zinc-700 transition hover:bg-white hover:text-zinc-900"
-            >
-              {zoomPercent}%
-            </button>
-            <button
-              type="button"
-              data-gantt-zoom="in"
-              disabled={dayWidth >= DAY_WIDTH_MAX - 0.05}
-              onClick={() => {
-                applyDayWidth(dayWidth * 1.25);
-              }}
-              title={t("gantt.zoom.inTip")}
-              className="rounded-md px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
-              aria-label={t("gantt.zoom.in")}
-            >
-              +
-            </button>
-            <span className="mx-0.5 h-3.5 w-px bg-zinc-200" aria-hidden="true" />
-            <button
-              type="button"
-              data-gantt-zoom="fit"
-              disabled={model === null}
-              onClick={fitToView}
-              title={t("gantt.zoom.fitTip")}
-              className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
-            >
-              {t("gantt.zoom.fit")}
-            </button>
-          </div>
+          ))}
+        </div>
+        <span className="text-[11px] text-zinc-400">{t("gantt.label.zoom")}</span>
+        <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
           <button
             type="button"
-            onClick={toggleAll}
-            className={"rounded-lg border px-2.5 py-1 text-xs font-medium text-zinc-600 transition hover:text-zinc-900 " + GLASS_SURFACE}
+            data-gantt-zoom="out"
+            disabled={dayWidth <= DAY_WIDTH_MIN + 0.05}
+            onClick={() => {
+              applyDayWidth(dayWidth / 1.25);
+            }}
+            title={t("gantt.zoom.outTip")}
+            className="rounded-md px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
+            aria-label={t("gantt.zoom.out")}
           >
-            {allCollapsedNow ? t("gantt.toggle.allExpand") : t("gantt.toggle.allCollapse")}
+            −
           </button>
           <button
             type="button"
-            onClick={goToToday}
-            disabled={model === null}
-            title={
-              todayIndex === null
-                ? t("gantt.today.outOfRange")
-                : t("gantt.today.title")
-            }
-            className={
-              "rounded-lg border px-2.5 py-1 text-xs font-medium transition " +
-              (model === null
-                ? "cursor-not-allowed border-zinc-200/60 bg-white/50 text-zinc-300"
-                : GLASS_SURFACE + " text-zinc-600 hover:text-zinc-900")
-            }
+            data-gantt-zoom="reset"
+            onClick={() => {
+              applyDayWidth(DAY_WIDTH_DEFAULT, undefined, "day");
+            }}
+            title={t("gantt.zoom.resetTip")}
+            className="min-w-[44px] rounded-md px-1.5 py-1 text-center text-[11px] font-medium tabular-nums text-zinc-700 transition hover:bg-white hover:text-zinc-900"
           >
-            {t("gantt.today.button")}
+            {zoomPercent}%
+          </button>
+          <button
+            type="button"
+            data-gantt-zoom="in"
+            disabled={dayWidth >= DAY_WIDTH_MAX - 0.05}
+            onClick={() => {
+              applyDayWidth(dayWidth * 1.25);
+            }}
+            title={t("gantt.zoom.inTip")}
+            className="rounded-md px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
+            aria-label={t("gantt.zoom.in")}
+          >
+            +
+          </button>
+          <span className="mx-0.5 h-3.5 w-px bg-zinc-200" aria-hidden="true" />
+          <button
+            type="button"
+            data-gantt-zoom="fit"
+            disabled={model === null}
+            onClick={fitToView}
+            title={t("gantt.zoom.fitTip")}
+            className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            {t("gantt.zoom.fit")}
           </button>
         </div>
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-100 pt-2">
+        <button
+          type="button"
+          onClick={toggleAll}
+          className={"rounded-lg border px-2.5 py-1 text-xs font-medium text-zinc-600 transition hover:text-zinc-900 " + GLASS_SURFACE}
+        >
+          {allCollapsedNow ? t("gantt.toggle.allExpand") : t("gantt.toggle.allCollapse")}
+        </button>
+        <button
+          type="button"
+          onClick={goToToday}
+          disabled={model === null}
+          title={
+            todayIndex === null
+              ? t("gantt.today.outOfRange")
+              : t("gantt.today.title")
+          }
+          className={
+            "rounded-lg border px-2.5 py-1 text-xs font-medium transition " +
+            (model === null
+              ? "cursor-not-allowed border-zinc-200/60 bg-white/50 text-zinc-300"
+              : GLASS_SURFACE + " text-zinc-600 hover:text-zinc-900")
+          }
+        >
+          {t("gantt.today.button")}
+        </button>
+        <span className="mx-0.5 h-3.5 w-px bg-zinc-200" aria-hidden="true" />
         <span className="text-[11px] text-zinc-400">{t("gantt.label.filter")}</span>
         <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
           {ROW_FILTERS.map((item) => (
@@ -1601,24 +1569,51 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             </button>
           </>
         ) : null}
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            data-gantt-lock={barsLocked ? "locked" : "unlocked"}
-            aria-pressed={barsLocked}
-            aria-label={t("gantt.lock.toggleAria")}
-            title={t(barsLocked ? "gantt.lock.lockedTip" : "gantt.lock.unlockedTip")}
-            onClick={toggleBarsLocked}
-            className={
-              "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition " +
-              (barsLocked
-                ? "border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100")
-            }
-          >
-            <GanttLockIcon locked={barsLocked} />
-          </button>
-        </div>
+        <button
+          type="button"
+          data-gantt-lock={barsLocked ? "locked" : "unlocked"}
+          aria-pressed={barsLocked}
+          aria-label={t("gantt.lock.toggleAria")}
+          title={t(barsLocked ? "gantt.lock.lockedTip" : "gantt.lock.unlockedTip")}
+          onClick={toggleBarsLocked}
+          className={
+            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition " +
+            (barsLocked
+              ? "border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+              : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100")
+          }
+        >
+          <GanttLockIcon locked={barsLocked} />
+        </button>
+        <ul data-gantt-legend="" className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-500">
+          <li className="flex items-center gap-1.5">
+            <span className={"h-2.5 w-4 rounded-[3px] " + BAR_DONE_CLASS} aria-hidden="true" />
+            {t("gantt.legend.done")}
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span className={"h-2.5 w-4 rounded-[3px] " + BAR_TODO_CLASS} aria-hidden="true" />
+            {t("gantt.legend.remaining")}
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span
+              className="h-2.5 w-4 rounded-[3px] border border-rose-300"
+              style={{ backgroundImage: OVERDUE_TAIL_BG }}
+              aria-hidden="true"
+            />
+            {t("gantt.legend.overdue")}
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span className="inline-flex items-center" aria-hidden="true">
+              <span className="h-0 w-2.5 border-t border-dashed border-slate-500" />
+              <span className="h-2 w-2 rounded-full border-[1.5px] border-white bg-slate-700 shadow-sm" />
+            </span>
+            {t("gantt.legend.doneDate")}
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span className="h-3 border-l border-dashed border-blue-500" aria-hidden="true" />
+            {t("gantt.legend.today")}
+          </li>
+        </ul>
       </div>
     </div>
   );

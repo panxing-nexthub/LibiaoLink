@@ -5,7 +5,7 @@ export type PopoverPosition = {
   left: number;
   width: number;
   /** 浮层相对触发器的落点；below 时箭头在浮层顶部，above 时箭头在底部。 */
-  side: "below" | "above" | "right";
+  side: "below" | "above" | "right" | "left";
   /** 居中锚点浮层的箭头左偏移；null = 不画箭头（right 落点等）。 */
   arrowLeft: number | null;
 };
@@ -17,8 +17,10 @@ export type PopoverPosition = {
  * - right = 触发器右侧、垂直对齐（宽屏放得下时用，如弹窗里的「项目地区 / 项目类型」「项目经理」——避免长列表压住表单其它字段），
  *   右侧放不下（窄屏 / 靠右面板）自动回落 below，不出现半截浮层。
  * - rightEdge = 优先贴住右侧相邻列；右侧不足时整体翻到左侧，不夹住当前筛选列（表格列头筛选面板用）。
+ * - leftEdge = 固定向触发器左侧弹出、右缘贴住触发器左缘（2026-11-26 业务口径「日期浮层改成左侧弹出」）；
+ *   左侧放不下（窄屏 / 贴左）再回落 below 口径，不出现半截浮层。
  */
-export type PopoverPlacement = "below" | "right" | "rightEdge";
+export type PopoverPlacement = "below" | "right" | "rightEdge" | "leftEdge";
 
 /**
  * 触发器 + 浮层的定位 / 关闭口径（与分类筛选的日期选择器同一套实现）：
@@ -60,6 +62,15 @@ export function usePopover(
         return;
       }
       const popoverWidth = Math.max(width, rect.width);
+      if (placement === "leftEdge") {
+        const popoverWidth = Math.min(width, Math.max(240, window.innerWidth - 16));
+        const left = rect.left - popoverWidth - gap;
+        if (left >= 8) {
+          const leftTop = Math.min(Math.max(8, rect.top), Math.max(8, window.innerHeight - height - 8));
+          setPosition({ top: leftTop, left, width: popoverWidth, side: "left", arrowLeft: null });
+          return;
+        }
+      }
       if (placement === "right") {
         // 在弹窗（role="dialog"）里靠右弹出时，从弹窗卡片边缘让开：只按触发器右缘会压住卡片圆角与右侧留白，看着像粘在表单上
         const host = trigger.closest('[role="dialog"]') ?? trigger;

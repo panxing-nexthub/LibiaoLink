@@ -4,7 +4,7 @@ import type { Member } from "../data/members";
 import { MemberSearchList } from "./MemberSelect";
 import { MultiOptionList, OptionList, type SelectOption } from "./SelectMenu";
 import { Toast } from "./Toast";
-import { usePopover } from "./usePopover";
+import { usePopover, type PopoverPlacement } from "./usePopover";
 import { useLocale, useMachineText, useT } from "../i18n";
 import { CalendarMonthHeader } from "./CalendarMonthHeader";
 
@@ -42,6 +42,8 @@ type InlineCellProps = {
   disabled?: boolean;
   /** 锁定说明文案（如「任务已定档，不支持任何修改（文件修改走变更）」）：悬停 title 与点击 Toast 共用。 */
   disabledHint?: string;
+  /** 浮层落点（2026-11-26 新增 leftEdge）：默认 below；日期单元格传 leftEdge = 向左侧弹出。 */
+  placement?: PopoverPlacement;
   /** 浮层内容；`close` 用于选完即关。 */
   render: (close: () => void) => ReactNode;
 };
@@ -52,8 +54,8 @@ type InlineCellProps = {
  * Push 264（P1-1 定档锁定）：加 disabled 锁定态 —— 入口保留可点、样式与可编辑态全等，点击改为弹出站点同款底部
  *  Toast（2026-10-10 业务追订「点击后显示弹出即可 不要红色的圆提示」+「都用这个即可」；见 InlineCellProps.disabled）。
  */
-export function InlineCell({ ariaLabel, title, display, width, height, triggerClassName, bare = false, wrapContent = false, disabled = false, disabledHint, render }: InlineCellProps) {
-  const { open, setOpen, position, triggerRef, popoverRef } = usePopover(width, height);
+export function InlineCell({ ariaLabel, title, display, width, height, triggerClassName, bare = false, wrapContent = false, disabled = false, disabledHint, placement = "below", render }: InlineCellProps) {
+  const { open, setOpen, position, triggerRef, popoverRef } = usePopover(width, height, placement);
   /** 锁定说明 Toast（Push 264 续 · 2026-10-10 业务口径「都用这个即可」）：点击锁定入口 → 站点同款底部浮空 Toast
    *  （error 档：rose 边框 / 浅底 + 「关闭」按钮，2s 自动消失）；tick 只增不减 —— 连点同一格也以新 key 重新计时。 */
   const [lockedHintTick, setLockedHintTick] = useState(0);
@@ -358,6 +360,7 @@ export function InlineDateCell({
   maxDate = "",
   todayIso,
   allowScheduleShift = false,
+  placement = "leftEdge",
   disabled = false,
   disabledHint,
 }: {
@@ -372,6 +375,8 @@ export function InlineDateCell({
   maxDate?: string;
   todayIso?: string;
   allowScheduleShift?: boolean;
+  /** 浮层落点（2026-11-26）：默认 leftEdge = 向左侧弹出（日期列靠右，向左弹不压右侧列）；传 below 可回落旧口径。 */
+  placement?: PopoverPlacement;
   /** 锁定入口（Push 264 · P1-1 定档锁定）：透传 InlineCell —— 定档任务的行内入口不弹编辑浮层，点击改弹站点同款顶部 Toast。 */
   disabled?: boolean;
   /** 锁定说明文案（定档口径同 409 TASK_FINALIZED 提示文案；悬停 title 与点击 Toast 共用）。 */
@@ -384,6 +389,7 @@ export function InlineDateCell({
       title={t("ie.pickDate")}
       width={264}
       height={allowScheduleShift && valueIso !== "" ? 370 : 336}
+      placement={placement}
       disabled={disabled}
       disabledHint={disabledHint}
       bare={bare}

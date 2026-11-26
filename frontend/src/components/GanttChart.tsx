@@ -1471,7 +1471,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
           </li>
         </ul>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          <span className="text-[11px] text-zinc-400">{t("gantt.label.granularity")}</span>
           <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
             {SCALE_KEYS.map((key) => (
               <button

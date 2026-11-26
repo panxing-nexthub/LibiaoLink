@@ -413,6 +413,8 @@ export class NotifyDmService {
   /**
    * 单聊进入事件欢迎语（企微 `enter_chat`）：只处理 single + enter_chat，且必须带事件 req_id；
    * 不写激活表、不做绑定，回复失败只 warn（5 秒时效内尽力送达，异常不打断 worker 回调链）。
+   * 一次性口径（0124 · 2026-11-26）：同一 (bot_id, wecom_userid) 只回一次 —— 先登记后发送，
+   * 用户反复点开机器人不再重复问候；登记失败按「不发」处理（宁缺勿重）。
    */
   async replyWelcomeToEnterChat(incoming: AibotIncomingMessage): Promise<void> {
     if (
@@ -427,6 +429,20 @@ export class NotifyDmService {
     const masked = maskUserid(incoming.fromUserId);
     if (incoming.reqId === null) {
       this.logger.warn("欢迎语事件缺 req_id，跳过回复：userid " + masked);
+      return;
+    }
+    try {
+      const firstTime = await this.repository.claimWelcomeOnce({
+        botId: this.botId(),
+        wecomUserid: incoming.fromUserId,
+        at: this.clock.now(),
+      });
+      if (!firstTime) {
+        this.logger.log("单聊欢迎语已发过（同一机器人下仅一次），跳过：userid " + masked);
+        return;
+      }
+    } catch (error) {
+      this.logger.warn("欢迎语一次性登记失败，跳过本次回复：userid " + masked + " —— " + messageOf(error));
       return;
     }
     try {

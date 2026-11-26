@@ -1,3 +1,10 @@
+> **2026-11-26 14:17–14:18 阶段标题备注优先第一行（仅测试机 · frontend-only · test-20261126-1417-px-stage-note-first-e7252449）**：代码来源 `codex/test-release-stage-notes-20261126` @ `e7252449`。previousRelease / previousManifestRelease = `test-20261126-1415-px-stage-meta-align-a7141ee8`。
+> **改动 / 验收**：阶段标题渲染顺序改为「阶段名 → 完成数 → 备注 → 统计」—— 备注优先紧跟「完成」放在第一行，统计（起止 / 历时、单日最多人天、平均每天人天，双语）随后；统计放不下时按段换到下一行并左对齐，尽量把原来 3 行压回 2 行、节约纵向空间。frontend typecheck / build 通过。
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,677,850 B / `10c73530…`（678 文件）、`frontend-files.sha256` 92,437 B / `ad8f073a…`、`deploy-test.sh` 3,167 B / `87eee131…`；测试机前端 704 → 706 文件，重建 web。
+> **验证 / 清单**：`/`、`/healthz`、`/readyz` 均 200；web healthy、RestartCount 0、OOM false；线上 `index.html` `42b185b7…`、CSS `f8affd40…`、ES `6524eb7f…`，主包 `assets/index-B0Q_X_10.js` 2,779,658 B / `291cca4f…`（构建 2,779,630 B + guard 28 字节）；manifest 4,117 B / `f7d219b9…`，root:root 644。
+> **备份 / 回滚**：`/srv/data/backups/before-test-20261126-1417-px-stage-note-first-e7252449`（4 文件 / 56,061,807 B / SHA256SUMS `a9633bc2…`）。回滚：恢复 `frontend-dist-before.tar.gz` 与 `RELEASE_MANIFEST.json.before`，再重建 web。
+> **边界**：仅测试机前端 dist、staging 与 release manifest；无 server / shared / API / 数据库 / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变更。
+
 > **2026-11-26 14:15–14:16 阶段标题换行左对齐（仅测试机 · frontend-only · test-20261126-1415-px-stage-meta-align-a7141ee8）**：代码来源 `codex/test-release-stage-notes-20261126` @ `a7141ee8`。previousRelease / previousManifestRelease = `test-20261126-1405-px-stage-effort-bilingual-2443ff68`。
 > **改动 / 验收**：阶段标题 flex 行改用 `column-gap: 10px` 并去掉统计 / 备注的 `margin-left` —— 换行后的统计行与备注行左对齐到阶段名起始位置（不再多缩进 10px），行间距 2px；统计段内仍不拆行。frontend typecheck / build 通过。
 > **发布件 / 安装**：`frontend-dist.tar.gz` 22,679,143 B / `ba7a09fc…`（678 文件）、`frontend-files.sha256` 92,437 B / `d2c48755…`、`deploy-test.sh` 3,260 B / `d9aa7638…`；测试机前端 702 → 704 文件，重建 web。

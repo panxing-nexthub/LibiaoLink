@@ -4,8 +4,9 @@
  * 写 = upsert（同键覆盖译文与 engine、抬 updated_at —— 换引擎重翻走同一条路径）。
  */
 import { Injectable } from "@nestjs/common";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { DatabaseService } from "../../db/database.service.js";
+import { taskNodes } from "../../db/schema/templates.js";
 import { contentTranslations } from "../../db/schema/translate.js";
 
 /** 单条读回行（服务层只关心译文与产出引擎）。 */
@@ -66,6 +67,26 @@ export class TranslateRepository {
           inArray(contentTranslations.sourceHash, [...sourceHashes]),
         ),
       );
+  }
+
+  /**
+   * 专业名词字典：节点库既有中英对照（公共 + 模板私有节点）。
+   * 全局机翻出引擎前先按词条占位保护，再按官方英文回换（见 translate.text.ts）。
+   */
+  async listNodeGlossary(): Promise<Array<{ zh: string; en: string }>> {
+    const rows = await this.database.db
+      .select({ zh: taskNodes.title, en: taskNodes.titleEn })
+      .from(taskNodes)
+      .where(and(isNotNull(taskNodes.titleEn), sql`btrim(${taskNodes.titleEn}) <> '`));
+    const out: Array<{ zh: string; en: string }> = [];
+    for (const row of rows) {
+      const zh = row.zh.trim();
+      const en = (row.en ?? "").trim();
+      if (zh !== "" && en !== "") {
+        out.push({ zh, en });
+      }
+    }
+    return out;
   }
 
   /** 同键 upsert：新增或覆盖译文（updated_at 抬到写入时刻）。 */

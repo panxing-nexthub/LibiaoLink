@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as R
 import type { Member } from "../data/members";
 import type { TintedTier } from "../backgroundTier";
 import { PROJECT_STAGES } from "../data/projects";
-import { PROGRESS_STEPS, TEMP_TASK_STAGE, daysBetweenInclusive, isCompleteStatus, isTaskDone, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "../data/tasks";
+import { PROGRESS_STEPS, TEMP_TASK_STAGE, daysBetweenInclusive, isTaskDone, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "../data/tasks";
 import { SearchSelect, type SearchSelectItem } from "./MemberSelect";
 import { fieldText, isLocalizedLocale, mdText, monthShortText, monthYearText, stageText, statusText, textOf, useLocale, useLocalizedTranslator, useT, yearText } from "../i18n";
 import type { Locale } from "../i18n";
@@ -50,7 +50,7 @@ import { STATUS_DOT_CLASS, TaskRow, resolveColumns, tableGridTemplate, tableMinW
  * 其余口径（详见 `前端功能需求.md` §6.14）：
  * - 分组 = 施工阶段（九个阶段按项目总览顺序，空阶段照样出骨架行；非九阶段的任务落「临时任务」垫底 · Push 196）；
  * - 任务条 = 开始日期 → 预计完成日期；条内青色 = 已完成进度（`task.progress`）、橙色 = 剩余工期；
- * - 单日任务（开始 = 预计完成）画成与普通任务条同高同圆角的 1 天条（2026-11-26 起不再画菱形、也不铺满整格）—— 一期没有「是否里程碑」字段（系统功能书 A1-11 在二期），条色按状态取：已完成 = 绿色、未完成 = 灰色、已延期 = 红色；
+ * - 单日任务（开始 = 预计完成）画成与普通任务条同高同圆角的 1 天条（2026-11-26 起不再画菱形、也不铺满整格）—— 一期没有「是否里程碑」字段（系统功能书 A1-11 在二期），条色跟随所属阶段，已延期在条头保留红条；
  *   这里按单日派生，字段口径见 `前端功能需求.md` §3.8 A26；
  * - 深色竖线 = 实际完成日期刻度（系统功能书 B3-01「计划条 + 实际完成标注」）；
  * - 已延期 = 条头一段红内嵌色条（B3-05）；今天 = 蓝色虚线（今天落在时间轴范围内时才画）；
@@ -1392,7 +1392,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             {t("gantt.legend.overdue")}
           </li>
           <li className="flex items-center gap-1.5" title={t("gantt.legend.singleDayHint")}>
-            <span className="h-2.5 w-4 rounded-[3px] bg-emerald-500" aria-hidden="true" />
+            <span className="h-2.5 w-4 rounded-[3px] bg-[#64748b]" aria-hidden="true" />
             {t("gantt.legend.singleDay")}
           </li>
           <li className="flex items-center gap-1.5">
@@ -1676,7 +1676,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   };
 
   /**
-   * 任务条：单日任务 = 与普通条同高的 1 天条（只给整条平移；已完成绿 / 未完成灰 / 已延期红）；其余 = 分阶段进度 + 同色浅底 + 实际完成刻度；
+   * 任务条：单日任务 = 与普通条同高的 1 天条（只给整条平移；条色跟随阶段、已延期条头红条）；其余 = 分阶段进度 + 同色浅底 + 实际完成刻度；
    * 悬停 / 拖动时条两端浮出改工期的热区与进度圆点，拖动中的那条上方浮一枚日期（进度）浮标。
    */
   const renderTaskBar = (bar: GanttBar) => {
@@ -1706,12 +1706,10 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
         : clampNumber((dayDiff(live.start, done) + 0.5) * dayWidth - 1, 0, Math.max(box.width - 2, 0));
 
     if (bar.milestone) {
-      // 单日任务（业务 2026-11-26「不要菱形，也不铺满整格，宽度和正常任务条一样」）：画成与普通任务条
-      // 同高、同圆角的一条（宽度 = 当天 1 天），按状态取色；只给整条平移。
-      // 已完成 / 提前完成 = 绿、未完成（待开始 / 进行中）= 灰、已延期 = 红。
-      const complete = isCompleteStatus(bar.status);
-      const fill = complete ? "#10b981" : bar.status === "已延期" ? "#f43f5e" : "#94a3b8";
-      const ring = complete ? "rgba(4,120,87,0.35)" : bar.status === "已延期" ? "rgba(190,18,60,0.35)" : "rgba(71,85,105,0.3)";
+      // 单日任务（业务 2026-11-26）：画成与普通任务条同高、同圆角的 1 天条，颜色跟随所属阶段
+      // （「颜色不要单独的 和整个阶段统一即可」），不再按状态单独取绿 / 灰 / 红；
+      // 已延期仍在条头保留 3px 玫瑰红内嵌色条，避免丢失延期信号。只给整条平移。
+      const palette = stagePaletteOf(bar.stage);
       return (
         <>
           <span
@@ -1726,8 +1724,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
               top: (ROW_H - BAR_H) / 2,
               width: box.width,
               height: BAR_H,
-              backgroundColor: fill,
-              boxShadow: selected ? undefined : "inset 0 0 0 1px " + ring,
+              backgroundColor: palette.accent,
+              boxShadow: selected ? undefined : "inset 0 0 0 1px rgba(15,23,42,0.08)",
             }}
             title={barTitle}
             onPointerDown={(event) => {
@@ -1747,6 +1745,9 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
               setSelectedId(bar.task.id);
             }}
           >
+            {bar.status === "已延期" ? (
+              <span className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-l-[5px] bg-rose-500" aria-hidden="true" />
+            ) : null}
             {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 rounded-[5px] bg-slate-900/10" aria-hidden="true" /> : null}
           </span>
           {dragBubble(box.left, dragging)}

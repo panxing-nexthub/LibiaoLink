@@ -194,21 +194,36 @@ const ZOOM_LEVELS: ReadonlyArray<{ key: "compact" | "standard" | "wide"; label: 
 type ZoomKey = (typeof ZOOM_LEVELS)[number]["key"];
 
 /**
- * 时间轴粒度（官方 `timelineHeader.scales`：日 / 周 / 月）—— 切的是**表头与网格的最小单位**，
- * 不是条的位置口径：几何基准始终是「每天多少 px」，所以三档缩放对每一档粒度都成立，
- * 任务条 / 里程碑 / 实际完成刻度 / 今天线一律按天精确落点（换粒度只变表头分段、列宽与网格密度）。
- * unitDays = 一列跨几天（月粒度按当月真实天数展开，所以月列宽 28~31 天不等）；
- * 列宽 = unitDays × dayWidth（标准档：日 26px、周 91px、月约 138px）。
+ * 连续缩放基准（参考图一 / 图二，支持「日 / 周 / 月」自动切换 + 无级缩放）：
+ * - 以「每天多少 px（dayWidth）」为唯一几何基准（范围 2.2px/天 ~ 52px/天）；
+ * - 当「日 / 周 / 月」手动点击时跳到对应推荐档位；当点击「-/+」、滚轮 Ctrl+Wheel / Alt+Wheel 或双指缩放时，
+ *   按倍率平滑缩放 dayWidth，并根据像素密度自动切换表头粒度（避免月视图太宽或日视图日期数字挤叠）：
+ *   dayWidth >= 16 -> 日；7.5 <= dayWidth < 16 -> 周；dayWidth < 7.5 -> 月；
+ * - 「自适应全览」一键将整个项目周期完整放进当前可视宽度（与参考图一/二一致）。
  */
 type ScaleKey = "day" | "week" | "month";
 
+const DAY_WIDTH_MIN = 2.2;
+const DAY_WIDTH_MAX = 52;
+const DAY_WIDTH_DEFAULT = 26;
+
 const SCALES: Record<ScaleKey, { label: string; unitDays: number; dayWidth: Record<ZoomKey, number> }> = {
-  day: { label: "日", unitDays: 1, dayWidth: { compact: 18, standard: 26, wide: 36 } },
-  week: { label: "周", unitDays: 7, dayWidth: { compact: 9, standard: 13, wide: 18 } },
-  month: { label: "月", unitDays: 30, dayWidth: { compact: 3.2, standard: 4.6, wide: 6.4 } },
+  day: { label: "日", unitDays: 1, dayWidth: { compact: 18, standard: 26, wide: 38 } },
+  week: { label: "周", unitDays: 7, dayWidth: { compact: 9, standard: 13, wide: 15.5 } },
+  month: { label: "月", unitDays: 30, dayWidth: { compact: 3.0, standard: 4.6, wide: 6.8 } },
 };
 
 const SCALE_KEYS: readonly ScaleKey[] = ["day", "week", "month"];
+
+function scaleForDayWidth(pxPerDay: number): ScaleKey {
+  if (pxPerDay >= 16) {
+    return "day";
+  }
+  if (pxPerDay >= 7.5) {
+    return "week";
+  }
+  return "month";
+}
 
 /** 甘特内筛选（B3-06 余下）：负责人 + 行筛选（全部 / 只看已延期 / 只看未排期）。 */
 type RowFilterKey = "all" | "overdue" | "unscheduled";
@@ -518,6 +533,9 @@ function buildModel(
       weeks.push({ key: "week-" + String(index), label: shortDateTextOf(utc), days: 1, start: index });
     } else {
       lastWeek.days += 1;
+      if (lastWeek.days === 7) {
+        lastWeek.label = shortDateTextOf(shiftDays(rangeStart, lastWeek.start)) + " - " + shortDateTextOf(utc);
+      }
     }
     if (weekday === 0 || weekday === 6) {
       weekends.push(index);
@@ -637,8 +655,9 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   const ganttTitle = (task: ProjectTask): string => (isLocalizedLocale(locale) ? (locale === "en" && task.titleEn !== "" ? task.titleEn : localize(task.title)) : task.title);
   const t = useT();
   const today = useMemo(localToday, []);
-  const [zoom, setZoom] = useState<ZoomKey>("standard");
-  /** 时间轴粒度（官方 timelineHeader.scales：日 / 周 / 月）—— 只换表头与网格密度，条仍按天精确落点。 */
+  /** 连续每天宽度（px/day）：唯一几何缩放基准，支持无级滚轮缩放、步进缩放、自适应全览与日/周/月快捷切换。 */
+  const [dayWidthRaw, setDayWidthRaw] = useState<number>(DAY_WIDTH_DEFAULT);
+  /** 允许用户点击「日 / 周 / 月」时锁定/切换粒度，或由连续缩放自动派生粒度。 */
   const [scale, setScale] = useState<ScaleKey>("day");
   /** 甘特内筛选（B3-06 余下）：负责人（含「待分配」）+ 行筛选（全部 / 只看已延期 / 只看未排期）。 */
   const [ownerFilter, setOwnerFilter] = useState<string>(OWNER_ANY);
@@ -678,14 +697,41 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   /** 拖条期间的指针位置与「按下时画面滚到哪儿了」：边缘自动滚动要靠它把滚动换算成日期位移。 */
   const dragPointerRef = useRef<{ x: number; y: number } | null>(null);
   const dragScrollBaseRef = useRef(0);
+  /** 连续缩放时锚定指针/视口中心所在日期：dayWidth 生效后立即还原 scrollLeft，确保缩放不漂移。 */
+  const pendingScrollLeftRef = useRef<number | null>(null);
   /** 刚拖完那一下（拖动收尾浏览器会补一个 click）：用来挡掉「拖完顺手把选中清掉」。 */
   const justDraggedRef = useRef(false);
 
-  const scaleConfig = SCALES[scale];
-  const dayWidth = scaleConfig.dayWidth[zoom];
+  const dayWidth = clampNumber(dayWidthRaw, DAY_WIDTH_MIN, DAY_WIDTH_MAX);
+  const zoomPercent = Math.round((dayWidth / DAY_WIDTH_DEFAULT) * 100);
+  const nearestZoomKey: ZoomKey =
+    Math.abs(dayWidth - SCALES[scale].dayWidth.compact) <= Math.abs(dayWidth - SCALES[scale].dayWidth.standard)
+      ? "compact"
+      : Math.abs(dayWidth - SCALES[scale].dayWidth.wide) < Math.abs(dayWidth - SCALES[scale].dayWidth.standard)
+        ? "wide"
+        : "standard";
+  const applyDayWidth = useCallback(
+    (nextWidth: number, anchorClientX?: number, forceScale?: ScaleKey) => {
+      const clamped = clampNumber(Math.round(nextWidth * 100) / 100, DAY_WIDTH_MIN, DAY_WIDTH_MAX);
+      const nextScale = forceScale ?? scaleForDayWidth(clamped);
+      const node = scrollRef.current;
+      if (node !== null && clamped !== dayWidth) {
+        const rect = node.getBoundingClientRect();
+        const timelineVisibleWidth = Math.max(node.clientWidth - leftWidth, 1);
+        const pointerOffsetInTimeline =
+          anchorClientX !== undefined
+            ? clampNumber(anchorClientX - rect.left - leftWidth, 0, timelineVisibleWidth)
+            : timelineVisibleWidth / 2;
+        const anchorDay = (node.scrollLeft + pointerOffsetInTimeline) / dayWidth;
+        pendingScrollLeftRef.current = Math.max(0, anchorDay * clamped - pointerOffsetInTimeline);
+      }
+      setDayWidthRaw(clamped);
+      setScale(nextScale);
+    },
+    [dayWidth, leftWidth],
+  );
   /** 粒度 / 缩放 / 行筛选的显示名（Push 301 词典；模块常量只留 key）。 */
   const scaleText = (key: ScaleKey): string => t(key === "day" ? "gantt.scale.day" : key === "week" ? "gantt.scale.week" : "gantt.scale.month");
-  const densityText = (key: ZoomKey): string => t(key === "compact" ? "gantt.density.compact" : key === "standard" ? "gantt.density.standard" : "gantt.density.wide");
   const rowFilterText = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all" : key === "overdue" ? "gantt.rowFilter.overdue" : "gantt.rowFilter.unscheduled");
   const rowFilterHint = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all.hint" : key === "overdue" ? "gantt.rowFilter.overdue.hint" : "gantt.rowFilter.unscheduled.hint");
 
@@ -750,7 +796,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   }, [tasks, ownerFilter, rowFilter]);
 
   const filtering = ownerFilter !== OWNER_ANY || rowFilter !== "all";
-  const viewportKey = [ownerFilter, rowFilter, scale, zoom, leftWidth, includeToday].join("|");
+  const viewportKey = [ownerFilter, rowFilter, scale, Math.round(dayWidth * 100), leftWidth, includeToday].join("|");
   const viewportKeyRef = useRef(viewportKey);
   const model = useMemo(() => {
     const node = scrollRef.current;
@@ -811,6 +857,45 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     setPendingToday(false);
   }, [pendingToday, todayLeft, leftWidth]);
 
+  /** 连续缩放后把锚点日期精确对齐回原视口坐标（避免缩放后时间轴跳走）。 */
+  useEffect(() => {
+    if (pendingScrollLeftRef.current === null) {
+      return;
+    }
+    const targetLeft = pendingScrollLeftRef.current;
+    pendingScrollLeftRef.current = null;
+    const node = scrollRef.current;
+    if (node !== null) {
+      node.scrollLeft = targetLeft;
+      syncScrollbars();
+    }
+  }, [dayWidth, scale]);
+
+  /** 按 Ctrl/Meta/Alt + 滚轮（或触控板双指捏合，浏览器默认以 ctrlKey wheel 事件派发）连续缩放时间轴。 */
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (node === null) {
+      return undefined;
+    }
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+      if (delta === 0) {
+        return;
+      }
+      // 指数倍率缩放（触控板细腻、鼠标滚轮每格约 12%）
+      const factor = Math.exp(-clampNumber(delta, -120, 120) * 0.0022);
+      applyDayWidth(dayWidth * factor, event.clientX);
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      node.removeEventListener("wheel", onWheel);
+    };
+  }, [applyDayWidth, dayWidth]);
+
   /** Esc = 取消拖动（不写回、回到原日期）并清掉选中。 */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -849,6 +934,21 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
       return;
     }
     centerOnToday(scrollRef.current, todayLeft, leftWidth);
+  };
+
+  /** 自适应全览：把当前项目排期全跨度正好放进右侧时间轴可视区，并自动匹配合适的日/周/月表头。 */
+  const fitToView = () => {
+    if (model === null) {
+      return;
+    }
+    const node = scrollRef.current;
+    const visibleTimelineWidth = node === null ? 680 : Math.max(node.clientWidth - leftWidth - 24, 180);
+    // 估算实际任务跨度（略去两端余量后留出右侧标签空间）
+    const fittedDayWidth = visibleTimelineWidth / Math.max(model.days, 1);
+    const clamped = clampNumber(Math.round(fittedDayWidth * 100) / 100, DAY_WIDTH_MIN, DAY_WIDTH_MAX);
+    pendingScrollLeftRef.current = 0;
+    setDayWidthRaw(clamped);
+    setScale(scaleForDayWidth(clamped));
   };
 
   const toggleAll = () => {
@@ -1412,7 +1512,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                 key={key}
                 type="button"
                 onClick={() => {
-                  setScale(key);
+                  applyDayWidth(SCALES[key].dayWidth[nearestZoomKey], undefined, key);
                 }}
                 title={t("gantt.scale.title", { name: scaleText(key) })}
                 className={
@@ -1426,22 +1526,54 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
           </div>
           <span className="text-[11px] text-zinc-400">{t("gantt.label.zoom")}</span>
           <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
-            {ZOOM_LEVELS.map((level) => (
-              <button
-                key={level.key}
-                type="button"
-                onClick={() => {
-                  setZoom(level.key);
-                }}
-                title={scale === "month" ? t("gantt.zoom.titleMonth", { n: Math.round(scaleConfig.unitDays * scaleConfig.dayWidth[level.key]) }) : t("gantt.zoom.titleUnit", { unit: locale === "en" ? (scale === "day" ? "day" : "week") : scaleText(scale), n: Math.round(scaleConfig.unitDays * scaleConfig.dayWidth[level.key]) })}
-                className={
-                  "rounded-md px-2.5 py-1 text-xs font-medium transition " +
-                  (level.key === zoom ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800")
-                }
-              >
-                {densityText(level.key)}
-              </button>
-            ))}
+            <button
+              type="button"
+              data-gantt-zoom="out"
+              disabled={dayWidth <= DAY_WIDTH_MIN + 0.05}
+              onClick={() => {
+                applyDayWidth(dayWidth / 1.25);
+              }}
+              title={t("gantt.zoom.outTip")}
+              className="rounded-md px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
+              aria-label={t("gantt.zoom.out")}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              data-gantt-zoom="reset"
+              onClick={() => {
+                applyDayWidth(DAY_WIDTH_DEFAULT, undefined, "day");
+              }}
+              title={t("gantt.zoom.resetTip")}
+              className="min-w-[44px] rounded-md px-1.5 py-1 text-center text-[11px] font-medium tabular-nums text-zinc-700 transition hover:bg-white hover:text-zinc-900"
+            >
+              {zoomPercent}%
+            </button>
+            <button
+              type="button"
+              data-gantt-zoom="in"
+              disabled={dayWidth >= DAY_WIDTH_MAX - 0.05}
+              onClick={() => {
+                applyDayWidth(dayWidth * 1.25);
+              }}
+              title={t("gantt.zoom.inTip")}
+              className="rounded-md px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
+              aria-label={t("gantt.zoom.in")}
+            >
+              +
+            </button>
+            <span className="mx-0.5 h-3.5 w-px bg-zinc-200" aria-hidden="true" />
+            <button
+              type="button"
+              data-gantt-zoom="fit"
+              disabled={model === null}
+              onClick={fitToView}
+              title={t("gantt.zoom.fitTip")}
+              className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              {t("gantt.zoom.fit")}
+            </button>
           </div>
           <button
             type="button"
@@ -2184,15 +2316,19 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                   下排 = 日粒度逐日、周粒度逐周（「M/D」）、月粒度逐月（「5月」）。今天那一列整列加蓝底。 */}
               <div className="sticky top-0 z-10 bg-white">
                 <div className="flex border-b border-slate-200 bg-slate-50/90" style={{ height: HEADER_H }}>
-                  {(scale === "month" ? model.years : model.months).map((unit) => (
-                    <div
-                      key={unit.key}
-                      className="flex items-center justify-center border-r border-zinc-200 text-xs font-semibold text-zinc-700"
-                      style={{ width: unit.days * dayWidth }}
-                    >
-                      {unit.label}
-                    </div>
-                  ))}
+                  {(scale === "month" ? model.years : model.months).map((unit) => {
+                    const unitWidth = unit.days * dayWidth;
+                    return (
+                      <div
+                        key={unit.key}
+                        className="flex items-center justify-center overflow-hidden whitespace-nowrap border-r border-zinc-200 px-1 text-xs font-semibold text-zinc-700"
+                        style={{ width: unitWidth }}
+                        title={unit.label}
+                      >
+                        {unitWidth >= 32 ? unit.label : null}
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="flex border-b border-zinc-200 bg-white" style={{ height: HEADER_H }}>
                   {headerUnits === null
@@ -2214,16 +2350,18 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                       })
                     : headerUnits.map((unit, index) => {
                         const isToday = index === todayUnitIndex;
+                        const unitWidth = unit.days * dayWidth;
                         return (
                           <div
                             key={unit.key}
                             className={
-                              "flex items-center justify-center border-r border-zinc-200 text-[10px] tabular-nums " +
+                              "flex items-center justify-center overflow-hidden whitespace-nowrap border-r border-zinc-200 px-1 text-[10px] tabular-nums " +
                               (isToday ? "bg-blue-50 font-semibold text-blue-600" : "text-zinc-600")
                             }
-                            style={{ width: unit.days * dayWidth }}
+                            style={{ width: unitWidth }}
+                            title={unit.label}
                           >
-                            {unit.label}
+                            {unitWidth >= 22 ? unit.label : null}
                           </div>
                         );
                       })}
@@ -2232,7 +2370,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
 
               {/* 网格随粒度：竖线 = 日粒度逐日 / 周粒度逐周（月粒度交给月线），周末底纹只在日粒度（周 / 月粒度太密），
                   月线一直有、年线只在月粒度 —— 条 / 今天线不受影响，仍按天精确落点。 */}
-              <div className="relative" style={scale === "month" ? undefined : dayLineStyle(scale === "week" ? dayWidth * 7 : dayWidth)}>
+              <div className="relative" style={scale === "day" ? dayLineStyle(dayWidth) : undefined}>
                 {scale !== "day"
                   ? null
                   : model.weekends.map((index) => (

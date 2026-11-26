@@ -1,3 +1,17 @@
+> **2026-11-26 13:27–13:29 阶段备注正文四语机翻（仅测试机 · full-stack · test-20261126-1327-px-stage-note-translate-c6c6a424）**：代码来源 `codex/test-release-stage-notes-20261126` @ `c6c6a424`（基于 main `a0718b5a`，未合 main）。previousRelease / previousManifestRelease = `test-20261126-1323-px-stage-note-caret-end-a37f8af6`。
+> **改动 / 验收**：备注正文接入既有手打内容机翻 —— 界面按当前语言显示译文（中文界面原文），编辑框始终回填原文；保存后服务端 `translate.warmup` 预热英 / 日 / 韩译文；项目总览 PDF 与预览的阶段分组备注按导出主体语言输出译文（中文主体保留英文小字，缺译文回退中文）。frontend / server typecheck 与 build 通过。
+> **发布件 / 安装**：`server-dist.tar.gz` 1,433,519 B / `b9e1933e…`（843 文件）、`frontend-dist.tar.gz` 22,677,009 B / `1307151b…`（678 文件）、`server-files.sha256` 88,916 B / `6b62f73a…`、`frontend-files.sha256` 92,437 B / `c65e6dfd…`、`deploy-test.sh` 5,191 B / `785d6275…`；测试机 server 843 → 843、前端 692 → 694 文件，重建 api / worker / web；staging = `/srv/data/deploy-test-20261126-1327-px-stage-note-translate-c6c6a424/staging`。
+> **验证 / 清单**：`/`、`/healthz`、`/readyz` 均 200，readyz 四项 true；api / worker / web healthy、RestartCount 0、OOM false；线上 `index.html` `1ed64cf0…`、CSS `assets/index-BzROYbT8.css` / `f8affd40…`、ES `assets/es-DeQYVZ4B.js` / `6dd43259…`；主包 `assets/index-ByrQrVlx.js` 2,777,157 B / `51278403…`（构建 2,777,129 B + guard 28 字节）；server 编译产物命中 `warmup([body.note])`；manifest 5,235 B / `42420256…`，root:root 644。
+> **备份 / 回滚**：`/srv/data/backups/before-test-20261126-1327-px-stage-note-translate-c6c6a424`（7 文件 / 51,752,788 B / SHA256SUMS `42d1f025…`）。回滚：恢复 server / frontend dist 与 `RELEASE_MANIFEST.json.before`，再重建 api / worker / web。
+> **边界**：server / frontend dist、staging 与 release manifest；无 shared / API 契约 / 数据库 / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变更。
+
+> **2026-11-26 13:23–13:24 阶段备注打开时光标落在文字末尾（仅测试机 · frontend-only · test-20261126-1323-px-stage-note-caret-end-a37f8af6）**：代码来源 `codex/test-release-stage-notes-20261126` @ `a37f8af6`。previousRelease / previousManifestRelease = `test-20261126-1320-px-stage-note-label-0273acfb`（已被 `test-20261126-1327-px-stage-note-translate-c6c6a424` 覆盖）。
+> **改动 / 验收**：点击「备注 / 备注文字」打开输入框时自动聚焦 textarea，并把光标放到已有文字末尾（`setSelectionRange(length, length)`）；frontend typecheck / build 通过。
+> **发布件 / 安装**：`frontend-dist.tar.gz` 22,678,322 B / `5f878af6…`（678 文件）、`frontend-files.sha256` 92,437 B / `7b13a2a8…`、`deploy-test.sh` 3,174 B / `5d8d0318…`；测试机前端 690 → 692 文件，重建 web。
+> **验证 / 清单**：`/`、`/healthz`、`/readyz` 均 200；web healthy、RestartCount 0、OOM false；线上 `index.html` `37229df9…`、CSS `f8affd40…`、ES `ccdbdd60…`，主包 `assets/index-D-ySYz-K.js` 2,777,037 B / `5103e1fa…`（构建 + guard 28 字节）。
+> **备份 / 回滚**：`/srv/data/backups/before-test-20261126-1323-px-stage-note-caret-end-a37f8af6`（4 文件 / 49,360,950 B / SHA256SUMS `717927c7…`）。
+> **边界**：仅测试机前端 dist；无 server / shared / API / 数据库 / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变更。
+
 > **2026-11-26 13:20–13:22 阶段备注触发改为「备注」并去掉悬停短横线（仅测试机 · frontend-only · test-20261126-1320-px-stage-note-label-0273acfb）**：代码来源 `codex/test-release-stage-notes-20261126` @ `0273acfb`（基于 main `a0718b5a`，未合 main）。previousRelease / previousManifestRelease = `test-20261126-1316-px-stage-note-hover-glass-f146e502`。
 > **改动 / 验收**：无备注时的触发文字由「添加备注」改为「备注」（en Note / ja メモ / ko 메모）；移除悬停时滑入的短横线。悬停 / 键盘聚焦仍只显示液体玻璃底，正常状态只显示文字，点击文字打开备注输入框。frontend typecheck / build 通过。
 > **发布件 / 安装**：`frontend-dist.tar.gz` 22,678,284 B / `d6f3bcb1…`（678 文件）、`frontend-files.sha256` 92,437 B / `8b388b26…`、`deploy-test.sh` 3,314 B / `f403a72f…`；测试机前端 687 → 690 文件，原子替换 `index.html` 后重建 web；staging = `/srv/data/deploy-test-20261126-1320-px-stage-note-label-0273acfb/staging`。

@@ -50,7 +50,7 @@ import { STATUS_DOT_CLASS, TaskRow, resolveColumns, tableGridTemplate, tableMinW
  * 其余口径（详见 `前端功能需求.md` §6.14）：
  * - 分组 = 施工阶段（九个阶段按项目总览顺序，空阶段照样出骨架行；非九阶段的任务落「临时任务」垫底 · Push 196）；
  * - 任务条 = 开始日期 → 预计完成日期；条内青色 = 已完成进度（`task.progress`）、橙色 = 剩余工期；
- * - 单日任务（开始 = 预计完成）画菱形 —— 一期没有「是否里程碑」字段（系统功能书 A1-11 在二期），菱形按状态取色：已完成 = 绿色、未完成 = 灰色、已延期 = 红色；
+ * - 单日任务（开始 = 预计完成）把当天那一格用状态色铺满（2026-11-26 起不再画菱形）—— 一期没有「是否里程碑」字段（系统功能书 A1-11 在二期），格子按状态取色：已完成 = 绿色、未完成 = 灰色、已延期 = 红色；
  *   这里按单日派生，字段口径见 `前端功能需求.md` §3.8 A26；
  * - 深色竖线 = 实际完成日期刻度（系统功能书 B3-01「计划条 + 实际完成标注」）；
  * - 已延期 = 条头一段红内嵌色条（B3-05）；今天 = 蓝色虚线（今天落在时间轴范围内时才画）；
@@ -1392,7 +1392,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             {t("gantt.legend.overdue")}
           </li>
           <li className="flex items-center gap-1.5" title={t("gantt.legend.singleDayHint")}>
-            <span className="h-2.5 w-2.5 rotate-45 rounded-[2px] bg-emerald-500 ring-1 ring-emerald-700/60" aria-hidden="true" />
+            <span className="h-2.5 w-3.5 rounded-[2px] bg-emerald-500 ring-1 ring-emerald-700/40" aria-hidden="true" />
             {t("gantt.legend.singleDay")}
           </li>
           <li className="flex items-center gap-1.5">
@@ -1676,7 +1676,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   };
 
   /**
-   * 任务条：单日任务 = 菱形（只给整条平移；已完成绿 / 未完成灰 / 已延期红）；其余 = 青色进度 + 橙色剩余 + 实际完成刻度；
+   * 任务条：单日任务 = 当天格铺满状态色（只给整条平移；已完成绿 / 未完成灰 / 已延期红）；其余 = 分阶段进度 + 同色浅底 + 实际完成刻度；
    * 悬停 / 拖动时条两端浮出改工期的热区与进度圆点，拖动中的那条上方浮一枚日期（进度）浮标。
    */
   const renderTaskBar = (bar: GanttBar) => {
@@ -1706,18 +1706,16 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
         : clampNumber((dayDiff(live.start, done) + 0.5) * dayWidth - 1, 0, Math.max(box.width - 2, 0));
 
     if (bar.milestone) {
-      const size = 14;
-      // 单日任务的菱形按状态取色（业务 2026-09-22）：已完成 / 提前完成 = 绿、未完成 = 灰、已延期 = 红。
-      const tone = isCompleteStatus(bar.status)
-        ? "bg-emerald-500 ring-emerald-700/50 shadow-sm"
-        : bar.status === "已延期"
-          ? "bg-rose-500 ring-rose-700/50 shadow-sm"
-          : "bg-slate-400 ring-slate-500/50 shadow-sm";
+      // 单日任务（业务 2026-11-26「不要菱形，把对应的格子用颜色铺满」）：用状态色铺满当天这一格，
+      // 仍只给整条平移；已完成 / 提前完成 = 绿、未完成（待开始 / 进行中）= 灰、已延期 = 红。
+      const complete = isCompleteStatus(bar.status);
+      const fill = complete ? "#10b981" : bar.status === "已延期" ? "#f43f5e" : "#94a3b8";
+      const ring = complete ? "rgba(4,120,87,0.45)" : bar.status === "已延期" ? "rgba(190,18,60,0.45)" : "rgba(71,85,105,0.4)";
       return (
         <>
           <span
             className={"absolute block touch-none select-none " + barCursor}
-            style={{ left: box.left + dayWidth / 2 - size / 2, top: (ROW_H - size) / 2 }}
+            style={{ left: box.left, top: 0, width: box.width, height: ROW_H }}
             title={barTitle}
             onPointerDown={(event) => {
               beginDrag(event, bar, "move");
@@ -1736,9 +1734,17 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
               setSelectedId(bar.task.id);
             }}
           >
-            <span className={"block rotate-45 rounded-[2px] ring-1 " + tone + " " + (selected ? "shadow-[0_0_0_2px_rgba(37,99,235,0.45)]" : "")} style={{ width: size, height: size }} aria-hidden="true" />
+            <span
+              className="block h-full w-full"
+              style={{
+                backgroundColor: fill,
+                boxShadow: selected ? "inset 0 0 0 2px #2563eb" : "inset 0 0 0 1px " + ring,
+              }}
+              aria-hidden="true"
+            />
+            {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 bg-slate-900/10" aria-hidden="true" /> : null}
           </span>
-          {dragBubble(box.left + dayWidth / 2 - size / 2, dragging)}
+          {dragBubble(box.left, dragging)}
         </>
       );
     }

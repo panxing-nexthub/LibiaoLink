@@ -3,7 +3,6 @@ import type { Member } from "../data/members";
 import type { TintedTier } from "../backgroundTier";
 import { PROJECT_STAGES } from "../data/projects";
 import { PROGRESS_STEPS, TEMP_TASK_STAGE, daysBetweenInclusive, isTaskDone, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "../data/tasks";
-import { SearchSelect, type SearchSelectItem } from "./MemberSelect";
 import { fieldText, isLocalizedLocale, mdText, monthShortText, monthYearText, stageText, statusText, textOf, useLocale, useLocalizedTranslator, useT, yearText } from "../i18n";
 import type { Locale } from "../i18n";
 import { STATUS_DOT_CLASS, TaskRow, resolveColumns, tableGridTemplate, tableMinWidth, type TaskPatch } from "./TaskBoard";
@@ -232,10 +231,6 @@ const ROW_FILTERS: ReadonlyArray<{ key: RowFilterKey; label: string; hint: strin
   { key: "all", label: "全部", hint: "不按行筛（只看负责人）" },
   { key: "overdue", label: "只看已延期", hint: "只出状态为「已延期」的任务（同 B3-05 的口径）" },
 ];
-
-/** 负责人筛选项：`all` = 不限；`__none__` = 待分配（与看板「待分配」列同口径）。 */
-const OWNER_ANY = "all";
-const OWNER_NONE = "__none__";
 
 /**
  * 任务日期域（M3-07 刀 1 后半）：任务日期一律 ISO（YYYY-MM-DD，契约 DateOnly），年份带着走 ——
@@ -674,8 +669,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   const [dayWidthRaw, setDayWidthRaw] = useState<number>(DAY_WIDTH_DEFAULT);
   /** 允许用户点击「日 / 周 / 月」时锁定/切换粒度，或由连续缩放自动派生粒度。 */
   const [scale, setScale] = useState<ScaleKey>("day");
-  /** 甘特内筛选（B3-06 余下）：负责人（含「待分配」）+ 行筛选（全部 / 只看已延期 / 只看未排期）。 */
-  const [ownerFilter, setOwnerFilter] = useState<string>(OWNER_ANY);
+  /** 甘特内行筛选（全部 / 只看已延期）。 */
   const [rowFilter, setRowFilter] = useState<RowFilterKey>("all");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   /** 悬停行（左表与时间轴同一行一起高亮）。 */
@@ -751,63 +745,18 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   const rowFilterText = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all" : "gantt.rowFilter.overdue");
   const rowFilterHint = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all.hint" : "gantt.rowFilter.overdue.hint");
 
-  /** 负责人筛选项（M3-07 刀 1 后半）：按任务出现顺序收集**负责人 id**（与看板「负责人按任务出现顺序」同口径）；有「没负责人」的任务才出「待分配」。 */
-  const ownerOptions = useMemo(() => {
-    const ids: string[] = [];
-    let hasUnassigned = false;
-    for (const task of tasks) {
-      if (task.ownerIds.length === 0) {
-        hasUnassigned = true;
-        continue;
-      }
-      for (const ownerId of task.ownerIds) {
-        if (!ids.includes(ownerId)) {
-          ids.push(ownerId);
-        }
-      }
-    }
-    return { ids, hasUnassigned };
-  }, [tasks]);
-
-  /**
-   * 负责人筛选项（Push 142 / M3-07 刀 1 后半）：全部 → 各负责人 → 待分配。
-   * 负责人在人员目录（GET /api/v1/users → 本组件的 members）里的按成员行渲染（头像 + 姓名 + 工号 + 角色）；
-   * 对不上的（目录外 / 已停用）退化成普通行 —— 不因为查不到人就把这个筛选项弄丢。
-   * 选中值走**负责人 id**（与 visibleTasks 的过滤口径同一套字符串空间）。
-   */
-  const ownerItems = useMemo<SearchSelectItem[]>(() => {
-    const items: SearchSelectItem[] = [{ kind: "plain", value: OWNER_ANY, name: textOf(locale, "gantt.owner.all"), hint: textOf(locale, "gantt.owner.allHint") }];
-    for (const ownerId of ownerOptions.ids) {
-      const member = members.find((item) => item.id === ownerId);
-      items.push(member === undefined ? { kind: "plain", value: ownerId, name: ownerId, hint: fieldText(locale, "负责人") } : { kind: "member", value: ownerId, member });
-    }
-    if (ownerOptions.hasUnassigned) {
-      items.push({ kind: "plain", value: OWNER_NONE, name: textOf(locale, "gantt.owner.none"), hint: textOf(locale, "gantt.owner.noneHint") });
-    }
-    return items;
-  }, [ownerOptions, members, locale]);
-
   /** 筛选后的任务：时间轴范围、阶段汇总、左表行数全部跟着它走（业务口径「甘特内筛选」）。 */
   const visibleTasks = useMemo(() => {
     return tasks.filter((task) => {
-      const matchesOwner =
-        ownerFilter === OWNER_ANY
-          ? true
-          : ownerFilter === OWNER_NONE
-            ? task.ownerIds.length === 0
-            : task.ownerIds.includes(ownerFilter);
-      if (!matchesOwner) {
-        return false;
-      }
       if (rowFilter === "overdue" && task.status !== "已延期") {
         return false;
       }
       return true;
     });
-  }, [tasks, ownerFilter, rowFilter]);
+  }, [tasks, rowFilter]);
 
-  const filtering = ownerFilter !== OWNER_ANY || rowFilter !== "all";
-  const viewportKey = [ownerFilter, rowFilter, scale, Math.round(dayWidth * 100), leftWidth, includeToday].join("|");
+  const filtering = rowFilter !== "all";
+  const viewportKey = [rowFilter, scale, Math.round(dayWidth * 100), leftWidth, includeToday].join("|");
   /** 筛选 / 缩放 / 左表宽度 / 回到今天 变化时收回右侧延伸，回到紧致时间轴。 */
   useEffect(() => {
     setExtraEndDays(0);
@@ -930,9 +879,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     setCollapsed((previous) => ({ ...previous, [stage]: previous[stage] !== true }));
   };
 
-  /** 清空甘特内筛选（负责人回到「全部」、行筛选回到「全部」），并把「回到今天」延出来的范围收回去。 */
+  /** 清空甘特内行筛选（回到「全部」），并把「回到今天」延出来的范围收回去。 */
   const clearFilters = () => {
-    setOwnerFilter(OWNER_ANY);
     setRowFilter("all");
     setIncludeToday(false);
   };
@@ -1622,19 +1570,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-100 pt-2">
         <span className="text-[11px] text-zinc-400">{t("gantt.label.filter")}</span>
-        <label className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-          {fieldText(locale, "负责人")}
-          <SearchSelect
-            value={ownerFilter}
-            items={ownerItems}
-            onChange={(next) => {
-              setOwnerFilter(next);
-            }}
-            ariaLabel={t("gantt.owner.aria")}
-            footer={t("gantt.owner.footer", { n: ownerOptions.ids.length })}
-            triggerClassName={"flex min-w-[88px] items-center gap-1 rounded-lg border py-1 pl-2 pr-1.5 text-xs text-zinc-600 transition " + GLASS_SURFACE}
-          />
-        </label>
         <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
           {ROW_FILTERS.map((item) => (
             <button

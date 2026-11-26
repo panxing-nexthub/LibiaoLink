@@ -80,7 +80,7 @@ class FakeTaskRepository {
   stageTaskOwner = false;
   additionalStage = { id: "aaaaaaaa-0000-4000-8000-000000000123", stageKey: "install", number: 1 };
   ownerStageNumber: number | null = null;
-  async lockAdditionalStage() {
+  async findAdditionalStage() {
     return this.additionalStage;
   }
   async isStageTaskOwner(_projectId: string, _stageKey: string, _actorId: string, _tx: unknown, stageNumber: number | null): Promise<boolean> {

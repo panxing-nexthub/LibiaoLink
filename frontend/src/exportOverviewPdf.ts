@@ -638,8 +638,8 @@ const REPORT_STYLE = `
   .grp__count { margin-left: 6px; font-size: 9.5px; color: #71717a; }
   .grp__heading { display: block; line-height: 1.55; }
   .grp__heading .grp__name { white-space: nowrap; }
-  .grp__note { color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; }
-  .grp__note--block { display: block; margin-top: 3px; }
+  .grp__note { color: #3f3f46; font-size: 9.5px; font-weight: 400; }
+  .grp__note--block { display: block; margin-top: 3px; white-space: nowrap; }
   .grp__title-cell { line-height: 1.5; }
   .grp__heading-line { display: block; white-space: nowrap; }
   .grp__headcount { font-variant-numeric: tabular-nums; line-height: 1.45; white-space: nowrap; }

@@ -9,6 +9,8 @@ type ScrollAreaProps = {
   ariaLabel?: string;
   /** 有溢出时轨道与滑块常显（默认只在滚动 / 悬停时浮现）——需要明确提示可滚动的看板 / 弹窗场景用。 */
   thumbAlwaysVisible?: boolean;
+  /** 常显滑块时是否同时画整条轨道（默认画）；只想露滑块、不想多一条贯穿整行的灰线时传 false。 */
+  trackVisible?: boolean;
   /** 滚动方向：默认纵向（分类筛选侧栏 / 任务抽屉 / 看板列内卡片）；看板横向列排布用 horizontal。 */
   axis?: "vertical" | "horizontal";
   /** 横向滚动条固定到视口底部（原生代理条）；开启后不再渲染自绘滑块。 */
@@ -34,6 +36,7 @@ export function ScrollArea({
   viewportClassName = "",
   ariaLabel,
   thumbAlwaysVisible = false,
+  trackVisible = true,
   axis = "vertical",
   fixedHorizontalScrollbar = false,
 }: ScrollAreaProps) {
@@ -145,7 +148,7 @@ export function ScrollArea({
           className={
             "pointer-events-none absolute " +
             (horizontal ? "inset-x-0 bottom-0 h-3" : "inset-y-0 right-0 w-3") +
-            (thumbAlwaysVisible ? " rounded-full bg-zinc-200/80" : "")
+            (thumbAlwaysVisible && trackVisible ? " rounded-full bg-zinc-200/80" : "")
           }
         >
           <div

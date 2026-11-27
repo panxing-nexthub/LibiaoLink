@@ -753,41 +753,48 @@ export function StageAddCard({ stage, sourceStage = stage, onCreateManualTask, a
         </button>
       </div>
 
-      {/* 标签导航：任务节点 + 这个阶段的模板（模板多时横向滚动） */}
-      <div className="mt-3 flex shrink-0 gap-1 overflow-x-auto border-b border-zinc-200/80">
-        {personalOnly ? null : (
+      {/* 标签导航：任务节点 + 这个阶段的模板（模板多时横向滚动；选中态用浅底胶囊，不再画下划线） */}
+      <ScrollArea
+        axis="horizontal"
+        ariaLabel={t("sac.aria", { stage: stageText(locale, stage) })}
+        viewportClassName="mt-3 shrink-0"
+        className="pb-3"
+        thumbAlwaysVisible
+        trackVisible={false}
+      >
+        <div className="flex gap-1">
           <button
             type="button"
-            onClick={() => { setActiveTab("nodes"); setTemplateEditorId(null); setTemplateNotice(null); }}
+            onClick={() => setActiveTab("nodes")}
             aria-current={isNodesTab ? "true" : undefined}
             className={
-              "whitespace-nowrap border-b-2 px-2.5 py-1.5 text-xs font-medium transition " +
-              (isNodesTab ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-800")
+              "whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition " +
+              (isNodesTab ? "bg-zinc-900/[0.06] text-zinc-900" : "text-zinc-500 hover:bg-zinc-900/[0.04] hover:text-zinc-800")
             }
           >
             {t("sac.tab.nodes")}
             <span className="ml-1 text-[10px] text-zinc-400">{nodes.length}</span>
           </button>
-        )}
-        {visibleTemplates.map((template) => {
-          const active = personalOnly ? true : template.id === activeTab;
-          return (
-            <button
-              key={template.id}
-              type="button"
-              onClick={() => { setActiveTab(template.id); if (templateEditorId !== null && templateEditorId !== template.id) { setTemplateEditorId(null); } setTemplateNotice(null); }}
-              aria-current={active ? "true" : undefined}
-              className={
-                "whitespace-nowrap border-b-2 px-2.5 py-1.5 text-xs font-medium transition " +
-                (active ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-800")
-              }
-            >
-              {localize(template.name)}
-              <span className="ml-1 text-[10px] text-zinc-400">{template.nodes.length}</span>
-            </button>
-          );
-        })}
-      </div>
+          {templates.map((template) => {
+            const active = template.id === activeTab;
+            return (
+              <button
+                key={template.id}
+                type="button"
+                onClick={() => setActiveTab(template.id)}
+                aria-current={active ? "true" : undefined}
+                className={
+                  "whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition " +
+                  (active ? "bg-zinc-900/[0.06] text-zinc-900" : "text-zinc-500 hover:bg-zinc-900/[0.04] hover:text-zinc-800")
+                }
+              >
+                {localize(template.name)}
+                <span className="ml-1 text-[10px] text-zinc-400">{template.nodes.length}</span>
+              </button>
+            );
+          })}
+        </div>
+      </ScrollArea>
 
       <div className="relative mt-2 shrink-0">
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400">

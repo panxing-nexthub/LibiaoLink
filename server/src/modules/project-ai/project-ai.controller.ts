@@ -98,11 +98,14 @@ export class ProjectAiContextController {
   async removeAgreementImage(
     @Param("id", uuidParam) id: string,
     @Param("kind") kind: string,
-    @Param("imageId", uuidParam) imageId: string,
+    @Param("imageId") imageId: string,
     @CurrentActorId() actorId: string,
   ): Promise<{ ok: boolean }> {
     if (kind !== "layout" && kind !== "three_d") {
       throw new BadRequestException("图片类型仅支持 layout / three_d");
+    }
+    if (!/^auto-\d+$/.test(imageId) && !UuidSchema.safeParse(imageId).success) {
+      throw new BadRequestException("图片 ID 不合法");
     }
     await this.agreements.remove(id, kind, actorId, imageId);
     return { ok: true };

@@ -9,7 +9,7 @@ import {
 } from "@libiaolink/contracts";
 import { AppError } from "../../common/errors/app-error.js";
 import { DatabaseService } from "../../db/database.service.js";
-import { projectAiManualImages } from "../../db/schema/project-ai.js";
+import { projectAiHiddenAgreementImages, projectAiManualImages } from "../../db/schema/project-ai.js";
 import { ObjectStorage } from "../../storage/index.js";
 import { DocumentAnalysisService } from "../document-analysis/index.js";
 
@@ -101,6 +101,11 @@ export class ProjectAiAgreementService {
       .from(projectAiManualImages)
       .where(eq(projectAiManualImages.projectId, projectId))
       .orderBy(asc(projectAiManualImages.kind), asc(projectAiManualImages.sortOrder), asc(projectAiManualImages.updatedAt));
+    const hiddenRows = await this.database.db
+      .select({ kind: projectAiHiddenAgreementImages.kind, imageId: projectAiHiddenAgreementImages.imageId })
+      .from(projectAiHiddenAgreementImages)
+      .where(eq(projectAiHiddenAgreementImages.projectId, projectId));
+    const hidden = new Set(hiddenRows.map((row) => row.kind + ":" + row.imageId));
     const extractedAt = (found.generatedAt ?? new Date()).toISOString();
     const manualOf = (kind: ImageKind) => manualRows.filter((row) => row.kind === kind);
     const revision = (kind: ImageKind): string => {
@@ -119,17 +124,19 @@ export class ProjectAiAgreementService {
           caption: "人工上传",
         }));
       }
-      return asImageArray(raw[kind === "layout" ? "layout" : "threeD"]).map((image, index) => {
-        const pageNo = pageOf(image);
-        const hasObject = typeof image["objectKey"] === "string" && image["objectKey"] !== "";
-        return {
-          id: "auto-" + String(index),
-          manual: false,
-          pageNo,
-          url: hasObject ? imageUrl(projectId, kind, extractedAt, null) : null,
-          caption: pageNo === null ? null : "技术协议第 " + String(pageNo) + " 页",
-        };
-      });
+      return asImageArray(raw[kind === "layout" ? "layout" : "threeD"])
+        .map((image, index) => {
+          const pageNo = pageOf(image);
+          const hasObject = typeof image["objectKey"] === "string" && image["objectKey"] !== "";
+          return {
+            id: "auto-" + String(index),
+            manual: false,
+            pageNo,
+            url: hasObject ? imageUrl(projectId, kind, extractedAt, null) : null,
+            caption: pageNo === null ? null : "技术协议第 " + String(pageNo) + " 页",
+          };
+        })
+        .filter((image) => !hidden.has(kind + ":" + image.id));
     };
     return {
       fileName: found.fileName,
@@ -222,8 +229,15 @@ export class ProjectAiAgreementService {
     });
   }
 
-  /** 移除一张人工图片；其余人工图片保留，全部移除后回落到自动抽取图。 */
+  /** 移除一张图片：人工图删除记录；自动抽取图写入隐藏表，后续不再返回。 */
   async remove(projectId: string, kind: ImageKind, actorId: string, imageId: string): Promise<void> {
+    if (imageId.startsWith("auto-")) {
+      await this.database.db
+        .insert(projectAiHiddenAgreementImages)
+        .values({ projectId, kind, imageId })
+        .onConflictDoNothing();
+      return;
+    }
     void actorId;
     await this.database.db
       .delete(projectAiManualImages)

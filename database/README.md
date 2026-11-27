@@ -1,3 +1,5 @@
+> **2026-11-27 · 自动抽取布局图隐藏（0125）**：新增 `project_ai_hidden_agreement_images`，以 `(project_id, kind, image_id)` 记录被用户移除的自动抽取图（`auto-N`）。AI 总结读面过滤这些图片；新增人工图片不受影响。回滚：删除该表即可恢复自动图显示（人工图仍以人工记录为准）。
+
 > **2026-11-26 · 单聊欢迎语一次性登记（0124）**：新增 `0124_wecom_aibot_welcome_once.sql` 与表 `wecom_aibot_welcome_sent`（主键 `bot_id` + `wecom_userid`，`sent_at`），用于同一机器人下同一企微用户只回一次 `enter_chat` 欢迎语；与激活 / 绑定无关，无业务表改动。回滚：`drop table if exists wecom_aibot_welcome_sent;`。
 
 > **2026-11-25 · 物料补发发货登记（0122）**：新增 `0122_material_reissue_tracking.sql`，`change_requests` 增 `material_reissue_tracking jsonb not null default '[]'::jsonb`，按 `changeRequestId + lineIndex` 保存发货 / 已签收状态、快递单号、预计到货时间、备注、凭证图片与操作人 / 时间；普通变更必须为空数组。回滚：删除两条 CHECK 后删除该列。

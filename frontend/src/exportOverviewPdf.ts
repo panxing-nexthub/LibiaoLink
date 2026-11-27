@@ -522,8 +522,9 @@ function groupSectionHtml(
     ? fixedText("暂无任务", primary)
     : String(group.done) + " / " + String(group.total) + " " + escapeHtml(localizedValue("完成", primary)) + " · " +
       (primary === "zh" ? secondaryText("completed", "en") : secondaryText("完成", "zh"));
-  const headingHtml = '<span class="grp__name">' + stageName + '</span>' +
-    '<span class="grp__count">' + countText + '</span>' + noteHtml;
+  const headingHtml = '<span class="grp__heading-line">' +
+    '<span class="grp__name">' + stageName + '</span>' +
+    '<span class="grp__count">' + countText + '</span></span>' + noteHtml;
   const dateRange = groupDateRange(group);
   const pct = group.total === 0 ? 0 : Math.round((group.done / group.total) * 100);
   const status = stageOverallStatus(group);
@@ -633,6 +634,7 @@ const REPORT_STYLE = `
   .grp__note { color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; }
   .grp__note--block { display: block; margin-top: 3px; }
   .grp__title-cell { line-height: 1.5; }
+  .grp__heading-line { display: block; white-space: nowrap; }
   .grp__headcount { font-variant-numeric: tabular-nums; line-height: 1.45; white-space: nowrap; }
   .grp__metric { display: inline; white-space: nowrap; color: #3f3f46; font-size: 8.5px; }
   .grp__metric + .grp__metric { margin-left: 6px; }

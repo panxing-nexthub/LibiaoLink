@@ -522,8 +522,9 @@ function groupSectionHtml(
     ? fixedText("暂无任务", primary)
     : String(group.done) + " / " + String(group.total) + " " + escapeHtml(localizedValue("完成", primary)) + " · " +
       (primary === "zh" ? secondaryText("completed", "en") : secondaryText("完成", "zh"));
-  const headingHtml = '<span class="grp__name">' + stageName + '</span>' +
-    '<span class="grp__count">' + countText + '</span>' + noteHtml;
+  const headingHtml = '<span class="grp__heading-line">' +
+    '<span class="grp__name">' + stageName + '</span>' +
+    '<span class="grp__count">' + countText + '</span></span>' + noteHtml;
   const dateRange = groupDateRange(group);
   const pct = group.total === 0 ? 0 : Math.round((group.done / group.total) * 100);
   const status = stageOverallStatus(group);
@@ -534,22 +535,27 @@ function groupSectionHtml(
     note: '<td class="pnote">' + (columns.title ? "" : headingHtml) + '</td>',
     managers: '<td class="managers"></td>',
     owners: '<td class="owners"></td>',
-    status: '<td class="grp__status"><span class="chip" style="color: ' + tint.text + '">' + fixedText(status ?? "暂无任务", primary) + '</span></td>',
+    status: '<td class="grp__status"></td>',
     startDate: '<td class="num date">' + dateText(dateRange.start) + '</td>',
     dueDate: '<td class="num date">' + dateText(dateRange.due) + '</td>',
     headcount: stageEffortCellHtml(group, primary),
+    progress: '<td class="grp__progress-cell"></td>',
+  };
+  const collapsedCells: Record<OverviewTaskColumnKey, string> = {
+    ...cells,
+    status: '<td class="grp__status"><span class="chip" style="color: ' + tint.text + '">' + fixedText(status ?? "暂无任务", primary) + '</span></td>',
     progress: '<td class="grp__progress-cell"><span class="grp__progress">' + barHtml(pct, fill, "bar--grp") + '<span>' + (group.total === 0 ? "—" : String(pct) + "%") + '</span></span></td>',
   };
   const banner = !columns.title && !columns.note
     ? '<tr class="grp__head"><td colspan="' + String(visibleColumns.length + 1) + '"><div class="grp__heading">' + headingHtml + '</div></td></tr>'
     : "";
-  const stageRow = (rowClass: string) =>
+  const stageRow = (rowClass: string, rowCells: Record<OverviewTaskColumnKey, string>) =>
     '<tr class="grp__head ' + rowClass + '"><td class="num"></td>' +
-    visibleColumns.map((column) => cells[column.key]).join("") +
+    visibleColumns.map((column) => rowCells[column.key]).join("") +
     '</tr>';
   if (collapsed && group.total > 0) {
     counter.value += group.tasks.length;
-    return '<tbody class="grp">' + banner + stageRow("grp__head--collapsed") + '</tbody>';
+    return '<tbody class="grp">' + banner + stageRow("grp__head--collapsed", collapsedCells) + '</tbody>';
   }
   const rows = group.tasks
     .map((task) => {
@@ -560,7 +566,7 @@ function groupSectionHtml(
   return (
     '<tbody class="grp">' +
     banner +
-    stageRow("grp__head--stage") +
+    stageRow("grp__head--stage", cells) +
     rows +
     '</tbody>'
   );
@@ -628,8 +634,10 @@ const REPORT_STYLE = `
   .grp__note { color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; }
   .grp__note--block { display: block; margin-top: 3px; }
   .grp__title-cell { line-height: 1.5; }
-  .grp__headcount { font-variant-numeric: tabular-nums; line-height: 1.45; }
-  .grp__metric { display: block; white-space: nowrap; color: #3f3f46; font-size: 9px; }
+  .grp__heading-line { display: block; white-space: nowrap; }
+  .grp__headcount { font-variant-numeric: tabular-nums; line-height: 1.45; white-space: nowrap; }
+  .grp__metric { display: inline; white-space: nowrap; color: #3f3f46; font-size: 8.5px; }
+  .grp__metric + .grp__metric { margin-left: 6px; }
   .grp__metric strong { color: #18181b; font-weight: 700; }
   tbody.grp tr.grp__head--collapsed .grp__note { display: block; margin: 2px 0 0; }
   tbody.grp tr.grp__head--collapsed td { padding: 6px 5px; background: #fafafa; border: 0; border-bottom: 1px solid #e4e4e7; vertical-align: middle; }

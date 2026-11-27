@@ -97,6 +97,8 @@ const PDF_FRAME_ID = "overview-export-pdf-frame";
 /** A4 横版报告画布（CSS px；与 overviewPreviewPaged.css 的 .preview-page 常量保持同步）。 */
 export const OVERVIEW_REPORT_PAGE_WIDTH = 1122;
 export const OVERVIEW_REPORT_PAGE_HEIGHT = 793.7008;
+/** 预览 / PDF 页内容宽 = A4 横版页宽 − 左右页边距（与 overviewPreviewPaged.css 的 .preview-page padding 同步）。 */
+const OVERVIEW_REPORT_CONTENT_WIDTH = OVERVIEW_REPORT_PAGE_WIDTH - 2 * 34.0157;
 /** 预览 iframe 固定视口；PDF 离屏 iframe 复用同一尺寸，避免宿主窗口参与报告排版。 */
 export const OVERVIEW_PREVIEW_FRAME_WIDTH = 1190;
 export const OVERVIEW_PREVIEW_FRAME_HEIGHT = 880;
@@ -487,7 +489,7 @@ const STAGE_META_TEXT: Record<OverviewExportLanguage, {
   ko: { total: "총 공수", peak: "최대", peopleUnit: "명", personDayUnit: "인일" },
 };
 
-/** 阶段「预计所需施工人数」列：总人工（人天）与单日峰值（人）同一行，主体语言 + 次语小字。 */
+/** 阶段「预计所需施工人数」列：总人工（人天）在上、单日峰值（人）在下，主体语言 + 次语小字。 */
 function stageEffortCellHtml(group: StageGroup, primary: OverviewExportLanguage): string {
   const effort = stageEffortOf(group);
   if (effort === null || !effort.hasHeadcount) {
@@ -500,10 +502,10 @@ function stageEffortCellHtml(group: StageGroup, primary: OverviewExportLanguage)
     '<span class="secondary" lang="' + languageAttr(secondaryLang) + '">' +
     escapeHtml(label) + ' ' + String(value) + ' ' + escapeHtml(unit) + '</span>';
   return '<td class="num grp__headcount">' +
-    '<span class="grp__metric"><strong>' + escapeHtml(main.total) + '</strong> ' +
+    '<span class="grp__metric grp__metric--total"><strong>' + escapeHtml(main.total) + '</strong> ' +
     String(effort.total) + ' ' + escapeHtml(main.personDayUnit) + ' ' +
     secondaryHtml(secondary.total, effort.total, secondary.personDayUnit) + '</span>' +
-    '<span class="grp__metric"><strong>' + escapeHtml(main.peak) + '</strong> ' +
+    '<span class="grp__metric grp__metric--peak"><strong>' + escapeHtml(main.peak) + '</strong> ' +
     String(effort.peak) + ' ' + escapeHtml(main.peopleUnit) + ' ' +
     secondaryHtml(secondary.peak, effort.peak, secondary.peopleUnit) + '</span>' +
     '</td>';
@@ -521,10 +523,18 @@ function groupSectionHtml(
   columns: OverviewTaskColumns,
 ): string {
   const visibleColumns = visibleOverviewTaskColumns(columns);
+  const visibleWidth = visibleColumns.reduce((sum, column) => sum + column.width, 0);
+  const dueIndex = visibleColumns.findIndex((column) => column.key === "dueDate");
+  const noteColumns = dueIndex >= 0 ? visibleColumns.slice(0, dueIndex + 1) : visibleColumns;
+  const noteWidthPx = visibleWidth === 0
+    ? 0
+    : Math.max(80, Math.round(OVERVIEW_REPORT_CONTENT_WIDTH * 0.97 *
+      (noteColumns.reduce((sum, column) => sum + column.width, 0) / visibleWidth)) - 10);
   const stageName = fixedText(group.name, primary);
   const noteHtml = note === undefined
     ? ""
-    : '<span class="grp__note grp__note--block">' + translatedText(note, translationMap.get(note), primary) + '</span>';
+    : '<span class="grp__note grp__note--block" style="width:' + String(noteWidthPx) + 'px;max-width:' +
+      String(noteWidthPx) + 'px">' + translatedText(note, translationMap.get(note), primary) + '</span>';
   const countText = group.total === 0
     ? fixedText("暂无任务", primary)
     : String(group.done) + " / " + String(group.total) + " " + escapeHtml(localizedValue("完成", primary)) + " · " +
@@ -639,13 +649,14 @@ const REPORT_STYLE = `
   .grp__heading { display: block; line-height: 1.55; }
   .grp__heading .grp__name { white-space: nowrap; }
   .grp__note { color: #3f3f46; font-size: 9.5px; font-weight: 400; }
-  .grp__note--block { display: block; margin-top: 3px; white-space: nowrap; }
+  .grp__note--block { display: block; margin-top: 3px; white-space: normal; }
   .grp__title-cell { line-height: 1.5; }
   .grp__heading-line { display: block; white-space: nowrap; }
   .grp__headcount { font-variant-numeric: tabular-nums; line-height: 1.45; white-space: nowrap; }
-  .grp__metric { display: inline; white-space: nowrap; color: #3f3f46; font-size: 8.5px; }
-  .grp__metric + .grp__metric { margin-left: 6px; }
+  .grp__metric { display: block; white-space: nowrap; color: #3f3f46; font-size: 8.5px; }
+  .grp__metric + .grp__metric { margin-top: 1px; }
   .grp__metric strong { color: #18181b; font-weight: 700; }
+  .grp__metric--peak strong { color: #3f3f46; }
   .grp__metric .secondary { margin-left: 4px; font-size: 7.5px; color: #a1a1aa; font-weight: 400; }
   tbody.grp tr.grp__head--collapsed .grp__note { display: block; margin: 2px 0 0; }
   tbody.grp tr.grp__head--collapsed td { padding: 6px 5px; background: #fafafa; border: 0; border-bottom: 1px solid #e4e4e7; vertical-align: middle; }

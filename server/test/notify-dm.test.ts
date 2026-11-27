@@ -97,6 +97,16 @@ class FakeDmRepository {
   messageToggleCalls: { botId: string; userId: string; messagesEnabled: boolean; at: Date }[] = [];
   /** 覆盖清除行数（null = 按实际清掉的行数返回）。 */
   clearOverride: number | null = null;
+  /** 欢迎语一次性登记（0124）：key = botId|wecomUserid；重复领取返回 false。 */
+  welcomeClaimed = new Set<string>();
+  claimWelcomeFails = false;
+  async claimWelcomeOnce(input: { botId: string; wecomUserid: string; at: Date }): Promise<boolean> {
+    if (this.claimWelcomeFails) throw new Error("claim failed");
+    const key = input.botId + "|" + input.wecomUserid;
+    if (this.welcomeClaimed.has(key)) return false;
+    this.welcomeClaimed.add(key);
+    return true;
+  }
   private nextCodeId = 1;
 
   async findContact(userId: string): Promise<WecomDmContact | null> {
@@ -1013,6 +1023,27 @@ describe("NotifyDmService.ingestCallback（单聊绑定码 · 口径 §5）", ()
     expect(aibot.replies).toEqual([]);
     expect(repo.upsertCalls).toEqual([]);
     expect(repo.bindCalls).toEqual([]);
+  });
+
+  it("欢迎语只发一次：同一机器人下重复 enter_chat 不再发送", async () => {
+    const { service, aibot } = makeService();
+    const event = incoming({ cmd: "aibot_event_callback", msgtype: "event", text: null, eventType: "enter_chat" });
+
+    await service.replyWelcomeToEnterChat(event);
+    await service.replyWelcomeToEnterChat(event);
+
+    expect(aibot.welcomes).toHaveLength(1);
+  });
+
+  it("欢迎语一次性登记失败时不发（宁缺勿重）", async () => {
+    const { service, repo, aibot } = makeService();
+    repo.claimWelcomeFails = true;
+
+    await service.replyWelcomeToEnterChat(
+      incoming({ cmd: "aibot_event_callback", msgtype: "event", text: null, eventType: "enter_chat" }),
+    );
+
+    expect(aibot.welcomes).toEqual([]);
   });
 
   it("欢迎语过滤：群事件 / 非 enter_chat / 缺 req_id 或 userid / 消息回调均不回复", async () => {

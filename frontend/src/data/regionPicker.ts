@@ -4,6 +4,7 @@
  * - 候选 = 地区字典启用条目（沿用其码 / 名，存量口径不拆行）＋ 标准国家清单里字典没覆盖到的国家（值 = 中文名）；
  * - 国名与洲口径与地图 / 侧栏同源：清单 = worldMap.ts（中国标准地图口径），洲 = worldMapContinents.ts 生成物，
  *   认国家 = mapProjects.ts 的 matchRegion（台湾不是国家；科索沃 / 北塞浦路斯 / 索马里兰并入主权国家）；
+ *   中国台湾 / 中国香港 / 中国澳门作为「中国特别地区」固定候选另列（2026-11-27），仍不当作独立国家。
  * - 只做候选、不写字典：选中的值直接落项目 region，地图立柱 / 侧栏筛选用同一套认名规则识别。
  */
 import type { DictItem } from "../dicts";
@@ -25,11 +26,23 @@ export type RegionPickerOption = {
   readonly usageCount: number;
 };
 
+/** 中国特别地区（业务口径 2026-11-27「增加中国台湾 中国香港 中国澳门」）：不作独立国家，但项目地区要能直接选；归亚洲。 */
+const CHINA_SUBREGIONS: readonly RegionPickerOption[] = [
+  { value: "中国台湾", name: "中国台湾", en: "Taiwan, China", continent: "亚洲", usageCount: 0 },
+  { value: "中国香港", name: "中国香港", en: "Hong Kong, China", continent: "亚洲", usageCount: 0 },
+  { value: "中国澳门", name: "中国澳门", en: "Macao, China", continent: "亚洲", usageCount: 0 },
+];
+const CHINA_SUBREGION_BY_NAME = new Map(CHINA_SUBREGIONS.map((option) => [option.name, option]));
+
 /** 洲间按 REGION_CONTINENT_GROUPS 排；洲内按中文名拼音（zh-Hans-CN 排序规则）。 */
 const collator = new Intl.Collator("zh-Hans-CN");
 
 /** 地区英文名（英文界面显示用）：标准国名 / 常用别名走 matchRegion 认名；认不出返回空串（调用方回退中文）。 */
 export function regionNameEn(name: string): string {
+  const special = CHINA_SUBREGION_BY_NAME.get(name.trim());
+  if (special !== undefined) {
+    return special.en;
+  }
   const hit = matchRegion(name, "");
   if (hit === null) {
     return "";
@@ -52,13 +65,23 @@ export function buildRegionPickerOptions(items: readonly DictItem[]): RegionPick
     seen.add(option.value);
     options.push(option);
   };
+  const dictNames = new Set<string>();
   for (const item of items) {
+    dictNames.add(item.name.trim());
+    const special = CHINA_SUBREGION_BY_NAME.get(item.name.trim());
     const hit = matchRegion(item.name, item.code);
-    if (hit !== null) {
+    /** 中国特别地区不是独立国家：命中的「中国」不能因此占位（否则标准清单里的「中国」被挤掉）。 */
+    if (hit !== null && special === undefined) {
       covered.add(hit.kind === "country" ? "country:" + hit.country.id : "micro:" + hit.micro.id);
     }
-    const en = hit === null ? "" : hit.kind === "country" ? hit.country.name : hit.micro.name;
+    const en = special !== undefined ? special.en : hit === null ? "" : hit.kind === "country" ? hit.country.name : hit.micro.name;
     push({ value: item.code, name: item.name, en: en, continent: continentOfRegion(item.name, item.code), usageCount: item.usageCount });
+  }
+  /** 字典没收录时补「中国台湾 / 中国香港 / 中国澳门」三条；已收录（同名）则不重复。 */
+  for (const special of CHINA_SUBREGIONS) {
+    if (!dictNames.has(special.name)) {
+      push(special);
+    }
   }
   for (const country of WORLD_MAP_COUNTRIES) {
     if (covered.has("country:" + country.id)) {

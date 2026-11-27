@@ -274,7 +274,7 @@ function LayoutSlot({ label, kind, photos, onPreviewOpenChange, onReplace, onRem
                     <img src={photo.url} alt={photo.name} className="h-24 w-full object-contain" />
                   </button>
                 ) : null}
-                {photo.manual === true && photo.id !== null && photo.id !== undefined ? (
+                {photo.id !== null && photo.id !== undefined ? (
                   <button
                     type="button"
                     data-layout-remove="true"

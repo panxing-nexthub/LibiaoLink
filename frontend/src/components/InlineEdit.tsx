@@ -355,6 +355,7 @@ export function InlineMultiOptionCell({ values, options, ariaLabel, onChange, di
 /** 行内日期单元格（单个日期的小日历）。 */
 export function InlineDateCell({
   valueIso,
+  hintIso = "",
   display,
   ariaLabel,
   onChange,
@@ -371,6 +372,8 @@ export function InlineDateCell({
   disabledHint,
 }: {
   valueIso: string;
+  /** 空值时日历默认展开的年月（仅作参照，不写入值）；如「预计完成日期」跟随该行「开始日期」。 */
+  hintIso?: string;
   display: ReactNode;
   ariaLabel: string;
   onChange: (iso: string, shiftTaskIds?: string[]) => void;
@@ -407,6 +410,7 @@ export function InlineDateCell({
       render={(close) => (
         <MiniCalendar
           value={valueIso}
+          hintIso={hintIso}
           showAuto={showAuto}
           minDate={minDate}
           maxDate={maxDate}
@@ -433,6 +437,7 @@ export type ScheduleShiftTarget = {
 
 function MiniCalendar({
   value,
+  hintIso = "",
   onChange,
   showAuto,
   minDate,
@@ -442,6 +447,7 @@ function MiniCalendar({
   shiftTargets = [],
 }: {
   value: string;
+  hintIso?: string;
   onChange: (iso: string, shiftTaskIds?: string[]) => void;
   showAuto: boolean;
   minDate: string;
@@ -476,8 +482,9 @@ function MiniCalendar({
     }
     return mdText(locale, toKey(new Date(Date.parse(iso + "T00:00:00Z") + deltaDays * 86_400_000)));
   };
+  /** 已有值 → 值所在年月；空值 → 跟随日期（如开始日期）所在年月；都没有才回到今天。 */
   const [view, setView] = useState(() => {
-    const base = toDate(value === "" ? todayIso : value);
+    const base = toDate(value !== "" ? value : hintIso !== "" ? hintIso : todayIso);
     return new Date(base.getFullYear(), base.getMonth(), 1);
   });
 
@@ -587,6 +594,8 @@ function MiniCalendar({
       <div className="mt-1 grid grid-cols-7 gap-y-1">
         {cells.map((cell) => {
           const selectable = cell.inMonth && isAllowed(cell.key);
+          /** 空值时把跟随日期轻轻标出来（不当作已选值），让用户一眼看到「预计完成」是从哪一天开始排。 */
+          const hint = value === "" && pendingIso === null && hintIso !== "" && cell.key === hintIso;
           const base = "flex h-8 w-full items-center justify-center rounded-lg text-xs transition ";
           const tone = !selectable
             ? "text-zinc-300 "
@@ -594,7 +603,9 @@ function MiniCalendar({
               ? "bg-zinc-900 font-semibold text-white "
               : pendingIso !== null && cell.key === pendingIso
                 ? "bg-zinc-400 font-semibold text-white "
-                : "text-zinc-600 hover:bg-zinc-100 ";
+                : hint
+                  ? "bg-zinc-50 font-semibold text-zinc-700 ring-1 ring-inset ring-zinc-300 "
+                  : "text-zinc-600 hover:bg-zinc-100 ";
           return (
             <button
               key={cell.key}
@@ -656,12 +667,17 @@ export function InlineNumberCell({
   onSave,
   disabled = false,
   disabledHint,
+  bare = false,
+  triggerClassName,
 }: {
   value: number;
   display: ReactNode;
   ariaLabel: string;
   suffix?: string;
   onSave: (value: number) => void;
+  /** 裸框模式：去掉液态玻璃小框，样式交给调用方。 */
+  bare?: boolean;
+  triggerClassName?: string;
   /** 锁定入口（Push 264 · P1-1 定档锁定）：透传 InlineCell —— 定档任务的行内入口不弹编辑浮层，点击改弹站点同款顶部 Toast。 */
   disabled?: boolean;
   /** 锁定说明文案（定档口径同 409 TASK_FINALIZED 提示文案；悬停 title 与点击 Toast 共用）。 */
@@ -678,6 +694,8 @@ export function InlineNumberCell({
       height={124}
       disabled={disabled}
       disabledHint={disabledHint}
+      bare={bare}
+      triggerClassName={triggerClassName}
       display={display}
       render={(close) => (
         <NumberEditor

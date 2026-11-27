@@ -5,7 +5,7 @@ import { PROJECT_STAGES } from "../data/projects";
 import { memberOptionsWithExisting, type Member } from "../data/members";
 import type { TaskFileRef } from "../fileApi";
 import { TEMP_TASK_STAGE, addedNodeIdsOf, addedNodeKeysOf, dateOnlyText, daysBetweenInclusive, lateDeliveryLabel, ownersLabel, taskCapabilitiesOf, taskFinalizeUploadReadiness, type ProjectTask, type TaskPriority, type TaskStatus } from "../data/tasks";
-import { additionalStageName, stageKeyOfName, stageNameOf, statusWriteValue, type AdditionalProjectStage, type ApiProjectSummary, type ProjectStageNote, type TaskUpdateInput } from "../taskApi";
+import { TEMP_TASK_STAGE_REF, additionalStageName, stageKeyOfName, stageNameOf, statusWriteValue, type AdditionalProjectStage, type ApiProjectSummary, type ProjectStageNote, type TaskUpdateInput } from "../taskApi";
 import { fieldText, isLocalizedLocale, mdText, priorityText, stageText, statusText, useLocale, useLocalizedText, useT } from "../i18n";
 import { InlineDateCell, InlineMemberMultiCell, InlineNumberCell, InlineOptionCell, InlineTextCell } from "./InlineEdit";
 import type { SelectOption } from "./SelectMenu";
@@ -820,6 +820,7 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
       ) : (
         <InlineDateCell
           valueIso={dueIso}
+          hintIso={startIso}
           minDate={startIso}
           placement="right"
           allowScheduleShift={canShiftFollowing}
@@ -1222,7 +1223,7 @@ export function TaskBoard({ tasks, focusTaskId = null, onFocusClosed, openTaskId
             const isCollapsed = collapsed[group.stage] === true;
             /** 只读关系用户没有新增回调：阶段头退化为普通标签，不出现「＋」和可展开卡片。 */
             const additionalStage = additionalStageByName.get(group.stage);
-            const stageRef = additionalStage?.id ?? stageKeyOfName(group.stage);
+            const stageRef = additionalStage?.id ?? stageKeyOfName(group.stage) ?? (group.stage === TEMP_TASK_STAGE ? TEMP_TASK_STAGE_REF : null);
             const canAddToStage = group.stage === TEMP_TASK_STAGE
               ? onCreateTempTask !== undefined
               : (additionalStage !== undefined || STAGE_ORDER.includes(group.stage)) && (onAddNode !== undefined || onAddNodes !== undefined) && (canOpenAddCard === undefined || canOpenAddCard(group.stage));

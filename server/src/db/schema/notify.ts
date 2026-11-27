@@ -534,3 +534,20 @@ export const notifyRateCounters = pgTable(
     check("ck_notify_rate_counters_count", sql`${table.count} >= 0`),
   ],
 );
+
+/**
+ * 单聊欢迎语一次性登记（0124 · 2026-11-26）：同一 (bot_id, wecom_userid) 只回一次 `enter_chat` 欢迎语。
+ * 与激活 / 绑定语义解耦 —— 不写 wecom_aibot_dm_activations、不影响 846607 判据与发送寻址；行存在 = 已发过。
+ */
+export const wecomAibotWelcomeSent = pgTable(
+  "wecom_aibot_welcome_sent",
+  {
+    botId: text("bot_id").notNull(),
+    wecomUserid: text("wecom_userid").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: "pk_wecom_aibot_welcome_sent", columns: [table.botId, table.wecomUserid] }),
+    check("ck_wecom_aibot_welcome_sent_userid", sql`${table.wecomUserid} ~ '^[A-Za-z0-9_.@-]{1,64}$'`),
+  ],
+);

@@ -610,11 +610,6 @@ export function MaterialReissueForm({ projectId, task, members, onSubmitted }: {
     };
   }, [projectId, projectTick, projectErrorText]);
 
-  useEffect(() => {
-    setEmailTitleDraft(null);
-    setCustomerNameDraft(null);
-  }, [projectId, task.id]);
-
   const defaultEmailTitle = project === null ? "…" : materialReissueDefaultEmailTitle(project.code, project.name);
   const emailTitle = emailTitleDraft ?? defaultEmailTitle;
   const customerName = customerNameDraft ?? project?.customer ?? "";

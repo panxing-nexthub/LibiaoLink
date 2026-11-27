@@ -22,7 +22,7 @@ export interface TaskDerivationInput {
   plannedEnd: string | null;
   /** 实际完成日期 YYYY-MM-DD（tasks.actual_end）。 */
   actualEnd: string | null;
-  /** 迁移导入的存储值（tasks.on_time），派生不出时回落。 */
+  /** 迁移导入的存储值（tasks.on_time），仅完成态派生不出时回落。 */
   storedOnTime: boolean | null;
   /** 业务日（Asia/Shanghai）YYYY-MM-DD。 */
   today: string;
@@ -68,7 +68,9 @@ export function deriveDisplayStatus(input: TaskDerivationInput): TaskDisplayStat
 /**
  * 是否按时交付派生（A14）：
  * 完成且实际完成不晚于预计完成 → true；完成但晚于预计完成，或已完成未填完成日期且预计完成已过 → false；
- * 未完成且已过预计完成日期 → false（配 displayStatus=overdue 渲染「逾期未交付」）；其余派生不出 → 回落存储值（仍无则 null）。
+ * 未完成且已过预计完成日期 → false（配 displayStatus=overdue 渲染「逾期未交付」）；**未完成一律不标记（null）** ——
+ * 清空实际完成日期退回未完成时，不能回落到迁移导入的 tasks.on_time（2026-11-27 修复）。
+ * 仅完成态派生不出（缺实际 / 预计完成日期）时回落迁移存储值（仍无则 null）。
  */
 export function deriveOnTime(input: TaskDerivationInput): boolean | null {
   if (input.status === "done") {
@@ -77,7 +79,7 @@ export function deriveOnTime(input: TaskDerivationInput): boolean | null {
     return input.storedOnTime;
   }
   if (input.plannedEnd !== null && input.plannedEnd < input.today) return false;
-  return input.storedOnTime;
+  return null;
 }
 
 /** 任务写入结果（状态 / 进度 / 完成日期 / 显式覆盖）——联动后一起落库。 */

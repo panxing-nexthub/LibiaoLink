@@ -121,8 +121,11 @@ export const AdditionalProjectStageCreateBodySchema = z.object({
 
 export type AdditionalProjectStage = z.infer<typeof AdditionalProjectStageSchema>;
 
-export const ProjectStageRefSchema = z.union([StageKeySchema, UuidSchema])
-  .describe("原阶段的字典键，或新增阶段的 ID");
+/** 临时任务分组（stage_key = null）的备注引用：与真实阶段键 / 新增阶段 UUID 区分。 */
+export const TEMP_TASK_STAGE_REF = "__temp__";
+
+export const ProjectStageRefSchema = z.union([StageKeySchema, UuidSchema, z.literal(TEMP_TASK_STAGE_REF)])
+  .describe("原阶段的字典键、新增阶段的 ID，或临时任务分组（__temp__）");
 
 export const ProjectStageNoteSchema = z.object({
   stageRef: ProjectStageRefSchema,

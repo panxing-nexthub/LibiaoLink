@@ -7,6 +7,7 @@ import {
   PRIORITY_VALUES,
   STAGE_KEYS,
   STAGE_NAMES,
+  TEMP_TASK_STAGE_REF,
   ProjectSummarySchema,
   TaskBatchBodySchema,
   TaskBatchFailureSchema,
@@ -232,7 +233,10 @@ export class TaskService {
 
       const stageKey = STAGE_KEYS.find((key) => key === stageRef);
       let name: string;
-      if (stageKey === undefined) {
+      if (stageRef === TEMP_TASK_STAGE_REF) {
+        // 临时任务分组（stage_key = null）也允许备注，用固定引用落库。
+        name = "临时任务";
+      } else if (stageKey === undefined) {
         // 新增阶段在持有项目行锁时才写入或删除，这里读取即可。
         const stage = await this.repository.findAdditionalStage(tx, projectId, stageRef);
         if (stage === null) throw new AppError("NOT_FOUND", "新增阶段不存在");

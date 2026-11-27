@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as R
 import type { Member } from "../data/members";
 import type { TintedTier } from "../backgroundTier";
 import { PROJECT_STAGES } from "../data/projects";
-import { PROGRESS_STEPS, TEMP_TASK_STAGE, daysBetweenInclusive, isCompleteStatus, isTaskDone, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "../data/tasks";
-import { SearchSelect, type SearchSelectItem } from "./MemberSelect";
+import { PROGRESS_STEPS, TEMP_TASK_STAGE, daysBetweenInclusive, isTaskDone, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "../data/tasks";
 import { fieldText, isLocalizedLocale, mdText, monthShortText, monthYearText, stageText, statusText, textOf, useLocale, useLocalizedTranslator, useT, yearText } from "../i18n";
 import type { Locale } from "../i18n";
+import { InlineDateCell, InlineNumberCell } from "./InlineEdit";
+import { TrackerDots } from "./Tracker";
 import { STATUS_DOT_CLASS, TaskRow, resolveColumns, tableGridTemplate, tableMinWidth, type TaskPatch } from "./TaskBoard";
 
 /**
@@ -13,7 +14,7 @@ import { STATUS_DOT_CLASS, TaskRow, resolveColumns, tableGridTemplate, tableMinW
  * 第二轮业务口径「维持手绘尽量还原官方的功能」）。
  *
  * 形态与交互参考 VTable 甘特图基本用法（https://visactor.io/vtable/demo/gantt/gantt-basic?version=1.26.6）：
- * 左侧固定任务列表（行号 / 任务 / 开始 / 结束 / 进展）+ 右侧时间轴（月份 + 日期两级表头、逐日网格、周末底纹、
+ * 左侧固定任务列表（行号 / 任务 / 开始 / 预计完成 / 施工人数 / 进展）+ 右侧时间轴（月份 + 日期两级表头、逐日网格、周末底纹、
  * 任务条、里程碑菱形、今天虚线）。用 Tailwind + 绝对定位手绘，不引入第三方图表库 ——
  * 本仓库前端目前零图表依赖，而 VTable 的甘特图要真实 Date 记录与自有表格实例，和现有任务数据模型对不上。
  *
@@ -50,10 +51,9 @@ import { STATUS_DOT_CLASS, TaskRow, resolveColumns, tableGridTemplate, tableMinW
  * 其余口径（详见 `前端功能需求.md` §6.14）：
  * - 分组 = 施工阶段（九个阶段按项目总览顺序，空阶段照样出骨架行；非九阶段的任务落「临时任务」垫底 · Push 196）；
  * - 任务条 = 开始日期 → 预计完成日期；条内青色 = 已完成进度（`task.progress`）、橙色 = 剩余工期；
- * - 单日任务（开始 = 预计完成）画菱形 —— 一期没有「是否里程碑」字段（系统功能书 A1-11 在二期），菱形按状态取色：已完成 = 绿色、未完成 = 灰色、已延期 = 红色；
- *   这里按单日派生，字段口径见 `前端功能需求.md` §3.8 A26；
- * - 深色竖线 = 实际完成日期刻度（系统功能书 B3-01「计划条 + 实际完成标注」）；
- * - 已延期 = 条头一段红内嵌色条（B3-05）；今天 = 蓝色虚线（今天落在时间轴范围内时才画）；
+ * - 单日任务（开始 = 预计完成）：不再画菱形，而是按对应日格子宽度铺满，垂直高度与多日任务条统一对齐（22px 居中），保持阶段配色体系；
+ * - 实际完成日期标注（B3-01）：条内不再画竖线，提前/按时在条内左侧或底部轻点/条外轻标，推迟则在条尾向右拉出细虚线与终点圆点直指实际完成日；
+ * - 已延期（B3-05）：去掉条头红杠，保留阶段配色，条框带轻细玫瑰红描边，超过预计完成日期向「今天」拉出半透明红色斜纹延伸段并标「+N天」（未过今天则右侧挂轻红签）；今天 = 蓝色虚线（今天落在时间轴范围内时才画）；
  * - 依赖箭头（B3-03）、关键路径（B3-04）、导出（B3-07）不在本期；B3-06 的粒度切换与筛选已在本轮补齐。
  *
  * 布局：左表与时间轴是同一个横向滚动容器里的两块并列面板 —— 左表 `sticky left-0`（横向不滚；列宽固定，
@@ -76,19 +76,19 @@ const FALLBACK_TASK_MIN_W = tableMinWidth(FALLBACK_TASK_COLUMNS);
 /**
  * 左表列宽 / 行高：左表与时间轴靠这一组常量逐行对齐。**列宽固定、不随可见宽度变** ——
  * 分隔线是「右侧时间轴盖住左表多少」的边界（业务口径「右侧看板是遮挡 不是压缩左侧」，对齐官方样例：
- * 拖窄了列是被裁掉，不是被挤窄）。「开始日期 / 预计完成日期」两列对齐官方样例左表的 start / end
- * （业务口径「我这个移动也要有这些信息」）：任务行 = 这条任务的开始 / 预计完成日期、阶段行 = 组内任务工期并集，
- * 拖动中的那条跟着预览值走。列宽按列头汉字数定：「预计完成日期」= 6 字 × 11px + 左右各 12px 内边距 = 90px，取 96。
+ * 拖窄了列是被裁掉，不是被挤窄）。紧凑布局以尽可能给右侧时间轴留出视野：
+ * 行号 36 + 任务 180 + 开始 60 + 预计完成 80 + 施工人数 56 + 进展 48 = 460px（较原先 572px 腾出 112px，保证表头单行不换行、数值居中对齐）。
  */
-const COL_INDEX_W = 48;
-const COL_TITLE_W = 284;
-const COL_START_W = 72;
-const COL_END_W = 96;
-const COL_PROGRESS_W = 72;
+const COL_INDEX_W = 36;
+const COL_TITLE_W = 180;
+const COL_START_W = 60;
+const COL_END_W = 80;
+const COL_HEADCOUNT_W = 56;
+const COL_PROGRESS_W = 48;
 /** 「任务」列至少要露出来的宽度：分隔线最窄只遮到这儿。 */
-const COL_TITLE_MIN_W = 140;
+const COL_TITLE_MIN_W = 112;
 /** 左表自然宽 = 各列固定宽之和：分隔线拖到最宽 = 各列全露出来（再宽也没东西可露）。 */
-const LEFT_W_NATURAL = COL_INDEX_W + COL_TITLE_W + COL_START_W + COL_END_W + COL_PROGRESS_W;
+const LEFT_W_NATURAL = COL_INDEX_W + COL_TITLE_W + COL_START_W + COL_END_W + COL_HEADCOUNT_W + COL_PROGRESS_W;
 /** 分隔线可拖范围：最窄 = 行号 + 一截任务列，最宽 = 左表自然宽。 */
 const LEFT_W_MIN = COL_INDEX_W + COL_TITLE_MIN_W;
 const LEFT_W_MAX = LEFT_W_NATURAL;
@@ -98,10 +98,7 @@ const HEADER_TOTAL_H = HEADER_H * 2;
 const ROW_H = 36;
 
 /** 任务条 / 阶段汇总条高度；条两端的热区宽与进度圆点直径（拖拽交互用）。 */
-const BAR_H = 20;
-const GROUP_BAR_H = 10;
-const EDGE_ZONE_W = 6;
-const KNOB_SIZE = 10;
+const BAR_H = 22;
 
 /** 拖空白平移画面：位移超过这个像素才算「拖动」（不到 = 还是点击，左表行定位 / 阶段折叠照常）。 */
 const PAN_THRESHOLD_PX = 4;
@@ -115,30 +112,76 @@ const DAY_MS = 86400000;
 /** 时间轴两端各留的余量（天）。 */
 const PAD_DAYS = 2;
 
-/** 条色对齐参考样例：青 = 已完成进度、橙 = 剩余工期。 */
-const BAR_DONE_CLASS = "bg-[#7fd1cb]";
-const BAR_TODO_CLASS = "bg-[#f7a63c]";
-
 /**
- * 条上不画描边（业务口径「末端 / 两色交接的地方还有橙色的边框」）：参考样例的条是平的，我们之前那圈
- * `ring-amber-600/40` 只压在橙色段上（青色进度是子层、盖住了它），看着就像给橙色块单独镶了个边。
- * 已延期按 B3-05「已延期变红」改成**条头一段红内嵌色条**（App 里「当前阶段」行也是这种内嵌色条），
- * 不再用红描边。色条要画成独立子层并抬到进度层之上 —— 直接给条挂 inset 阴影会被上面的青色进度层盖住。
- * 选中态另见 BAR_SELECTED_CLASS。
+ * 分阶段色彩体系（参考现代甘特图按阶段分色 + 括弧汇总样式）：
+ * 每个施工阶段拥有一套协调色（主色 accent 用于阶段括弧与已完成进度、浅底 tint 用于剩余工期底色、
+ * 淡雾 shade 用于阶段展开时的背景包络、深字 text 用于条内清晰可读性）。
+ * 未完成部分采用同色系浅底（而非高对比亮橙），已完成部分用饱和主色填充，整体干净通透。
  */
-const BAR_OVERDUE_STRIPE_CLASS = "pointer-events-none absolute inset-y-0 left-0 z-10 w-[3px] bg-red-500";
+type StagePalette = {
+  /** 阶段主色（括弧、已完成进度条、阶段色点）。 */
+  accent: string;
+  /** 剩余工期底色（同色系浅底，与主色构成柔和对比）。 */
+  track: string;
+  /** 阶段展开时包住子任务区域的极淡背景底色（图二样式）。 */
+  envelope: string;
+  /** 阶段括弧及汇总条上的深色字 / 边框辅助。 */
+  text: string;
+};
+
+const STAGE_PALETTE: Record<string, StagePalette> = {
+  售前规划: { accent: "#d97706", track: "#fde68a", envelope: "rgba(217, 119, 6, 0.05)", text: "#78350f" },
+  设计开发: { accent: "#7c3aed", track: "#ddd6fe", envelope: "rgba(124, 58, 237, 0.045)", text: "#4c1d95" },
+  加工采购: { accent: "#0d9488", track: "#99f6e4", envelope: "rgba(13, 148, 136, 0.045)", text: "#134e4a" },
+  组装发货: { accent: "#65a30d", track: "#d9f99d", envelope: "rgba(101, 163, 13, 0.05)", text: "#365314" },
+  硬件实施: { accent: "#2563eb", track: "#bfdbfe", envelope: "rgba(37, 99, 235, 0.045)", text: "#1e3a8a" },
+  软件部署: { accent: "#0891b2", track: "#a5f3fc", envelope: "rgba(8, 145, 178, 0.045)", text: "#164e63" },
+  试运行:   { accent: "#db2777", track: "#fbcfe8", envelope: "rgba(219, 39, 119, 0.045)", text: "#831843" },
+  投产阶段: { accent: "#c026d3", track: "#f5d0fe", envelope: "rgba(192, 38, 211, 0.045)", text: "#701a75" },
+  验收:     { accent: "#059669", track: "#a7f3d0", envelope: "rgba(5, 150, 105, 0.045)", text: "#064e3b" },
+};
+
+const DEFAULT_STAGE_PALETTE: StagePalette = {
+  accent: "#64748b",
+  track: "#cbd5e1",
+  envelope: "rgba(100, 116, 139, 0.045)",
+  text: "#334155",
+};
+
+function stagePaletteOf(stage: string): StagePalette {
+  const exact = STAGE_PALETTE[stage];
+  if (exact !== undefined) {
+    return exact;
+  }
+  // 追加阶段（如「硬件实施1」「硬件实施2」「软件部署1」）沿用其所属基础阶段的配色：
+  // 按前缀匹配标准九阶段，找不到再退回默认石板灰。
+  for (const [name, palette] of Object.entries(STAGE_PALETTE)) {
+    if (stage.startsWith(name)) {
+      return palette;
+    }
+  }
+  return DEFAULT_STAGE_PALETTE;
+}
+
+/** 图例示例色（使用中性石板灰示范：实心 = 已完成进度，浅底 = 剩余工期，画布上按所属阶段分色）。 */
+const BAR_DONE_CLASS = "bg-slate-600";
+const BAR_TODO_CLASS = "bg-slate-200";
+
+/** 已延期超期延伸段斜纹（半透明玫瑰红斜线纹理）。 */
+const OVERDUE_TAIL_BG =
+  "repeating-linear-gradient(-45deg, rgba(244, 63, 94, 0.16) 0 4px, rgba(244, 63, 94, 0.04) 4px 8px)";
 
 /** 选中条的描边（官方 taskBar.selectable 的选中态）。 */
 const BAR_SELECTED_CLASS = "ring-2 ring-blue-600 shadow-[0_0_0_2px_rgba(37,99,235,0.25)]";
 
 /** 逐日网格线（1px 线 + 空白，周期 = 每天宽度）；周末底纹块套同一套，免得盖住底下的日线。 */
 function dayLineStyle(dayWidth: number): { backgroundImage: string } {
-  return { backgroundImage: "repeating-linear-gradient(to right, #f1f2f4 0 1px, transparent 1px " + String(dayWidth) + "px)" };
+  return { backgroundImage: "repeating-linear-gradient(to right, #f1f5f9 0 1px, transparent 1px " + String(dayWidth) + "px)" };
 }
 
 /** 左表「开始 / 结束」单元格：拖动中（预览值）加一档强调，平时与「进展」同色。 */
 function dateCellClass(live: boolean): string {
-  return "px-3 text-[11px] tabular-nums " + (live ? "font-medium text-zinc-900" : "text-zinc-500");
+  return "px-1 text-center whitespace-nowrap text-[11px] tabular-nums " + (live ? "font-medium text-zinc-900" : "text-zinc-500");
 }
 
 /**
@@ -161,34 +204,44 @@ const ZOOM_LEVELS: ReadonlyArray<{ key: "compact" | "standard" | "wide"; label: 
 type ZoomKey = (typeof ZOOM_LEVELS)[number]["key"];
 
 /**
- * 时间轴粒度（官方 `timelineHeader.scales`：日 / 周 / 月）—— 切的是**表头与网格的最小单位**，
- * 不是条的位置口径：几何基准始终是「每天多少 px」，所以三档缩放对每一档粒度都成立，
- * 任务条 / 里程碑 / 实际完成刻度 / 今天线一律按天精确落点（换粒度只变表头分段、列宽与网格密度）。
- * unitDays = 一列跨几天（月粒度按当月真实天数展开，所以月列宽 28~31 天不等）；
- * 列宽 = unitDays × dayWidth（标准档：日 26px、周 91px、月约 138px）。
+ * 连续缩放基准（参考图一 / 图二，支持「日 / 周 / 月」自动切换 + 无级缩放）：
+ * - 以「每天多少 px（dayWidth）」为唯一几何基准（范围 2.2px/天 ~ 52px/天）；
+ * - 当「日 / 周 / 月」手动点击时跳到对应推荐档位；当点击「-/+」、滚轮 Ctrl+Wheel / Alt+Wheel 或双指缩放时，
+ *   按倍率平滑缩放 dayWidth，并根据像素密度自动切换表头粒度（避免月视图太宽或日视图日期数字挤叠）：
+ *   dayWidth >= 16 -> 日；7.5 <= dayWidth < 16 -> 周；dayWidth < 7.5 -> 月；
+ * - 「自适应全览」一键将整个项目周期完整放进当前可视宽度（与参考图一/二一致）。
  */
 type ScaleKey = "day" | "week" | "month";
 
+const DAY_WIDTH_MIN = 2.2;
+const DAY_WIDTH_MAX = 52;
+const DAY_WIDTH_DEFAULT = 26;
+
 const SCALES: Record<ScaleKey, { label: string; unitDays: number; dayWidth: Record<ZoomKey, number> }> = {
-  day: { label: "日", unitDays: 1, dayWidth: { compact: 18, standard: 26, wide: 36 } },
-  week: { label: "周", unitDays: 7, dayWidth: { compact: 9, standard: 13, wide: 18 } },
-  month: { label: "月", unitDays: 30, dayWidth: { compact: 3.2, standard: 4.6, wide: 6.4 } },
+  day: { label: "日", unitDays: 1, dayWidth: { compact: 18, standard: 26, wide: 38 } },
+  week: { label: "周", unitDays: 7, dayWidth: { compact: 9, standard: 13, wide: 15.5 } },
+  month: { label: "月", unitDays: 30, dayWidth: { compact: 3.0, standard: 4.6, wide: 6.8 } },
 };
 
 const SCALE_KEYS: readonly ScaleKey[] = ["day", "week", "month"];
 
-/** 甘特内筛选（B3-06 余下）：负责人 + 行筛选（全部 / 只看已延期 / 只看未排期）。 */
-type RowFilterKey = "all" | "overdue" | "unscheduled";
+function scaleForDayWidth(pxPerDay: number): ScaleKey {
+  if (pxPerDay >= 16) {
+    return "day";
+  }
+  if (pxPerDay >= 7.5) {
+    return "week";
+  }
+  return "month";
+}
+
+/** 甘特内筛选（B3-06 余下）：负责人 + 行筛选（全部 / 只看已延期）。 */
+type RowFilterKey = "all" | "overdue";
 
 const ROW_FILTERS: ReadonlyArray<{ key: RowFilterKey; label: string; hint: string }> = [
   { key: "all", label: "全部", hint: "不按行筛（只看负责人）" },
   { key: "overdue", label: "只看已延期", hint: "只出状态为「已延期」的任务（同 B3-05 的口径）" },
-  { key: "unscheduled", label: "只看未排期", hint: "只出没填齐「开始 + 预计完成」的任务" },
 ];
-
-/** 负责人筛选项：`all` = 不限；`__none__` = 待分配（与看板「待分配」列同口径）。 */
-const OWNER_ANY = "all";
-const OWNER_NONE = "__none__";
 
 /**
  * 任务日期域（M3-07 刀 1 后半）：任务日期一律 ISO（YYYY-MM-DD，契约 DateOnly），年份带着走 ——
@@ -300,6 +353,8 @@ function shortDateTextOf(utc: number): string {
 
 type GanttBar = {
   task: ProjectTask;
+  /** 所属规范阶段名（用于按阶段取色）。 */
+  stage: string;
   status: TaskStatus;
   /** 0~100（task.progress 是 0~1 的四档小数）。 */
   percent: number;
@@ -316,12 +371,18 @@ type GanttBar = {
 type GanttGroup = {
   stage: string;
   bars: GanttBar[];
-  /** 组内任务的工期并集（画阶段汇总条）；组内没有「开始 + 预计完成」都齐的任务 = null。 */
+  /** 组内任务的工期并集（画阶段括弧汇总）；组内没有「开始 + 预计完成」都齐的任务 = null。 */
   start: number | null;
   end: number | null;
   doneCount: number;
   /** 完成度（已完成 / 组内任务数）—— 与项目总览阶段头的「已完成 N/M」同口径。 */
   percent: number;
+  /** 该阶段是否处于折叠态。 */
+  collapsed: boolean;
+  /** 阶段内展开显示的子任务数（折叠态为 0，用于计算阶段包络底框高度）。 */
+  expandedCount: number;
+  /** 阶段内各任务预计所需施工人数合计（全部未填时为 0）。 */
+  headcountTotal: number;
 };
 
 type GanttRow =
@@ -336,9 +397,11 @@ type GanttMonthUnit = GanttHeaderUnit & { short: string };
 
 type GanttModel = {
   rows: GanttRow[];
-  /** 时间轴首日（UTC 零点毫秒）与总天数。 */
+  /** 时间轴首日（UTC 零点毫秒）与总天数（含右侧「无限延伸」余量）。 */
   rangeStart: number;
   days: number;
+  /** 不含右侧无限延伸余量的天数（「全览」按它计算）。 */
+  coreDays: number;
   /** 今天在时间轴里的下标（今天不在范围内 = null，不画今天虚线）。 */
   todayIndex: number | null;
   /** 表头分段：月份 / 年份 / 周 —— 粒度决定用哪一套渲染（官方 timelineHeader.scales）。 */
@@ -400,7 +463,9 @@ function buildBar(locale: Locale, task: ProjectTask): GanttBar {
   ]
     .filter((line) => line !== "")
     .join("\n");
-  return { task, status, percent, start, end, done, milestone: start !== null && end !== null && start === end, label };
+  // 保留任务原始阶段名（含追加阶段「硬件实施1」等），取色时由 stagePaletteOf 按前缀归到基础阶段。
+  const stage = task.stage === "" ? UNGROUPED : task.stage;
+  return { task, stage, status, percent, start, end, done, milestone: start !== null && end !== null && start === end, label };
 }
 
 /**
@@ -416,6 +481,8 @@ function buildModel(
   collapsed: Record<string, boolean>,
   hideEmptyGroups: boolean,
   includeToday: boolean,
+  /** 右侧无限延伸的额外天数（滚动到右缘时累加）。 */
+  extraEndDays: number,
   viewport?: { start: number; end: number },
 ): GanttModel | null {
   const bars = tasks.map((task) => buildBar(locale, task));
@@ -429,8 +496,13 @@ function buildModel(
     min = Math.min(min, bar.start, bar.end);
     max = Math.max(max, bar.start, bar.end);
   }
-  if (min === Number.POSITIVE_INFINITY) {
+  if (bars.length === 0) {
     return null;
+  }
+  if (min === Number.POSITIVE_INFINITY) {
+    // 全部未排期：仍画出甘特图（默认以今天为中心的窗口），未排期行在时间轴上只显示小图标。
+    min = shiftDays(today, -14);
+    max = shiftDays(today, 45);
   }
   /*
    * 时间轴范围默认 = 筛选后任务的范围（业务口径「时间轴范围跟着筛完剩下的任务走」）—— 所以筛到一个任务全在过去（或全在将来）
@@ -443,8 +515,11 @@ function buildModel(
   }
 
   const rangeStart = Math.min(shiftDays(min, -PAD_DAYS), viewport?.start ?? Number.POSITIVE_INFINITY);
-  const rangeEnd = Math.max(shiftDays(max, PAD_DAYS), viewport?.end ?? Number.NEGATIVE_INFINITY);
+  /** 任务真实跨度末端（含 2 天余量 / 当前可视区右缘）—— 右侧无限延伸从它继续往右加。 */
+  const rangeEndCore = Math.max(shiftDays(max, PAD_DAYS), viewport?.end ?? Number.NEGATIVE_INFINITY);
+  const rangeEnd = shiftDays(rangeEndCore, Math.max(0, extraEndDays));
   const days = dayDiff(rangeStart, rangeEnd) + 1;
+  const coreDays = dayDiff(rangeStart, rangeEndCore) + 1;
   const todayIndex = today >= rangeStart && today <= rangeEnd ? dayDiff(rangeStart, today) : null;
 
   // 表头三套分段（日 / 周 / 月粒度各取所需）：月份、年份、周 —— 每段记下首日下标与跨的天数，列宽 = 天数 × 每天宽度。
@@ -478,6 +553,9 @@ function buildModel(
       weeks.push({ key: "week-" + String(index), label: shortDateTextOf(utc), days: 1, start: index });
     } else {
       lastWeek.days += 1;
+      if (lastWeek.days === 7) {
+        lastWeek.label = shortDateTextOf(shiftDays(rangeStart, lastWeek.start)) + " - " + shortDateTextOf(utc);
+      }
     }
     if (weekday === 0 || weekday === 6) {
       weekends.push(index);
@@ -529,6 +607,7 @@ function buildModel(
       end = end === null ? bar.end : Math.max(end, bar.end);
     }
     const doneCount = items.filter((bar) => isTaskDone(bar.task)).length;
+    const headcountTotal = items.reduce((sum, bar) => sum + (bar.task.headcount > 0 ? bar.task.headcount : 0), 0);
     const percent = items.length === 0 ? 0 : Math.round((doneCount / items.length) * 100);
     const isCollapsed = collapsed[stage] === true;
     // 行号：阶段行也占一个号（与参考样例的行号列一致）。
@@ -536,7 +615,7 @@ function buildModel(
     if (isCollapsed) {
       collapsedCount += 1;
     }
-    rows.push({ kind: "group", key: "stage:" + stage, no, group: { stage, bars: items, start, end, doneCount, percent } });
+    rows.push({ kind: "group", key: "stage:" + stage, no, group: { stage, bars: items, start, end, doneCount, percent, collapsed: isCollapsed, expandedCount: isCollapsed ? 0 : items.length, headcountTotal } });
     if (isCollapsed) {
       continue;
     }
@@ -550,6 +629,7 @@ function buildModel(
     rows,
     rangeStart,
     days,
+    coreDays,
     todayIndex,
     months,
     years,
@@ -575,14 +655,49 @@ function centerOnToday(element: HTMLDivElement | null, todayLeft: number | null,
   element.scrollLeft = Math.max(0, todayLeft - visible / 3);
 }
 
-/** 任务条编辑锁图标：闭合 / 打开锁 shackle 只由同一个按钮切换。 */
+/**
+ * 任务条编辑锁图标：两个独立图形 —— 锁住 = 红色闭合锁（#d81e06）、解开 = 蓝色打开锁（#1296db）。
+ */
 function GanttLockIcon({ locked }: { locked: boolean }) {
+  if (locked) {
+    return (
+      <svg viewBox="0 0 1024 1024" className="h-4 w-4" aria-hidden="true">
+        <path
+          d="M385.150849 385.662338l-128.895105 0 0-150.377622q0-49.102897 19.436563-91.556444t53.706294-74.677323 80.815185-50.637363 101.786214-18.413586q49.102897 0 94.625375 18.413586t80.815185 50.637363 56.263736 74.677323 20.971029 91.556444l0 150.377622-123.78022 0 0-121.734266q0-64.447552-35.804196-99.74026t-97.182817-35.292707q-55.240759 0-88.999001 35.292707t-33.758242 99.74026l0 121.734266zM826.053946 447.040959q27.62038 0 47.568432 19.948052t19.948052 47.568432l0 317.122877q0 27.62038-9.718282 51.66034t-26.597403 41.942058-39.896104 28.131868-50.637363 10.22977l-516.603397 0q-27.62038 0-50.125874-10.22977t-38.361638-27.108891-24.551449-39.384615-8.695305-48.07992l0-324.283716q0-27.62038 19.436563-47.568432t47.056943-19.948052l61.378621 0 128.895105 0 255.744256 0 123.78022 0 61.378621 0z"
+          fill="#d81e06"
+        />
+      </svg>
+    );
+  }
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="5" y="10.5" width="14" height="10" rx="2" />
-      {locked ? <path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" /> : <path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 6.7-1.4" />}
+    <svg viewBox="0 0 1024 1024" className="h-4 w-4" aria-hidden="true">
+      <path
+        d="M768.25422 0q48.810328 0 94.061569 18.303873t80.333664 50.33565 56.436941 74.740814 21.354518 91.519364l0 150.49851-123.042701 0 0-122.025819q0-64.063555-36.099305-99.654419t-97.112214-35.590864q-54.911619 0-88.468719 35.590864t-33.5571 99.654419l0 124.059583-128.12711 0 0-152.532274q0-48.810328 19.320755-91.519364t53.386296-74.740814 80.333664-50.33565 101.179742-18.303873zM766.220457 693.513406l0 87.451837 0 47.793446q0 27.455809-9.660377 51.860973t-26.438928 41.692155-39.658391 27.455809-50.33565 10.168818l-514.542205 0q-27.455809 0-49.82721-9.660377t-38.641509-26.438928-24.913605-39.14995-8.643496-47.793446l0-323.368421q0-28.472691 19.829196-47.793446t46.268123-19.320755l629.449851 0q28.472691 0 47.793446 19.320755t19.320755 47.793446l0 179.988083z"
+        fill="#1296db"
+      />
     </svg>
   );
+}
+
+/**
+ * 甘特图全屏图标（业务口径 2026-11-27「甘特图左侧新加图片 全屏按钮」）：
+ * 图形取自业务提供的四角框 SVG（品牌蓝 #1296db），进入 / 退出全屏共用同一枚按钮。
+ */
+function GanttFullscreenIcon() {
+  return (
+    <svg viewBox="0 0 1024 1024" className="h-4 w-4" aria-hidden="true">
+      <path d="M0 0h256v51.2H0z" fill="#1296db" />
+      <path d="M51.2 0v256H0V0zM1024 0v256h-51.2V0z" fill="#1296db" />
+      <path d="M1024 51.2h-256V0h256zM1024 1024h-256v-51.2h256z" fill="#1296db" />
+      <path d="M972.8 1024v-256h51.2v256zM0 1024v-256h51.2v256z" fill="#1296db" />
+      <path d="M0 972.8h256v51.2H0z" fill="#1296db" />
+    </svg>
+  );
+}
+
+/** 甘特编辑锁记忆键：按登录账号隔离（同机换账号不串用；与仪表盘筛选记忆同一套键口径）。 */
+function ganttLockKey(viewerId: string): string {
+  return "libiaolink.gantt.barsLocked.v1." + (viewerId === "" ? "anon" : viewerId);
 }
 
 /**
@@ -590,18 +705,18 @@ function GanttLockIcon({ locked }: { locked: boolean }) {
  * 传了 onPatchTask / onSetProgress 就能拖动改期 / 改进度（不传 = 拖动照常预览、松手不写回）。
  * members = 人员目录（负责人筛选项的成员行渲染）。
  */
-export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint = false, onPatchTask, onSetProgress }: { tasks: readonly ProjectTask[]; members: readonly Member[]; stageOrder?: readonly string[]; /** 背景档位（适中 / 炫彩；空态兜底列表的行色与项目页任务行的铺色同口径，Push 294）。 */ tierTint?: TintedTier | false; onPatchTask?: (taskId: string, patch: TaskPatch) => void; onSetProgress?: (taskId: string, progress: number) => void }) {
+export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_ORDER, tierTint = false, onPatchTask, onSetProgress }: { tasks: readonly ProjectTask[]; members: readonly Member[]; /** 当前登录账号（锁状态按账号记住用；空 = 未登录兜底）。 */ viewerId?: string; stageOrder?: readonly string[]; /** 背景档位（适中 / 炫彩；空态兜底列表的行色与项目页任务行的铺色同口径，Push 294）。 */ tierTint?: TintedTier | false; onPatchTask?: (taskId: string, patch: TaskPatch) => void; onSetProgress?: (taskId: string, progress: number) => void }) {
   const locale = useLocale();
   const localize = useLocalizedTranslator();
   /** 手打内容（任务名）机翻显示：英文界面 titleEn 优先 → 机翻 → 原文；中文界面照旧。 */
   const ganttTitle = (task: ProjectTask): string => (isLocalizedLocale(locale) ? (locale === "en" && task.titleEn !== "" ? task.titleEn : localize(task.title)) : task.title);
   const t = useT();
   const today = useMemo(localToday, []);
-  const [zoom, setZoom] = useState<ZoomKey>("standard");
-  /** 时间轴粒度（官方 timelineHeader.scales：日 / 周 / 月）—— 只换表头与网格密度，条仍按天精确落点。 */
+  /** 连续每天宽度（px/day）：唯一几何缩放基准，支持无级滚轮缩放、步进缩放、自适应全览与日/周/月快捷切换。 */
+  const [dayWidthRaw, setDayWidthRaw] = useState<number>(DAY_WIDTH_DEFAULT);
+  /** 允许用户点击「日 / 周 / 月」时锁定/切换粒度，或由连续缩放自动派生粒度。 */
   const [scale, setScale] = useState<ScaleKey>("day");
-  /** 甘特内筛选（B3-06 余下）：负责人（含「待分配」）+ 行筛选（全部 / 只看已延期 / 只看未排期）。 */
-  const [ownerFilter, setOwnerFilter] = useState<string>(OWNER_ANY);
+  /** 甘特内行筛选（全部 / 只看已延期）。 */
   const [rowFilter, setRowFilter] = useState<RowFilterKey>("all");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   /** 悬停行（左表与时间轴同一行一起高亮）。 */
@@ -613,12 +728,24 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   /** 拖动会话：预览值挂在 state 上，松手才写回任务字段。 */
   const [drag, setDrag] = useState<GanttDrag | null>(null);
   /** 任务条编辑锁：默认锁上，防止误拖改期 / 工期 / 进度；滚动、筛选、定位等浏览操作不受影响。 */
-  const [barsLocked, setBarsLocked] = useState(true);
-  const [shiftFollowing, setShiftFollowing] = useState(false);
+  const [barsLocked, setBarsLocked] = useState<boolean>(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    try {
+      return window.localStorage.getItem(ganttLockKey(viewerId)) === "true";
+    } catch {
+      return false;
+    }
+  });
   /** 「回到今天」把今天并进时间轴范围（今天本来就在范围里 = 无影响）；清空筛选时收回。 */
   const [includeToday, setIncludeToday] = useState(false);
   /** 刚点「回到今天」但当时今天不在范围里：等范围延出来（todayLeft 有值）再居中一次。 */
   const [pendingToday, setPendingToday] = useState(false);
+  /** 时间轴右侧无限延伸的天数：滚动接近右缘时按 120 天加长（仅前端渲染，不写库）。 */
+  const [extraEndDays, setExtraEndDays] = useState(0);
+  /** 左表「进展」四格胶囊的悬停档位（0 = 无）。 */
+  const [trackerHover, setTrackerHover] = useState(0);
   /** 左表宽度（官方 frame.verticalSplitLineMoveable：拖左表右边线改宽窄），双击复位默认宽。 */
   const [leftWidth, setLeftWidth] = useState(LEFT_W_DEFAULT);
   const [splitHover, setSplitHover] = useState(false);
@@ -638,79 +765,65 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   /** 拖条期间的指针位置与「按下时画面滚到哪儿了」：边缘自动滚动要靠它把滚动换算成日期位移。 */
   const dragPointerRef = useRef<{ x: number; y: number } | null>(null);
   const dragScrollBaseRef = useRef(0);
+  /** 连续缩放时锚定指针/视口中心所在日期：dayWidth 生效后立即还原 scrollLeft，确保缩放不漂移。 */
+  const pendingScrollLeftRef = useRef<number | null>(null);
   /** 刚拖完那一下（拖动收尾浏览器会补一个 click）：用来挡掉「拖完顺手把选中清掉」。 */
   const justDraggedRef = useRef(false);
+  /** 甘特图全屏（2026-11-27）：shell 包住工具条 + 图表；优先浏览器 Fullscreen API，失败退页内覆盖层。 */
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
+  const [cssFullscreen, setCssFullscreen] = useState(false);
+  const fullscreen = nativeFullscreen || cssFullscreen;
 
-  const scaleConfig = SCALES[scale];
-  const dayWidth = scaleConfig.dayWidth[zoom];
+  const dayWidth = clampNumber(dayWidthRaw, DAY_WIDTH_MIN, DAY_WIDTH_MAX);
+  const zoomPercent = Math.round((dayWidth / DAY_WIDTH_DEFAULT) * 100);
+  const nearestZoomKey: ZoomKey =
+    Math.abs(dayWidth - SCALES[scale].dayWidth.compact) <= Math.abs(dayWidth - SCALES[scale].dayWidth.standard)
+      ? "compact"
+      : Math.abs(dayWidth - SCALES[scale].dayWidth.wide) < Math.abs(dayWidth - SCALES[scale].dayWidth.standard)
+        ? "wide"
+        : "standard";
+  const applyDayWidth = useCallback(
+    (nextWidth: number, anchorClientX?: number, forceScale?: ScaleKey) => {
+      const clamped = clampNumber(Math.round(nextWidth * 100) / 100, DAY_WIDTH_MIN, DAY_WIDTH_MAX);
+      const nextScale = forceScale ?? scaleForDayWidth(clamped);
+      const node = scrollRef.current;
+      if (node !== null && clamped !== dayWidth) {
+        const rect = node.getBoundingClientRect();
+        const timelineVisibleWidth = Math.max(node.clientWidth - leftWidth, 1);
+        const pointerOffsetInTimeline =
+          anchorClientX !== undefined
+            ? clampNumber(anchorClientX - rect.left - leftWidth, 0, timelineVisibleWidth)
+            : timelineVisibleWidth / 2;
+        const anchorDay = (node.scrollLeft + pointerOffsetInTimeline) / dayWidth;
+        pendingScrollLeftRef.current = Math.max(0, anchorDay * clamped - pointerOffsetInTimeline);
+      }
+      setDayWidthRaw(clamped);
+      setScale(nextScale);
+    },
+    [dayWidth, leftWidth],
+  );
   /** 粒度 / 缩放 / 行筛选的显示名（Push 301 词典；模块常量只留 key）。 */
   const scaleText = (key: ScaleKey): string => t(key === "day" ? "gantt.scale.day" : key === "week" ? "gantt.scale.week" : "gantt.scale.month");
-  const densityText = (key: ZoomKey): string => t(key === "compact" ? "gantt.density.compact" : key === "standard" ? "gantt.density.standard" : "gantt.density.wide");
-  const rowFilterText = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all" : key === "overdue" ? "gantt.rowFilter.overdue" : "gantt.rowFilter.unscheduled");
-  const rowFilterHint = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all.hint" : key === "overdue" ? "gantt.rowFilter.overdue.hint" : "gantt.rowFilter.unscheduled.hint");
-
-  /** 负责人筛选项（M3-07 刀 1 后半）：按任务出现顺序收集**负责人 id**（与看板「负责人按任务出现顺序」同口径）；有「没负责人」的任务才出「待分配」。 */
-  const ownerOptions = useMemo(() => {
-    const ids: string[] = [];
-    let hasUnassigned = false;
-    for (const task of tasks) {
-      if (task.ownerIds.length === 0) {
-        hasUnassigned = true;
-        continue;
-      }
-      for (const ownerId of task.ownerIds) {
-        if (!ids.includes(ownerId)) {
-          ids.push(ownerId);
-        }
-      }
-    }
-    return { ids, hasUnassigned };
-  }, [tasks]);
-
-  /**
-   * 负责人筛选项（Push 142 / M3-07 刀 1 后半）：全部 → 各负责人 → 待分配。
-   * 负责人在人员目录（GET /api/v1/users → 本组件的 members）里的按成员行渲染（头像 + 姓名 + 工号 + 角色）；
-   * 对不上的（目录外 / 已停用）退化成普通行 —— 不因为查不到人就把这个筛选项弄丢。
-   * 选中值走**负责人 id**（与 visibleTasks 的过滤口径同一套字符串空间）。
-   */
-  const ownerItems = useMemo<SearchSelectItem[]>(() => {
-    const items: SearchSelectItem[] = [{ kind: "plain", value: OWNER_ANY, name: textOf(locale, "gantt.owner.all"), hint: textOf(locale, "gantt.owner.allHint") }];
-    for (const ownerId of ownerOptions.ids) {
-      const member = members.find((item) => item.id === ownerId);
-      items.push(member === undefined ? { kind: "plain", value: ownerId, name: ownerId, hint: fieldText(locale, "负责人") } : { kind: "member", value: ownerId, member });
-    }
-    if (ownerOptions.hasUnassigned) {
-      items.push({ kind: "plain", value: OWNER_NONE, name: textOf(locale, "gantt.owner.none"), hint: textOf(locale, "gantt.owner.noneHint") });
-    }
-    return items;
-  }, [ownerOptions, members, locale]);
+  const rowFilterText = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all" : "gantt.rowFilter.overdue");
+  const rowFilterHint = (key: RowFilterKey): string => t(key === "all" ? "gantt.rowFilter.all.hint" : "gantt.rowFilter.overdue.hint");
 
   /** 筛选后的任务：时间轴范围、阶段汇总、左表行数全部跟着它走（业务口径「甘特内筛选」）。 */
   const visibleTasks = useMemo(() => {
     return tasks.filter((task) => {
-      const matchesOwner =
-        ownerFilter === OWNER_ANY
-          ? true
-          : ownerFilter === OWNER_NONE
-            ? task.ownerIds.length === 0
-            : task.ownerIds.includes(ownerFilter);
-      if (!matchesOwner) {
-        return false;
-      }
       if (rowFilter === "overdue" && task.status !== "已延期") {
-        return false;
-      }
-      // 未排期 = 没填齐「开始 + 预计完成」（与条、左表日期列同一口径）—— 只看未排期时反过来：排期齐了的都筛掉。
-      const scheduled = task.startDate !== "" && task.dueDate !== "";
-      if (rowFilter === "unscheduled" && scheduled) {
         return false;
       }
       return true;
     });
-  }, [tasks, ownerFilter, rowFilter]);
+  }, [tasks, rowFilter]);
 
-  const filtering = ownerFilter !== OWNER_ANY || rowFilter !== "all";
-  const viewportKey = [ownerFilter, rowFilter, scale, zoom, leftWidth, includeToday].join("|");
+  const filtering = rowFilter !== "all";
+  const viewportKey = [rowFilter, scale, Math.round(dayWidth * 100), leftWidth, includeToday].join("|");
+  /** 筛选 / 缩放 / 左表宽度 / 回到今天 变化时收回右侧延伸，回到紧致时间轴。 */
+  useEffect(() => {
+    setExtraEndDays(0);
+  }, [viewportKey]);
   const viewportKeyRef = useRef(viewportKey);
   const model = useMemo(() => {
     const node = scrollRef.current;
@@ -726,8 +839,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
         end: origin + Math.ceil((node.scrollLeft + Math.max(0, node.clientWidth - leftWidth)) / previousDayWidth) * DAY_MS,
       }
       : undefined;
-    return buildModel(locale, visibleTasks, stageOrder, today, collapsed, filtering, includeToday, viewport);
-  }, [visibleTasks, stageOrder, today, collapsed, filtering, includeToday, viewportKey, leftWidth, locale]);
+    return buildModel(locale, visibleTasks, stageOrder, today, collapsed, filtering, includeToday, extraEndDays, viewport);
+  }, [visibleTasks, stageOrder, today, collapsed, filtering, includeToday, extraEndDays, viewportKey, leftWidth, locale]);
   const weekendSet = useMemo(() => new Set(model === null ? [] : model.weekends), [model]);
 
   /**
@@ -771,6 +884,45 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     setPendingToday(false);
   }, [pendingToday, todayLeft, leftWidth]);
 
+  /** 连续缩放后把锚点日期精确对齐回原视口坐标（避免缩放后时间轴跳走）。 */
+  useEffect(() => {
+    if (pendingScrollLeftRef.current === null) {
+      return;
+    }
+    const targetLeft = pendingScrollLeftRef.current;
+    pendingScrollLeftRef.current = null;
+    const node = scrollRef.current;
+    if (node !== null) {
+      node.scrollLeft = targetLeft;
+      syncScrollbars();
+    }
+  }, [dayWidth, scale]);
+
+  /** 按 Ctrl/Meta/Alt + 滚轮（或触控板双指捏合，浏览器默认以 ctrlKey wheel 事件派发）连续缩放时间轴。 */
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (node === null) {
+      return undefined;
+    }
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+      if (delta === 0) {
+        return;
+      }
+      // 指数倍率缩放（触控板细腻、鼠标滚轮每格约 12%）
+      const factor = Math.exp(-clampNumber(delta, -120, 120) * 0.0022);
+      applyDayWidth(dayWidth * factor, event.clientX);
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      node.removeEventListener("wheel", onWheel);
+    };
+  }, [applyDayWidth, dayWidth]);
+
   /** Esc = 取消拖动（不写回、回到原日期）并清掉选中。 */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -786,13 +938,89 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     };
   }, []);
 
+  /** 进全屏：优先浏览器 Fullscreen API（Esc 由浏览器原生退出）；不支持 / 被拒绝 / 假成功时退化为页内覆盖层。 */
+  const enterFullscreen = useCallback(() => {
+    const node = shellRef.current;
+    if (node === null) {
+      return;
+    }
+    if (typeof node.requestFullscreen !== "function" || document.fullscreenEnabled === false) {
+      setCssFullscreen(true);
+      return;
+    }
+    try {
+      const request = node.requestFullscreen();
+      if (request === undefined) {
+        // 旧内核的同步式 requestFullscreen：没有 Promise 可等，交给 fullscreenchange 反映真实状态。
+        return;
+      }
+      void request
+        .then(() => {
+          // 部分环境（自动化 / 权限策略 / 浏览器外壳）会 resolve 却立刻被系统收回：
+          // 250ms 后真实全屏元素不是 shell 就切页内覆盖层，避免「点了没反应」。
+          window.setTimeout(() => {
+            if (document.fullscreenElement !== node) {
+              setCssFullscreen(true);
+            }
+          }, 250);
+        })
+        .catch(() => {
+          setCssFullscreen(true);
+        });
+    } catch {
+      setCssFullscreen(true);
+    }
+  }, []);
+
+  /** 退全屏：页内覆盖层与浏览器原生全屏一起收。 */
+  const exitFullscreen = useCallback(() => {
+    setCssFullscreen(false);
+    if (document.fullscreenElement !== null && typeof document.exitFullscreen === "function") {
+      void document.exitFullscreen().catch(() => {
+        // 退出失败时浏览器仍会派发 fullscreenchange，状态跟着实际全屏元素走。
+      });
+    }
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (nativeFullscreen || cssFullscreen) {
+      exitFullscreen();
+      return;
+    }
+    enterFullscreen();
+  }, [cssFullscreen, enterFullscreen, exitFullscreen, nativeFullscreen]);
+
+  /** 浏览器原生全屏状态以 fullscreenchange 为准（含用户按 Esc / 浏览器 UI 退出）。 */
+  useEffect(() => {
+    const onChange = () => {
+      setNativeFullscreen(document.fullscreenElement === shellRef.current);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+    };
+  }, []);
+
+  /** Esc = 退出页内覆盖层兜底（原生全屏由浏览器自己退出）；全屏只走按钮开关，不再占用 Ctrl + 空格。 */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setCssFullscreen(false);
+      }
+    };
+    // 捕获阶段先拿 Esc，避免页面内其他键盘处理 stopPropagation 把退出吞掉。
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, []);
+
   const toggleStage = (stage: string) => {
     setCollapsed((previous) => ({ ...previous, [stage]: previous[stage] !== true }));
   };
 
-  /** 清空甘特内筛选（负责人回到「全部」、行筛选回到「全部」），并把「回到今天」延出来的范围收回去。 */
+  /** 清空甘特内行筛选（回到「全部」），并把「回到今天」延出来的范围收回去。 */
   const clearFilters = () => {
-    setOwnerFilter(OWNER_ANY);
     setRowFilter("all");
     setIncludeToday(false);
   };
@@ -809,6 +1037,21 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
       return;
     }
     centerOnToday(scrollRef.current, todayLeft, leftWidth);
+  };
+
+  /** 自适应全览：把当前项目排期全跨度正好放进右侧时间轴可视区，并自动匹配合适的日/周/月表头。 */
+  const fitToView = () => {
+    if (model === null) {
+      return;
+    }
+    const node = scrollRef.current;
+    const visibleTimelineWidth = node === null ? 680 : Math.max(node.clientWidth - leftWidth - 24, 180);
+    // 估算实际任务跨度（略去两端余量后留出右侧标签空间）
+    const fittedDayWidth = visibleTimelineWidth / Math.max(model.coreDays, 1);
+    const clamped = clampNumber(Math.round(fittedDayWidth * 100) / 100, DAY_WIDTH_MIN, DAY_WIDTH_MAX);
+    pendingScrollLeftRef.current = 0;
+    setDayWidthRaw(clamped);
+    setScale(scaleForDayWidth(clamped));
   };
 
   const toggleAll = () => {
@@ -837,12 +1080,17 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
 
   /** 锁图标一键切换：锁上时立即结束正在进行的拖动，避免松手后继续写回。 */
   const toggleBarsLocked = () => {
+    const next = !barsLocked;
     if (!barsLocked) {
       setDrag(null);
       dragPointerRef.current = null;
-      setShiftFollowing(false);
     }
-    setBarsLocked((previous) => !previous);
+    setBarsLocked(next);
+    try {
+      window.localStorage.setItem(ganttLockKey(viewerId), next ? "true" : "false");
+    } catch {
+      // localStorage 不可用（隐私模式）时静默降级，仅本次会话生效。
+    }
   };
 
   /** 任务条提示：锁定时去掉拖动说明，换成解锁提示；解锁时沿用完整操作说明。 */
@@ -998,10 +1246,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
       return;
     }
     justDraggedRef.current = true;
-    const task = tasks.find((row) => row.id === session.taskId);
-    const canShift = task !== undefined && task.stageKey !== null && taskCapabilitiesOf(task).source === "project_edit";
-    setShiftFollowing(false);
-    onPatchTask?.(session.taskId, { ...rangePatch(session.start, session.end), shiftFollowing: shiftFollowing && canShift });
+    onPatchTask?.(session.taskId, rangePatch(session.start, session.end));
   };
 
   /** 拖左表右边线改左表宽度（官方 frame.verticalSplitLineMoveable）；双击复位默认宽。 */
@@ -1127,9 +1372,17 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
       return undefined;
     }
     syncScrollbars();
+    /** 上次因「接近右缘」而延伸的时间戳：节流到 500ms，避免同一段滚动反复加长。 */
+    let lastExtendAt = 0;
     const onScroll = () => {
       syncScrollbars();
       revealScrollbars();
+      // 右侧无限延伸：滚到接近右缘（320px 内）就再追加 120 天，继续往右渲染。
+      const now = Date.now();
+      if (now - lastExtendAt > 500 && node.scrollLeft + node.clientWidth >= node.scrollWidth - 320) {
+        lastExtendAt = now;
+        setExtraEndDays((days) => days + 120);
+      }
     };
     node.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", syncScrollbars);
@@ -1311,7 +1564,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                                 onSetProgress(task.id, progress);
                               }
                         }
-                        allowScheduleShift
                         onPatch={
                           onPatchTask === undefined
                             ? undefined
@@ -1331,117 +1583,122 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     </div>
   );
 
-  /** 工具条（常驻，空态 ② / ③ 也在）：图例 + 粒度 / 缩放 / 折叠 / 回到今天 + 甘特内筛选 + 两行操作提示。 */
+  /** 工具条（常驻）：一行 —— 左侧操作（粒度 / 缩放 / 折叠 / 回到今天 / 筛选 / 编辑锁），右侧图例提示。 */
   const toolbarBlock = (
     <div data-gantt-toolbar="" className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <ul data-gantt-legend="" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500">
-          <li className="flex items-center gap-1.5">
-            <span className={"h-2.5 w-4 rounded-[3px] " + BAR_DONE_CLASS} aria-hidden="true" />
-            {t("gantt.legend.done")}
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className={"h-2.5 w-4 rounded-[3px] " + BAR_TODO_CLASS} aria-hidden="true" />
-            {t("gantt.legend.remaining")}
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="h-2.5 w-4 rounded-[3px] bg-[#f7a63c] shadow-[inset_3px_0_0_0_#ef4444]" aria-hidden="true" />
-            {t("gantt.legend.overdue")}
-          </li>
-          <li className="flex items-center gap-1.5" title={t("gantt.legend.singleDayHint")}>
-            <span className="h-2.5 w-2.5 rotate-45 rounded-[2px] bg-emerald-500 ring-1 ring-emerald-700/60" aria-hidden="true" />
-            {t("gantt.legend.singleDay")}
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="h-3 w-[2px] bg-zinc-900/60" aria-hidden="true" />
-            {t("gantt.legend.doneDate")}
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="h-3 border-l border-dashed border-blue-500" aria-hidden="true" />
-            {t("gantt.legend.today")}
-          </li>
-        </ul>
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          <span className="text-[11px] text-zinc-400">{t("gantt.label.granularity")}</span>
-          <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
-            {SCALE_KEYS.map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => {
-                  setScale(key);
-                }}
-                title={t("gantt.scale.title", { name: scaleText(key) })}
-                className={
-                  "rounded-md px-2.5 py-1 text-xs font-medium transition " +
-                  (key === scale ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800")
-                }
-              >
-                {scaleText(key)}
-              </button>
-            ))}
-          </div>
-          <span className="text-[11px] text-zinc-400">{t("gantt.label.zoom")}</span>
-          <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
-            {ZOOM_LEVELS.map((level) => (
-              <button
-                key={level.key}
-                type="button"
-                onClick={() => {
-                  setZoom(level.key);
-                }}
-                title={scale === "month" ? t("gantt.zoom.titleMonth", { n: Math.round(scaleConfig.unitDays * scaleConfig.dayWidth[level.key]) }) : t("gantt.zoom.titleUnit", { unit: locale === "en" ? (scale === "day" ? "day" : "week") : scaleText(scale), n: Math.round(scaleConfig.unitDays * scaleConfig.dayWidth[level.key]) })}
-                className={
-                  "rounded-md px-2.5 py-1 text-xs font-medium transition " +
-                  (level.key === zoom ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800")
-                }
-              >
-                {densityText(level.key)}
-              </button>
-            ))}
-          </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <button
+          type="button"
+          data-gantt-fullscreen-toggle={fullscreen ? "on" : "off"}
+          aria-pressed={fullscreen}
+          aria-label={t(fullscreen ? "gantt.fullscreen.exitAria" : "gantt.fullscreen.enterAria")}
+          title={t(fullscreen ? "gantt.fullscreen.exitTip" : "gantt.fullscreen.enterTip")}
+          onClick={toggleFullscreen}
+          className={
+            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition " +
+            (fullscreen
+              ? "border-sky-200 bg-sky-50 hover:bg-sky-100"
+              : "border-zinc-200 bg-white hover:bg-zinc-50")
+          }
+        >
+          <GanttFullscreenIcon />
+        </button>
+        <span className="h-4 w-px bg-zinc-200" aria-hidden="true" />
+        <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
+          {SCALE_KEYS.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => {
+                applyDayWidth(SCALES[key].dayWidth[nearestZoomKey], undefined, key);
+              }}
+              title={t("gantt.scale.title", { name: scaleText(key) })}
+              className={
+                "rounded-md px-2.5 py-1 text-xs font-medium transition " +
+                (key === scale ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800")
+              }
+            >
+              {scaleText(key)}
+            </button>
+          ))}
+        </div>
+        <span className="text-[11px] text-zinc-400">{t("gantt.label.zoom")}</span>
+        <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
           <button
             type="button"
-            onClick={toggleAll}
-            className={"rounded-lg border px-2.5 py-1 text-xs font-medium text-zinc-600 transition hover:text-zinc-900 " + GLASS_SURFACE}
+            data-gantt-zoom="out"
+            disabled={dayWidth <= DAY_WIDTH_MIN + 0.05}
+            onClick={() => {
+              applyDayWidth(dayWidth / 1.25);
+            }}
+            title={t("gantt.zoom.outTip")}
+            className="rounded-md px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
+            aria-label={t("gantt.zoom.out")}
           >
-            {allCollapsedNow ? t("gantt.toggle.allExpand") : t("gantt.toggle.allCollapse")}
+            −
           </button>
           <button
             type="button"
-            onClick={goToToday}
-            disabled={model === null}
-            title={
-              todayIndex === null
-                ? t("gantt.today.outOfRange")
-                : t("gantt.today.title")
-            }
-            className={
-              "rounded-lg border px-2.5 py-1 text-xs font-medium transition " +
-              (model === null
-                ? "cursor-not-allowed border-zinc-200/60 bg-white/50 text-zinc-300"
-                : GLASS_SURFACE + " text-zinc-600 hover:text-zinc-900")
-            }
+            data-gantt-zoom="reset"
+            onClick={() => {
+              applyDayWidth(DAY_WIDTH_DEFAULT, undefined, "day");
+            }}
+            title={t("gantt.zoom.resetTip")}
+            className="min-w-[44px] rounded-md px-1.5 py-1 text-center text-[11px] font-medium tabular-nums text-zinc-700 transition hover:bg-white hover:text-zinc-900"
           >
-            {t("gantt.today.button")}
+            {zoomPercent}%
+          </button>
+          <button
+            type="button"
+            data-gantt-zoom="in"
+            disabled={dayWidth >= DAY_WIDTH_MAX - 0.05}
+            onClick={() => {
+              applyDayWidth(dayWidth * 1.25);
+            }}
+            title={t("gantt.zoom.inTip")}
+            className="rounded-md px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
+            aria-label={t("gantt.zoom.in")}
+          >
+            +
+          </button>
+          <span className="mx-0.5 h-3.5 w-px bg-zinc-200" aria-hidden="true" />
+          <button
+            type="button"
+            data-gantt-zoom="fit"
+            disabled={model === null}
+            onClick={fitToView}
+            title={t("gantt.zoom.fitTip")}
+            className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 transition hover:bg-white hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            {t("gantt.zoom.fit")}
           </button>
         </div>
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-100 pt-2">
-        <span className="text-[11px] text-zinc-400">{t("gantt.label.filter")}</span>
-        <label className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-          {fieldText(locale, "负责人")}
-          <SearchSelect
-            value={ownerFilter}
-            items={ownerItems}
-            onChange={(next) => {
-              setOwnerFilter(next);
-            }}
-            ariaLabel={t("gantt.owner.aria")}
-            footer={t("gantt.owner.footer", { n: ownerOptions.ids.length })}
-            triggerClassName={"flex min-w-[88px] items-center gap-1 rounded-lg border py-1 pl-2 pr-1.5 text-xs text-zinc-600 transition " + GLASS_SURFACE}
-          />
-        </label>
+        <button
+          type="button"
+          onClick={toggleAll}
+          className={"rounded-lg border px-2.5 py-1 text-xs font-medium text-zinc-600 transition hover:text-zinc-900 " + GLASS_SURFACE}
+        >
+          {allCollapsedNow ? t("gantt.toggle.allExpand") : t("gantt.toggle.allCollapse")}
+        </button>
+        <button
+          type="button"
+          onClick={goToToday}
+          disabled={model === null}
+          title={
+            todayIndex === null
+              ? t("gantt.today.outOfRange")
+              : t("gantt.today.title")
+          }
+          className={
+            "rounded-lg border px-2.5 py-1 text-xs font-medium transition " +
+            (model === null
+              ? "cursor-not-allowed border-zinc-200/60 bg-white/50 text-zinc-300"
+              : GLASS_SURFACE + " text-zinc-600 hover:text-zinc-900")
+          }
+        >
+          {t("gantt.today.button")}
+        </button>
+        <span className="mx-0.5 h-3.5 w-px bg-zinc-200" aria-hidden="true" />
         <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
           {ROW_FILTERS.map((item) => (
             <button
@@ -1460,59 +1717,48 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             </button>
           ))}
         </div>
-        {filtering ? (
-          <>
-            <span className="text-[11px] tabular-nums text-zinc-500">
-              {t("gantt.filter.result", { shown: visibleTasks.length, total: tasks.length })}
-            </span>
-            <button
-              type="button"
-              onClick={clearFilters}
-              className={"rounded-lg border px-2 py-1 text-[11px] font-medium text-zinc-500 transition hover:text-zinc-900 " + GLASS_SURFACE}
-            >
-              {t("gantt.filter.clear")}
-            </button>
-          </>
-        ) : null}
-      </div>
-      <div className="mt-2 flex items-start justify-between gap-3 border-t border-zinc-100 pt-2">
-        <div data-gantt-help="" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] leading-4 text-zinc-500">
-          <span className="inline-flex shrink-0 items-center gap-1 font-medium text-zinc-600">
-            <svg viewBox="0 0 20 20" aria-hidden="true" className="h-3.5 w-3.5 shrink-0"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M10 8.4v5M10 5.8v.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-            <span>{t("gantt.help.title")}</span>
-          </span>
-          <span className="hidden h-3 w-px shrink-0 bg-zinc-200 sm:inline-block" aria-hidden="true" />
-          <span className="whitespace-nowrap">{t("gantt.help.move")}</span>
-          <span className="whitespace-nowrap">{t("gantt.help.resize")}</span>
-          <span className="whitespace-nowrap">{t("gantt.help.progress")}</span>
-          <span className="whitespace-nowrap">{t("gantt.help.pan")}</span>
-          <span className="whitespace-nowrap">{t("gantt.help.pick")}</span>
-          <span className="whitespace-nowrap">{t("gantt.help.splitter")}</span>
-          {!barsLocked && onPatchTask !== undefined && visibleTasks.some((task) =>
-            task.stageKey !== null && task.finalizedAt === null && taskCapabilitiesOf(task).source === "project_edit"
-          ) ? (
-            <label className="inline-flex items-center gap-1.5 text-xs text-zinc-700">
-              <input type="checkbox" checked={shiftFollowing} onChange={(event) => setShiftFollowing(event.target.checked)} />
-              {t("task.schedule.shiftFollowing")}
-            </label>
-          ) : null}
-        </div>
         <button
           type="button"
           data-gantt-lock={barsLocked ? "locked" : "unlocked"}
           aria-pressed={barsLocked}
           aria-label={t("gantt.lock.toggleAria")}
-          title={t(barsLocked ? "gantt.lock.lockedTip" : "gantt.lock.unlockedTip")}
           onClick={toggleBarsLocked}
-          className={
-            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition " +
-            (barsLocked
-              ? "border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-              : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100")
-          }
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white transition hover:bg-zinc-50"
         >
           <GanttLockIcon locked={barsLocked} />
         </button>
+        <span className="shrink-0 text-xs font-bold text-zinc-900">
+          {t(barsLocked ? "gantt.lock.lockedLabel" : "gantt.lock.unlockedLabel")}
+        </span>
+        <ul data-gantt-legend="" className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-500">
+          <li className="flex items-center gap-1.5">
+            <span className={"h-2.5 w-4 rounded-[3px] " + BAR_DONE_CLASS} aria-hidden="true" />
+            {t("gantt.legend.done")}
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span className={"h-2.5 w-4 rounded-[3px] " + BAR_TODO_CLASS} aria-hidden="true" />
+            {t("gantt.legend.remaining")}
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span
+              className="h-2.5 w-4 rounded-[3px] border border-rose-300"
+              style={{ backgroundImage: OVERDUE_TAIL_BG }}
+              aria-hidden="true"
+            />
+            {t("gantt.legend.overdue")}
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span className="inline-flex items-center" aria-hidden="true">
+              <span className="h-0 w-2.5 border-t border-dashed border-slate-500" />
+              <span className="h-2 w-2 rounded-full border-[1.5px] border-white bg-slate-700 shadow-sm" />
+            </span>
+            {t("gantt.legend.doneDate")}
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span className="h-3 border-l border-dashed border-blue-500" aria-hidden="true" />
+            {t("gantt.legend.today")}
+          </li>
+        </ul>
       </div>
     </div>
   );
@@ -1520,12 +1766,21 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   // 空态 ② / ③：工具条（含筛选栏）常驻 —— ② 筛选到一条不剩出提示卡；③ 画不出时间轴出提示条 + 任务列表
   // （列表与甘特图同屏的口径见 taskListBlock 注释）。此分支不进入下面的图表区 —— 那边的常量 / 闭包按 model 非空写。
   if (model === null) {
+    // 任务列表为空（项目无任务，或筛选后一条不剩）：只出提示卡。
     return (
-      <div className="space-y-3">
+      <div
+        ref={shellRef}
+        data-gantt-fullscreen={fullscreen ? "on" : "off"}
+        className={
+          fullscreen
+            ? "fixed inset-0 z-[300] flex h-screen flex-col gap-3 overflow-y-auto bg-slate-100 p-3"
+            : "space-y-3"
+        }
+      >
         {toolbarBlock}
-        {visibleTasks.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-14 text-center text-sm text-zinc-500">
-            <p>{t("gantt.empty.filtered", { n: tasks.length })}</p>
+        <div className="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-14 text-center text-sm text-zinc-500">
+          <p>{tasks.length === 0 ? t("gantt.empty.project") : t("gantt.empty.filtered", { n: tasks.length })}</p>
+          {tasks.length === 0 ? null : (
             <button
               type="button"
               onClick={clearFilters}
@@ -1533,19 +1788,8 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             >
               {t("gantt.filter.clear")}
             </button>
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-xs text-zinc-500">
-              {filtering ? (
-                <p>{t("gantt.empty.unscheduledFiltered", { n: visibleTasks.length })}</p>
-              ) : (
-                <p>{t("gantt.empty.unscheduledProject", { n: tasks.length })}</p>
-              )}
-            </div>
-            {taskListBlock}
-          </>
-        )}
+          )}
+        </div>
       </div>
     );
   }
@@ -1616,6 +1860,32 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     element.scrollTo({ left: Math.max(0, box.left + box.width / 2 - (element.clientWidth - leftWidth) / 2), behavior: "smooth" });
   };
 
+  /**
+   * 未排期任务：在时间轴空白格双击 = 以该日新建 1 天任务条（已有条的任务不响应）。
+   * 新建后即可按普通任务条拖动改期 / 拖两端改工期（锁定态或无权编辑时不生效）。
+   */
+  const createBarOnDoubleClick = (event: ReactMouseEvent<HTMLDivElement>, bar: GanttBar) => {
+    if (bar.start !== null || bar.end !== null) {
+      return;
+    }
+    if (model === null || onPatchTask === undefined || barsLocked) {
+      return;
+    }
+    const capabilities = taskCapabilitiesOf(bar.task);
+    if (!capabilities.canEditFields || bar.task.finalizedAt !== null) {
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left;
+    if (offsetX < 0) {
+      return;
+    }
+    const dayIndex = clampNumber(Math.floor(offsetX / dayWidth), 0, Math.max(model.days - 1, 0));
+    const day = model.rangeStart + dayIndex * DAY_MS;
+    setSelectedId(bar.task.id);
+    onPatchTask(bar.task.id, rangePatch(day, day));
+  };
+
   /** 拖动中的浮标（贴在条上方，行坐标系）：改期 / 改工期写新日期区间与天数，改进度写新百分比。 */
   const dragBubble = (left: number, dragging: boolean) => {
     if (!dragging || drag === null) {
@@ -1633,12 +1903,24 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   };
 
   /**
-   * 任务条：单日任务 = 菱形（只给整条平移；已完成绿 / 未完成灰 / 已延期红）；其余 = 青色进度 + 橙色剩余 + 实际完成刻度；
+   * 任务条：按所属阶段取协调色（主色进度 + 同色系浅底剩余工期 + 实际完成刻度）；
+   * 单日任务（开始 = 预计完成）不再画菱形，直接把对应的日格子用阶段色铺满（仍支持拖动改期 / 改工期 / 改进度）；
    * 悬停 / 拖动时条两端浮出改工期的热区与进度圆点，拖动中的那条上方浮一枚日期（进度）浮标。
    */
   const renderTaskBar = (bar: GanttBar) => {
     if (bar.start === null || bar.end === null) {
-      return <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400">{t("gantt.unscheduled")}</span>;
+      return (
+        <span
+          className="absolute left-2 top-1/2 inline-flex -translate-y-1/2 items-center text-slate-300"
+          title={t("gantt.unscheduled.hint")}
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4">
+            <rect x="2.5" y="4" width="15" height="13" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M2.5 8h15M6.5 2.5v3M13.5 2.5v3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            <path d="M4.5 16.5l11-11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </span>
+      );
     }
     const live = liveOf(bar);
     const box = barBox(live.start, live.end);
@@ -1648,71 +1930,113 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
     const barTitle = barTitleOf(bar);
     const capabilities = taskCapabilitiesOf(bar.task);
     const canEditDates = !barsLocked && capabilities.canEditFields && bar.task.finalizedAt === null;
-    const canEditProgress = !barsLocked && capabilities.canUpdateProgress && bar.task.finalizedAt === null;
     const barCursor = !canEditDates ? "cursor-default" : dragging ? "cursor-grabbing" : "cursor-grab";
-    const showHandles = canEditDates && (barHovered || dragging);
-    const showProgressHandle = canEditProgress && (barHovered || dragging);
+    const showHandles = canEditDates && box.width >= 18 && (barHovered || dragging);
     const percent = Math.round(live.percent);
     // 条内标签对齐官方 labelText「{title} {progress}%」：条够宽写全，窄条只写百分比、再窄就不写。
     const barLabel = box.width >= 84 ? ganttTitle(bar.task) + " " + String(percent) + "%" : String(percent) + "%";
-    // 实际完成日期刻度（B3-01）：按绝对日期落点，拖出条外就不画（免得贴边误导）。
-    const done = bar.done;
-    const doneLeft =
-      done === null || done < live.start || done > live.end
-        ? null
-        : clampNumber((dayDiff(live.start, done) + 0.5) * dayWidth - 1, 0, Math.max(box.width - 2, 0));
 
-    if (bar.milestone) {
-      const size = 14;
-      // 单日任务的菱形按状态取色（业务 2026-09-22）：已完成 / 提前完成 = 绿、未完成 = 灰、已延期 = 红。
-      const tone = isCompleteStatus(bar.status)
-        ? "bg-emerald-500 ring-emerald-700/60"
-        : bar.status === "已延期"
-          ? "bg-red-500 ring-red-700/60"
-          : "bg-zinc-400 ring-zinc-500/60";
-      return (
-        <>
-          <span
-            className={"absolute block touch-none select-none " + barCursor}
-            style={{ left: box.left + dayWidth / 2 - size / 2, top: (ROW_H - size) / 2 }}
-            title={barTitle}
-            onPointerDown={(event) => {
-              beginDrag(event, bar, "move");
-            }}
-            onPointerMove={moveDrag}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-            onMouseEnter={() => {
-              setHoveredBar(bar.task.id);
-            }}
-            onMouseLeave={() => {
-              setHoveredBar(null);
-            }}
-            onClick={(event) => {
-              event.stopPropagation();
-              setSelectedId(bar.task.id);
-            }}
-          >
-            <span className={"block rotate-45 rounded-[2px] ring-1 " + tone + " " + (selected ? "shadow-[0_0_0_2px_rgba(37,99,235,0.45)]" : "")} style={{ width: size, height: size }} aria-hidden="true" />
-          </span>
-          {dragBubble(box.left + dayWidth / 2 - size / 2, dragging)}
-        </>
-      );
-    }
-
+    const palette = stagePaletteOf(bar.stage);
     const overdue = bar.status === "已延期";
+    const isSingleDay = live.start === live.end;
+    // 单日任务宽度按日网格留 1px 缝，垂直高度与多日任务条统一居中（22px 高），保持水平视觉线齐整。
+    const cellLeft = isSingleDay ? box.left + 1 : box.left;
+    const cellWidth = isSingleDay ? Math.max(box.width - 1, 3) : box.width;
+    const barTop = (ROW_H - BAR_H) / 2;
+    const barHeight = BAR_H;
+    const barRight = cellLeft + cellWidth;
+    // 已完成进度 >= 55% 时深色主色铺过半条，文字切换白色提升对比度；未完成浅底段用同色系深字。
+    const labelColor = live.percent >= 55 ? "#ffffff" : palette.text;
+
+    // 实际完成日期（方案 A）：条内彻底不画竖线；
+    // - 推迟完成（done > live.end）：从计划条右端向外拉出虚线 + 实心终点圆点直指实际完成日；
+    // - 按时 / 提前完成（done <= live.end）：在条外右侧挂轻盈的「✓ M/D」小标（若同时超期延长，则放在延长尾端）。
+    const done = bar.done;
+    const doneLateDays = done !== null && done > live.end ? dayDiff(live.end, done) : 0;
+    const doneCenterX = done !== null && done > live.end ? (dayDiff(model.rangeStart, done) + 0.5) * dayWidth : null;
+    const doneEarlyOrOnTime = done !== null && done <= live.end;
+
+    // 已延期（方案 1）：去掉条头 3px 红竖杠，保留阶段配色；
+    // - 若预计完成日期早于今天（today > live.end）且任务未完成：向「今天」拉出半透明玫瑰红斜纹延伸段并标「+N天」；
+    // - 若尚未到今天或已标延期但预计在今天及之后：条外右侧挂轻量红色「已延期」标记（不压条内文字）。
+    const overdueTailDays = overdue && today > live.end ? dayDiff(live.end, today) : 0;
+    const overdueTailLeft = barRight;
+    const showDoneInlineDot = doneLateDays > 0 && doneCenterX !== null && doneCenterX > barRight + 2;
+    const isTaskCompleted = isTaskDone(bar.task);
+    // 已完成任务即使之前曾超期，若有实际完成日期则以实际完成连线为准，不再拉向「今天」的超期滞留条
+    const effectiveOverdueTailDays = !isTaskCompleted ? overdueTailDays : 0;
+    const effectiveOverdueTailWidth = effectiveOverdueTailDays > 0 ? Math.max(effectiveOverdueTailDays * dayWidth, 6) : 0;
+    const effectiveOverdueBadgeOnly = overdue && !isTaskCompleted && effectiveOverdueTailDays <= 0;
+
+    // 条右侧紧邻的轻量徽标起点（避开超期斜纹延伸段 / 实际完成延迟虚线点）
+    const rightAddonLeft =
+      showDoneInlineDot && doneCenterX !== null
+        ? Math.max(doneCenterX + 8, barRight + effectiveOverdueTailWidth + 6)
+        : effectiveOverdueTailWidth > 0
+          ? barRight + effectiveOverdueTailWidth + 6
+          : barRight + 6;
+
     return (
       <>
+        {/* 1. 已延期超期滞留延伸段（方案 1：半透明淡红斜纹从计划条尾拉向「今天」） */}
+        {overdue && effectiveOverdueTailWidth > 0 ? (
+          <div
+            data-gantt-overdue-tail=""
+            className="pointer-events-none absolute flex items-center rounded-r-[4px] border border-l-0 border-rose-300/90"
+            style={{
+              left: overdueTailLeft,
+              width: effectiveOverdueTailWidth,
+              top: barTop + 2,
+              height: barHeight - 4,
+              backgroundImage: OVERDUE_TAIL_BG,
+            }}
+            title={t("gantt.overdue.days", { n: effectiveOverdueTailDays })}
+            aria-hidden="true"
+          />
+        ) : null}
+
+        {/* 2. 推迟完成的实际完成日期虚线 + 实心终点圆点（方案 A：条外直指实际完成日，不劈裂条内文字） */}
+        {showDoneInlineDot && doneCenterX !== null && done !== null ? (
+          <div
+            data-gantt-done-marker="late"
+            className="pointer-events-none absolute flex items-center"
+            style={{
+              left: barRight,
+              width: Math.max(doneCenterX - barRight, 6),
+              top: barTop,
+              height: barHeight,
+            }}
+            title={t("gantt.tip.done", { date: mdText(locale, isoOf(done)) })}
+          >
+            <span className="h-0 flex-1 border-t border-dashed border-slate-500/80" aria-hidden="true" />
+            <span
+              className="-ml-1 h-2.5 w-2.5 shrink-0 rounded-full border-[1.5px] border-white bg-slate-700 shadow-sm"
+              aria-hidden="true"
+            />
+          </div>
+        ) : null}
+
+        {/* 3. 主任务条（极简干净：阶段底色 + 进度填充 + 任务名%，已延期仅加轻细玫瑰红边框不压条内） */}
         <div
+          data-gantt-single-day={isSingleDay ? "true" : undefined}
           className={
-            "absolute flex touch-none select-none items-center overflow-hidden rounded-[4px] " +
-            (selected ? BAR_SELECTED_CLASS : " ") +
-            " " +
-            BAR_TODO_CLASS +
+            "absolute flex touch-none select-none items-center overflow-hidden " +
+            (isSingleDay ? "rounded-[4px] " : "rounded-[5px] ") +
+            (selected
+              ? BAR_SELECTED_CLASS
+              : overdue
+                ? "ring-1 ring-rose-400/90 shadow-[0_1px_2px_rgba(244,63,94,0.12)]"
+                : "shadow-[0_1px_2px_rgba(15,23,42,0.06)]") +
             " " +
             (dragging ? "cursor-grabbing shadow-md" : barCursor)
           }
-          style={{ left: box.left, width: box.width, height: BAR_H, top: (ROW_H - BAR_H) / 2 }}
+          style={{
+            left: cellLeft,
+            width: cellWidth,
+            height: barHeight,
+            top: barTop,
+            backgroundColor: palette.track,
+          }}
           title={barTitle}
           onPointerDown={(event) => {
             beginDrag(event, bar, "move");
@@ -1731,91 +2055,201 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             setSelectedId(bar.task.id);
           }}
         >
-          <span className={"absolute inset-y-0 left-0 " + BAR_DONE_CLASS} style={{ width: String(live.percent) + "%" }} aria-hidden="true" />
-          {overdue ? <span className={BAR_OVERDUE_STRIPE_CLASS} aria-hidden="true" /> : null}
-          {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 bg-zinc-900/10" aria-hidden="true" /> : null}
+          <span
+            className="absolute inset-y-0 left-0 transition-[width] duration-150"
+            style={{ width: String(live.percent) + "%", backgroundColor: palette.accent }}
+            aria-hidden="true"
+          />
+          {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 bg-slate-900/10" aria-hidden="true" /> : null}
           {box.width < 40 ? null : (
-            <span className="relative truncate pl-1.5 pr-1 text-[11px] font-semibold text-zinc-900">{barLabel}</span>
-          )}
-          {doneLeft === null ? null : (
             <span
-              className="absolute inset-y-0 w-[2px] bg-zinc-900/60"
-              style={{ left: doneLeft }}
-              title={t("gantt.tip.done", { date: bar.task.doneDate === "" ? "—" : mdText(locale, bar.task.doneDate) })}
-            />
+              className="relative truncate pl-2 pr-1.5 text-[11px] font-semibold"
+              style={{ color: labelColor, textShadow: live.percent >= 55 ? "0 1px 1px rgba(15,23,42,0.22)" : "none" }}
+            >
+              {barLabel}
+            </span>
           )}
           {showHandles ? (
             <>
               {/* 拖两端 = 改工期（官方 taskBar.resizable）：热区只在悬停 / 拖动时显形，平时不噪。 */}
               <span
-                className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-ew-resize bg-white/40"
+                className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-ew-resize bg-white/45"
                 onPointerDown={(event) => {
                   beginDrag(event, bar, "start");
                 }}
               />
               <span
-                className="absolute inset-y-0 right-0 z-20 w-1.5 cursor-ew-resize bg-white/40"
+                className="absolute inset-y-0 right-0 z-20 w-1.5 cursor-ew-resize bg-white/45"
                 onPointerDown={(event) => {
                   beginDrag(event, bar, "end");
                 }}
               />
             </>
           ) : null}
-          {showProgressHandle && box.width >= 60 ? (
-            // 进度圆点 = 改进度（四档吸附）；左右各让开 6px，免得压住两端的改工期热区。
-            <span
-              className="absolute z-30 cursor-ew-resize rounded-full border border-zinc-400 bg-white shadow"
-              style={{
-                width: KNOB_SIZE,
-                height: KNOB_SIZE,
-                left: clampNumber((live.percent / 100) * box.width - KNOB_SIZE / 2, EDGE_ZONE_W, Math.max(box.width - KNOB_SIZE - EDGE_ZONE_W, EDGE_ZONE_W)),
-                top: (BAR_H - KNOB_SIZE) / 2,
-              }}
-              title={t("gantt.tip.dragProgress", { n: percent })}
-              onPointerDown={(event) => {
-                beginDrag(event, bar, "progress");
-              }}
-            />
-          ) : null}
         </div>
-        {dragBubble(box.left, dragging)}
+
+        {/* 4. 条外轻量状态标注（按时/提前完成「✓ M/D」；延迟完成「+N天」；超期滞留「+N天」；已延期小签） */}
+        {!dragging && (effectiveOverdueTailDays > 0 || effectiveOverdueBadgeOnly || doneEarlyOrOnTime || doneLateDays > 0) ? (
+          <div
+            className="pointer-events-none absolute flex items-center gap-1.5 whitespace-nowrap text-[10px] font-medium leading-none"
+            style={{ left: rightAddonLeft, top: barTop, height: barHeight }}
+          >
+            {effectiveOverdueTailDays > 0 ? (
+              <span className="rounded bg-rose-50 px-1 py-0.5 font-semibold text-rose-600 ring-1 ring-rose-200/80">
+                +{effectiveOverdueTailDays}{t("gantt.dayShort")}
+              </span>
+            ) : effectiveOverdueBadgeOnly ? (
+              <span className="rounded bg-rose-50 px-1 py-0.5 font-medium text-rose-600 ring-1 ring-rose-200/80">
+                {t("gantt.legend.overdue")}
+              </span>
+            ) : null}
+            {doneLateDays > 0 && done !== null ? (
+              <span
+                data-gantt-done-marker="late-label"
+                className="text-slate-500"
+                title={t("gantt.tip.done", { date: mdText(locale, isoOf(done)) })}
+              >
+                {mdText(locale, isoOf(done))} (+{doneLateDays}{t("gantt.dayShort")})
+              </span>
+            ) : doneEarlyOrOnTime && done !== null ? (
+              <span
+                data-gantt-done-marker="ontime"
+                className="inline-flex items-center gap-0.5 text-slate-400"
+                title={t("gantt.tip.done", { date: mdText(locale, isoOf(done)) })}
+              >
+                <span aria-hidden="true">✓</span>
+                <span>{mdText(locale, isoOf(done))}</span>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {dragBubble(cellLeft, dragging)}
       </>
     );
   };
 
-  /** 阶段行：组内任务工期并集的汇总条（比任务条细），进度 = 完成度（已完成 / 组内任务数）。 */
+  /**
+   * 阶段行（顶部括弧统计 + 展开包络）：
+   * - 门型括弧（顶部进度横梁 + 左右向下折钩）包住本阶段工期跨度；
+   * - 统计标签放到括弧紧右侧（而非骑在横梁上方），彻底避免与上一行或吸顶表头碰撞；
+   * - 展开时在括弧下方铺一层淡色半透明包络底框罩住本阶段所有子任务行。
+   */
   const renderGroupBar = (group: GanttGroup) => {
-    if (group.start === null || group.end === null) {
+    let liveStart: number | null = null;
+    let liveEnd: number | null = null;
+    for (const bar of group.bars) {
+      if (bar.start === null || bar.end === null) {
+        continue;
+      }
+      const live = liveOf(bar);
+      liveStart = liveStart === null ? live.start : Math.min(liveStart, live.start);
+      liveEnd = liveEnd === null ? live.end : Math.max(liveEnd, live.end);
+    }
+    if (liveStart === null || liveEnd === null) {
       return null;
     }
-    const box = barBox(group.start, group.end);
+    const palette = stagePaletteOf(group.stage);
+    const box = barBox(liveStart, liveEnd);
+    const spanDays = dayDiff(liveStart, liveEnd) + 1;
+    const expandedHeight = group.expandedCount > 0 ? group.expandedCount * ROW_H : 0;
+    const summaryText = t("board.stage.done", { done: group.doneCount, total: group.bars.length }) + " · " + String(group.percent) + "% · " + t("pm.gantt.days", { n: spanDays });
+    const bracketTop = Math.round((ROW_H - 12) / 2);
+    const barThickness = 5;
+    const legH = 7;
+
     return (
       <div
-        className={"absolute rounded-full " + BAR_TODO_CLASS}
-        style={{ left: box.left, width: box.width, height: GROUP_BAR_H, top: (ROW_H - GROUP_BAR_H) / 2 }}
-        title={t("gantt.groupSpan.tip", { text: String(group.doneCount) + "/" + String(group.bars.length) + " · " + String(group.percent) + "%" })}
+        className="pointer-events-none absolute inset-y-0 left-0 right-0"
+        style={{ zIndex: 2 }}
       >
-        <span className={"absolute inset-y-0 left-0 rounded-full " + BAR_DONE_CLASS} style={{ width: group.percent + "%" }} aria-hidden="true" />
+        {/* 阶段展开时包住子任务区域的淡色包络底框 */}
+        {expandedHeight > 0 ? (
+          <div
+            data-gantt-stage-envelope={group.stage}
+            className="pointer-events-none absolute rounded-b-[6px] border-x border-b"
+            style={{
+              left: box.left,
+              width: box.width,
+              top: bracketTop + barThickness,
+              height: ROW_H - (bracketTop + barThickness) + expandedHeight - 2,
+              backgroundColor: palette.envelope,
+              borderColor: palette.track,
+            }}
+            aria-hidden="true"
+          />
+        ) : null}
+
+        {/* 括弧横梁（顶横杠 + 左下折钩 + 右下折钩；未完成段用同色系浅底、已完成段用阶段主色） */}
+        <div
+          data-gantt-stage-bracket={group.stage}
+          className="pointer-events-auto absolute"
+          style={{ left: box.left, width: box.width, top: bracketTop, height: barThickness + legH }}
+          title={t("gantt.groupSpan.tip", { text: String(group.doneCount) + "/" + String(group.bars.length) + " · " + String(group.percent) + "%" })}
+        >
+          <div
+            className="relative w-full overflow-hidden rounded-t-[3px]"
+            style={{ height: barThickness, backgroundColor: palette.track }}
+          >
+            <span
+              className="absolute inset-y-0 left-0 transition-[width] duration-150"
+              style={{ width: String(group.percent) + "%", backgroundColor: palette.accent }}
+              aria-hidden="true"
+            />
+          </div>
+          <span
+            className="absolute left-0 block w-[3px] rounded-b-[2px]"
+            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent > 0 ? palette.accent : palette.track }}
+            aria-hidden="true"
+          />
+          <span
+            className="absolute right-0 block w-[3px] rounded-b-[2px]"
+            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent >= 100 ? palette.accent : palette.track }}
+            aria-hidden="true"
+          />
+        </div>
+
+        {/* 统计标签放在括弧紧右侧，不占上方高度，彻底杜绝与表头/上一行碰撞 */}
+        <div
+          className="pointer-events-none absolute flex items-center gap-1.5 whitespace-nowrap text-[10px] font-semibold leading-none tabular-nums"
+          style={{ left: box.left + box.width + 8, top: 0, height: ROW_H, color: palette.text }}
+        >
+          <span>{stageText(locale, group.stage)}</span>
+          <span className="rounded px-1.5 py-0.5 text-[10px] font-medium" style={{ backgroundColor: palette.track, color: palette.text }}>
+            {summaryText}
+          </span>
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="space-y-3">
+    <div
+      ref={shellRef}
+      data-gantt-fullscreen={fullscreen ? "on" : "off"}
+      className={
+        fullscreen
+          ? "fixed inset-0 z-[300] flex h-screen flex-col gap-3 overflow-hidden bg-slate-100 p-3"
+          : "space-y-3"
+      }
+    >
       {toolbarBlock}
 
       {/* 任务列表与甘特图同屏（Push 294；Push 295 起列表按阶段标题分组可折叠；Push 313 起「全部」（未筛选）不出列表）：筛选生效且还有没排期的任务才把列表出在甘特上方；图表本身照常在下方渲染（提示条 / 空态 ② 在 model === null 的早退分支里出）。 */}
-      {filtering && hasUnscheduled ? taskListBlock : null}
+      {filtering && hasUnscheduled ? (
+        <div className={fullscreen ? "max-h-[30vh] shrink-0 overflow-y-auto" : undefined}>{taskListBlock}</div>
+      ) : null}
               {/* 图表：左表（sticky left，横向不滚）+ 时间轴（表头 sticky top，纵向吸顶），两边逐行同一组行高 */}
               {/* 外面这层 relative 给自绘的竖向滑块（隐式浮在右缘）定位；下方横向那条是 fixed 在整个窗口底部的，不随页面滚 */}
-              <div className="relative">
+              <div className={fullscreen ? "relative min-h-0 flex-1" : "relative"}>
         <div
           ref={scrollRef}
           data-gantt-scroll=""
           data-live-date-origin={model === null ? undefined : model.rangeStart}
           data-live-date-width={dayWidth}
           className={
-            "scrollbar-hidden h-[calc(100vh-15rem)] min-h-[22rem] max-h-[52rem] overflow-auto rounded-xl border border-zinc-200 bg-white " +
+            "scrollbar-hidden overflow-auto rounded-xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)] " +
+            (fullscreen ? "h-full min-h-0 " : "h-[calc(100vh-15rem)] min-h-[22rem] max-h-[52rem] ") +
             (panActive ? "cursor-grabbing select-none" : "cursor-grab")
           }
           onPointerDown={beginPan}
@@ -1839,28 +2273,46 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                 style={{ width: leftWidth, clipPath: "inset(0)" }}
               >
                 <div
-                  className="flex items-center border-b border-zinc-200 bg-zinc-50 text-[11px] font-medium text-zinc-500"
+                  className="sticky top-0 z-10 flex items-center border-b border-slate-200 bg-slate-50/95 text-[11px] font-medium text-slate-500"
                   style={{ height: HEADER_TOTAL_H, width: LEFT_W_NATURAL }}
                 >
-                  <div className="flex h-full items-center justify-center" style={{ width: COL_INDEX_W }}>
+                  <div className="flex h-full items-center justify-center whitespace-nowrap" style={{ width: COL_INDEX_W }}>
                     {fieldText(locale, "行号")}
                   </div>
-                  <div className="flex h-full items-center px-3" style={{ width: COL_TITLE_W }}>
+                  <div className="flex h-full items-center whitespace-nowrap px-2" style={{ width: COL_TITLE_W }}>
                     {fieldText(locale, "任务")}
                   </div>
-                  <div className="flex h-full items-center px-3" style={{ width: COL_START_W }}>
+                  <div className="flex h-full items-center justify-center whitespace-nowrap px-1" style={{ width: COL_START_W }}>
                     {fieldText(locale, "开始日期")}
                   </div>
-                  <div className="flex h-full items-center px-3" style={{ width: COL_END_W }}>
+                  <div className="flex h-full items-center justify-center whitespace-nowrap px-1" style={{ width: COL_END_W }}>
                     {fieldText(locale, "预计完成日期")}
                   </div>
-                  <div className="flex h-full items-center justify-end pr-3" style={{ width: COL_PROGRESS_W }}>
+                  <div className="flex h-full items-center justify-center whitespace-nowrap px-1" style={{ width: COL_HEADCOUNT_W }}>
+                    {fieldText(locale, "施工人数")}
+                  </div>
+                  <div className="flex h-full items-center justify-center whitespace-nowrap px-1" style={{ width: COL_PROGRESS_W }}>
                     {fieldText(locale, "进展")}
                   </div>
                 </div>
                 {model.rows.map((row) => {
                   const isHovered = hovered === row.key;
                   const range = rowDateRange(row);
+                  const rowTask = row.kind === "task" ? row.bar.task : null;
+                  const rowCaps = rowTask === null ? null : taskCapabilitiesOf(rowTask);
+                  const datesEditable = rowTask !== null && !barsLocked && onPatchTask !== undefined && rowCaps !== null && rowCaps.canEditFields && rowTask.finalizedAt === null;
+                  const progressEditable = rowTask !== null && !barsLocked && onSetProgress !== undefined && rowCaps !== null && rowCaps.canUpdateProgress && rowTask.finalizedAt === null;
+                  const editHint = barsLocked ? t("gantt.lock.lockedTip") : t("board.finalizedHint");
+                  const patchRowRange = (nextStartIso: string, nextDueIso: string) => {
+                    if (rowTask === null) {
+                      return;
+                    }
+                    onPatchTask?.(rowTask.id, {
+                      startDate: nextStartIso,
+                      dueDate: nextDueIso,
+                      days: nextStartIso !== "" && nextDueIso !== "" ? daysBetweenInclusive(nextStartIso, nextDueIso) : 0,
+                    });
+                  };
                   return (
                     <div
                       key={row.key}
@@ -1871,10 +2323,19 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                         setHovered(null);
                       }}
                       onClick={clearSelection}
-                      className={"flex items-center border-b border-zinc-100 " + (isHovered ? "bg-zinc-50" : "bg-white")}
+                      className={
+                        "flex items-center border-b border-slate-100 " +
+                        (row.kind === "group"
+                          ? isHovered
+                            ? "bg-slate-100/80"
+                            : "bg-slate-50/70"
+                          : isHovered
+                            ? "bg-slate-50/80"
+                            : "bg-white")
+                      }
                       style={{ height: ROW_H, width: LEFT_W_NATURAL }}
                     >
-                      <div className="flex items-center justify-center text-[11px] tabular-nums text-zinc-400" style={{ width: COL_INDEX_W }}>
+                      <div className="flex items-center justify-center text-[11px] tabular-nums text-slate-400" style={{ width: COL_INDEX_W }}>
                         {row.no}
                       </div>
                       {row.kind === "group" ? (
@@ -1884,24 +2345,29 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                             toggleStage(row.group.stage);
                           }}
                           title={collapsed[row.group.stage] === true ? t("board.stage.expand") : t("board.stage.collapse")}
-                          className="flex h-full min-w-0 items-center gap-1.5 px-2 text-left"
+                          className="flex h-full min-w-0 items-center gap-1 px-1.5 text-left"
                           style={{ width: COL_TITLE_W }}
                         >
                           <svg
                             viewBox="0 0 12 12"
                             className={
-                              "h-2.5 w-2.5 shrink-0 text-zinc-400 transition-transform " +
+                              "h-2.5 w-2.5 shrink-0 text-slate-400 transition-transform " +
                               (collapsed[row.group.stage] === true ? "" : "rotate-90")
                             }
                             aria-hidden="true"
                           >
                             <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
-                          <span className="truncate text-[13px] font-semibold text-zinc-800">{stageText(locale, row.group.stage)}</span>
-                          <span className="ml-auto shrink-0 pr-1 text-[11px] text-zinc-400">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-[2px]"
+                            style={{ backgroundColor: stagePaletteOf(row.group.stage).accent }}
+                            aria-hidden="true"
+                          />
+                          <span className="truncate text-[12px] font-semibold text-slate-800">{stageText(locale, row.group.stage)}</span>
+                          <span className="ml-auto shrink-0 pr-0.5 text-[10px] tabular-nums text-slate-400">
                             {row.group.bars.length === 0
                               ? t("board.stage.empty")
-                              : t("board.stage.done", { done: row.group.doneCount, total: row.group.bars.length })}
+                              : String(row.group.doneCount) + "/" + String(row.group.bars.length)}
                           </span>
                         </button>
                       ) : (
@@ -1912,28 +2378,101 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                             locateBar(row.bar);
                           }}
                           title={barTitleOf(row.bar) + "\n" + t("gantt.tip.selectTip")}
-                          className="flex h-full min-w-0 items-center gap-1.5 pl-6 pr-2 text-left"
+                          className="flex h-full min-w-0 items-center gap-1.5 pl-4 pr-1.5 text-left"
                           style={{ width: COL_TITLE_W }}
                         >
                           <span className={"h-1.5 w-1.5 shrink-0 rounded-full " + STATUS_DOT_CLASS[row.bar.status]} aria-hidden="true" />
-                          <span className={"truncate text-[13px] " + (selectedId === row.bar.task.id ? "font-semibold text-zinc-900" : "text-zinc-700")}>
+                          <span className={"truncate text-[12px] " + (selectedId === row.bar.task.id ? "font-semibold text-zinc-900" : "text-zinc-700")}>
                             {ganttTitle(row.bar.task)}
                           </span>
                         </button>
                       )}
-                      <div className={dateCellClass(range.live)} style={{ width: COL_START_W }}>
-                        {range.start}
-                      </div>
-                      <div className={dateCellClass(range.live)} style={{ width: COL_END_W }}>
-                        {range.end}
-                      </div>
-                      <div className="pr-3 text-right text-[11px] tabular-nums text-zinc-500" style={{ width: COL_PROGRESS_W }}>
-                        {row.kind === "group"
-                          ? String(row.group.percent) + "%"
-                          : row.bar.start === null
-                            ? t("gantt.unscheduled")
-                            : String(row.bar.percent) + "%"}
-                      </div>
+                      {row.kind === "group" ? (
+                        <>
+                          <div className={dateCellClass(range.live)} style={{ width: COL_START_W }}>
+                            {range.start === "—" ? <span className="text-slate-300">—</span> : range.start}
+                          </div>
+                          <div className={dateCellClass(range.live)} style={{ width: COL_END_W }}>
+                            {range.end === "—" ? <span className="text-slate-300">—</span> : range.end}
+                          </div>
+                          <div className="px-1 text-center whitespace-nowrap text-[11px] tabular-nums text-zinc-500" style={{ width: COL_HEADCOUNT_W }}>
+                            {row.group.headcountTotal > 0 ? t("drawer.headcount.value", { n: row.group.headcountTotal }) : <span className="text-slate-300">—</span>}
+                          </div>
+                          <div className="px-1 text-center whitespace-nowrap text-[11px] tabular-nums text-zinc-500" style={{ width: COL_PROGRESS_W }}>
+                            {String(row.group.percent) + "%"}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-center" style={{ width: COL_START_W }}>
+                            <InlineDateCell
+                              valueIso={rowTask === null ? "" : rowTask.startDate}
+                              ariaLabel={t("board.edit.aria", { field: fieldText(locale, "开始日期") })}
+                              disabled={!datesEditable}
+                              disabledHint={editHint}
+                              placement="below"
+                              bare
+                              triggerClassName="rounded px-1 tabular-nums text-[11px] text-slate-600 hover:bg-slate-100/70"
+                              display={rowTask === null || rowTask.startDate === "" ? <span className="text-slate-300">—</span> : mdText(locale, rowTask.startDate)}
+                              onChange={(iso) => {
+                                const due = rowTask === null ? "" : rowTask.dueDate;
+                                patchRowRange(iso, iso !== "" && due !== "" && iso > due ? "" : due);
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-center" style={{ width: COL_END_W }}>
+                            <InlineDateCell
+                              valueIso={rowTask === null ? "" : rowTask.dueDate}
+                              hintIso={rowTask === null ? "" : rowTask.startDate}
+                              minDate={rowTask === null ? "" : rowTask.startDate}
+                              ariaLabel={t("board.edit.aria", { field: fieldText(locale, "预计完成日期") })}
+                              disabled={!datesEditable}
+                              disabledHint={editHint}
+                              placement="below"
+                              bare
+                              triggerClassName="rounded px-1 tabular-nums text-[11px] text-slate-600 hover:bg-slate-100/70"
+                              display={rowTask === null || rowTask.dueDate === "" ? <span className="text-slate-300">—</span> : mdText(locale, rowTask.dueDate)}
+                              onChange={(iso) => {
+                                patchRowRange(rowTask === null ? "" : rowTask.startDate, iso);
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-center" style={{ width: COL_HEADCOUNT_W }}>
+                            <InlineNumberCell
+                              value={rowTask === null ? 0 : rowTask.headcount}
+                              ariaLabel={t("board.edit.aria", { field: fieldText(locale, "预计所需施工人数") })}
+                              disabled={!datesEditable}
+                              disabledHint={editHint}
+                              bare
+                              triggerClassName="rounded px-1 tabular-nums text-[11px] text-slate-600 hover:bg-slate-100/70"
+                              display={rowTask !== null && rowTask.headcount > 0 ? t("drawer.headcount.value", { n: rowTask.headcount }) : <span className="text-slate-300">—</span>}
+                              onSave={(value) => {
+                                if (rowTask !== null) {
+                                  onPatchTask?.(rowTask.id, { headcount: value });
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-center" style={{ width: COL_PROGRESS_W }}>
+                            {rowTask !== null && (rowTask.startDate === "" || rowTask.dueDate === "") ? (
+                              <span className="text-[11px] text-slate-400">{t("gantt.unscheduled")}</span>
+                            ) : (
+                              <TrackerDots
+                                progress={rowTask === null ? 0 : rowTask.progress}
+                                hovered={trackerHover}
+                                onHoverChange={setTrackerHover}
+                                disabled={!progressEditable}
+                                disabledHint={editHint}
+                                onChange={(next) => {
+                                  if (rowTask !== null) {
+                                    onSetProgress?.(rowTask.id, next);
+                                  }
+                                }}
+                              />
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })}
@@ -1967,16 +2506,20 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
               {/* 表头两排（官方 timelineHeader.scales）：上排 = 月粒度下写年份、日 / 周粒度下写月份；
                   下排 = 日粒度逐日、周粒度逐周（「M/D」）、月粒度逐月（「5月」）。今天那一列整列加蓝底。 */}
               <div className="sticky top-0 z-10 bg-white">
-                <div className="flex border-b border-zinc-200 bg-zinc-50" style={{ height: HEADER_H }}>
-                  {(scale === "month" ? model.years : model.months).map((unit) => (
-                    <div
-                      key={unit.key}
-                      className="flex items-center justify-center border-r border-zinc-200 text-xs font-semibold text-zinc-700"
-                      style={{ width: unit.days * dayWidth }}
-                    >
-                      {unit.label}
-                    </div>
-                  ))}
+                <div className="flex border-b border-slate-200 bg-slate-50/90" style={{ height: HEADER_H }}>
+                  {(scale === "month" ? model.years : model.months).map((unit) => {
+                    const unitWidth = unit.days * dayWidth;
+                    return (
+                      <div
+                        key={unit.key}
+                        className="flex items-center justify-center overflow-hidden whitespace-nowrap border-r border-zinc-200 px-1 text-xs font-semibold text-zinc-700"
+                        style={{ width: unitWidth }}
+                        title={unit.label}
+                      >
+                        {unitWidth >= 32 ? unit.label : null}
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="flex border-b border-zinc-200 bg-white" style={{ height: HEADER_H }}>
                   {headerUnits === null
@@ -1988,7 +2531,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                             key={"day-" + String(index)}
                             className={
                               "flex items-center justify-center text-[10px] tabular-nums " +
-                              (isToday ? "bg-blue-50 font-semibold text-blue-600" : isWeekend ? "bg-zinc-50 text-zinc-400" : "text-zinc-600")
+                              (isToday ? "bg-blue-50 font-semibold text-blue-600" : isWeekend ? "bg-slate-50/80 text-slate-400" : "text-slate-600")
                             }
                             style={{ width: dayWidth }}
                           >
@@ -1998,16 +2541,18 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                       })
                     : headerUnits.map((unit, index) => {
                         const isToday = index === todayUnitIndex;
+                        const unitWidth = unit.days * dayWidth;
                         return (
                           <div
                             key={unit.key}
                             className={
-                              "flex items-center justify-center border-r border-zinc-200 text-[10px] tabular-nums " +
+                              "flex items-center justify-center overflow-hidden whitespace-nowrap border-r border-zinc-200 px-1 text-[10px] tabular-nums " +
                               (isToday ? "bg-blue-50 font-semibold text-blue-600" : "text-zinc-600")
                             }
-                            style={{ width: unit.days * dayWidth }}
+                            style={{ width: unitWidth }}
+                            title={unit.label}
                           >
-                            {unit.label}
+                            {unitWidth >= 22 ? unit.label : null}
                           </div>
                         );
                       })}
@@ -2016,13 +2561,13 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
 
               {/* 网格随粒度：竖线 = 日粒度逐日 / 周粒度逐周（月粒度交给月线），周末底纹只在日粒度（周 / 月粒度太密），
                   月线一直有、年线只在月粒度 —— 条 / 今天线不受影响，仍按天精确落点。 */}
-              <div className="relative" style={scale === "month" ? undefined : dayLineStyle(scale === "week" ? dayWidth * 7 : dayWidth)}>
+              <div className="relative" style={scale === "day" ? dayLineStyle(dayWidth) : undefined}>
                 {scale !== "day"
                   ? null
                   : model.weekends.map((index) => (
                       <span
                         key={"weekend-" + String(index)}
-                        className="absolute inset-y-0 bg-zinc-50"
+                        className="absolute inset-y-0 bg-slate-50/70"
                         style={{ left: index * dayWidth, width: dayWidth, ...dayLineStyle(dayWidth) }}
                         aria-hidden="true"
                       />
@@ -2032,7 +2577,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                   : model.weekStarts.map((index) => (
                       <span
                         key={"week-" + String(index)}
-                        className={"absolute inset-y-0 border-l " + (scale === "week" ? "border-zinc-300" : "border-zinc-200")}
+                        className={"absolute inset-y-0 border-l " + (scale === "week" ? "border-slate-300/80" : "border-slate-200/80")}
                         style={{ left: index * dayWidth }}
                         aria-hidden="true"
                       />
@@ -2040,7 +2585,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                 {model.monthStarts.map((index) => (
                   <span
                     key={"month-line-" + String(index)}
-                    className="absolute inset-y-0 border-l border-zinc-300"
+                    className="absolute inset-y-0 border-l border-slate-300/80"
                     style={{ left: index * dayWidth }}
                     aria-hidden="true"
                   />
@@ -2050,13 +2595,14 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                   : model.yearStarts.map((index) => (
                       <span
                         key={"year-line-" + String(index)}
-                        className="absolute inset-y-0 border-l border-zinc-400"
+                        className="absolute inset-y-0 border-l border-slate-400/80"
                         style={{ left: index * dayWidth }}
                         aria-hidden="true"
                       />
                     ))}
                 {model.rows.map((row) => {
                   const isHovered = hovered === row.key;
+                  const isGroup = row.kind === "group";
                   return (
                     <div
                       key={row.key}
@@ -2067,16 +2613,26 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
                         setHovered(null);
                       }}
                       onClick={clearSelection}
-                      className={"relative border-b border-zinc-100 " + (isHovered ? "bg-zinc-50/70" : "")}
+                      onDoubleClick={isGroup ? undefined : (event) => createBarOnDoubleClick(event, row.bar)}
+                      className={
+                        "relative border-b border-slate-100 " +
+                        (isGroup
+                          ? isHovered
+                            ? "z-[1] bg-slate-100/55"
+                            : "z-[1] bg-slate-50/45"
+                          : isHovered
+                            ? "z-[3] bg-slate-50/60"
+                            : "z-[3]")
+                      }
                       style={{ height: ROW_H }}
                     >
-                      {row.kind === "group" ? renderGroupBar(row.group) : renderTaskBar(row.bar)}
+                      {isGroup ? renderGroupBar(row.group) : renderTaskBar(row.bar)}
                     </div>
                   );
                 })}
                 {todayLeft === null ? null : (
                   <span
-                    className="pointer-events-none absolute inset-y-0 border-l border-dashed border-blue-500"
+                    className="pointer-events-none absolute inset-y-0 z-[4] border-l border-dashed border-blue-500/80"
                     style={{ left: todayLeft }}
                     aria-hidden="true"
                   />

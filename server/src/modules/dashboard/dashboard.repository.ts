@@ -45,10 +45,17 @@ export interface DashboardProjectRoleTaskRow {
   ownerNames: (string | null)[] | null;
 }
 
-/** 项目启动任务实际完成日期（多条取最晚，用于启动年份）。 */
+/**
+ * 项目启动任务的日期行（用于「项目启动时间」与启动年份分组）：
+ * - startupCompletedAt = 实际完成日期，多条取最晚；
+ * - startupPlannedStart / startupPlannedEnd = 计划开始（取最早）/ 计划结束（取最晚）；
+ * 实际未填时回退计划日期（2026-11-26 口径，见 dashboard.rules.ts 的 projectStartupDate）。
+ */
 export interface DashboardProjectStartupRow {
   projectId: string;
   startupCompletedAt: string | null;
+  startupPlannedStart?: string | null;
+  startupPlannedEnd?: string | null;
 }
 
 export interface DashboardTaskBucketRow {
@@ -143,7 +150,7 @@ function onTimeExpression(today: string): SQL<boolean | null> {
       else ${tasks.onTime}
     end)
     when ${tasks.plannedEnd} is not null and ${tasks.plannedEnd} < ${today}::date then false
-    else ${tasks.onTime}
+    else null
   end`;
 }
 
@@ -228,7 +235,10 @@ export class DashboardRepository {
       .where(and(...conditions));
   }
 
-  /** 每个项目的启动时间 =「项目启动 / Project Startup」任务实际完成日期最晚值。 */
+  /**
+   * 每个项目的启动时间 =「项目启动 / Project Startup」任务的实际完成日期（最晚）；
+   * 同时带出计划开始 / 计划结束，供实际未填时回退（2026-11-26 口径）。
+   */
   async listProjectStartupDates(scope: ProjectScopeFilter, client: DbClient = this.database.db): Promise<DashboardProjectStartupRow[]> {
     if (scope.kind === "ids" && scope.ids.length === 0) return [];
     const conditions: SQL[] = [
@@ -244,6 +254,8 @@ export class DashboardRepository {
       .select({
         projectId: tasks.projectId,
         startupCompletedAt: sql<string | null>`max(${tasks.actualEnd})`,
+        startupPlannedStart: sql<string | null>`min(${tasks.plannedStart})`,
+        startupPlannedEnd: sql<string | null>`max(${tasks.plannedEnd})`,
       })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))

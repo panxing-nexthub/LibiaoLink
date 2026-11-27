@@ -18,10 +18,13 @@ export const REGION_CONTINENT_GROUPS: readonly string[] = [...REGION_CONTINENT_O
 /** 中国国内大区：不是国家，但跟中国同归亚洲（地区字典里的通用条目）。 */
 const CHINA_DOMESTIC_REGIONS: readonly string[] = ["华北", "华东", "华南", "华中", "西南", "西北", "东北"];
 
+/** 中国特别地区（2026-11-27）：与国内大区一样归「亚洲」，不另造洲 / 不当地图国家。 */
+const CHINA_SPECIAL_REGIONS: readonly string[] = ["中国台湾", "中国香港", "中国澳门"];
+
 /** 单个地区的洲；认不出国家 → 「其他」。 */
 export function continentOfRegion(name: string, code = ""): string {
   const wanted = name.trim() === "" ? code.trim() : name.trim();
-  if (CHINA_DOMESTIC_REGIONS.indexOf(wanted) >= 0) {
+  if (CHINA_DOMESTIC_REGIONS.indexOf(wanted) >= 0 || CHINA_SPECIAL_REGIONS.indexOf(wanted) >= 0) {
     return "亚洲";
   }
   const hit = matchRegion(name, code);

@@ -50,8 +50,8 @@
 import notoSansJpCss from "@fontsource-variable/noto-sans-jp/index.css?inline";
 import notoSansKrCss from "@fontsource-variable/noto-sans-kr/index.css?inline";
 import notoSansScCss from "@fontsource-variable/noto-sans-sc/index.css?inline";
-import { TEMP_TASK_STAGE, type ProjectTask, type TaskStatus } from "./data/tasks";
-import { additionalStageName, projectTaskStageNames, stageKeyOfName, stageNameOf } from "./taskApi";
+import { TEMP_TASK_STAGE, daysBetweenInclusive, type ProjectTask, type TaskStatus } from "./data/tasks";
+import { TEMP_TASK_STAGE_REF, additionalStageName, projectTaskStageNames, stageKeyOfName, stageNameOf } from "./taskApi";
 import { translateZhTo, type TranslationTarget } from "./translateApi";
 import overviewPreviewPagedCss from "./overviewPreviewPaged.css?inline";
 import overviewPreviewPagedScriptUrl from "./overviewPreviewPaged.js?url";
@@ -97,6 +97,8 @@ const PDF_FRAME_ID = "overview-export-pdf-frame";
 /** A4 横版报告画布（CSS px；与 overviewPreviewPaged.css 的 .preview-page 常量保持同步）。 */
 export const OVERVIEW_REPORT_PAGE_WIDTH = 1122;
 export const OVERVIEW_REPORT_PAGE_HEIGHT = 793.7008;
+/** 预览 / PDF 页内容宽 = A4 横版页宽 − 左右页边距（与 overviewPreviewPaged.css 的 .preview-page padding 同步）。 */
+const OVERVIEW_REPORT_CONTENT_WIDTH = OVERVIEW_REPORT_PAGE_WIDTH - 2 * 34.0157;
 /** 预览 iframe 固定视口；PDF 离屏 iframe 复用同一尺寸，避免宿主窗口参与报告排版。 */
 export const OVERVIEW_PREVIEW_FRAME_WIDTH = 1190;
 export const OVERVIEW_PREVIEW_FRAME_HEIGHT = 880;
@@ -409,7 +411,107 @@ function groupDateRange(group: StageGroup): { start: string; due: string } {
   return { start, due };
 }
 
-/** 折叠阶段与任务行共用当前列配置；折叠行把阶段汇总值放回对应可见列，隐藏列不再占位。 */
+/** 阶段投入统计：开始 / 实际结束（缺实际结束用预计完成）、含首尾天数、单日最多人数与总人天。 */
+type StageEffort = {
+  start: string;
+  end: string;
+  days: number;
+  peak: number;
+  total: number;
+  hasHeadcount: boolean;
+};
+
+/**
+ * 阶段起止与人力统计（业务口径 2026-11-27「单日最多 X 人、阶段共需 X 人天」）：
+ * 设计施工人数按日期汇总：一个任务 22-24 号 4 人 + 下一个任务 23-24 号 4 人 → 23 / 24 号 = 8 人；
+ * 单日人数 = 当天在做的所有任务 headcount 之和（含首尾），peak 取单日最大值；
+ * total = 阶段内每天人数之和（人天）。
+ */
+function stageEffortOf(group: StageGroup): StageEffort | null {
+  let start = "";
+  let end = "";
+  for (const task of group.tasks) {
+    if (task.startDate !== "" && (start === "" || task.startDate < start)) {
+      start = task.startDate;
+    }
+    const finish = task.doneDate !== "" ? task.doneDate : task.dueDate;
+    if (finish !== "" && (end === "" || finish > end)) {
+      end = finish;
+    }
+  }
+  if (start === "" || end === "" || end < start) {
+    return null;
+  }
+  const days = daysBetweenInclusive(start, end);
+  if (days <= 0) {
+    return null;
+  }
+  const covered = group.tasks.filter((task) => task.headcount > 0
+    && task.startDate !== ""
+    && (task.doneDate !== "" || task.dueDate !== ""));
+  let peak = 0;
+  let total = 0;
+  if (covered.length > 0) {
+    const startMs = Date.parse(start + "T00:00:00Z");
+    for (let index = 0; index < days; index += 1) {
+      const day = new Date(startMs + index * 86400000).toISOString().slice(0, 10);
+      let sum = 0;
+      for (const task of covered) {
+        const finish = task.doneDate !== "" ? task.doneDate : task.dueDate;
+        if (task.startDate <= day && day <= finish) {
+          sum += task.headcount;
+        }
+      }
+      peak = Math.max(peak, sum);
+      total += sum;
+    }
+  }
+  return {
+    start,
+    end,
+    days,
+    peak,
+    total,
+    hasHeadcount: covered.length > 0,
+  };
+}
+
+/** 阶段施工人数列文案（中 / 英 / 日 / 韩）：主体语言 + 次语小字。 */
+const STAGE_META_TEXT: Record<OverviewExportLanguage, {
+  total: string;
+  peak: string;
+  peopleUnit: string;
+  personDayUnit: string;
+}> = {
+  zh: { total: "总人工", peak: "峰值", peopleUnit: "人", personDayUnit: "人天" },
+  en: { total: "Total", peak: "Peak", peopleUnit: "people", personDayUnit: "person-days" },
+  ja: { total: "総人工", peak: "ピーク", peopleUnit: "人", personDayUnit: "人日" },
+  ko: { total: "총 공수", peak: "최대", peopleUnit: "명", personDayUnit: "인일" },
+};
+
+/** 阶段「预计所需施工人数」列：总人工（人天）在上、单日峰值（人）在下，主体语言 + 次语小字。 */
+function stageEffortCellHtml(group: StageGroup, primary: OverviewExportLanguage): string {
+  const effort = stageEffortOf(group);
+  if (effort === null || !effort.hasHeadcount) {
+    return '<td class="num"></td>';
+  }
+  const main = STAGE_META_TEXT[primary];
+  const secondaryLang: OverviewExportLanguage = primary === "zh" ? "en" : "zh";
+  const secondary = STAGE_META_TEXT[secondaryLang];
+  const secondaryHtml = (label: string, value: number, unit: string): string =>
+    '<span class="secondary" lang="' + languageAttr(secondaryLang) + '">' +
+    escapeHtml(label) + ' ' + String(value) + ' ' + escapeHtml(unit) + '</span>';
+  return '<td class="num grp__headcount">' +
+    '<span class="grp__metric grp__metric--total"><strong>' + escapeHtml(main.total) + '</strong> ' +
+    String(effort.total) + ' ' + escapeHtml(main.personDayUnit) + ' ' +
+    secondaryHtml(secondary.total, effort.total, secondary.personDayUnit) + '</span>' +
+    '<span class="grp__metric grp__metric--peak"><strong>' + escapeHtml(main.peak) + '</strong> ' +
+    String(effort.peak) + ' ' + escapeHtml(main.peopleUnit) + ' ' +
+    secondaryHtml(secondary.peak, effort.peak, secondary.peopleUnit) + '</span>' +
+    '</td>';
+}
+
+/** 阶段汇总行按可见列落位：阶段名 / 备注 / 计数在阶段列，日期落在各自日期列，人天统计落在施工人数列。 */
 function groupSectionHtml(
   counter: { value: number },
   group: StageGroup,
@@ -421,46 +523,56 @@ function groupSectionHtml(
   columns: OverviewTaskColumns,
 ): string {
   const visibleColumns = visibleOverviewTaskColumns(columns);
+  const visibleWidth = visibleColumns.reduce((sum, column) => sum + column.width, 0);
+  const dueIndex = visibleColumns.findIndex((column) => column.key === "dueDate");
+  const noteColumns = dueIndex >= 0 ? visibleColumns.slice(0, dueIndex + 1) : visibleColumns;
+  const noteWidthPx = visibleWidth === 0
+    ? 0
+    : Math.max(80, Math.round(OVERVIEW_REPORT_CONTENT_WIDTH * 0.97 *
+      (noteColumns.reduce((sum, column) => sum + column.width, 0) / visibleWidth)) - 10);
   const stageName = fixedText(group.name, primary);
-  const noteHtml = note === undefined ? "" : `<span class="grp__note">${escapeHtml(note)}</span>`;
+  const noteHtml = note === undefined
+    ? ""
+    : '<span class="grp__note grp__note--block" style="width:' + String(noteWidthPx) + 'px;max-width:' +
+      String(noteWidthPx) + 'px">' + translatedText(note, translationMap.get(note), primary) + '</span>';
   const countText = group.total === 0
     ? fixedText("暂无任务", primary)
     : String(group.done) + " / " + String(group.total) + " " + escapeHtml(localizedValue("完成", primary)) + " · " +
       (primary === "zh" ? secondaryText("completed", "en") : secondaryText("完成", "zh"));
-  const groupHeading = (showCount = true) =>
-    '<tr class="grp__head"><td colspan="' + String(visibleColumns.length + 1) + '"><div class="grp__heading">' +
+  const headingHtml = '<span class="grp__heading-line">' +
     '<span class="grp__name">' + stageName + '</span>' +
-    (showCount ? '<span class="grp__count">' + countText + '</span>' : '') +
-    noteHtml +
-    '</div></td></tr>';
-
+    '<span class="grp__count">' + countText + '</span></span>' + noteHtml;
+  const dateRange = groupDateRange(group);
+  const pct = group.total === 0 ? 0 : Math.round((group.done / group.total) * 100);
+  const status = stageOverallStatus(group);
+  const tint = status === null ? { text: "#52525b" } : STATUS_TINT[status];
+  const fill = group.total === 0 ? "#d4d4d8" : pct === 100 ? "#10b981" : "#18181b";
+  const cells: Record<OverviewTaskColumnKey, string> = {
+    title: '<td class="task grp__title-cell">' + headingHtml + '</td>',
+    note: '<td class="pnote">' + (columns.title ? "" : headingHtml) + '</td>',
+    managers: '<td class="managers"></td>',
+    owners: '<td class="owners"></td>',
+    status: '<td class="grp__status"></td>',
+    startDate: '<td class="num date">' + dateText(dateRange.start) + '</td>',
+    dueDate: '<td class="num date">' + dateText(dateRange.due) + '</td>',
+    headcount: stageEffortCellHtml(group, primary),
+    progress: '<td class="grp__progress-cell"></td>',
+  };
+  const collapsedCells: Record<OverviewTaskColumnKey, string> = {
+    ...cells,
+    status: '<td class="grp__status"><span class="chip" style="color: ' + tint.text + '">' + fixedText(status ?? "暂无任务", primary) + '</span></td>',
+    progress: '<td class="grp__progress-cell"><span class="grp__progress">' + barHtml(pct, fill, "bar--grp") + '<span>' + (group.total === 0 ? "—" : String(pct) + "%") + '</span></span></td>',
+  };
+  const banner = !columns.title && !columns.note
+    ? '<tr class="grp__head"><td colspan="' + String(visibleColumns.length + 1) + '"><div class="grp__heading">' + headingHtml + '</div></td></tr>'
+    : "";
+  const stageRow = (rowClass: string, rowCells: Record<OverviewTaskColumnKey, string>) =>
+    '<tr class="grp__head ' + rowClass + '"><td class="num"></td>' +
+    visibleColumns.map((column) => rowCells[column.key]).join("") +
+    '</tr>';
   if (collapsed && group.total > 0) {
     counter.value += group.tasks.length;
-    const pct = group.total === 0 ? 0 : Math.round((group.done / group.total) * 100);
-    const status = stageOverallStatus(group);
-    const tint = status === null ? { text: "#52525b" } : STATUS_TINT[status];
-    const dateRange = groupDateRange(group);
-    const fill = group.total === 0 ? "#d4d4d8" : pct === 100 ? "#10b981" : "#18181b";
-    const cells: Record<OverviewTaskColumnKey, string> = {
-      title: '<td class="grp__name">' + stageName + noteHtml + '</td>',
-      note: '<td class="grp__count">' + countText + '</td>',
-      managers: '<td class="managers"><span class="one-line">' + escapeHtml(managerText) + '</span></td>',
-      owners: '<td class="owners"></td>',
-      status: '<td class="grp__status"><span class="chip" style="color: ' + tint.text + '">' + fixedText(status ?? "暂无任务", primary) + '</span></td>',
-      startDate: '<td class="num date">' + dateText(dateRange.start) + '</td>',
-      dueDate: '<td class="num date">' + dateText(dateRange.due) + '</td>',
-      headcount: '<td class="num"></td>',
-      progress: '<td class="grp__progress-cell"><span class="grp__progress">' + barHtml(pct, fill, "bar--grp") + '<span>' + (group.total === 0 ? "—" : String(pct) + "%") + '</span></span></td>',
-    };
-    return (
-      '<tbody class="grp">' +
-      (!columns.title && note !== undefined ? groupHeading(false) : "") +
-      '<tr class="grp__head grp__head--collapsed">' +
-      '<td class="num"></td>' +
-      visibleColumns.map((column) => cells[column.key]).join("") +
-      '</tr>' +
-      '</tbody>'
-    );
+    return '<tbody class="grp">' + banner + stageRow("grp__head--collapsed", collapsedCells) + '</tbody>';
   }
   const rows = group.tasks
     .map((task) => {
@@ -470,7 +582,8 @@ function groupSectionHtml(
     .join("");
   return (
     '<tbody class="grp">' +
-    groupHeading() +
+    banner +
+    stageRow("grp__head--stage", cells) +
     rows +
     '</tbody>'
   );
@@ -533,9 +646,18 @@ const REPORT_STYLE = `
   tbody.grp tr.grp__head td { padding: 3px 7px; background: #f4f4f5; border-bottom: 1px solid #e4e4e7; break-after: avoid; }
   .grp__name { font-size: 10.5px; font-weight: 700; }
   .grp__count { margin-left: 6px; font-size: 9.5px; color: #71717a; }
-  .grp__heading { display: flex; align-items: baseline; }
-  .grp__heading .grp__name, .grp__heading .grp__count { flex-shrink: 0; }
-  .grp__note { min-width: 0; margin-left: 10px; color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; }
+  .grp__heading { display: block; line-height: 1.55; }
+  .grp__heading .grp__name { white-space: nowrap; }
+  .grp__note { color: #3f3f46; font-size: 9.5px; font-weight: 400; }
+  .grp__note--block { display: block; margin-top: 3px; white-space: normal; }
+  .grp__title-cell { line-height: 1.5; }
+  .grp__heading-line { display: block; white-space: nowrap; }
+  .grp__headcount { font-variant-numeric: tabular-nums; line-height: 1.45; white-space: nowrap; }
+  .grp__metric { display: block; white-space: nowrap; color: #3f3f46; font-size: 8.5px; }
+  .grp__metric + .grp__metric { margin-top: 1px; }
+  .grp__metric strong { color: #18181b; font-weight: 700; }
+  .grp__metric--peak strong { color: #3f3f46; }
+  .grp__metric .secondary { margin-left: 4px; font-size: 7.5px; color: #a1a1aa; font-weight: 400; }
   tbody.grp tr.grp__head--collapsed .grp__note { display: block; margin: 2px 0 0; }
   tbody.grp tr.grp__head--collapsed td { padding: 6px 5px; background: #fafafa; border: 0; border-bottom: 1px solid #e4e4e7; vertical-align: middle; }
   tbody.grp tr.grp__head--collapsed td:first-child { padding-left: 7px; border-left: 1px solid #e4e4e7; }
@@ -596,6 +718,7 @@ export function buildOverviewReportHtml(
   collapsedStages: readonly string[] = [],
   columns: OverviewTaskColumns = DEFAULT_OVERVIEW_TASK_COLUMNS,
   hiddenStages: readonly string[] = [],
+  showStageNotes: boolean = true,
 ): string {
   const { project, tasks, summary } = input;
   const groups = groupedByStage(tasks, projectTaskStageNames(summary?.additionalStages, tasks));
@@ -635,8 +758,8 @@ export function buildOverviewReportHtml(
   const managerText = projectManagerText(project);
   const collapsed = new Set(collapsedStages);
   const detailRows = shownGroups.map((group) => {
-    const stageRef = additionalIds.get(group.name) ?? stageKeyOfName(group.name);
-    const note = stageRef === null ? undefined : notesByRef.get(stageRef);
+    const stageRef = additionalIds.get(group.name) ?? stageKeyOfName(group.name) ?? (group.name === TEMP_TASK_STAGE ? TEMP_TASK_STAGE_REF : null);
+    const note = !showStageNotes || stageRef === null ? undefined : notesByRef.get(stageRef);
     if (group.total === 0 && note === undefined) return "";
     return groupSectionHtml(counter, group, note, managerText, translationMap, primary, collapsed.has(group.name), columns);
   }).join("");
@@ -764,8 +887,9 @@ export function buildOverviewPreviewHtml(
   collapsedStages: readonly string[] = [],
   columns: OverviewTaskColumns = DEFAULT_OVERVIEW_TASK_COLUMNS,
   hiddenStages: readonly string[] = [],
+  showStageNotes: boolean = true,
 ): string {
-  return buildOverviewReportHtml(input, translationMap, primary, collapsedStages, columns, hiddenStages)
+  return buildOverviewReportHtml(input, translationMap, primary, collapsedStages, columns, hiddenStages, showStageNotes)
     .replace("</head>", `<style>${overviewPreviewPagedCss}</style></head>`)
     .replace("</body>", `<script data-overview-preview-runtime="" src="${escapeHtml(new URL(overviewPreviewPagedScriptUrl, window.location.origin).href)}"></script></body>`);
 }
@@ -776,9 +900,9 @@ export function buildOverviewPreviewHtml(
  */
 export function overviewExportTranslationRequest(
   input: OverviewExportInput,
-  options: Pick<OverviewExportOptions, "primary" | "collapsedStages" | "hiddenStages" | "columns">,
+  options: Pick<OverviewExportOptions, "primary" | "collapsedStages" | "hiddenStages" | "columns" | "showStageNotes">,
 ): { target: TranslationTarget; texts: string[] } {
-  const { primary, collapsedStages, hiddenStages } = options;
+  const { primary, collapsedStages, hiddenStages, showStageNotes } = options;
   const target: TranslationTarget = primary === "ja" ? "ja" : primary === "ko" ? "ko" : "en";
   const collapsed = new Set(collapsedStages);
   const hidden = new Set(hiddenStages);
@@ -786,9 +910,15 @@ export function overviewExportTranslationRequest(
     const stage = task.stage === "" ? "临时任务" : task.stage;
     return !collapsed.has(stage) && !hidden.has(stage);
   });
+  // 阶段备注同样按导出主体语言翻译（2026-11-26 追订）；空备注不进翻译通道。
+  const stageNoteTexts = showStageNotes
+    ? (input.summary?.stageNotes ?? [])
+      .map((item) => item.note)
+      .filter((note) => note !== "")
+    : [];
   const texts = target === "en"
-    ? [input.project.description, ...visibleTasks.map((task) => task.note)]
-    : [input.project.description, ...visibleTasks.flatMap((task) => [task.title, task.note])];
+    ? [input.project.description, ...visibleTasks.map((task) => task.note), ...stageNoteTexts]
+    : [input.project.description, ...visibleTasks.flatMap((task) => [task.title, task.note]), ...stageNoteTexts];
   return { target, texts };
 }
 
@@ -804,10 +934,10 @@ export async function exportProjectOverviewPdf(
   options: OverviewExportOptions = DEFAULT_OVERVIEW_EXPORT_OPTIONS,
   onTranslateProgress?: (done: number, total: number) => void,
 ): Promise<void> {
-  const { primary, collapsedStages, columns, hiddenStages, exportName } = options;
+  const { primary, collapsedStages, columns, hiddenStages, showStageNotes, exportName } = options;
   const { target, texts } = overviewExportTranslationRequest(input, options);
   const translationMap = await translateZhTo(texts, target, onTranslateProgress);
-  const html = buildOverviewPreviewHtml(input, translationMap, primary, collapsedStages, columns, hiddenStages);
+  const html = buildOverviewPreviewHtml(input, translationMap, primary, collapsedStages, columns, hiddenStages, showStageNotes);
   await exportProjectOverviewPdfHtml(html, input, exportName);
 }
 

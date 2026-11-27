@@ -1,4 +1,4 @@
-import { check, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { desc, sql } from "drizzle-orm";
 import { projects } from "./projects.js";
 import { users } from "./identity.js";
@@ -33,6 +33,22 @@ export const projectAiSummaries = pgTable(
 );
 
 /** project_ai_manual_images（0115 / 0117）：设备布局 / 三维图的人工图片；一项目一类型可多张，按 sort_order 排序。 */
+/** project_ai_hidden_agreement_images（0125）：被用户移除的自动抽取图；按 image_id（auto-0…）隐藏。 */
+export const projectAiHiddenAgreementImages = pgTable(
+  "project_ai_hidden_agreement_images",
+  {
+    projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    imageId: text("image_id").notNull(),
+    hiddenAt: timestamp("hidden_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: "project_ai_hidden_agreement_images_pkey", columns: [table.projectId, table.kind, table.imageId] }),
+    check("ck_project_ai_hidden_agreement_images_kind", sql`${table.kind} in ('layout', 'three_d')`),
+    check("ck_project_ai_hidden_agreement_images_id", sql`${table.imageId} like 'auto-%'`),
+  ],
+);
+
 export const projectAiManualImages = pgTable(
   "project_ai_manual_images",
   {

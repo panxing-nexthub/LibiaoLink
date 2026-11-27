@@ -129,6 +129,9 @@ export function projectTaskStageNames(
 }
 
 /** 舞台展示名 → 阶段 key；不在九阶段内（「临时任务」等分组名）→ null。 */
+/** 临时任务分组（无 stage_key）的备注引用：与真实阶段键 / 新增阶段 UUID 区分。 */
+export const TEMP_TASK_STAGE_REF = "__temp__";
+
 export function stageKeyOfName(stageName: string): string | null {
   return STAGE_KEYS_BY_NAME[stageName] ?? null;
 }

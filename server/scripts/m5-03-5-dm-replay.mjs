@@ -574,6 +574,14 @@ async function main() {
         });
         return true;
       },
+      /** 欢迎语一次性登记（0124）：key = botId|wecomUserid；重复领取返回 false。 */
+      welcomeClaimed: new Set(),
+      async claimWelcomeOnce(input) {
+        const key = input.botId + "|" + input.wecomUserid;
+        if (this.welcomeClaimed.has(key)) return false;
+        this.welcomeClaimed.add(key);
+        return true;
+      },
       async insertDelivery(input) {
         this.deliveries.push(input);
       },
@@ -897,6 +905,10 @@ async function main() {
       String(aibot.welcomes.length),
       "1",
     );
+    await service.replyWelcomeToEnterChat(
+      dmIncoming({ cmd: "aibot_event_callback", msgtype: "event", text: null, eventType: "enter_chat" }),
+    );
+    assertEqual("S16a 欢迎语只发一次：重复 enter_chat 不再发送", String(aibot.welcomes.length), "1");
   }
 
   // S16b 欢迎语回执帧形锁帧（aibot_respond_welcome_msg + 事件 req_id 透传 + text 纯文本）

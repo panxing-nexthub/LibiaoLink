@@ -77,15 +77,15 @@ function capitalizeSentenceStart(text: string): string {
   return first.toUpperCase() + text.slice(1);
 }
 
-/** 领域术语表（原 frontend/src/translateApi.ts 原样搬移；术语不参与机翻、按目标语言固定译法回换）。 */
-interface GlossaryEntry {
-  zh: string;
-  en: string;
-  ja: string;
-  ko: string;
+/** 领域术语 / 官方产品名 / 节点库词条统一结构；日 / 韩缺省回落英文官方写法。 */
+export interface GlossaryTerm {
+  readonly zh: string;
+  readonly en: string;
+  readonly ja?: string;
+  readonly ko?: string;
 }
 
-const GLOSSARY: readonly GlossaryEntry[] = [
+const GLOSSARY: readonly GlossaryTerm[] = [
   { zh: "基督城", en: "Christchurch", ja: "クライストチャーチ", ko: "크라이스트처치" },
   { zh: "立镖", en: "Libiao", ja: "Libiao", ko: "Libiao" },
   { zh: "仓配中心", en: "Warehouse and Distribution Center", ja: "倉庫・配送センター", ko: "창고·물류센터" },
@@ -99,8 +99,42 @@ const GLOSSARY: readonly GlossaryEntry[] = [
   { zh: "调试", en: "Commissioning", ja: "試運転調整", ko: "시운전" },
 ];
 
-/** 长词优先的匹配序（模块级排一次）。 */
-const GLOSSARY_SORTED: readonly GlossaryEntry[] = GLOSSARY.slice().sort((a, b) => b.zh.length - a.zh.length);
+/** 官方产品名（与前端 PlaceholderPage 的 PRODUCT_NAME_TERMS 同口径）：不交给机翻自由发挥。 */
+const PRODUCT_TERMS: readonly GlossaryTerm[] = [
+  { zh: "T-sort", en: "T-Sort" },
+  { zh: "T-Sort", en: "T-Sort" },
+  { zh: "T型分拣", en: "T-Sort" },
+  { zh: "T型分选", en: "T-Sort" },
+  { zh: "3D分拣", en: "3D Sorting" },
+  { zh: "3D分选", en: "3D Sorting" },
+  { zh: "飞箱", en: "AirRob" },
+];
+
+/** 术语目标语言取值：日 / 韩没有专门写法时沿用英文官方名（与页面口径一致）。 */
+function glossaryValue(term: GlossaryTerm, target: TranslateLang): string {
+  if (target === "ja") {
+    return term.ja ?? term.en;
+  }
+  if (target === "ko") {
+    return term.ko ?? term.en;
+  }
+  return term.en;
+}
+
+/** 合并内置术语 / 产品名 / 调用方传入的节点库词条；同中文词以节点库（extra）优先，长词优先。 */
+function glossaryCandidates(text: string, extraTerms: readonly GlossaryTerm[]): GlossaryTerm[] {
+  const seen = new Set<string>();
+  const merged: GlossaryTerm[] = [];
+  for (const term of [...extraTerms, ...PRODUCT_TERMS, ...GLOSSARY]) {
+    const zh = term.zh.trim();
+    if (zh === "" || seen.has(zh) || !text.includes(zh)) {
+      continue;
+    }
+    seen.add(zh);
+    merged.push({ ...term, zh });
+  }
+  return merged.sort((a, b) => b.zh.length - a.zh.length);
+}
 
 /** 占位符号码池（六位、无连零，实测原样透传）：一个术语固定取一枚（同文本内不重号；超池追加一位数字）。 */
 const TOKEN_NUMBERS: readonly string[] = ["8612345", "8612347", "8612361", "8612371", "8612381", "8612391", "8612412", "8612432", "8612452", "8612462", "8612472", "8612482", "8612492", "8612512", "8612532", "8612542"];
@@ -112,20 +146,22 @@ function glossaryToken(index: number): string {
 }
 
 /** 出引擎前：长词优先把命中术语换成占位符（空格包夹，防相邻占位符互相干扰）；返回目标语言替换表（无命中 = 空表、原文照发）。 */
-export function protectGlossary(text: string, target: TranslateLang = "en"): { protectedText: string; tokens: ReadonlyMap<string, string> } {
+export function protectGlossary(
+  text: string,
+  target: TranslateLang = "en",
+  extraTerms: readonly GlossaryTerm[] = [],
+): { protectedText: string; tokens: ReadonlyMap<string, string> } {
+  const terms = glossaryCandidates(text, extraTerms);
+  if (terms.length === 0) {
+    return { protectedText: text, tokens: new Map() };
+  }
   let out = text;
   const tokens = new Map<string, string>();
-  GLOSSARY_SORTED.forEach((term, index) => {
-    if (!out.includes(term.zh)) {
-      return;
-    }
+  terms.forEach((term, index) => {
     const token = glossaryToken(index);
-    tokens.set(token, term[target]);
+    tokens.set(token, glossaryValue(term, target));
     out = out.split(term.zh).join(" " + token + " ");
   });
-  if (tokens.size === 0) {
-    return { protectedText: text, tokens };
-  }
   return { protectedText: out.replace(/\s{2,}/g, " ").trim(), tokens };
 }
 

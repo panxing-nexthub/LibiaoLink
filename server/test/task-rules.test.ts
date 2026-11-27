@@ -72,10 +72,12 @@ describe("deriveOnTime（A14 是否按时交付）", () => {
     expect(deriveOnTime(input({ status: "active", plannedEnd: "2026-09-19" }))).toBe(false);
   });
 
-  it("派生不出时回落存储值（仍无则 null）", () => {
-    expect(deriveOnTime(input({ status: "active", plannedEnd: "2026-09-30", storedOnTime: true }))).toBe(true);
+  it("未完成一律不标记；仅完成态派生不出时回落迁移存储值（仍无则 null）", () => {
+    expect(deriveOnTime(input({ status: "active", plannedEnd: "2026-09-30", storedOnTime: true }))).toBeNull();
+    expect(deriveOnTime(input({ status: "pending", plannedEnd: "2026-09-30", storedOnTime: false }))).toBeNull();
     expect(deriveOnTime(input({ status: "pending", storedOnTime: null }))).toBeNull();
     expect(deriveOnTime(input({ status: "done", plannedEnd: "2026-09-30", actualEnd: null, storedOnTime: false }))).toBe(false);
+    expect(deriveOnTime(input({ status: "done", plannedEnd: "2026-09-30", actualEnd: null, storedOnTime: true }))).toBe(true);
   });
 });
 

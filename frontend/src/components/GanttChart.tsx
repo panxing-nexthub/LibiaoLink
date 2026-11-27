@@ -2423,6 +2423,7 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
                           <div className="flex items-center justify-center" style={{ width: COL_END_W }}>
                             <InlineDateCell
                               valueIso={rowTask === null ? "" : rowTask.dueDate}
+                              hintIso={rowTask === null ? "" : rowTask.startDate}
                               minDate={rowTask === null ? "" : rowTask.startDate}
                               ariaLabel={t("board.edit.aria", { field: fieldText(locale, "预计完成日期") })}
                               disabled={!datesEditable}

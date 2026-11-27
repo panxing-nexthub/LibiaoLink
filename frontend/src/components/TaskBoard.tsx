@@ -820,6 +820,7 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
       ) : (
         <InlineDateCell
           valueIso={dueIso}
+          hintIso={startIso}
           minDate={startIso}
           placement="right"
           allowScheduleShift={canShiftFollowing}

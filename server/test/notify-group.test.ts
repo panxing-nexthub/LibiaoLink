@@ -19,6 +19,7 @@ import type { DailyReportPosterData } from "../src/modules/notify/daily-report.p
 import type { MaterialReissuePosterData } from "../src/modules/notify/material-reissue.poster.types.js";
 import type { StageCompletePosterData } from "../src/modules/notify/stage-complete.poster.types.js";
 import { areAllProjectTasksOnTime } from "../src/modules/notify/notify.group.repository.js";
+import { stageCompletionNoticeKey } from "../src/modules/notify/notify.constants.js";
 import {
   composeGroupMarkdown,
   GROUP_DEGRADE_PREFIX,
@@ -1119,6 +1120,7 @@ describe("NotifyGroupService.consume（outbox notify.group → 投递 → 三分
           templateCode: "STAGE_COMPLETE_GROUP",
           stageKey: "design",
         }),
+        { dedupeKey: stageCompletionNoticeKey(PROJECT_ID, "design") },
       ),
     );
 
@@ -1133,15 +1135,32 @@ describe("NotifyGroupService.consume（outbox notify.group → 投递 → 三分
     expect(repo.deliveries[0]).toMatchObject({ state: "sent", attempts: 2 });
   });
 
-  it("STAGE_COMPLETE_GROUP：阶段键缺失或海报发送失败只留文字，不回滚已送达消息", async () => {
+  it("旧的自动阶段播报和已取消完成的手动请求直接结束", async () => {
     const { service, repo, aibot } = makeService();
     repo.groups.push(groupRow({ projectId: PROJECT_ID, chatid: CHATID, activatedAt: AT }));
-    let outcome = await service.consume(
-      claimedRow(payload({ templateCode: "STAGE_COMPLETE_GROUP", title: "阶段完成", body: "本阶段已全部完成" })),
-    );
-    expect(outcome).toEqual({ outcome: "done" });
+    repo.stageCompletePosterData = {
+      projectCode: "P-001",
+      projectName: "测试项目",
+      stageKey: "design",
+      completedAt: AT,
+      stages: [{ key: "design", total: 5, done: 4 }],
+    };
+    const stageMessage = payload({ templateCode: "STAGE_COMPLETE_GROUP", stageKey: "design" });
+    const requests = [
+      claimedRow(stageMessage, { dedupeKey: "stage.completed:" + PROJECT_ID + ":design" }),
+      claimedRow(payload({ templateCode: "A08_GROUP" }), { dedupeKey: "A08:stage-1:v7" }),
+      claimedRow(stageMessage, { dedupeKey: stageCompletionNoticeKey(PROJECT_ID, "design") }),
+    ];
+    for (const request of requests) {
+      expect(await service.consume(request)).toEqual({ outcome: "done" });
+    }
+    expect(aibot.sends).toHaveLength(0);
     expect(aibot.imageSends).toHaveLength(0);
+  });
 
+  it("手动阶段播报海报发送失败，文字仍只送达一次", async () => {
+    const { service, repo, aibot } = makeService();
+    repo.groups.push(groupRow({ projectId: PROJECT_ID, chatid: CHATID, activatedAt: AT }));
     aibot.imageResult = {
       ok: false,
       kind: "retryable",
@@ -1158,13 +1177,13 @@ describe("NotifyGroupService.consume（outbox notify.group → 投递 → 三分
       completedAt: AT,
       stages: [{ key: "design", total: 5, done: 5 }],
     };
-    outcome = await service.consume(
-      claimedRow(
-        payload({ templateCode: "STAGE_COMPLETE_GROUP", stageKey: "design", title: "阶段完成", body: "本阶段已全部完成" }),
-        { id: 8, dedupeKey: "stage.completed:test" },
-      ),
+    const row = claimedRow(
+      payload({ templateCode: "STAGE_COMPLETE_GROUP", stageKey: "design", title: "阶段完成", body: "本阶段已全部完成" }),
+      { id: 8, dedupeKey: stageCompletionNoticeKey(PROJECT_ID, "design") },
     );
-    expect(outcome).toEqual({ outcome: "done" });
+    expect(await service.consume(row)).toEqual({ outcome: "done" });
+    expect(await service.consume(row)).toEqual({ outcome: "done" });
+    expect(aibot.sends).toHaveLength(1);
     expect(aibot.imageSends).toHaveLength(1);
     expect(repo.deliveries.at(-1)).toMatchObject({ state: "sent" });
   });

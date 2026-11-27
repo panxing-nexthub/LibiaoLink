@@ -5,6 +5,8 @@ import {
   ProjectStageNotePutBodySchema,
   ProjectStageRefSchema,
   ProjectSummarySchema,
+  StageKeySchema,
+  type StageKey,
   TaskBatchBodySchema,
   TaskBatchResponseSchema,
   TaskCanCompleteResponseSchema,
@@ -46,6 +48,7 @@ type TaskLockedFieldsAdjustBody = z.infer<typeof TaskLockedFieldsAdjustBodySchem
 
 const uuidParam = new ZodValidationPipe(UuidSchema);
 const stageRefParam = new ZodValidationPipe(ProjectStageRefSchema);
+const stageKeyParam = new ZodValidationPipe(StageKeySchema);
 
 /**
  * 任务接口（h4 · S6·task）：契约 shared/src/modules/tasks.ts。
@@ -83,6 +86,17 @@ export class TaskController {
   @Get(":id/summary")
   summary(@Param("id", uuidParam) id: string): Promise<z.infer<typeof ProjectSummarySchema>> {
     return this.tasks.summary(id);
+  }
+
+  @Post(":id/stage-completion-notices/:key")
+  @RequirePermission("project.update")
+  @HttpCode(204)
+  sendStageCompletionNotice(
+    @Param("id", uuidParam) id: string,
+    @Param("key", stageKeyParam) key: StageKey,
+    @CurrentActorId() actorId: string,
+  ): Promise<void> {
+    return this.tasks.sendStageCompletionNotice(id, key, actorId);
   }
 
   @Post(":id/additional-stages")

@@ -947,7 +947,7 @@ export function TaskRow({ task, columns, selected, onSelect, onProgress, onDelet
   );
 }
 
-export function ProjectSummary({ summary }: { summary: ApiProjectSummary | null }) {
+export function ProjectSummary({ summary, stageNotices }: { summary: ApiProjectSummary | null; stageNotices?: React.ReactNode }) {
   const locale = useLocale();
   const t = useT();
   const total = summary?.total ?? 0;
@@ -967,6 +967,7 @@ export function ProjectSummary({ summary }: { summary: ApiProjectSummary | null 
       <p className="text-xs text-zinc-500">
         {t("board.summary.latest")}<span className="ml-1.5 text-sm font-bold text-zinc-800">{stageLabel(latest)}</span>
       </p>
+      {stageNotices}
       <div className="ml-auto flex items-center gap-2.5">
         <span className="text-xs text-zinc-500">{t("board.summary.progress")}</span>
         <div className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-100">

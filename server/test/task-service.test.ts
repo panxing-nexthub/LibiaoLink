@@ -21,6 +21,7 @@ import type {
 import { TaskRepository } from "../src/modules/task/task.repository.js";
 import type { TaskGateRepository } from "../src/modules/task/task.gate.repository.js";
 import { shanghaiToday } from "../src/modules/task/task.rules.js";
+import { stageCompletionNoticeKey } from "../src/modules/notify/index.js";
 import { TaskService } from "../src/modules/task/task.service.js";
 import type { TaskNodeRepository, TemplateService } from "../src/modules/template/index.js";
 
@@ -97,7 +98,7 @@ class FakeTaskRepository {
     managerNames: ["原经理"],
   };
   /** 项目群绑定窄读面；群同步用例按需置 null / 未激活。 */
-  groupBinding: { activatedAt: Date | null } | null = { activatedAt: new Date("2026-09-01T00:00:00Z") };
+  groupBinding: { activatedAt: Date | null; enabled: boolean } | null = { activatedAt: new Date("2026-09-01T00:00:00Z"), enabled: true };
   /** listChangeLinks 收到的 change_refs（追加序）。 */
   changeLinkQueries: string[][] = [];
   inserted: TaskRow | null = null;
@@ -167,7 +168,7 @@ class FakeTaskRepository {
           changeLinks: this.changeLinks,
         };
   }
-  async findGroupBinding(): Promise<{ activatedAt: Date | null } | null> {
+  async findGroupBinding(): Promise<{ activatedAt: Date | null; enabled: boolean } | null> {
     return this.groupBinding;
   }
   async findProjectNotificationContext(): Promise<{ code: string; name: string; managerNames: (string | null)[] | null }> {
@@ -272,14 +273,15 @@ class FakeTaskRepository {
     return this.abortedTaskSessionCount;
   }
   stageCounts = { total: 0, done: 0, deliveryReady: 0 };
-  stageLocks: { projectId: string; stageKey: string }[] = [];
-  async lockStageCompletion(_client: unknown, projectId: string, stageKey: string): Promise<void> {
-    this.stageLocks.push({ projectId, stageKey });
+  sentNotices = new Map<string, Date>();
+  noticeQueue = new Map<string, "sending" | "failed">();
+  async findSentStageNotices(): Promise<Map<string, Date>> {
+    return this.sentNotices;
   }
-  stageNoticeSent = false;
-  async hasSentStageCompletionNotice(_client: unknown, _projectId: string, _stageKey: string): Promise<boolean> {
-    return this.stageNoticeSent;
+  async stageNoticeQueue(): Promise<Map<string, "sending" | "failed">> {
+    return this.noticeQueue;
   }
+  readonly resetFailedStageNotice = vi.fn(async () => {});
   async countStageTasks(): Promise<{ total: number; done: number; deliveryReady: number }> {
     return this.stageCounts;
   }
@@ -709,7 +711,7 @@ describe("TaskService.create（A10 / A1-13）", () => {
 
   it.each([
     ["未绑定", null],
-    ["未激活", { activatedAt: null }],
+    ["未激活", { activatedAt: null, enabled: true }],
   ] as const)("临时任务同步项目群但群%s：400，且任务整体回滚", async (_label, binding) => {
     const repo = new FakeTaskRepository();
     repo.project = { id: PROJECT, managerIds: [ACTOR], stageKey: "acceptance", status: "active" };
@@ -1172,6 +1174,10 @@ describe("TaskService.summary（汇总卡：最慢 / 最新阶段 + 三计数）
       projectId: PROJECT,
       additionalStages: [],
       stageNotes: [],
+      stageNotices: [
+        { stageKey: "presale", status: "unsent", sentAt: null },
+        { stageKey: "install", status: "unsent", sentAt: null },
+      ],
       slowestStage: "design",
       latestStage: "install",
       overdue: 2,
@@ -1245,84 +1251,115 @@ describe("变更关联多条（A1-07 / R01 · Push 144）", () => {
 });
 
 
-describe("大阶段完成群通知（全部小任务完成）", () => {
-  it("本次完成使阶段全部 done：写入 STAGE_COMPLETE_GROUP 群通知，阶段判定加事务锁", async () => {
+describe("项目总览手动阶段播报", () => {
+  it("任务完成只发任务事件，首次完成整阶段也不自动入群播报队列", async () => {
     const repo = new FakeTaskRepository();
-    repo.task = makeRow({ stageKey: "design", status: "active", progress: "0.8" });
+    repo.task = makeRow({ stageKey: "design", status: "active" });
     const gate = new FakeTaskGateRepository();
     gate.delivery = { total: 5, done: 5, deliveryReady: 5, issues: [] };
     const database = new FakeDatabase();
-    const service = makeService(repo, new FakePermissionService(), gate, new FakeAuditService(), database);
+    const service = makeService(repo, undefined, gate, undefined, database);
 
     await service.complete(PROJECT, TASK, { version: 3 }, ACTOR);
 
-    expect(repo.stageLocks).toEqual([{ projectId: PROJECT, stageKey: "design" }]);
-    const groupEvent = database.outbox.find(
-      (item) =>
-        typeof item === "object" &&
-        item !== null &&
-        (item as { topic?: string }).topic === "notify.group",
-    ) as
-      | { topic: string; dedupeKey: string; payload: Record<string, unknown> }
-      | undefined;
-    expect(groupEvent).toMatchObject({
+    expect(database.outbox).toContainEqual(expect.objectContaining({ topic: "task.completed" }));
+    expect(database.outbox).not.toContainEqual(expect.objectContaining({ topic: "notify.group" }));
+  });
+
+  it("取消完成后移出待发送，恢复后重新列出，历史送达保留", async () => {
+    const repo = new FakeTaskRepository();
+    const service = makeService(repo);
+    repo.perStage = [
+      { stageKey: "design", status: "done", value: 2 },
+      { stageKey: "purchase", status: "active", value: 1 },
+      { stageKey: null, status: "done", value: 1 },
+    ];
+    const sentAt = new Date("2026-11-25T03:00:00Z");
+    repo.sentNotices.set("purchase", sentAt);
+    const expected = [
+      { stageKey: "design", status: "unsent", sentAt: null },
+      { stageKey: "purchase", status: "sent", sentAt: sentAt.toISOString() },
+    ];
+
+    expect((await service.summary(PROJECT)).stageNotices).toEqual(expected);
+    repo.perStage.push({ stageKey: "design", status: "active", value: 1 });
+    expect((await service.summary(PROJECT)).stageNotices).toEqual([expected[1]]);
+    repo.perStage.pop();
+    expect((await service.summary(PROJECT)).stageNotices).toEqual(expected);
+  });
+
+  it("点击发送才排队，同一阶段排队中或已送达均不再创建投递", async () => {
+    const repo = new FakeTaskRepository();
+    repo.perStage = [{ stageKey: "design", status: "done", value: 5 }];
+    const gate = new FakeTaskGateRepository();
+    gate.delivery = { total: 5, done: 5, deliveryReady: 5, issues: [] };
+    const database = new FakeDatabase();
+    const service = makeService(repo, undefined, gate, undefined, database);
+    const dedupeKey = stageCompletionNoticeKey(PROJECT, "design");
+
+    await service.sendStageCompletionNotice(PROJECT, "design", ACTOR);
+
+    expect(database.outbox).toEqual([expect.objectContaining({
       topic: "notify.group",
-      dedupeKey: "stage.completed:" + PROJECT + ":design",
+      dedupeKey,
       payload: {
         projectId: PROJECT,
         title: "阶段完成｜设计开发",
         body: "「设计开发」阶段 5 项小任务已全部完成，阶段里程碑达成。",
-        refType: "task",
-        refId: TASK,
+        refType: "project",
+        refId: PROJECT,
         templateCode: "STAGE_COMPLETE_GROUP",
         stageKey: "design",
       },
-    });
+    })]);
+    repo.noticeQueue.set(dedupeKey, "sending");
+    expect((await service.summary(PROJECT)).stageNotices).toEqual([
+      { stageKey: "design", status: "sending", sentAt: null },
+    ]);
+    await service.sendStageCompletionNotice(PROJECT, "design", ACTOR);
+
+    repo.noticeQueue.clear();
+    repo.sentNotices.set("design", new Date());
+    await service.sendStageCompletionNotice(PROJECT, "design", ACTOR);
+    expect(database.outbox).toHaveLength(1);
   });
 
-  it("已成功发送过阶段完成通知：阶段再次完成不重复写群通知", async () => {
+  it("终态失败可以手动重试同一条播报", async () => {
     const repo = new FakeTaskRepository();
-    repo.task = makeRow({ stageKey: "design", status: "active" });
-    repo.stageNoticeSent = true;
+    repo.perStage = [{ stageKey: "design", status: "done", value: 1 }];
     const gate = new FakeTaskGateRepository();
-    gate.delivery = { total: 5, done: 5, deliveryReady: 5, issues: [] };
+    gate.delivery = { total: 1, done: 1, deliveryReady: 1, issues: [] };
     const database = new FakeDatabase();
-    const service = makeService(repo, new FakePermissionService(), gate, new FakeAuditService(), database);
+    const service = makeService(repo, undefined, gate, undefined, database);
+    const dedupeKey = stageCompletionNoticeKey(PROJECT, "design");
+    repo.noticeQueue.set(dedupeKey, "failed");
 
-    await service.complete(PROJECT, TASK, { version: 3 }, ACTOR);
+    expect((await service.summary(PROJECT)).stageNotices).toEqual([
+      { stageKey: "design", status: "failed", sentAt: null },
+    ]);
+    await service.sendStageCompletionNotice(PROJECT, "design", ACTOR);
 
-    expect(database.outbox.some((item) => (item as { topic?: string }).topic === "notify.group")).toBe(false);
+    expect(repo.resetFailedStageNotice).toHaveBeenCalledWith(expect.anything(), dedupeKey);
+    expect(database.outbox).toEqual([expect.objectContaining({ dedupeKey })]);
   });
 
-  it("阶段仍有未完成任务 / 未分组任务：不发群通知", async () => {
-    const partialRepo = new FakeTaskRepository();
-    partialRepo.task = makeRow({ stageKey: "design", status: "active" });
-    const partialGate = new FakeTaskGateRepository();
-    partialGate.delivery = { total: 5, done: 4, deliveryReady: 4, issues: [] };
-    const partialDb = new FakeDatabase();
-    await makeService(
-      partialRepo,
-      new FakePermissionService(),
-      partialGate,
-      new FakeAuditService(),
-      partialDb,
-    ).complete(PROJECT, TASK, { version: 3 }, ACTOR);
-    expect(partialDb.outbox.some((item) => (item as { topic?: string }).topic === "notify.group")).toBe(false);
+  it.each([
+    ["stage_not_done", { total: 5, done: 4, deliveryReady: 4, issues: [] }],
+    ["stage_documents_missing", { total: 5, done: 5, deliveryReady: 4, issues: [] }],
+    ["stage_group_unavailable", { total: 5, done: 5, deliveryReady: 5, issues: [] }],
+  ] as const)("发送时重新核对任务与群绑定（%s）", async (code, counts) => {
+    const repo = new FakeTaskRepository();
+    repo.groupBinding = { activatedAt: null, enabled: true };
+    const gate = new FakeTaskGateRepository();
+    gate.delivery = { ...counts, issues: [] };
+    const database = new FakeDatabase();
+    const service = makeService(repo, undefined, gate, undefined, database);
 
-    const ungroupedRepo = new FakeTaskRepository();
-    ungroupedRepo.task = makeRow({ stageKey: null, status: "active" });
-    const ungroupedGate = new FakeTaskGateRepository();
-    ungroupedGate.delivery = { total: 1, done: 1, deliveryReady: 1, issues: [] };
-    const ungroupedDb = new FakeDatabase();
-    await makeService(
-      ungroupedRepo,
-      new FakePermissionService(),
-      ungroupedGate,
-      new FakeAuditService(),
-      ungroupedDb,
-    ).complete(PROJECT, TASK, { version: 3 }, ACTOR);
-    expect(ungroupedRepo.stageLocks).toEqual([]);
-    expect(ungroupedDb.outbox.some((item) => (item as { topic?: string }).topic === "notify.group")).toBe(false);
+    await expect(service.sendStageCompletionNotice(PROJECT, "design", ACTOR)).rejects.toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: [expect.objectContaining({ code })],
+    });
+    expect(database.outbox).toHaveLength(0);
   });
 });
 

@@ -108,7 +108,13 @@ export type {
   NotifyDeliveryMessageRow,
   NotifyDeliveryStateUpdate,
 } from "./notify.delivery-archive.repository.js";
-export { NOTIFY_GROUP_TOPIC, NOTIFY_MESSAGE_TOPIC } from "./notify.constants.js";
+export {
+  NOTIFY_GROUP_TOPIC,
+  NOTIFY_MESSAGE_TOPIC,
+  STAGE_ADVANCED_GROUP_TEMPLATE,
+  STAGE_COMPLETE_GROUP_TEMPLATE,
+  stageCompletionNoticeKey,
+} from "./notify.constants.js";
 export {
   channelOfNotifyPayload,
   formatClockMinute,

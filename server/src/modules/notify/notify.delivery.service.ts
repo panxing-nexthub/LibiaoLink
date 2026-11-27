@@ -21,6 +21,7 @@ import { DatabaseService } from "../../db/database.service.js";
 import type { DbClient } from "../../db/db-client.js";
 import { AuditService } from "../audit/index.js";
 import { PermissionService } from "../permission/index.js";
+import { STAGE_ADVANCED_GROUP_TEMPLATE, STAGE_COMPLETE_GROUP_TEMPLATE } from "./notify.constants.js";
 import {
   NotifyDeliveryReadRepository,
   type NotifyDeliveryAttemptRecord,
@@ -115,6 +116,9 @@ export class NotifyDeliveryService {
       const original = await this.repository.findById(id, tx);
       if (original === null) {
         throw new AppError("NOT_FOUND", "发送记录不存在（id=" + id + "）");
+      }
+      if (original.templateCode === STAGE_COMPLETE_GROUP_TEMPLATE || original.templateCode === STAGE_ADVANCED_GROUP_TEMPLATE) {
+        throw new AppError("VERSION_CONFLICT", "请在项目总览的阶段播报中发送");
       }
       if (!RESEND_CHANNELS.has(original.channel) || !RESEND_STATES.has(original.lastState)) {
         throw new AppError(

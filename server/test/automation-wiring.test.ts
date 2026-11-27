@@ -280,7 +280,7 @@ describe("规则事件消费（S7-4 接线 · evaluateEventMessages → notify.m
     expect(h.appended).toHaveLength(0);
   });
 
-  it("A08 阶段推进事件：产出 notify.group（项目群寻址 + 阶段关联 + 明确项目 / 推进人）", async () => {
+  it("A08 阶段推进事件：已启用也不自动发到项目群", async () => {
     const h = makeHarness();
     h.subjects.eventSubjects.set(
       "stage.advanced",
@@ -303,17 +303,7 @@ describe("规则事件消费（S7-4 接线 · evaluateEventMessages → notify.m
       ?.handle(row("stage.advanced", { projectId: "p-1", stageKey: "design", stageVersion: 7, actorId: "u-1" }));
 
     expect(outcome).toEqual({ outcome: "done" });
-    expect(h.appended).toHaveLength(1);
-    const event = h.appended[0];
-    expect(event?.event.topic).toBe("notify.group");
-    expect(event?.event.dedupeKey).toBe("A08:stage-1:v7");
-    const payload = event?.event.payload as Record<string, unknown>;
-    expect(payload.projectId).toBe("p-1");
-    expect(payload.title).toBe("🏁 大阶段完成通知");
-    expect(String(payload.body)).toBe("项目：**LBUSA-20261014-002·美国仓储公司订单**\n邵晨宇已完成大阶段「**设计开发**」，当前项目阶段：**加工采购**。");
-    expect(payload.refType).toBe("stage");
-    expect(payload.refId).toBe("stage-1");
-    expect(payload.templateCode).toBe("A08_GROUP");
+    expect(h.appended).toHaveLength(0);
   });
 
   it("R06 项目完成事件：产出 notify.group（项目群寻址 + 项目关联 + 项目完成文案）", async () => {

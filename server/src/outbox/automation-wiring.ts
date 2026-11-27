@@ -292,6 +292,10 @@ async function produceMessages(
   const invalid: string[] = [];
   for (const message of messages) {
     if (message.channel === "wecom_group") {
+      if (message.ruleCode === "A08") {
+        stats.channelSkipped += 1;
+        continue;
+      }
       const body = message.body.trim();
       const title = message.title === null ? null : message.title.trim() === "" ? null : message.title.trim();
       if (message.recipientId === null) {

@@ -33,6 +33,7 @@ import {
   TaskUpdateBodySchema,
   z,
   type AdditionalProjectStage,
+  type ProjectStageNotice,
   type StageKey,
   type ErrorDetail,
   type TaskCapabilities,
@@ -45,6 +46,7 @@ import { appendOutbox, appendOutboxIfAbsent } from "../../db/outbox.js";
 import { hasUnfinishedTemporaryTask, isTemporaryTask } from "../../db/task-scope.js";
 import { AuditService, diffRecords } from "../admin/index.js";
 import { addDays } from "../calendar/index.js";
+import { STAGE_COMPLETE_GROUP_TEMPLATE, stageCompletionNoticeKey } from "../notify/index.js";
 import { PermissionService, ProjectManagerEligibilityService, projectManagerIdsChanged, taskCapabilitiesOf, type ProjectAccessContext } from "../permission/index.js";
 import { TaskNodeRepository, TemplateService } from "../template/index.js";
 import { clampSortIndex } from "./task.order.js";
@@ -166,9 +168,11 @@ export class TaskService {
     const perStage = await this.repository.taskCountsByStage(this.database.db, projectId);
     const unfinished = new Set<string>();
     const started = new Set<string>();
+    const completed = new Set<string>();
     for (const row of perStage) {
       if (row.stageKey === null) continue;
       if (row.status === "done") {
+        completed.add(row.stageKey);
         started.add(row.stageKey);
       } else {
         unfinished.add(row.stageKey);
@@ -177,10 +181,25 @@ export class TaskService {
     }
     const slowestStage = STAGE_KEYS.find((key) => unfinished.has(key)) ?? null;
     const latestStage = [...STAGE_KEYS].reverse().find((key) => started.has(key)) ?? null;
+    const noticeKeys = STAGE_KEYS.map((key) => stageCompletionNoticeKey(projectId, key));
+    // Worker 先记录送达再结束队列，按相反顺序读取可避免已发条目暂时显示未发。
+    const queue = await this.repository.stageNoticeQueue(this.database.db, noticeKeys);
+    const sent = await this.repository.findSentStageNotices(this.database.db, projectId);
+    const stageNotices: ProjectStageNotice[] = [];
+    for (const stageKey of STAGE_KEYS) {
+      const sentAt = sent.get(stageKey);
+      if (sentAt !== undefined) {
+        stageNotices.push({ stageKey, status: "sent", sentAt: sentAt.toISOString() });
+      } else if (completed.has(stageKey) && !unfinished.has(stageKey)) {
+        const status = queue.get(stageCompletionNoticeKey(projectId, stageKey)) ?? "unsent";
+        stageNotices.push({ stageKey, status, sentAt: null });
+      }
+    }
     return {
       projectId,
       additionalStages: await this.repository.listAdditionalStages(projectId),
       stageNotes: await this.repository.listStageNotes(projectId),
+      stageNotices,
       slowestStage,
       latestStage,
       overdue: counts.overdue,
@@ -190,6 +209,53 @@ export class TaskService {
         hasUnfinishedTemporaryTask: await hasUnfinishedTemporaryTask(this.database.db, projectId),
       } : {}),
     };
+  }
+
+  /** 持有项目行锁时登记播报，重复点击和并发请求共用一条投递。 */
+  async sendStageCompletionNotice(projectId: string, stageKey: StageKey, actorId: string): Promise<void> {
+    await this.database.db.transaction(async (tx) => {
+      await this.loadProjectOrFail(projectId, tx);
+      const dedupeKey = stageCompletionNoticeKey(projectId, stageKey);
+      const queue = await this.repository.stageNoticeQueue(tx, [dedupeKey]);
+      const state = queue.get(dedupeKey);
+      if (state === "sending") return;
+
+      const sent = await this.repository.findSentStageNotices(tx, projectId);
+      if (sent.has(stageKey)) return;
+
+      const counts = await this.gate.evaluateDeliveryStatus(tx, projectId, stageKey);
+      if (counts.total === 0 || counts.done !== counts.total) {
+        throw new AppError("VALIDATION_FAILED", "阶段任务尚未全部完成", [{ code: "stage_not_done", message: "请先完成阶段内全部任务" }]);
+      }
+      if (counts.deliveryReady !== counts.total) {
+        throw new AppError("VALIDATION_FAILED", "阶段成果文件尚未齐全", [{ code: "stage_documents_missing", message: "请先上传所需成果文件" }]);
+      }
+      const group = await this.repository.findGroupBinding(projectId, tx);
+      if (group === null || !group.enabled || group.activatedAt === null) {
+        throw new AppError("VALIDATION_FAILED", "项目群需要绑定并激活才能发送播报", [{ code: "stage_group_unavailable", message: "请检查项目群绑定和机器人激活状态" }]);
+      }
+
+      if (state === "failed") await this.repository.resetFailedStageNotice(tx, dedupeKey);
+      const stageName = STAGE_NAMES[stageKey];
+      await appendOutboxIfAbsent(tx, {
+        topic: "notify.group",
+        dedupeKey,
+        payload: {
+          projectId,
+          title: "阶段完成｜" + stageName,
+          body: "「" + stageName + "」阶段 " + String(counts.total) + " 项小任务已全部完成，阶段里程碑达成。",
+          refType: "project",
+          refId: projectId,
+          templateCode: STAGE_COMPLETE_GROUP_TEMPLATE,
+          stageKey,
+        },
+      }, { reviveDone: true });
+      await this.audit.record(tx, {
+        actorId, projectId, action: "update", objectType: "project", objectId: projectId,
+        summary: "发送阶段完成播报：" + stageName,
+        metadata: { stageKey },
+      });
+    });
   }
 
   async createAdditionalStage(projectId: string, stageKey: StageKey, actorId: string): Promise<AdditionalProjectStage> {
@@ -1551,49 +1617,6 @@ export class TaskService {
         payload: { projectId: input.projectId, taskId: input.task.id, warnings: input.warnings, actorId: input.actorId, at: input.at.toISOString() },
       });
     }
-    await this.appendStageCompletionOutbox(tx, {
-      projectId: input.projectId,
-      task: input.task,
-      actorId: input.actorId,
-      at: input.at,
-    });
-  }
-
-  /**
-   * 大阶段完成群通知：只在本次任务首次转入 done 的同一事务内判定。
-   * 阶段锁保证并发完成最后两项时只有后一笔看到“全部完成”；无任务 / 未分组阶段不发。
-   * 每个项目每个阶段只播报一次：阶段回退后再次完成不重复发（永久送达留档 + outbox 稳定幂等键双保险）。
-   */
-  private async appendStageCompletionOutbox(
-    tx: DbClient,
-    input: { projectId: string; task: TaskRow; actorId: string; at: Date },
-  ): Promise<void> {
-    const stageKey = input.task.stageKey;
-    if (stageKey === null || !(STAGE_KEYS as readonly string[]).includes(stageKey)) return;
-    await this.repository.lockStageCompletion(tx, input.projectId, stageKey);
-    const counts = await this.gate.evaluateDeliveryStatus(tx, input.projectId, stageKey);
-    if (
-      counts.total === 0 ||
-      counts.done !== counts.total ||
-      counts.deliveryReady !== counts.total
-    ) {
-      return;
-    }
-    if (await this.repository.hasSentStageCompletionNotice(tx, input.projectId, stageKey)) return;
-    const stageName = (STAGE_NAMES as Record<string, string>)[stageKey] ?? stageKey;
-    await appendOutboxIfAbsent(tx, {
-      topic: "notify.group",
-      dedupeKey: "stage.completed:" + input.projectId + ":" + stageKey,
-      payload: {
-        projectId: input.projectId,
-        title: "阶段完成｜" + stageName,
-        body: "「" + stageName + "」阶段 " + String(counts.total) + " 项小任务已全部完成，阶段里程碑达成。",
-        refType: "task",
-        refId: input.task.id,
-        templateCode: "STAGE_COMPLETE_GROUP",
-        stageKey,
-      },
-    });
   }
 
   /** 成果缺件错误（完成任务 / 定档共用）：422 + details.missing 口径一致。 */

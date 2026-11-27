@@ -9,6 +9,7 @@
  * - 删除 DELETE /api/v1/projects/{id}/tasks/{taskId}（If-Match 回传 version）
  * 契约字段 → UI 模型（data/tasks.ts 的 ProjectTask）的映射只在本文件做。
  */
+import type { components } from "../../shared/generated/api-types.js";
 import { apiRequest, apiSend, readAllPages } from "./api";
 import { textOf, type Locale } from "./i18n";
 import { daysBetweenInclusive, type ProjectTask, type TaskCapabilities, type TaskChange, type TaskFileSummary, type TaskPriority, type TaskStatus } from "./data/tasks";
@@ -69,6 +70,7 @@ export type ApiTaskListResult = { items: ApiTaskListItem[]; page: number; limit:
 
 export type AdditionalProjectStage = { id: string; stageKey: string; number: number };
 export type ProjectStageNote = { stageRef: string; note: string };
+export type ProjectStageNotice = components["schemas"]["ProjectStageNotice"];
 
 /** 项目总览汇总卡（契约 ProjectSummary）。 */
 export type ApiProjectSummary = {
@@ -81,6 +83,7 @@ export type ApiProjectSummary = {
   hasUnfinishedTemporaryTask?: boolean;
   additionalStages?: AdditionalProjectStage[];
   stageNotes?: ProjectStageNote[];
+  stageNotices?: ProjectStageNotice[];
 };
 
 /** 九阶段字典（契约 STAGE_KEYS / STAGE_NAMES）：阶段名 ↔ key 的双向映射在前端本地维护。 */
@@ -264,6 +267,13 @@ export function fetchProjectTasks(projectId: string): Promise<ApiTaskListResult>
 
 export function fetchProjectSummary(projectId: string): Promise<ApiProjectSummary> {
   return apiRequest<ApiProjectSummary>("/api/v1/projects/" + encodeURIComponent(projectId) + "/summary");
+}
+
+export function sendStageCompletionNotice(projectId: string, stageKey: string): Promise<void> {
+  return apiSend<void>(
+    "/api/v1/projects/" + encodeURIComponent(projectId) + "/stage-completion-notices/" + encodeURIComponent(stageKey),
+    "POST",
+  );
 }
 
 export function fetchTaskDetail(projectId: string, taskId: string): Promise<ApiTaskDetail> {

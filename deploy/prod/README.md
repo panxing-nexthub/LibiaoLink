@@ -1,3 +1,15 @@
+> **2026-11-27 13:52 未完成不显示按时交付（仅测试机 · server-only · test-20261127-1352-px-on-time-non-done-7cbe3f45）**：代码来源 main @ `7cbe3f45`（PR #1258，分支 @dd66669a）。previousRelease / previousManifestRelease = `test-20261127-1336-px-ai-summary-layout-merge-0f567ef7`。
+> **根因 / 改动**：Excel 导入任务的 `tasks.on_time` 可能为 true；清空实际完成日期退回未完成后，`deriveOnTime` 仍回落到该存储值，界面残留绿色「按时交付」。现改为未完成一律不标记（仅已过预计完成日期返回 false = 逾期未交付），迁移存储值只在完成态缺日期时回落；仪表盘同口径 SQL 同步 `else null`。
+> **发布件 / 安装**：server 1,438,118 B / `5d60dfa1…`（843 文件）、`server-files.sha256` 87,230 B / `9bd474b8…`；server 843 → 843；停 api / worker 后原子换装，重建 api / worker / web。
+> **验证 / 备份 / 清单**：`task-rules` / `dashboard` / `workspace` 48 条测试通过；server typecheck / build 通过；线上 `task.rules.js` `f7b40893…`、`dashboard.repository.js` `48862321…` 与本地构建一致；`/`、`/healthz`、`/readyz` 均 200，readyz 4/4；api / worker / web healthy。备份 `/srv/data/backups/before-test-20261127-1352-px-on-time-non-done-7cbe3f45`（SHA256SUMS `c98fc81f…`）；manifest 2,147 B / `28789de2…`，root:root 644；staging = `/srv/data/deploy-test-20261127-1352-px-on-time-non-done-7cbe3f45/staging`。
+> **边界 / 回滚**：仅测试机 server dist、api / worker / web 与 release manifest；无前端 / shared / worker 镜像 / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变更。回滚恢复 server before 压缩包与原 manifest，再重建 api / worker / web。
+
+> **2026-11-27 13:56 未完成不显示按时交付（正式机 · server-only · prod-20261127-1356-px-on-time-non-done-7cbe3f45）**：代码来源 main @ `7cbe3f45`（PR #1258）；与测试机同一 server bundle。previousRelease / previousManifestRelease = `prod-20261127-1339-px-ai-summary-layout-merge-0f567ef7`。
+> **改动 / 验收**：与测试机一致：未完成不显示按时交付，清空实际完成日期后徽标变「—」；完成态缺日期仍保留迁移值回落。
+> **发布件 / 安装**：server 1,438,118 B / `5d60dfa1…`（843 文件）、`server-files.sha256` 87,230 B / `9bd474b8…`；server 843 → 843；停 api / worker 后原子换装，重建 api / worker / web。
+> **验证 / 备份 / 清单**：线上 `task.rules.js` `f7b40893…`、`dashboard.repository.js` `48862321…` 与本地构建一致；`/`、`/healthz`、`/readyz` 均 200，readyz 4/4；api / worker / web healthy。备份 `/srv/data/backups/before-prod-20261127-1356-px-on-time-non-done-7cbe3f45`（SHA256SUMS `edca739f…`）；manifest 2,142 B / `159bb228…`，root:root 644；staging = `/srv/data/deploy-prod-20261127-1356-px-on-time-non-done-7cbe3f45/staging`。
+> **边界 / 回滚**：仅正式机 server dist、api / worker / web 与 release manifest；测试机已先行发布同一 bundle；无前端 / shared / worker 镜像 / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变更。回滚恢复 server before 与原 manifest，再重建 api / worker / web。
+
 > **2026-11-27 13:36 设备布局系统图与人工图并存（仅测试机 · server-only · test-20261127-1336-px-ai-summary-layout-merge-0f567ef7）**：代码来源 main @ `0f567ef7`（PR #1256）。previousRelease = `test-20261127-1324-px-ai-summary-image-add-delete-924d36fc`。
 > **改动 / 验收**：自动抽取的 CAD 布局图 / 三维图不再被人工上传挤掉；读面顺序改为「系统自动图（原顺序）→ 人工上传图（上传顺序）」，自动图仍可单独隐藏，人工图仍可逐张删除。真实项目 `LBGN23171-G12` 上传 1 张人工 layout 后 ai-context 返回 `[auto-0(manual=false), 人工图(manual=true)]`，系统图保留；测试后已清理人工图。
 > **发布件 / 安装**：server 1,441,880 B / `ff4ea531…`（843 文件）；server 843 → 843；停 api / worker 后原子换装并重建。前端 / shared / worker / 数据库未变更。

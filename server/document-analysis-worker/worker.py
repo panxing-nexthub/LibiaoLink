@@ -48,7 +48,7 @@ CONVERSION_TIMEOUT_SECONDS = 90
 MAX_FILE_MB_DEFAULT = 200
 IMAGE_DPI = 120
 MAX_IMAGE_SIDE = 1600
-EXTRACTION_VERSION = "project-agreement-extraction-v5"
+EXTRACTION_VERSION = "project-agreement-extraction-v6"
 MIN_PICTURE_PAGE_RATIO = 0.05
 MIN_PICTURE_SIDE = 80
 MAX_PICTURE_PIXELS = 60_000_000
@@ -56,6 +56,13 @@ AGREEMENT_DOC_TYPE = "技术协议"
 LAYOUT_WORDS = ("布局", "平面布置", "平面图", "车间布局", "布局规划", "cad")
 THREE_D_WORDS = ("三维图", "三维效果", "三维模型", "3d图", "3d效果", "3d模型", "效果图", "渲染图", "鸟瞰")
 BACKGROUND_WORDS = ("项目背景", "背景需求", "需求概述", "建设目标", "项目概述", "项目需求", "场地信息")
+BACKGROUND_FALLBACK_WORDS = ("客户", "项目地址", "项目地点", "场地", "建设目标", "业务场景", "需求")
+SUPPLIER_INTRO_WORDS = (
+    "公司简介", "企业简介", "关于我们", "发展历程", "企业文化", "企业使命",
+    "研发投入", "发明专利", "软件著作权", "技术优势", "市场覆盖", "资质荣誉",
+    "全球首创", "高新技术企业", "研发中心", "员工人数", "合作伙伴",
+)
+SOURCE_SENTENCE_WORDS = ("本页", "技术协议", "技术规格书", "目录")
 
 WORD_EXT = {"doc", "docx"}
 EXCEL_EXT = {"xls", "xlsx"}
@@ -501,26 +508,51 @@ def find_agreement_field(
     return agreement_field(None, None, None, 0.0)
 
 
+def _is_toc_text(text: str) -> bool:
+    compact = re.sub(r"\s+", "", text)
+    return "目录" in compact or bool(re.search(r"[.．·]{6,}", text)) or bool(re.search(r"…{3,}", text))
+
+
+def _is_supplier_intro(text: str) -> bool:
+    return any(word in text for word in SUPPLIER_INTRO_WORDS)
+
+
+def _strip_noise_sentences(text: str) -> str:
+    """去掉供应商介绍 / 页面来源句，避免背景段出现“本页为技术协议第 X 页，介绍立镖公司”这类内容。"""
+    parts = re.split(r"(?<=[。！？!?\n])", text)
+    kept = [
+        part for part in parts
+        if part.strip() and not _is_supplier_intro(part) and not any(word in part for word in SOURCE_SENTENCE_WORDS)
+    ]
+    return "".join(kept).strip()
+
+
 def find_agreement_background(pages: list[dict[str, Any]], page_records: list[dict[str, Any]]) -> dict[str, Any]:
     pieces: list[str] = []
     for page, record in zip(pages, page_records):
-        extraction = record["extraction"]
-        combined = " ".join([
-            str(page["text"] or ""),
-            str(extraction.get("documentType") or ""),
-            str(extraction.get("summary") or ""),
-        ])
-        if "目录" in combined:
+        text = str(page["text"] or "")
+        if _is_toc_text(text) or _is_supplier_intro(text):
             continue
-        if any(word in page["text"] for word in BACKGROUND_WORDS):
-            summary = str(extraction.get("summary") or "").strip()
-            if summary:
-                pieces.append(summary)
+        if not any(word in text for word in BACKGROUND_WORDS):
+            continue
+        summary = _strip_noise_sentences(str(record["extraction"].get("summary") or ""))
+        if summary:
+            pieces.append(summary)
+        if len(pieces) >= 3:
+            break
     if not pieces:
-        for record in page_records[1:5]:
-            summary = str(record["extraction"].get("summary") or "").strip()
+        # 回退只看前 8 页中明确提到客户 / 项目 / 场地的页面，且跳过目录与供应商介绍。
+        for page, record in zip(pages[:8], page_records[:8]):
+            text = str(page["text"] or "")
+            if _is_toc_text(text) or _is_supplier_intro(text):
+                continue
+            if not any(word in text for word in BACKGROUND_FALLBACK_WORDS):
+                continue
+            summary = _strip_noise_sentences(str(record["extraction"].get("summary") or ""))
             if summary:
                 pieces.append(summary)
+            if len(pieces) >= 2:
+                break
     value = "\n".join(pieces).strip()
     if len(value) > 1200:
         value = value[:1200] + "…"

@@ -11,7 +11,7 @@ import { ProjectAiSummaryRepository, type ProjectAiSummaryRow } from "./project-
 import { buildSummaryDocument } from "./project-ai-summary-document.js";
 
 /** prompt 结构变更时递增：旧版本的缓存自动不再命中，不会被复用。 */
-export const PROJECT_AI_PROMPT_VERSION = "v5";
+export const PROJECT_AI_PROMPT_VERSION = "v6";
 
 /** 上下文指纹：去掉每次请求都会变的 generatedAt，其余字段按固定顺序序列化（构建时已排序）。 */
 export function hashProjectAiContext(context: ProjectAiContext): string {

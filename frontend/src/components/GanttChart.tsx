@@ -130,20 +130,20 @@ type StagePalette = {
 };
 
 const STAGE_PALETTE: Record<string, StagePalette> = {
-  售前规划: { accent: "#2563eb", track: "#dbeafe", envelope: "rgba(37, 99, 235, 0.045)", text: "#1e3a8a" },
-  设计开发: { accent: "#0891b2", track: "#cffafe", envelope: "rgba(8, 145, 178, 0.045)", text: "#164e63" },
-  加工采购: { accent: "#0d9488", track: "#ccfbf1", envelope: "rgba(13, 148, 136, 0.045)", text: "#134e4a" },
-  组装发货: { accent: "#65a30d", track: "#ecfccb", envelope: "rgba(101, 163, 13, 0.05)", text: "#365314" },
-  硬件实施: { accent: "#d97706", track: "#fef3c7", envelope: "rgba(217, 119, 6, 0.05)", text: "#78350f" },
-  软件部署: { accent: "#ea580c", track: "#ffedd5", envelope: "rgba(234, 88, 12, 0.045)", text: "#7c2d12" },
-  试运行:   { accent: "#7c3aed", track: "#ede9fe", envelope: "rgba(124, 58, 237, 0.045)", text: "#4c1d95" },
-  投产阶段: { accent: "#c026d3", track: "#fae8ff", envelope: "rgba(192, 38, 211, 0.045)", text: "#701a75" },
-  验收:     { accent: "#059669", track: "#d1fae5", envelope: "rgba(5, 150, 105, 0.045)", text: "#064e3b" },
+  售前规划: { accent: "#2563eb", track: "#bfdbfe", envelope: "rgba(37, 99, 235, 0.045)", text: "#1e3a8a" },
+  设计开发: { accent: "#0891b2", track: "#a5f3fc", envelope: "rgba(8, 145, 178, 0.045)", text: "#164e63" },
+  加工采购: { accent: "#0d9488", track: "#99f6e4", envelope: "rgba(13, 148, 136, 0.045)", text: "#134e4a" },
+  组装发货: { accent: "#65a30d", track: "#d9f99d", envelope: "rgba(101, 163, 13, 0.05)", text: "#365314" },
+  硬件实施: { accent: "#d97706", track: "#fde68a", envelope: "rgba(217, 119, 6, 0.05)", text: "#78350f" },
+  软件部署: { accent: "#ea580c", track: "#fed7aa", envelope: "rgba(234, 88, 12, 0.045)", text: "#7c2d12" },
+  试运行:   { accent: "#7c3aed", track: "#ddd6fe", envelope: "rgba(124, 58, 237, 0.045)", text: "#4c1d95" },
+  投产阶段: { accent: "#c026d3", track: "#f5d0fe", envelope: "rgba(192, 38, 211, 0.045)", text: "#701a75" },
+  验收:     { accent: "#059669", track: "#a7f3d0", envelope: "rgba(5, 150, 105, 0.045)", text: "#064e3b" },
 };
 
 const DEFAULT_STAGE_PALETTE: StagePalette = {
   accent: "#64748b",
-  track: "#e2e8f0",
+  track: "#cbd5e1",
   envelope: "rgba(100, 116, 139, 0.045)",
   text: "#334155",
 };

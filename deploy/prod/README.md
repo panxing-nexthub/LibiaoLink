@@ -1,3 +1,15 @@
+> **2026-11-27 13:36 设备布局系统图与人工图并存（仅测试机 · server-only · test-20261127-1336-px-ai-summary-layout-merge-0f567ef7）**：代码来源 main @ `0f567ef7`（PR #1256）。previousRelease = `test-20261127-1324-px-ai-summary-image-add-delete-924d36fc`。
+> **改动 / 验收**：自动抽取的 CAD 布局图 / 三维图不再被人工上传挤掉；读面顺序改为「系统自动图（原顺序）→ 人工上传图（上传顺序）」，自动图仍可单独隐藏，人工图仍可逐张删除。真实项目 `LBGN23171-G12` 上传 1 张人工 layout 后 ai-context 返回 `[auto-0(manual=false), 人工图(manual=true)]`，系统图保留；测试后已清理人工图。
+> **发布件 / 安装**：server 1,441,880 B / `ff4ea531…`（843 文件）；server 843 → 843；停 api / worker 后原子换装并重建。前端 / shared / worker / 数据库未变更。
+> **验证 / 备份 / 清单**：`/`、`/healthz`、`/readyz` 均 200，readyz 4/4；api / worker healthy；server agreement service 哈希 `bb218b83…` 与本地构建一致。备份 `/srv/data/backups/before-test-20261127-1336-px-ai-summary-layout-merge-0f567ef7`（SHA256SUMS `29c74424…`）；manifest 1,886 B / `0e42f52f…`，root:root 644；staging = `/srv/data/deploy-test-20261127-1336-px-ai-summary-layout-merge-0f567ef7/staging`。
+> **边界 / 回滚**：仅测试机 server dist、api / worker 与 release manifest；无前端 / shared / worker 镜像 / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变更。回滚恢复 server before 压缩包与原 manifest，再重建 api / worker。
+
+> **2026-11-27 13:39 设备布局系统图与人工图并存（正式机 · server-only · prod-20261127-1339-px-ai-summary-layout-merge-0f567ef7）**：代码来源 main @ `0f567ef7`（PR #1256）。previousRelease / previousManifestRelease = `prod-20261127-1329-px-ai-summary-image-add-delete-924d36fc`。
+> **改动 / 验收**：与测试机同一 server bundle：系统自动图保留，人工图追加在后。api / worker 重建后 nginx 仍缓存旧 upstream IP，已重建 web 刷新 DNS，healthz / readyz 恢复 200。
+> **发布件 / 安装**：server 1,441,880 B / `ff4ea531…`（843 文件）；server 843 → 843；停 api / worker 后原子换装并重建，随后重建 web。前端 / shared / worker / 数据库未变更。
+> **验证 / 备份 / 清单**：`/`、`/healthz`、`/readyz` 均 200，readyz 4/4；api / worker / web healthy；server agreement service 哈希 `bb218b83…` 与本地构建一致。备份 `/srv/data/backups/before-prod-20261127-1339-px-ai-summary-layout-merge-0f567ef7`（SHA256SUMS `24588953…`）；manifest 1,783 B / `12f9aba8…`，root:root 644；staging = `/srv/data/deploy-prod-20261127-1339-px-ai-summary-layout-merge-0f567ef7/staging`。
+> **边界 / 回滚**：仅正式机 server dist、api / worker / web 与 release manifest；无前端 / shared / worker 镜像 / 数据库 / DDL / 迁移 / Compose / env / Secret / Nginx / 对象存储 / CAD 变更。回滚恢复 server before 与原 manifest，再重建 api / worker / web。
+
 > **2026-11-27 13:24 设备布局按钮改「添加」+ 自动抽取图可删除（仅测试机 · frontend + server + 迁移 0125 · test-20261127-1324-px-ai-summary-image-add-delete-924d36fc）**：代码来源 main @ `924d36fc`（PR #1254）。previousRelease = `test-20261127-1026-px-ai-summary-background-v6-43f3886c`。
 > **改动 / 验收**：CAD 布局图 / 三维图上传按钮由「替换」改为「添加」，继续支持多选；人工图与自动抽取图右上角均可「×」逐张删除；自动图删除写入 `project_ai_hidden_agreement_images`（迁移 0125），刷新后保持隐藏。shared / server / frontend typecheck + build 通过。真实项目 `LBGN23171-G12` API 烟测：删除 layout `auto-0` 返回 200，ai-context layout 变空、threeD 不受影响；测试后清理 hidden 行恢复自动图。
 > **发布件 / 安装**：frontend 22,701,212 B / `9318a5f1…`（678 文件）、server 1,441,701 B / `14a0686a…`（843 文件）、迁移 `0125_project_ai_hidden_agreement_images.sql` 724 B / `25f95abe…`。前端 793 → 795 文件、server 843 → 843；停 api / worker 后原子换装，重建 api / worker / web。

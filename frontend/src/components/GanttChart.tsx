@@ -1556,20 +1556,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
             </button>
           ))}
         </div>
-        {filtering ? (
-          <>
-            <span className="text-[11px] tabular-nums text-zinc-500">
-              {t("gantt.filter.result", { shown: visibleTasks.length, total: tasks.length })}
-            </span>
-            <button
-              type="button"
-              onClick={clearFilters}
-              className={"rounded-lg border px-2 py-1 text-[11px] font-medium text-zinc-500 transition hover:text-zinc-900 " + GLASS_SURFACE}
-            >
-              {t("gantt.filter.clear")}
-            </button>
-          </>
-        ) : null}
         <button
           type="button"
           data-gantt-lock={barsLocked ? "locked" : "unlocked"}

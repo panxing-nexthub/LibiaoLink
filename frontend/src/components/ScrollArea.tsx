@@ -90,9 +90,14 @@ export function ScrollArea({
     for (const child of Array.from(node.children)) {
       observer.observe(child);
     }
+    // 子节点异步加载（如模板标签）时容器自身尺寸不变，scrollWidth 却会变大；
+    // ResizeObserver 看不到这部分变化，补一个 DOM 变更监听，内容一出现就重算滑块。
+    const contentObserver = new MutationObserver(sync);
+    contentObserver.observe(node, { childList: true, subtree: true, characterData: true });
     return () => {
       node.removeEventListener("scroll", handleScroll);
       observer.disconnect();
+      contentObserver.disconnect();
       window.clearTimeout(hideTimerRef.current);
     };
   }, [reveal, sync]);

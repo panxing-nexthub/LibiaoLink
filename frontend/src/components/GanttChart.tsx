@@ -924,20 +924,35 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
     };
   }, []);
 
-  /** 进全屏：优先浏览器 Fullscreen API（Esc 由浏览器原生退出）；不支持 / 被拒绝时退化为页内覆盖层。 */
+  /** 进全屏：优先浏览器 Fullscreen API（Esc 由浏览器原生退出）；不支持 / 被拒绝 / 假成功时退化为页内覆盖层。 */
   const enterFullscreen = useCallback(() => {
     const node = shellRef.current;
     if (node === null) {
       return;
     }
-    if (typeof node.requestFullscreen !== "function") {
+    if (typeof node.requestFullscreen !== "function" || document.fullscreenEnabled === false) {
       setCssFullscreen(true);
       return;
     }
     try {
-      void node.requestFullscreen().catch(() => {
-        setCssFullscreen(true);
-      });
+      const request = node.requestFullscreen();
+      if (request === undefined) {
+        // 旧内核的同步式 requestFullscreen：没有 Promise 可等，交给 fullscreenchange 反映真实状态。
+        return;
+      }
+      void request
+        .then(() => {
+          // 部分环境（自动化 / 权限策略 / 浏览器外壳）会 resolve 却立刻被系统收回：
+          // 250ms 后真实全屏元素不是 shell 就切页内覆盖层，避免「点了没反应」。
+          window.setTimeout(() => {
+            if (document.fullscreenElement !== node) {
+              setCssFullscreen(true);
+            }
+          }, 250);
+        })
+        .catch(() => {
+          setCssFullscreen(true);
+        });
     } catch {
       setCssFullscreen(true);
     }
@@ -988,9 +1003,10 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
         setCssFullscreen(false);
       }
     };
-    window.addEventListener("keydown", onKeyDown);
+    // 捕获阶段先拿 Esc / Ctrl + 空格，避免页面内其他键盘处理 stopPropagation 把退出吞掉。
+    window.addEventListener("keydown", onKeyDown, true);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keydown", onKeyDown, true);
     };
   }, [toggleFullscreen]);
 

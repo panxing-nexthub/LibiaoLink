@@ -1593,7 +1593,6 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
           data-gantt-lock={barsLocked ? "locked" : "unlocked"}
           aria-pressed={barsLocked}
           aria-label={t("gantt.lock.toggleAria")}
-          title={t(barsLocked ? "gantt.lock.lockedTip" : "gantt.lock.unlockedTip")}
           onClick={toggleBarsLocked}
           className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white transition hover:bg-zinc-50"
         >

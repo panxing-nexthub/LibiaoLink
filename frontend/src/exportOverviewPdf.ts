@@ -474,7 +474,7 @@ function stageEffortOf(group: StageGroup): StageEffort | null {
   };
 }
 
-/** 阶段施工人数列文案（中 / 英 / 日 / 韩；列宽有限，只输出导出主体语言）。 */
+/** 阶段施工人数列文案（中 / 英 / 日 / 韩）：主体语言 + 次语小字。 */
 const STAGE_META_TEXT: Record<OverviewExportLanguage, {
   total: string;
   peak: string;
@@ -487,18 +487,25 @@ const STAGE_META_TEXT: Record<OverviewExportLanguage, {
   ko: { total: "총 공수", peak: "최대", peopleUnit: "명", personDayUnit: "인일" },
 };
 
-/** 阶段「预计所需施工人数」列：总人工（人天）与单日峰值（人）上下两行。 */
+/** 阶段「预计所需施工人数」列：总人工（人天）与单日峰值（人）同一行，主体语言 + 次语小字。 */
 function stageEffortCellHtml(group: StageGroup, primary: OverviewExportLanguage): string {
   const effort = stageEffortOf(group);
   if (effort === null || !effort.hasHeadcount) {
     return '<td class="num"></td>';
   }
-  const text = STAGE_META_TEXT[primary];
+  const main = STAGE_META_TEXT[primary];
+  const secondaryLang: OverviewExportLanguage = primary === "zh" ? "en" : "zh";
+  const secondary = STAGE_META_TEXT[secondaryLang];
+  const secondaryHtml = (label: string, value: number, unit: string): string =>
+    '<span class="secondary" lang="' + languageAttr(secondaryLang) + '">' +
+    escapeHtml(label) + ' ' + String(value) + ' ' + escapeHtml(unit) + '</span>';
   return '<td class="num grp__headcount">' +
-    '<span class="grp__metric"><strong>' + escapeHtml(text.total) + '</strong> ' +
-    String(effort.total) + ' ' + escapeHtml(text.personDayUnit) + '</span>' +
-    '<span class="grp__metric"><strong>' + escapeHtml(text.peak) + '</strong> ' +
-    String(effort.peak) + ' ' + escapeHtml(text.peopleUnit) + '</span>' +
+    '<span class="grp__metric"><strong>' + escapeHtml(main.total) + '</strong> ' +
+    String(effort.total) + ' ' + escapeHtml(main.personDayUnit) + ' ' +
+    secondaryHtml(secondary.total, effort.total, secondary.personDayUnit) + '</span>' +
+    '<span class="grp__metric"><strong>' + escapeHtml(main.peak) + '</strong> ' +
+    String(effort.peak) + ' ' + escapeHtml(main.peopleUnit) + ' ' +
+    secondaryHtml(secondary.peak, effort.peak, secondary.peopleUnit) + '</span>' +
     '</td>';
 }
 
@@ -639,6 +646,7 @@ const REPORT_STYLE = `
   .grp__metric { display: inline; white-space: nowrap; color: #3f3f46; font-size: 8.5px; }
   .grp__metric + .grp__metric { margin-left: 6px; }
   .grp__metric strong { color: #18181b; font-weight: 700; }
+  .grp__metric .secondary { margin-left: 4px; font-size: 7.5px; color: #a1a1aa; font-weight: 400; }
   tbody.grp tr.grp__head--collapsed .grp__note { display: block; margin: 2px 0 0; }
   tbody.grp tr.grp__head--collapsed td { padding: 6px 5px; background: #fafafa; border: 0; border-bottom: 1px solid #e4e4e7; vertical-align: middle; }
   tbody.grp tr.grp__head--collapsed td:first-child { padding-left: 7px; border-left: 1px solid #e4e4e7; }

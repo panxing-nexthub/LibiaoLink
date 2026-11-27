@@ -643,12 +643,14 @@ function centerOnToday(element: HTMLDivElement | null, todayLeft: number | null,
   element.scrollLeft = Math.max(0, todayLeft - visible / 3);
 }
 
-/** 任务条编辑锁图标：闭合 / 打开锁 shackle 只由同一个按钮切换。 */
+/** 任务条编辑锁图标：红 = 锁住、蓝 = 解开（同一按钮切换）。 */
 function GanttLockIcon({ locked }: { locked: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="5" y="10.5" width="14" height="10" rx="2" />
-      {locked ? <path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" /> : <path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 6.7-1.4" />}
+    <svg viewBox="0 0 1024 1024" className="h-4 w-4" aria-hidden="true">
+      <path
+        d="M385.150849 385.662338l-128.895105 0 0-150.377622q0-49.102897 19.436563-91.556444t53.706294-74.677323 80.815185-50.637363 101.786214-18.413586q49.102897 0 94.625375 18.413586t80.815185 50.637363 56.263736 74.677323 20.971029 91.556444l0 150.377622-123.78022 0 0-121.734266q0-64.447552-35.804196-99.74026t-97.182817-35.292707q-55.240759 0-88.999001 35.292707t-33.758242 99.74026l0 121.734266zM826.053946 447.040959q27.62038 0 47.568432 19.948052t19.948052 47.568432l0 317.122877q0 27.62038-9.718282 51.66034t-26.597403 41.942058-39.896104 28.131868-50.637363 10.22977l-516.603397 0q-27.62038 0-50.125874-10.22977t-38.361638-27.108891-24.551449-39.384615-8.695305-48.07992l0-324.283716q0-27.62038 19.436563-47.568432t47.056943-19.948052l61.378621 0 128.895105 0 255.744256 0 123.78022 0 61.378621 0z"
+        fill={locked ? "#d81e06" : "#1296db"}
+      />
     </svg>
   );
 }
@@ -681,7 +683,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   /** 拖动会话：预览值挂在 state 上，松手才写回任务字段。 */
   const [drag, setDrag] = useState<GanttDrag | null>(null);
   /** 任务条编辑锁：默认锁上，防止误拖改期 / 工期 / 进度；滚动、筛选、定位等浏览操作不受影响。 */
-  const [barsLocked, setBarsLocked] = useState(true);
+  const [barsLocked, setBarsLocked] = useState(false);
   /** 「回到今天」把今天并进时间轴范围（今天本来就在范围里 = 无影响）；清空筛选时收回。 */
   const [includeToday, setIncludeToday] = useState(false);
   /** 刚点「回到今天」但当时今天不在范围里：等范围延出来（todayLeft 有值）再居中一次。 */
@@ -1536,7 +1538,6 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
           {t("gantt.today.button")}
         </button>
         <span className="mx-0.5 h-3.5 w-px bg-zinc-200" aria-hidden="true" />
-        <span className="text-[11px] text-zinc-400">{t("gantt.label.filter")}</span>
         <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
           {ROW_FILTERS.map((item) => (
             <button
@@ -1576,12 +1577,7 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
           aria-label={t("gantt.lock.toggleAria")}
           title={t(barsLocked ? "gantt.lock.lockedTip" : "gantt.lock.unlockedTip")}
           onClick={toggleBarsLocked}
-          className={
-            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition " +
-            (barsLocked
-              ? "border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-              : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100")
-          }
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white transition hover:bg-zinc-50"
         >
           <GanttLockIcon locked={barsLocked} />
         </button>

@@ -1401,6 +1401,8 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "gantt.lock.toggleAria": "ガントチャートのタスクバー編集ロック",
   "gantt.lock.lockedTip": "タスクバーはロックされています：ロックアイコンをクリックして解除するとドラッグできます",
   "gantt.lock.unlockedTip": "タスクバーのロックは解除されています：ドラッグで日程 / 期間 / 進捗を変更できます。ロックアイコンで再ロックできます",
+  "gantt.lock.lockedLabel": "ガントはロック中",
+  "gantt.lock.unlockedLabel": "ガントは編集可能",
   "gantt.filter.result": "フィルター後のタスク {total} 件中 {shown} 件",
   "gantt.filter.clear": "フィルターをクリア",
   "gantt.help.title": "操作のヒント",

@@ -1401,6 +1401,8 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "gantt.lock.toggleAria": "간트 차트 작업 막대 편집 잠금",
   "gantt.lock.lockedTip": "작업 막대가 잠겨 있습니다. 잠금 아이콘을 클릭해 해제하면 드래그할 수 있습니다.",
   "gantt.lock.unlockedTip": "작업 막대 잠금이 해제되었습니다. 드래그해 일정 / 기간 / 진행률을 변경할 수 있으며 잠금 아이콘으로 다시 잠글 수 있습니다.",
+  "gantt.lock.lockedLabel": "간트 잠김",
+  "gantt.lock.unlockedLabel": "간트 편집 가능",
   "gantt.filter.result": "필터링 후 작업 {total}개 중 {shown}개",
   "gantt.filter.clear": "필터 지우기",
   "gantt.help.title": "조작 안내",

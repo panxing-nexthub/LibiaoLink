@@ -667,12 +667,17 @@ function GanttLockIcon({ locked }: { locked: boolean }) {
   );
 }
 
+/** 甘特编辑锁记忆键：按登录账号隔离（同机换账号不串用；与仪表盘筛选记忆同一套键口径）。 */
+function ganttLockKey(viewerId: string): string {
+  return "libiaolink.gantt.barsLocked.v1." + (viewerId === "" ? "anon" : viewerId);
+}
+
 /**
  * 甘特图视图（项目详情第二个标签页）。数据 = 项目任务列表同一份（服务端任务接口）；
  * 传了 onPatchTask / onSetProgress 就能拖动改期 / 改进度（不传 = 拖动照常预览、松手不写回）。
  * members = 人员目录（负责人筛选项的成员行渲染）。
  */
-export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint = false, onPatchTask, onSetProgress }: { tasks: readonly ProjectTask[]; members: readonly Member[]; stageOrder?: readonly string[]; /** 背景档位（适中 / 炫彩；空态兜底列表的行色与项目页任务行的铺色同口径，Push 294）。 */ tierTint?: TintedTier | false; onPatchTask?: (taskId: string, patch: TaskPatch) => void; onSetProgress?: (taskId: string, progress: number) => void }) {
+export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_ORDER, tierTint = false, onPatchTask, onSetProgress }: { tasks: readonly ProjectTask[]; members: readonly Member[]; /** 当前登录账号（锁状态按账号记住用；空 = 未登录兜底）。 */ viewerId?: string; stageOrder?: readonly string[]; /** 背景档位（适中 / 炫彩；空态兜底列表的行色与项目页任务行的铺色同口径，Push 294）。 */ tierTint?: TintedTier | false; onPatchTask?: (taskId: string, patch: TaskPatch) => void; onSetProgress?: (taskId: string, progress: number) => void }) {
   const locale = useLocale();
   const localize = useLocalizedTranslator();
   /** 手打内容（任务名）机翻显示：英文界面 titleEn 优先 → 机翻 → 原文；中文界面照旧。 */
@@ -695,7 +700,16 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
   /** 拖动会话：预览值挂在 state 上，松手才写回任务字段。 */
   const [drag, setDrag] = useState<GanttDrag | null>(null);
   /** 任务条编辑锁：默认锁上，防止误拖改期 / 工期 / 进度；滚动、筛选、定位等浏览操作不受影响。 */
-  const [barsLocked, setBarsLocked] = useState(false);
+  const [barsLocked, setBarsLocked] = useState<boolean>(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    try {
+      return window.localStorage.getItem(ganttLockKey(viewerId)) === "true";
+    } catch {
+      return false;
+    }
+  });
   /** 「回到今天」把今天并进时间轴范围（今天本来就在范围里 = 无影响）；清空筛选时收回。 */
   const [includeToday, setIncludeToday] = useState(false);
   /** 刚点「回到今天」但当时今天不在范围里：等范围延出来（todayLeft 有值）再居中一次。 */
@@ -954,11 +968,17 @@ export function GanttChart({ tasks, members, stageOrder = STAGE_ORDER, tierTint 
 
   /** 锁图标一键切换：锁上时立即结束正在进行的拖动，避免松手后继续写回。 */
   const toggleBarsLocked = () => {
+    const next = !barsLocked;
     if (!barsLocked) {
       setDrag(null);
       dragPointerRef.current = null;
     }
-    setBarsLocked((previous) => !previous);
+    setBarsLocked(next);
+    try {
+      window.localStorage.setItem(ganttLockKey(viewerId), next ? "true" : "false");
+    } catch {
+      // localStorage 不可用（隐私模式）时静默降级，仅本次会话生效。
+    }
   };
 
   /** 任务条提示：锁定时去掉拖动说明，换成解锁提示；解锁时沿用完整操作说明。 */

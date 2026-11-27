@@ -12,13 +12,13 @@
  *   ③ 点胶囊照旧按地区筛选（URL 写 filter[region]、卡片计数同步）；
  *   ④ 新建项目弹窗的项目地区 = 贴字段弹出的小窗（Push 195 返工）：「还是要之前的小窗 然后最上方是已有项目地区」
  *      ＋「小窗做分页 已有项目地区 / 全部地区 然后选中标蓝即可 不要这个勾」——两个页签：已有项目地区（有项目在用、
- *      按用量降序、带项目数；Push 304 起按项目落库值聚合 —— 字典外国名也照数）/ 全部地区（标准国家清单 201 条（中国标准地图口径）+ 字典独有条目，按洲分组 —— 字典
+ *      按用量降序、带项目数；Push 304 起按项目落库值聚合 —— 字典外国名也照数）/ 全部地区（标准国家清单 201 条（中国标准地图口径）+ 中国特别地区 3 条（中国台湾 / 中国香港 / 中国澳门）+ 字典独有条目，按洲分组 —— 字典
  *      没收录的国家也能搜到、选到）；两个页签的小窗同高同位（「两个分页的高度位置要一致」：固定尺寸，切页不跳）；
  *      打开即聚焦搜索框、输入关键词自动切到全部地区页、中英文都能搜（冰岛 / Iceland）、
  *      搜不到给提示行、回车选当前页第一条；选中态 = 标蓝（不带对勾）；纯选择：无「＋ 添加地区」、无行内删除、不支持手填；
  *   ⑤ 洲口径 = 中国口径（与地图同一套国界 / 国名口径）：中国 / 日本 / 新加坡 在亚洲，英国 / 德国 / 俄罗斯 / 冰岛 在欧洲，
  *      南非 / 埃及 在非洲，美国 / 加拿大 在北美洲，巴西 / 秘鲁 在南美洲，澳大利亚 / 新西兰 在大洋洲；
- *      台湾 / 科索沃 / 北塞浦路斯 / 索马里兰 一个都不许出现（中国口径硬护栏），香港 / 澳门 也不在候选里；
+ *      台湾 / 科索沃 / 北塞浦路斯 / 索马里兰 一个都不许作为独立国家出现（中国口径硬护栏）；香港 / 澳门 也不作为独立条目 —— 另列「中国台湾 / 中国香港 / 中国澳门」三条（2026-11-27 追订，归亚洲）；
  *   ⑥ 整洲筛选（Push 193）：「某一个洲点击可以直接筛选整个洲」—— 勾洲行最右侧的复选框 = 把该洲全部地区
  *      一起勾上（并展开），再点一次取消；URL / 工具条计数 / 复选框状态与库内对账；
  *   ⑦ 地区选择不再承载字典维护（Push 194 / 195）：断言无添加入口、无删除按钮、小窗里只有搜索框 1 个输入框
@@ -56,6 +56,8 @@ const CONTINENTS = ["亚洲", "欧洲", "非洲", "北美洲", "南美洲", "大
 const OTHER_GROUP = "其他";
 /** 中国口径硬护栏：不许作为国家出现在任何候选里（与地图 e2e 同一份清单） */
 const FORBIDDEN = ["台湾", "科索沃", "北塞浦路斯", "索马里兰"];
+/** 2026-11-27 追订：中国特别地区三条 —— 不是独立国家，但地区选择器要能选（归亚洲）。 */
+const CHINA_SUBREGIONS = ["中国台湾", "中国香港", "中国澳门"];
 /** 洲归属抽查（拿库内在用的地区对账；口径 = 中国口径，与地图同一套） */
 const CONTINENT_SPOT = [
   ["亚洲", ["中国", "日本", "新加坡"]],
@@ -71,7 +73,7 @@ const CONTINENT_SPOT = [
  * 有项目在用的国家会被上提到「已有项目地区」段（业务口径），命中该段算通过、计入上提数。
  */
 const PICKER_SPOT = [
-  ["亚洲", "中国"], ["亚洲", "新加坡"], ["亚洲", "约旦"], ["欧洲", "冰岛"], ["欧洲", "英国"], ["欧洲", "芬兰"],
+  ["亚洲", "中国"], ["亚洲", "中国台湾"], ["亚洲", "中国香港"], ["亚洲", "中国澳门"], ["亚洲", "新加坡"], ["亚洲", "约旦"], ["欧洲", "冰岛"], ["欧洲", "英国"], ["欧洲", "芬兰"],
   ["非洲", "埃及"], ["非洲", "苏丹"], ["北美洲", "美国"], ["南美洲", "巴西"], ["大洋洲", "澳大利亚"], ["大洋洲", "新西兰"]
 ];
 
@@ -611,7 +613,8 @@ const worldMapText = readFileSync(new URL("../src/data/worldMap.ts", import.meta
 const standardNames = Array.from(new Set(Array.from(worldMapText.matchAll(/nameZh: "([^"]+)"/g)).map((match) => match[1])));
 /** 期望候选数 = 标准清单 + 字典里不是标准国名的条目（旧「华东」类；当前库为 0）。 */
 const dictOnlyRows = dictRegionRows.filter((row) => standardNames.indexOf(row.name) < 0);
-const expectedPopupRows = standardNames.length + dictOnlyRows.length;
+const missingChinaSubregions = CHINA_SUBREGIONS.filter((name) => dictRegionRows.every((row) => row.name !== name));
+const expectedPopupRows = standardNames.length + dictOnlyRows.length + missingChinaSubregions.length;
 /** 「已有项目地区」期望 = 有项目在用的地区（值 = 项目落库原文 → 未删除项目数；Push 304 起按落库值聚合，字典外国名也照数）。 */
 const usedCountByValue = new Map(projectRows.map((row) => [row.region, Number(row.n)]));
 const usedValues = Array.from(usedCountByValue.keys());
@@ -667,7 +670,7 @@ popup = await probe(readRegionPopup);
 check("两个分页的小窗同高同位（追订「两个分页的高度位置要一致」）：已有页 / 全部页的盒子四边一致、切页不跳",
   usedTabBox !== null && popup !== null && popup.box !== null && popup.box.height === usedTabBox.height && popup.box.top === usedTabBox.top && popup.box.left === usedTabBox.left && popup.box.width === usedTabBox.width,
   JSON.stringify({ used: usedTabBox, all: popup === null ? null : popup.box }));
-check("点「全部地区」页签：候选 = 标准国家清单 " + String(standardNames.length) + " 条 + 字典独有条目 " + String(dictOnlyRows.length) + " 条，值不重复",
+check("点「全部地区」页签：候选 = 标准国家清单 " + String(standardNames.length) + " 条 + 中国特别地区 " + String(missingChinaSubregions.length) + " 条 + 字典独有条目 " + String(dictOnlyRows.length) + " 条，值不重复",
   popup !== null && popup.activeTab === "all" && popup.rows.length === expectedPopupRows && new Set(popup.rows.map((row) => row.value)).size === expectedPopupRows,
   JSON.stringify(popup === null ? null : { active: popup.activeTab, rows: popup.rows.length, expected: expectedPopupRows }));
 const popupGroups = popup === null ? [] : popup.groups;
@@ -692,9 +695,9 @@ for (const entry of PICKER_SPOT) {
 }
 check("候选洲归属抽查（" + String(PICKER_SPOT.length) + " 条）：" + PICKER_SPOT.map((entry) => entry[1] + "→" + entry[0]).join("、"),
   popup !== null && popupSpotFailures.length === 0, popupSpotFailures.join("；"));
-check("中国口径护栏：候选里不出现台湾 / 科索沃 / 北塞浦路斯 / 索马里兰、也没有香港 / 澳门",
-  popup !== null && FORBIDDEN.concat(["香港", "澳门"]).every((name) => String(popup.text).indexOf(name) < 0),
-  FORBIDDEN.concat(["香港", "澳门"]).filter((name) => popup !== null && String(popup.text).indexOf(name) >= 0).join(","));
+check("中国口径护栏：不出现台湾 / 香港 / 澳门独立条目，另列中国台湾 / 中国香港 / 中国澳门 三条（亚洲）",
+  popup !== null && FORBIDDEN.concat(["香港", "澳门"]).every((name) => popup.rows.every((row) => row.name !== name)) && CHINA_SUBREGIONS.every((name) => popup.rows.some((row) => row.name === name && row.group === "亚洲")),
+  JSON.stringify({ standalone: FORBIDDEN.concat(["香港", "澳门"]).filter((name) => popup !== null && popup.rows.some((row) => row.name === name)), chinaSubregions: popup === null ? [] : popup.rows.filter((row) => CHINA_SUBREGIONS.indexOf(row.name) >= 0).map((row) => row.name + "→" + String(row.group)) }));
 await shot("08-modal-region-all");
 
 // 搜「冰岛」= 用户原话场景（字典里没有的国家，照样搜得到、选得上）；输入即自动切到全部地区页

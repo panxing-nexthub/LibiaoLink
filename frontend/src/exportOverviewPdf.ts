@@ -474,86 +474,35 @@ function stageEffortOf(group: StageGroup): StageEffort | null {
   };
 }
 
-/** 阶段日期文本：2026-05-15 → 2026.5.15（与业务口径一致，不带前导零）。 */
-function stageDateText(iso: string): string {
-  const [year, month, day] = iso.split("-");
-  if (year === undefined || month === undefined || day === undefined) {
-    return iso;
-  }
-  return String(Number(year)) + "." + String(Number(month)) + "." + String(Number(day));
-}
-
-/** 阶段统计整句模板（中 / 英 / 日 / 韩；标签加粗，全部保持在同一行）。 */
+/** 阶段施工人数列文案（中 / 英 / 日 / 韩；列宽有限，只输出导出主体语言）。 */
 const STAGE_META_TEXT: Record<OverviewExportLanguage, {
-  span: (from: string, to: string, days: number) => string;
-  peak: string;
   total: string;
+  peak: string;
   peopleUnit: string;
   personDayUnit: string;
 }> = {
-  zh: {
-    span: (from, to, days) => `本阶段自${from}至${to} 需持续${String(days)}天`,
-    peak: "单日最多",
-    total: "阶段共需",
-    peopleUnit: "人",
-    personDayUnit: "人天",
-  },
-  en: {
-    span: (from, to, days) => `Stage from ${from} to ${to} · lasts ${String(days)} days`,
-    peak: "Max in one day",
-    total: "Stage total",
-    peopleUnit: "people",
-    personDayUnit: "person-days",
-  },
-  ja: {
-    span: (from, to, days) => `本ステージ ${from}〜${to}・${String(days)}日間継続`,
-    peak: "単日最多",
-    total: "ステージ必要",
-    peopleUnit: "人",
-    personDayUnit: "人日",
-  },
-  ko: {
-    span: (from, to, days) => `본 단계 ${from}~${to} · ${String(days)}일 소요`,
-    peak: "일일 최대",
-    total: "단계 총",
-    peopleUnit: "명",
-    personDayUnit: "인일",
-  },
+  zh: { total: "总人工", peak: "峰值", peopleUnit: "人", personDayUnit: "人天" },
+  en: { total: "Total", peak: "Peak", peopleUnit: "people", personDayUnit: "person-days" },
+  ja: { total: "総人工", peak: "ピーク", peopleUnit: "人", personDayUnit: "人日" },
+  ko: { total: "총 공수", peak: "최대", peopleUnit: "명", personDayUnit: "인일" },
 };
 
-/** 阶段统计分段（按语言生成；标签是否加粗由主 / 次文案决定）。 */
-function stageMetaSegments(effort: StageEffort, lang: OverviewExportLanguage, emphasize: boolean): string[] {
-  const text = STAGE_META_TEXT[lang];
-  const peakLabel = emphasize ? "<strong>" + escapeHtml(text.peak) + "</strong>" : escapeHtml(text.peak);
-  const totalLabel = emphasize ? "<strong>" + escapeHtml(text.total) + "</strong>" : escapeHtml(text.total);
-  const segments = [escapeHtml(text.span(stageDateText(effort.start), stageDateText(effort.end), effort.days))];
-  if (effort.hasHeadcount) {
-    segments.push(peakLabel + " " + String(effort.peak) + " " + escapeHtml(text.peopleUnit));
-    segments.push(totalLabel + " " + String(effort.total) + " " + escapeHtml(text.personDayUnit));
-  }
-  return segments;
-}
-
-/**
- * 阶段标题内联统计（2026-11-26 追订「要双语 然后要有适当间距」）：
- * 主体语言（导出语言，中文主体为中文）+ 次要语言（中文主体补英文，其它主体补中文）逐段对照，
- * 段与段之间留 14px 间距；统计整体在同一行，放不下时按段换行，不拆段内文字。
- */
-function stageMetaHtml(group: StageGroup, primary: OverviewExportLanguage): string {
+/** 阶段「预计所需施工人数」列：总人工（人天）与单日峰值（人）上下两行。 */
+function stageEffortCellHtml(group: StageGroup, primary: OverviewExportLanguage): string {
   const effort = stageEffortOf(group);
-  if (effort === null) {
-    return "";
+  if (effort === null || !effort.hasHeadcount) {
+    return '<td class="num"></td>';
   }
-  const secondaryLang: OverviewExportLanguage = primary === "zh" ? "en" : "zh";
-  const mainSegments = stageMetaSegments(effort, primary, true);
-  const secondarySegments = stageMetaSegments(effort, secondaryLang, false);
-  const items = mainSegments.map((main, index) =>
-    '<span class="grp__effort-item">' + main +
-    ' <span class="secondary" lang="' + languageAttr(secondaryLang) + '">' + secondarySegments[index] + "</span></span>");
-  return '<span class="grp__effort">' + items.join("") + "</span>";
+  const text = STAGE_META_TEXT[primary];
+  return '<td class="num grp__headcount">' +
+    '<span class="grp__metric"><strong>' + escapeHtml(text.total) + '</strong> ' +
+    String(effort.total) + ' ' + escapeHtml(text.personDayUnit) + '</span>' +
+    '<span class="grp__metric"><strong>' + escapeHtml(text.peak) + '</strong> ' +
+    String(effort.peak) + ' ' + escapeHtml(text.peopleUnit) + '</span>' +
+    '</td>';
 }
 
-/** 折叠阶段与任务行共用当前列配置；折叠行把阶段汇总值放回对应可见列，隐藏列不再占位。 */
+/** 阶段汇总行按可见列落位：阶段名 / 备注 / 计数在阶段列，日期落在各自日期列，人天统计落在施工人数列。 */
 function groupSectionHtml(
   counter: { value: number },
   group: StageGroup,
@@ -566,47 +515,41 @@ function groupSectionHtml(
 ): string {
   const visibleColumns = visibleOverviewTaskColumns(columns);
   const stageName = fixedText(group.name, primary);
-  const noteHtml = note === undefined ? "" : `<span class="grp__note">${translatedText(note, translationMap.get(note), primary)}</span>`;
-  const metaHtml = stageMetaHtml(group, primary);
+  const noteHtml = note === undefined
+    ? ""
+    : '<span class="grp__note grp__note--block">' + translatedText(note, translationMap.get(note), primary) + '</span>';
   const countText = group.total === 0
     ? fixedText("暂无任务", primary)
     : String(group.done) + " / " + String(group.total) + " " + escapeHtml(localizedValue("完成", primary)) + " · " +
       (primary === "zh" ? secondaryText("completed", "en") : secondaryText("完成", "zh"));
-  const groupHeading = (showCount = true) =>
-    '<tr class="grp__head"><td colspan="' + String(visibleColumns.length + 1) + '"><div class="grp__heading">' +
-    '<span class="grp__name">' + stageName + '</span>' +
-    (showCount ? '<span class="grp__count">' + countText + '</span>' : '') +
-    noteHtml + " " +
-    metaHtml +
-    '</div></td></tr>';
-
+  const headingHtml = '<span class="grp__name">' + stageName + '</span>' +
+    '<span class="grp__count">' + countText + '</span>' + noteHtml;
+  const dateRange = groupDateRange(group);
+  const pct = group.total === 0 ? 0 : Math.round((group.done / group.total) * 100);
+  const status = stageOverallStatus(group);
+  const tint = status === null ? { text: "#52525b" } : STATUS_TINT[status];
+  const fill = group.total === 0 ? "#d4d4d8" : pct === 100 ? "#10b981" : "#18181b";
+  const cells: Record<OverviewTaskColumnKey, string> = {
+    title: '<td class="task grp__title-cell">' + headingHtml + '</td>',
+    note: '<td class="pnote">' + (columns.title ? "" : headingHtml) + '</td>',
+    managers: '<td class="managers"></td>',
+    owners: '<td class="owners"></td>',
+    status: '<td class="grp__status"><span class="chip" style="color: ' + tint.text + '">' + fixedText(status ?? "暂无任务", primary) + '</span></td>',
+    startDate: '<td class="num date">' + dateText(dateRange.start) + '</td>',
+    dueDate: '<td class="num date">' + dateText(dateRange.due) + '</td>',
+    headcount: stageEffortCellHtml(group, primary),
+    progress: '<td class="grp__progress-cell"><span class="grp__progress">' + barHtml(pct, fill, "bar--grp") + '<span>' + (group.total === 0 ? "—" : String(pct) + "%") + '</span></span></td>',
+  };
+  const banner = !columns.title && !columns.note
+    ? '<tr class="grp__head"><td colspan="' + String(visibleColumns.length + 1) + '"><div class="grp__heading">' + headingHtml + '</div></td></tr>'
+    : "";
+  const stageRow = (rowClass: string) =>
+    '<tr class="grp__head ' + rowClass + '"><td class="num"></td>' +
+    visibleColumns.map((column) => cells[column.key]).join("") +
+    '</tr>';
   if (collapsed && group.total > 0) {
     counter.value += group.tasks.length;
-    const pct = group.total === 0 ? 0 : Math.round((group.done / group.total) * 100);
-    const status = stageOverallStatus(group);
-    const tint = status === null ? { text: "#52525b" } : STATUS_TINT[status];
-    const dateRange = groupDateRange(group);
-    const fill = group.total === 0 ? "#d4d4d8" : pct === 100 ? "#10b981" : "#18181b";
-    const cells: Record<OverviewTaskColumnKey, string> = {
-      title: '<td class="grp__name">' + stageName + noteHtml + " " + metaHtml + '</td>',
-      note: '<td class="grp__count">' + countText + '</td>',
-      managers: '<td class="managers"><span class="one-line">' + escapeHtml(managerText) + '</span></td>',
-      owners: '<td class="owners"></td>',
-      status: '<td class="grp__status"><span class="chip" style="color: ' + tint.text + '">' + fixedText(status ?? "暂无任务", primary) + '</span></td>',
-      startDate: '<td class="num date">' + dateText(dateRange.start) + '</td>',
-      dueDate: '<td class="num date">' + dateText(dateRange.due) + '</td>',
-      headcount: '<td class="num"></td>',
-      progress: '<td class="grp__progress-cell"><span class="grp__progress">' + barHtml(pct, fill, "bar--grp") + '<span>' + (group.total === 0 ? "—" : String(pct) + "%") + '</span></span></td>',
-    };
-    return (
-      '<tbody class="grp">' +
-      (!columns.title && note !== undefined ? groupHeading(false) : "") +
-      '<tr class="grp__head grp__head--collapsed">' +
-      '<td class="num"></td>' +
-      visibleColumns.map((column) => cells[column.key]).join("") +
-      '</tr>' +
-      '</tbody>'
-    );
+    return '<tbody class="grp">' + banner + stageRow("grp__head--collapsed") + '</tbody>';
   }
   const rows = group.tasks
     .map((task) => {
@@ -616,7 +559,8 @@ function groupSectionHtml(
     .join("");
   return (
     '<tbody class="grp">' +
-    groupHeading() +
+    banner +
+    stageRow("grp__head--stage") +
     rows +
     '</tbody>'
   );
@@ -681,12 +625,12 @@ const REPORT_STYLE = `
   .grp__count { margin-left: 6px; font-size: 9.5px; color: #71717a; }
   .grp__heading { display: block; line-height: 1.55; }
   .grp__heading .grp__name { white-space: nowrap; }
-  .grp__note { margin-left: 10px; color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; }
-  .grp__effort { font-size: 8.5px; color: #3f3f46; }
-  .grp__effort-item { display: inline-block; margin-right: 14px; white-space: nowrap; }
-  .grp__effort-item:last-child { margin-right: 0; }
-  .grp__effort strong { font-weight: 700; color: #18181b; }
-  .grp__effort .secondary { margin-left: 4px; font-size: 8px; color: #a1a1aa; }
+  .grp__note { color: #3f3f46; font-size: 9.5px; font-weight: 400; overflow-wrap: anywhere; }
+  .grp__note--block { display: block; margin-top: 3px; }
+  .grp__title-cell { line-height: 1.5; }
+  .grp__headcount { font-variant-numeric: tabular-nums; line-height: 1.45; }
+  .grp__metric { display: block; white-space: nowrap; color: #3f3f46; font-size: 9px; }
+  .grp__metric strong { color: #18181b; font-weight: 700; }
   tbody.grp tr.grp__head--collapsed .grp__note { display: block; margin: 2px 0 0; }
   tbody.grp tr.grp__head--collapsed td { padding: 6px 5px; background: #fafafa; border: 0; border-bottom: 1px solid #e4e4e7; vertical-align: middle; }
   tbody.grp tr.grp__head--collapsed td:first-child { padding-left: 7px; border-left: 1px solid #e4e4e7; }

@@ -153,8 +153,8 @@ function stagePaletteOf(stage: string): StagePalette {
 }
 
 /** 图例示例色（使用中性石板灰示范：实心 = 已完成进度，浅底 = 剩余工期，画布上按所属阶段分色）。 */
-const BAR_DONE_CLASS = "bg-[#a5f3fc]";
-const BAR_TODO_CLASS = "bg-[#0891b2]";
+const BAR_DONE_CLASS = "bg-slate-600";
+const BAR_TODO_CLASS = "bg-slate-200";
 
 /** 已延期超期延伸段斜纹（半透明玫瑰红斜线纹理）。 */
 const OVERDUE_TAIL_BG =
@@ -1934,7 +1934,7 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
     const barHeight = BAR_H;
     const barRight = cellLeft + cellWidth;
     // 已完成进度 >= 55% 时深色主色铺过半条，文字切换白色提升对比度；未完成浅底段用同色系深字。
-    const labelColor = live.percent >= 55 ? palette.text : "#ffffff";
+    const labelColor = live.percent >= 55 ? "#ffffff" : palette.text;
 
     // 实际完成日期（方案 A）：条内彻底不画竖线；
     // - 推迟完成（done > live.end）：从计划条右端向外拉出虚线 + 实心终点圆点直指实际完成日；
@@ -2023,7 +2023,7 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
             width: cellWidth,
             height: barHeight,
             top: barTop,
-            backgroundColor: palette.accent,
+            backgroundColor: palette.track,
           }}
           title={barTitle}
           onPointerDown={(event) => {
@@ -2045,14 +2045,14 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
         >
           <span
             className="absolute inset-y-0 left-0 transition-[width] duration-150"
-            style={{ width: String(live.percent) + "%", backgroundColor: palette.track }}
+            style={{ width: String(live.percent) + "%", backgroundColor: palette.accent }}
             aria-hidden="true"
           />
           {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 bg-slate-900/10" aria-hidden="true" /> : null}
           {box.width < 40 ? null : (
             <span
               className="relative truncate pl-2 pr-1.5 text-[11px] font-semibold"
-              style={{ color: labelColor, textShadow: live.percent >= 55 ? "none" : "0 1px 1px rgba(15,23,42,0.22)" }}
+              style={{ color: labelColor, textShadow: live.percent >= 55 ? "0 1px 1px rgba(15,23,42,0.22)" : "none" }}
             >
               {barLabel}
             </span>
@@ -2193,22 +2193,22 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
         >
           <div
             className="relative w-full overflow-hidden rounded-t-[3px]"
-            style={{ height: barThickness, backgroundColor: palette.accent }}
+            style={{ height: barThickness, backgroundColor: palette.track }}
           >
             <span
               className="absolute inset-y-0 left-0 transition-[width] duration-150"
-              style={{ width: String(group.percent) + "%", backgroundColor: palette.track }}
+              style={{ width: String(group.percent) + "%", backgroundColor: palette.accent }}
               aria-hidden="true"
             />
           </div>
           <span
             className="absolute left-0 block w-[3px] rounded-b-[2px]"
-            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent > 0 ? palette.track : palette.accent }}
+            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent > 0 ? palette.accent : palette.track }}
             aria-hidden="true"
           />
           <span
             className="absolute right-0 block w-[3px] rounded-b-[2px]"
-            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent >= 100 ? palette.track : palette.accent }}
+            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent >= 100 ? palette.accent : palette.track }}
             aria-hidden="true"
           />
         </div>

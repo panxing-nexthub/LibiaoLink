@@ -409,21 +409,21 @@ function groupDateRange(group: StageGroup): { start: string; due: string } {
   return { start, due };
 }
 
-/** 阶段投入统计：开始 / 实际结束（缺实际结束用预计完成）、含首尾天数、单日峰值与平均每天人天。 */
+/** 阶段投入统计：开始 / 实际结束（缺实际结束用预计完成）、含首尾天数、单日最多人数与总人天。 */
 type StageEffort = {
   start: string;
   end: string;
   days: number;
   peak: number;
-  average: number;
+  total: number;
   hasHeadcount: boolean;
 };
 
 /**
- * 阶段起止与人力统计（业务口径 2026-11-26「大阶段标题显示开始时间到实际结束时间、历时多少天；
- * 设计施工人数按日期汇总：一个任务 22-24 号 4 人 + 下一个任务 23-24 号 4 人 → 23 / 24 号 = 8 人/天；
- * 还要统计平均每天多少人天」）：单日人数 = 当天在做的所有任务 headcount 之和（含首尾），
- * 平均 = 阶段总人天 ÷ 阶段日历天数（含首尾）。
+ * 阶段起止与人力统计（业务口径 2026-11-27「单日最多 X 人、阶段共需 X 人天」）：
+ * 设计施工人数按日期汇总：一个任务 22-24 号 4 人 + 下一个任务 23-24 号 4 人 → 23 / 24 号 = 8 人；
+ * 单日人数 = 当天在做的所有任务 headcount 之和（含首尾），peak 取单日最大值；
+ * total = 阶段内每天人数之和（人天）。
  */
 function stageEffortOf(group: StageGroup): StageEffort | null {
   let start = "";
@@ -469,7 +469,7 @@ function stageEffortOf(group: StageGroup): StageEffort | null {
     end,
     days,
     peak,
-    average: covered.length === 0 ? 0 : Math.round((total / days) * 10) / 10,
+    total,
     hasHeadcount: covered.length > 0,
   };
 }
@@ -487,32 +487,37 @@ function stageDateText(iso: string): string {
 const STAGE_META_TEXT: Record<OverviewExportLanguage, {
   span: (from: string, to: string, days: number) => string;
   peak: string;
-  average: string;
-  unit: string;
+  total: string;
+  peopleUnit: string;
+  personDayUnit: string;
 }> = {
   zh: {
     span: (from, to, days) => `本阶段自${from}至${to} 需持续${String(days)}天`,
-    peak: "单日最多人天",
-    average: "平均每天人天",
-    unit: "人/天",
+    peak: "单日最多",
+    total: "阶段共需",
+    peopleUnit: "人",
+    personDayUnit: "人天",
   },
   en: {
     span: (from, to, days) => `Stage from ${from} to ${to} · lasts ${String(days)} days`,
-    peak: "Max people per day",
-    average: "Average people per day",
-    unit: "people/day",
+    peak: "Max in one day",
+    total: "Stage total",
+    peopleUnit: "people",
+    personDayUnit: "person-days",
   },
   ja: {
     span: (from, to, days) => `本ステージ ${from}〜${to}・${String(days)}日間継続`,
-    peak: "単日最多人日",
-    average: "平均人日",
-    unit: "人/日",
+    peak: "単日最多",
+    total: "ステージ必要",
+    peopleUnit: "人",
+    personDayUnit: "人日",
   },
   ko: {
     span: (from, to, days) => `본 단계 ${from}~${to} · ${String(days)}일 소요`,
-    peak: "일일 최대 인원",
-    average: "일평균 인원",
-    unit: "명/일",
+    peak: "일일 최대",
+    total: "단계 총",
+    peopleUnit: "명",
+    personDayUnit: "인일",
   },
 };
 
@@ -520,11 +525,11 @@ const STAGE_META_TEXT: Record<OverviewExportLanguage, {
 function stageMetaSegments(effort: StageEffort, lang: OverviewExportLanguage, emphasize: boolean): string[] {
   const text = STAGE_META_TEXT[lang];
   const peakLabel = emphasize ? "<strong>" + escapeHtml(text.peak) + "</strong>" : escapeHtml(text.peak);
-  const averageLabel = emphasize ? "<strong>" + escapeHtml(text.average) + "</strong>" : escapeHtml(text.average);
+  const totalLabel = emphasize ? "<strong>" + escapeHtml(text.total) + "</strong>" : escapeHtml(text.total);
   const segments = [escapeHtml(text.span(stageDateText(effort.start), stageDateText(effort.end), effort.days))];
   if (effort.hasHeadcount) {
-    segments.push(peakLabel + " " + String(effort.peak) + " " + escapeHtml(text.unit));
-    segments.push(averageLabel + " " + String(effort.average) + " " + escapeHtml(text.unit));
+    segments.push(peakLabel + " " + String(effort.peak) + " " + escapeHtml(text.peopleUnit));
+    segments.push(totalLabel + " " + String(effort.total) + " " + escapeHtml(text.personDayUnit));
   }
   return segments;
 }

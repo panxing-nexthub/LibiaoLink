@@ -1429,7 +1429,7 @@ export const KO_TEXTS: Partial<Record<TextKey, string>> = {
   "gantt.tip.progress": "진행률 {n}%",
   "gantt.tip.status": "상태 {status}",
   "gantt.tip.owners": "담당자 {names}",
-  "gantt.tip.dragBar": "막대를 끌어 일정 변경 · 끝을 끌어 크기 조절 · 점을 끌어 진행률 설정",
+  "gantt.tip.dragBar": "막대를 끌어 일정 변경 · 끝을 끌어 크기 조절",
   "gantt.tip.dragProgress": "끌어서 진행률 설정 (현재 {n}%)",
   "gantt.tip.dragRange": "{from} → {to} · {n}일",
   "gantt.tip.selectTip": "클릭하여 이 행을 선택하고 해당 막대가 보이도록 스크롤",

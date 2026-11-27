@@ -1429,7 +1429,7 @@ export const JA_TEXTS: Partial<Record<TextKey, string>> = {
   "gantt.tip.progress": "進捗 {n}%",
   "gantt.tip.status": "ステータス {status}",
   "gantt.tip.owners": "担当者 {names}",
-  "gantt.tip.dragBar": "バーをドラッグして日程を変更 · 端をドラッグして期間を調整 · ドットをドラッグして進捗を設定",
+  "gantt.tip.dragBar": "バーをドラッグして日程を変更 · 端をドラッグして期間を調整",
   "gantt.tip.dragProgress": "ドラッグして進捗を設定（現在 {n}%）",
   "gantt.tip.dragRange": "{from} → {to} · {n}日",
   "gantt.tip.selectTip": "クリックしてこの行を選択し、そのバーを表示領域にスクロール",

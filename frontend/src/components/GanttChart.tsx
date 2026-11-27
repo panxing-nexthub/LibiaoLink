@@ -135,8 +135,8 @@ const STAGE_PALETTE: Record<string, StagePalette> = {
   加工采购: { accent: "#0d9488", track: "#99f6e4", envelope: "rgba(13, 148, 136, 0.045)", text: "#134e4a" },
   组装发货: { accent: "#65a30d", track: "#d9f99d", envelope: "rgba(101, 163, 13, 0.05)", text: "#365314" },
   硬件实施: { accent: "#d97706", track: "#fde68a", envelope: "rgba(217, 119, 6, 0.05)", text: "#78350f" },
-  软件部署: { accent: "#ea580c", track: "#fed7aa", envelope: "rgba(234, 88, 12, 0.045)", text: "#7c2d12" },
-  试运行:   { accent: "#7c3aed", track: "#ddd6fe", envelope: "rgba(124, 58, 237, 0.045)", text: "#4c1d95" },
+  软件部署: { accent: "#7c3aed", track: "#ddd6fe", envelope: "rgba(124, 58, 237, 0.045)", text: "#4c1d95" },
+  试运行:   { accent: "#db2777", track: "#fbcfe8", envelope: "rgba(219, 39, 119, 0.045)", text: "#831843" },
   投产阶段: { accent: "#c026d3", track: "#f5d0fe", envelope: "rgba(192, 38, 211, 0.045)", text: "#701a75" },
   验收:     { accent: "#059669", track: "#a7f3d0", envelope: "rgba(5, 150, 105, 0.045)", text: "#064e3b" },
 };
@@ -153,8 +153,8 @@ function stagePaletteOf(stage: string): StagePalette {
 }
 
 /** 图例示例色（使用中性石板灰示范：实心 = 已完成进度，浅底 = 剩余工期，画布上按所属阶段分色）。 */
-const BAR_DONE_CLASS = "bg-slate-600";
-const BAR_TODO_CLASS = "bg-slate-200";
+const BAR_DONE_CLASS = "bg-[#a5f3fc]";
+const BAR_TODO_CLASS = "bg-[#0891b2]";
 
 /** 已延期超期延伸段斜纹（半透明玫瑰红斜线纹理）。 */
 const OVERDUE_TAIL_BG =
@@ -1934,7 +1934,7 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
     const barHeight = BAR_H;
     const barRight = cellLeft + cellWidth;
     // 已完成进度 >= 55% 时深色主色铺过半条，文字切换白色提升对比度；未完成浅底段用同色系深字。
-    const labelColor = live.percent >= 55 ? "#ffffff" : palette.text;
+    const labelColor = live.percent >= 55 ? palette.text : "#ffffff";
 
     // 实际完成日期（方案 A）：条内彻底不画竖线；
     // - 推迟完成（done > live.end）：从计划条右端向外拉出虚线 + 实心终点圆点直指实际完成日；
@@ -2023,7 +2023,7 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
             width: cellWidth,
             height: barHeight,
             top: barTop,
-            backgroundColor: palette.track,
+            backgroundColor: palette.accent,
           }}
           title={barTitle}
           onPointerDown={(event) => {
@@ -2045,14 +2045,14 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
         >
           <span
             className="absolute inset-y-0 left-0 transition-[width] duration-150"
-            style={{ width: String(live.percent) + "%", backgroundColor: palette.accent }}
+            style={{ width: String(live.percent) + "%", backgroundColor: palette.track }}
             aria-hidden="true"
           />
           {barHovered && !dragging ? <span className="pointer-events-none absolute inset-0 bg-slate-900/10" aria-hidden="true" /> : null}
           {box.width < 40 ? null : (
             <span
               className="relative truncate pl-2 pr-1.5 text-[11px] font-semibold"
-              style={{ color: labelColor, textShadow: live.percent >= 55 ? "0 1px 1px rgba(15,23,42,0.22)" : "none" }}
+              style={{ color: labelColor, textShadow: live.percent >= 55 ? "none" : "0 1px 1px rgba(15,23,42,0.22)" }}
             >
               {barLabel}
             </span>
@@ -2193,22 +2193,22 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
         >
           <div
             className="relative w-full overflow-hidden rounded-t-[3px]"
-            style={{ height: barThickness, backgroundColor: palette.track }}
+            style={{ height: barThickness, backgroundColor: palette.accent }}
           >
             <span
               className="absolute inset-y-0 left-0 transition-[width] duration-150"
-              style={{ width: String(group.percent) + "%", backgroundColor: palette.accent }}
+              style={{ width: String(group.percent) + "%", backgroundColor: palette.track }}
               aria-hidden="true"
             />
           </div>
           <span
             className="absolute left-0 block w-[3px] rounded-b-[2px]"
-            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent > 0 ? palette.accent : palette.track }}
+            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent > 0 ? palette.track : palette.accent }}
             aria-hidden="true"
           />
           <span
             className="absolute right-0 block w-[3px] rounded-b-[2px]"
-            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent >= 100 ? palette.accent : palette.track }}
+            style={{ top: barThickness - 1, height: legH, backgroundColor: group.percent >= 100 ? palette.track : palette.accent }}
             aria-hidden="true"
           />
         </div>

@@ -987,28 +987,19 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
     };
   }, []);
 
-  /** Ctrl + 空格 = 进 / 出全屏；Esc = 退出页内覆盖层兜底（原生全屏由浏览器退出）。 */
+  /** Esc = 退出页内覆盖层兜底（原生全屏由浏览器自己退出）；全屏只走按钮开关，不再占用 Ctrl + 空格。 */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.isComposing || event.repeat) {
-        return;
-      }
-      const isSpace = event.code === "Space" || event.key === " " || event.key === "Spacebar";
-      if (isSpace && event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
-        event.preventDefault();
-        toggleFullscreen();
-        return;
-      }
       if (event.key === "Escape") {
         setCssFullscreen(false);
       }
     };
-    // 捕获阶段先拿 Esc / Ctrl + 空格，避免页面内其他键盘处理 stopPropagation 把退出吞掉。
+    // 捕获阶段先拿 Esc，避免页面内其他键盘处理 stopPropagation 把退出吞掉。
     window.addEventListener("keydown", onKeyDown, true);
     return () => {
       window.removeEventListener("keydown", onKeyDown, true);
     };
-  }, [toggleFullscreen]);
+  }, []);
 
   const toggleStage = (stage: string) => {
     setCollapsed((previous) => ({ ...previous, [stage]: previous[stage] !== true }));

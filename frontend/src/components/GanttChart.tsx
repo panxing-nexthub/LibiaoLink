@@ -5,6 +5,8 @@ import { PROJECT_STAGES } from "../data/projects";
 import { PROGRESS_STEPS, TEMP_TASK_STAGE, daysBetweenInclusive, isTaskDone, ownersLabel, taskCapabilitiesOf, type ProjectTask, type TaskStatus } from "../data/tasks";
 import { fieldText, isLocalizedLocale, mdText, monthShortText, monthYearText, stageText, statusText, textOf, useLocale, useLocalizedTranslator, useT, yearText } from "../i18n";
 import type { Locale } from "../i18n";
+import { InlineDateCell, InlineNumberCell } from "./InlineEdit";
+import { TrackerDots } from "./Tracker";
 import { STATUS_DOT_CLASS, TaskRow, resolveColumns, tableGridTemplate, tableMinWidth, type TaskPatch } from "./TaskBoard";
 
 /**
@@ -97,8 +99,6 @@ const ROW_H = 36;
 
 /** 任务条 / 阶段汇总条高度；条两端的热区宽与进度圆点直径（拖拽交互用）。 */
 const BAR_H = 22;
-const EDGE_ZONE_W = 6;
-const KNOB_SIZE = 10;
 
 /** 拖空白平移画面：位移超过这个像素才算「拖动」（不到 = 还是点击，左表行定位 / 阶段折叠照常）。 */
 const PAN_THRESHOLD_PX = 4;
@@ -732,6 +732,8 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
   const [pendingToday, setPendingToday] = useState(false);
   /** 时间轴右侧无限延伸的天数：滚动接近右缘时按 120 天加长（仅前端渲染，不写库）。 */
   const [extraEndDays, setExtraEndDays] = useState(0);
+  /** 左表「进展」四格胶囊的悬停档位（0 = 无）。 */
+  const [trackerHover, setTrackerHover] = useState(0);
   /** 左表宽度（官方 frame.verticalSplitLineMoveable：拖左表右边线改宽窄），双击复位默认宽。 */
   const [leftWidth, setLeftWidth] = useState(LEFT_W_DEFAULT);
   const [splitHover, setSplitHover] = useState(false);
@@ -1916,10 +1918,8 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
     const barTitle = barTitleOf(bar);
     const capabilities = taskCapabilitiesOf(bar.task);
     const canEditDates = !barsLocked && capabilities.canEditFields && bar.task.finalizedAt === null;
-    const canEditProgress = !barsLocked && capabilities.canUpdateProgress && bar.task.finalizedAt === null;
     const barCursor = !canEditDates ? "cursor-default" : dragging ? "cursor-grabbing" : "cursor-grab";
     const showHandles = canEditDates && box.width >= 18 && (barHovered || dragging);
-    const showProgressHandle = canEditProgress && (barHovered || dragging);
     const percent = Math.round(live.percent);
     // 条内标签对齐官方 labelText「{title} {progress}%」：条够宽写全，窄条只写百分比、再窄就不写。
     const barLabel = box.width >= 84 ? ganttTitle(bar.task) + " " + String(percent) + "%" : String(percent) + "%";
@@ -2073,22 +2073,6 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
                 }}
               />
             </>
-          ) : null}
-          {showProgressHandle && box.width >= 60 ? (
-            // 进度圆点 = 改进度（四档吸附）；左右各让开 6px，免得压住两端的改工期热区。
-            <span
-              className="absolute z-30 cursor-ew-resize rounded-full border border-slate-400 bg-white shadow"
-              style={{
-                width: KNOB_SIZE,
-                height: KNOB_SIZE,
-                left: clampNumber((live.percent / 100) * box.width - KNOB_SIZE / 2, EDGE_ZONE_W, Math.max(box.width - KNOB_SIZE - EDGE_ZONE_W, EDGE_ZONE_W)),
-                top: (barHeight - KNOB_SIZE) / 2,
-              }}
-              title={t("gantt.tip.dragProgress", { n: percent })}
-              onPointerDown={(event) => {
-                beginDrag(event, bar, "progress");
-              }}
-            />
           ) : null}
         </div>
 
@@ -2302,6 +2286,21 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
                 {model.rows.map((row) => {
                   const isHovered = hovered === row.key;
                   const range = rowDateRange(row);
+                  const rowTask = row.kind === "task" ? row.bar.task : null;
+                  const rowCaps = rowTask === null ? null : taskCapabilitiesOf(rowTask);
+                  const datesEditable = rowTask !== null && !barsLocked && onPatchTask !== undefined && rowCaps !== null && rowCaps.canEditFields && rowTask.finalizedAt === null;
+                  const progressEditable = rowTask !== null && !barsLocked && onSetProgress !== undefined && rowCaps !== null && rowCaps.canUpdateProgress && rowTask.finalizedAt === null;
+                  const editHint = barsLocked ? t("gantt.lock.lockedTip") : t("board.finalizedHint");
+                  const patchRowRange = (nextStartIso: string, nextDueIso: string) => {
+                    if (rowTask === null) {
+                      return;
+                    }
+                    onPatchTask?.(rowTask.id, {
+                      startDate: nextStartIso,
+                      dueDate: nextDueIso,
+                      days: nextStartIso !== "" && nextDueIso !== "" ? daysBetweenInclusive(nextStartIso, nextDueIso) : 0,
+                    });
+                  };
                   return (
                     <div
                       key={row.key}
@@ -2376,28 +2375,87 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
                           </span>
                         </button>
                       )}
-                      <div className={dateCellClass(range.live)} style={{ width: COL_START_W }}>
-                        {range.start === "—" ? <span className="text-slate-300">—</span> : range.start}
-                      </div>
-                      <div className={dateCellClass(range.live)} style={{ width: COL_END_W }}>
-                        {range.end === "—" ? <span className="text-slate-300">—</span> : range.end}
-                      </div>
-                      <div className="px-1 text-center whitespace-nowrap text-[11px] tabular-nums text-zinc-500" style={{ width: COL_HEADCOUNT_W }}>
-                        {row.kind === "group"
-                          ? row.group.headcountTotal > 0
-                            ? t("drawer.headcount.value", { n: row.group.headcountTotal })
-                            : <span className="text-slate-300">—</span>
-                          : row.bar.task.headcount > 0
-                            ? t("drawer.headcount.value", { n: row.bar.task.headcount })
-                            : <span className="text-slate-300">—</span>}
-                      </div>
-                      <div className="px-1 text-center whitespace-nowrap text-[11px] tabular-nums text-zinc-500" style={{ width: COL_PROGRESS_W }}>
-                        {row.kind === "group"
-                          ? String(row.group.percent) + "%"
-                          : row.bar.start === null
-                            ? t("gantt.unscheduled")
-                            : String(row.bar.percent) + "%"}
-                      </div>
+                      {row.kind === "group" ? (
+                        <>
+                          <div className={dateCellClass(range.live)} style={{ width: COL_START_W }}>
+                            {range.start === "—" ? <span className="text-slate-300">—</span> : range.start}
+                          </div>
+                          <div className={dateCellClass(range.live)} style={{ width: COL_END_W }}>
+                            {range.end === "—" ? <span className="text-slate-300">—</span> : range.end}
+                          </div>
+                          <div className="px-1 text-center whitespace-nowrap text-[11px] tabular-nums text-zinc-500" style={{ width: COL_HEADCOUNT_W }}>
+                            {row.group.headcountTotal > 0 ? t("drawer.headcount.value", { n: row.group.headcountTotal }) : <span className="text-slate-300">—</span>}
+                          </div>
+                          <div className="px-1 text-center whitespace-nowrap text-[11px] tabular-nums text-zinc-500" style={{ width: COL_PROGRESS_W }}>
+                            {String(row.group.percent) + "%"}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-center" style={{ width: COL_START_W }}>
+                            <InlineDateCell
+                              valueIso={rowTask === null ? "" : rowTask.startDate}
+                              ariaLabel={t("board.edit.aria", { field: fieldText(locale, "开始日期") })}
+                              disabled={!datesEditable}
+                              disabledHint={editHint}
+                              placement="below"
+                              triggerClassName="tabular-nums text-[11px] text-slate-600"
+                              display={rowTask === null || rowTask.startDate === "" ? <span className="text-slate-300">—</span> : mdText(locale, rowTask.startDate)}
+                              onChange={(iso) => {
+                                const due = rowTask === null ? "" : rowTask.dueDate;
+                                patchRowRange(iso, iso !== "" && due !== "" && iso > due ? "" : due);
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-center" style={{ width: COL_END_W }}>
+                            <InlineDateCell
+                              valueIso={rowTask === null ? "" : rowTask.dueDate}
+                              minDate={rowTask === null ? "" : rowTask.startDate}
+                              ariaLabel={t("board.edit.aria", { field: fieldText(locale, "预计完成日期") })}
+                              disabled={!datesEditable}
+                              disabledHint={editHint}
+                              placement="below"
+                              triggerClassName="tabular-nums text-[11px] text-slate-600"
+                              display={rowTask === null || rowTask.dueDate === "" ? <span className="text-slate-300">—</span> : mdText(locale, rowTask.dueDate)}
+                              onChange={(iso) => {
+                                patchRowRange(rowTask === null ? "" : rowTask.startDate, iso);
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-center" style={{ width: COL_HEADCOUNT_W }}>
+                            <InlineNumberCell
+                              value={rowTask === null ? 0 : rowTask.headcount}
+                              ariaLabel={t("board.edit.aria", { field: fieldText(locale, "预计所需施工人数") })}
+                              disabled={!datesEditable}
+                              disabledHint={editHint}
+                              display={rowTask !== null && rowTask.headcount > 0 ? t("drawer.headcount.value", { n: rowTask.headcount }) : <span className="text-slate-300">—</span>}
+                              onSave={(value) => {
+                                if (rowTask !== null) {
+                                  onPatchTask?.(rowTask.id, { headcount: value });
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-center" style={{ width: COL_PROGRESS_W }}>
+                            {rowTask !== null && (rowTask.startDate === "" || rowTask.dueDate === "") ? (
+                              <span className="text-[11px] text-slate-400">{t("gantt.unscheduled")}</span>
+                            ) : (
+                              <TrackerDots
+                                progress={rowTask === null ? 0 : rowTask.progress}
+                                hovered={trackerHover}
+                                onHoverChange={setTrackerHover}
+                                disabled={!progressEditable}
+                                disabledHint={editHint}
+                                onChange={(next) => {
+                                  if (rowTask !== null) {
+                                    onSetProgress?.(rowTask.id, next);
+                                  }
+                                }}
+                              />
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })}

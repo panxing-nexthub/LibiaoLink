@@ -667,6 +667,22 @@ function GanttLockIcon({ locked }: { locked: boolean }) {
   );
 }
 
+/**
+ * 甘特图全屏图标（业务口径 2026-11-27「甘特图左侧新加图片 全屏按钮」）：
+ * 图形取自业务提供的四角框 SVG（品牌蓝 #1296db），进入 / 退出全屏共用同一枚按钮。
+ */
+function GanttFullscreenIcon() {
+  return (
+    <svg viewBox="0 0 1024 1024" className="h-4 w-4" aria-hidden="true">
+      <path d="M0 0h256v51.2H0z" fill="#1296db" />
+      <path d="M51.2 0v256H0V0zM1024 0v256h-51.2V0z" fill="#1296db" />
+      <path d="M1024 51.2h-256V0h256zM1024 1024h-256v-51.2h256z" fill="#1296db" />
+      <path d="M972.8 1024v-256h51.2v256zM0 1024v-256h51.2v256z" fill="#1296db" />
+      <path d="M0 972.8h256v51.2H0z" fill="#1296db" />
+    </svg>
+  );
+}
+
 /** 甘特编辑锁记忆键：按登录账号隔离（同机换账号不串用；与仪表盘筛选记忆同一套键口径）。 */
 function ganttLockKey(viewerId: string): string {
   return "libiaolink.gantt.barsLocked.v1." + (viewerId === "" ? "anon" : viewerId);
@@ -739,6 +755,11 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
   const pendingScrollLeftRef = useRef<number | null>(null);
   /** 刚拖完那一下（拖动收尾浏览器会补一个 click）：用来挡掉「拖完顺手把选中清掉」。 */
   const justDraggedRef = useRef(false);
+  /** 甘特图全屏（2026-11-27）：shell 包住工具条 + 图表；优先浏览器 Fullscreen API，失败退页内覆盖层。 */
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
+  const [cssFullscreen, setCssFullscreen] = useState(false);
+  const fullscreen = nativeFullscreen || cssFullscreen;
 
   const dayWidth = clampNumber(dayWidthRaw, DAY_WIDTH_MIN, DAY_WIDTH_MAX);
   const zoomPercent = Math.round((dayWidth / DAY_WIDTH_DEFAULT) * 100);
@@ -902,6 +923,76 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
       window.removeEventListener("keydown", onKeyDown);
     };
   }, []);
+
+  /** 进全屏：优先浏览器 Fullscreen API（Esc 由浏览器原生退出）；不支持 / 被拒绝时退化为页内覆盖层。 */
+  const enterFullscreen = useCallback(() => {
+    const node = shellRef.current;
+    if (node === null) {
+      return;
+    }
+    if (typeof node.requestFullscreen !== "function") {
+      setCssFullscreen(true);
+      return;
+    }
+    try {
+      void node.requestFullscreen().catch(() => {
+        setCssFullscreen(true);
+      });
+    } catch {
+      setCssFullscreen(true);
+    }
+  }, []);
+
+  /** 退全屏：页内覆盖层与浏览器原生全屏一起收。 */
+  const exitFullscreen = useCallback(() => {
+    setCssFullscreen(false);
+    if (document.fullscreenElement !== null && typeof document.exitFullscreen === "function") {
+      void document.exitFullscreen().catch(() => {
+        // 退出失败时浏览器仍会派发 fullscreenchange，状态跟着实际全屏元素走。
+      });
+    }
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (nativeFullscreen || cssFullscreen) {
+      exitFullscreen();
+      return;
+    }
+    enterFullscreen();
+  }, [cssFullscreen, enterFullscreen, exitFullscreen, nativeFullscreen]);
+
+  /** 浏览器原生全屏状态以 fullscreenchange 为准（含用户按 Esc / 浏览器 UI 退出）。 */
+  useEffect(() => {
+    const onChange = () => {
+      setNativeFullscreen(document.fullscreenElement === shellRef.current);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+    };
+  }, []);
+
+  /** Ctrl + 空格 = 进 / 出全屏；Esc = 退出页内覆盖层兜底（原生全屏由浏览器退出）。 */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.repeat) {
+        return;
+      }
+      const isSpace = event.code === "Space" || event.key === " " || event.key === "Spacebar";
+      if (isSpace && event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+        event.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+      if (event.key === "Escape") {
+        setCssFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [toggleFullscreen]);
 
   const toggleStage = (stage: string) => {
     setCollapsed((previous) => ({ ...previous, [stage]: previous[stage] !== true }));
@@ -1475,6 +1566,23 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
   const toolbarBlock = (
     <div data-gantt-toolbar="" className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <button
+          type="button"
+          data-gantt-fullscreen-toggle={fullscreen ? "on" : "off"}
+          aria-pressed={fullscreen}
+          aria-label={t(fullscreen ? "gantt.fullscreen.exitAria" : "gantt.fullscreen.enterAria")}
+          title={t(fullscreen ? "gantt.fullscreen.exitTip" : "gantt.fullscreen.enterTip")}
+          onClick={toggleFullscreen}
+          className={
+            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition " +
+            (fullscreen
+              ? "border-sky-200 bg-sky-50 hover:bg-sky-100"
+              : "border-zinc-200 bg-white hover:bg-zinc-50")
+          }
+        >
+          <GanttFullscreenIcon />
+        </button>
+        <span className="h-4 w-px bg-zinc-200" aria-hidden="true" />
         <div className={"flex items-center gap-0.5 rounded-lg border p-0.5 " + GLASS_TRACK}>
           {SCALE_KEYS.map((key) => (
             <button
@@ -1639,7 +1747,15 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
   if (model === null) {
     // 任务列表为空（项目无任务，或筛选后一条不剩）：只出提示卡。
     return (
-      <div className="space-y-3">
+      <div
+        ref={shellRef}
+        data-gantt-fullscreen={fullscreen ? "on" : "off"}
+        className={
+          fullscreen
+            ? "fixed inset-0 z-[300] flex h-screen flex-col gap-3 overflow-y-auto bg-slate-100 p-3"
+            : "space-y-3"
+        }
+      >
         {toolbarBlock}
         <div className="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-14 text-center text-sm text-zinc-500">
           <p>{tasks.length === 0 ? t("gantt.empty.project") : t("gantt.empty.filtered", { n: tasks.length })}</p>
@@ -2105,21 +2221,32 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
   };
 
   return (
-    <div className="space-y-3">
+    <div
+      ref={shellRef}
+      data-gantt-fullscreen={fullscreen ? "on" : "off"}
+      className={
+        fullscreen
+          ? "fixed inset-0 z-[300] flex h-screen flex-col gap-3 overflow-hidden bg-slate-100 p-3"
+          : "space-y-3"
+      }
+    >
       {toolbarBlock}
 
       {/* 任务列表与甘特图同屏（Push 294；Push 295 起列表按阶段标题分组可折叠；Push 313 起「全部」（未筛选）不出列表）：筛选生效且还有没排期的任务才把列表出在甘特上方；图表本身照常在下方渲染（提示条 / 空态 ② 在 model === null 的早退分支里出）。 */}
-      {filtering && hasUnscheduled ? taskListBlock : null}
+      {filtering && hasUnscheduled ? (
+        <div className={fullscreen ? "max-h-[30vh] shrink-0 overflow-y-auto" : undefined}>{taskListBlock}</div>
+      ) : null}
               {/* 图表：左表（sticky left，横向不滚）+ 时间轴（表头 sticky top，纵向吸顶），两边逐行同一组行高 */}
               {/* 外面这层 relative 给自绘的竖向滑块（隐式浮在右缘）定位；下方横向那条是 fixed 在整个窗口底部的，不随页面滚 */}
-              <div className="relative">
+              <div className={fullscreen ? "relative min-h-0 flex-1" : "relative"}>
         <div
           ref={scrollRef}
           data-gantt-scroll=""
           data-live-date-origin={model === null ? undefined : model.rangeStart}
           data-live-date-width={dayWidth}
           className={
-            "scrollbar-hidden h-[calc(100vh-15rem)] min-h-[22rem] max-h-[52rem] overflow-auto rounded-xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)] " +
+            "scrollbar-hidden overflow-auto rounded-xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)] " +
+            (fullscreen ? "h-full min-h-0 " : "h-[calc(100vh-15rem)] min-h-[22rem] max-h-[52rem] ") +
             (panActive ? "cursor-grabbing select-none" : "cursor-grab")
           }
           onPointerDown={beginPan}

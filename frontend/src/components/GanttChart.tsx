@@ -130,12 +130,12 @@ type StagePalette = {
 };
 
 const STAGE_PALETTE: Record<string, StagePalette> = {
-  售前规划: { accent: "#2563eb", track: "#bfdbfe", envelope: "rgba(37, 99, 235, 0.045)", text: "#1e3a8a" },
-  设计开发: { accent: "#0891b2", track: "#a5f3fc", envelope: "rgba(8, 145, 178, 0.045)", text: "#164e63" },
+  售前规划: { accent: "#d97706", track: "#fde68a", envelope: "rgba(217, 119, 6, 0.05)", text: "#78350f" },
+  设计开发: { accent: "#7c3aed", track: "#ddd6fe", envelope: "rgba(124, 58, 237, 0.045)", text: "#4c1d95" },
   加工采购: { accent: "#0d9488", track: "#99f6e4", envelope: "rgba(13, 148, 136, 0.045)", text: "#134e4a" },
   组装发货: { accent: "#65a30d", track: "#d9f99d", envelope: "rgba(101, 163, 13, 0.05)", text: "#365314" },
-  硬件实施: { accent: "#d97706", track: "#fde68a", envelope: "rgba(217, 119, 6, 0.05)", text: "#78350f" },
-  软件部署: { accent: "#7c3aed", track: "#ddd6fe", envelope: "rgba(124, 58, 237, 0.045)", text: "#4c1d95" },
+  硬件实施: { accent: "#2563eb", track: "#bfdbfe", envelope: "rgba(37, 99, 235, 0.045)", text: "#1e3a8a" },
+  软件部署: { accent: "#0891b2", track: "#a5f3fc", envelope: "rgba(8, 145, 178, 0.045)", text: "#164e63" },
   试运行:   { accent: "#db2777", track: "#fbcfe8", envelope: "rgba(219, 39, 119, 0.045)", text: "#831843" },
   投产阶段: { accent: "#c026d3", track: "#f5d0fe", envelope: "rgba(192, 38, 211, 0.045)", text: "#701a75" },
   验收:     { accent: "#059669", track: "#a7f3d0", envelope: "rgba(5, 150, 105, 0.045)", text: "#064e3b" },

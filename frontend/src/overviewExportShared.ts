@@ -64,6 +64,8 @@ export type OverviewExportOptions = {
   hiddenStages: readonly string[];
   /** 任务明细显示哪些列；项目经理与任务负责人默认关闭。 */
   columns: OverviewTaskColumns;
+  /** 是否显示阶段备注（只影响阶段汇总行第二行）；默认显示。 */
+  showStageNotes: boolean;
   /** 导出名称：默认 = 项目编号 + 项目名称 + 计划表；用于 PDF 标题与下载文件名。 */
   exportName: string;
 };
@@ -85,6 +87,7 @@ export const DEFAULT_OVERVIEW_EXPORT_OPTIONS: OverviewExportOptions = {
   collapsedStages: [],
   hiddenStages: [],
   columns: DEFAULT_OVERVIEW_TASK_COLUMNS,
+  showStageNotes: true,
   exportName: "",
 };
 

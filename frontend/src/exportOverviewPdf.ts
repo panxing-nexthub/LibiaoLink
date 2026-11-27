@@ -707,6 +707,7 @@ export function buildOverviewReportHtml(
   collapsedStages: readonly string[] = [],
   columns: OverviewTaskColumns = DEFAULT_OVERVIEW_TASK_COLUMNS,
   hiddenStages: readonly string[] = [],
+  showStageNotes: boolean = true,
 ): string {
   const { project, tasks, summary } = input;
   const groups = groupedByStage(tasks, projectTaskStageNames(summary?.additionalStages, tasks));
@@ -747,7 +748,7 @@ export function buildOverviewReportHtml(
   const collapsed = new Set(collapsedStages);
   const detailRows = shownGroups.map((group) => {
     const stageRef = additionalIds.get(group.name) ?? stageKeyOfName(group.name) ?? (group.name === TEMP_TASK_STAGE ? TEMP_TASK_STAGE_REF : null);
-    const note = stageRef === null ? undefined : notesByRef.get(stageRef);
+    const note = !showStageNotes || stageRef === null ? undefined : notesByRef.get(stageRef);
     if (group.total === 0 && note === undefined) return "";
     return groupSectionHtml(counter, group, note, managerText, translationMap, primary, collapsed.has(group.name), columns);
   }).join("");
@@ -875,8 +876,9 @@ export function buildOverviewPreviewHtml(
   collapsedStages: readonly string[] = [],
   columns: OverviewTaskColumns = DEFAULT_OVERVIEW_TASK_COLUMNS,
   hiddenStages: readonly string[] = [],
+  showStageNotes: boolean = true,
 ): string {
-  return buildOverviewReportHtml(input, translationMap, primary, collapsedStages, columns, hiddenStages)
+  return buildOverviewReportHtml(input, translationMap, primary, collapsedStages, columns, hiddenStages, showStageNotes)
     .replace("</head>", `<style>${overviewPreviewPagedCss}</style></head>`)
     .replace("</body>", `<script data-overview-preview-runtime="" src="${escapeHtml(new URL(overviewPreviewPagedScriptUrl, window.location.origin).href)}"></script></body>`);
 }
@@ -887,9 +889,9 @@ export function buildOverviewPreviewHtml(
  */
 export function overviewExportTranslationRequest(
   input: OverviewExportInput,
-  options: Pick<OverviewExportOptions, "primary" | "collapsedStages" | "hiddenStages" | "columns">,
+  options: Pick<OverviewExportOptions, "primary" | "collapsedStages" | "hiddenStages" | "columns" | "showStageNotes">,
 ): { target: TranslationTarget; texts: string[] } {
-  const { primary, collapsedStages, hiddenStages } = options;
+  const { primary, collapsedStages, hiddenStages, showStageNotes } = options;
   const target: TranslationTarget = primary === "ja" ? "ja" : primary === "ko" ? "ko" : "en";
   const collapsed = new Set(collapsedStages);
   const hidden = new Set(hiddenStages);
@@ -898,9 +900,11 @@ export function overviewExportTranslationRequest(
     return !collapsed.has(stage) && !hidden.has(stage);
   });
   // 阶段备注同样按导出主体语言翻译（2026-11-26 追订）；空备注不进翻译通道。
-  const stageNoteTexts = (input.summary?.stageNotes ?? [])
-    .map((item) => item.note)
-    .filter((note) => note !== "");
+  const stageNoteTexts = showStageNotes
+    ? (input.summary?.stageNotes ?? [])
+      .map((item) => item.note)
+      .filter((note) => note !== "")
+    : [];
   const texts = target === "en"
     ? [input.project.description, ...visibleTasks.map((task) => task.note), ...stageNoteTexts]
     : [input.project.description, ...visibleTasks.flatMap((task) => [task.title, task.note]), ...stageNoteTexts];
@@ -919,10 +923,10 @@ export async function exportProjectOverviewPdf(
   options: OverviewExportOptions = DEFAULT_OVERVIEW_EXPORT_OPTIONS,
   onTranslateProgress?: (done: number, total: number) => void,
 ): Promise<void> {
-  const { primary, collapsedStages, columns, hiddenStages, exportName } = options;
+  const { primary, collapsedStages, columns, hiddenStages, showStageNotes, exportName } = options;
   const { target, texts } = overviewExportTranslationRequest(input, options);
   const translationMap = await translateZhTo(texts, target, onTranslateProgress);
-  const html = buildOverviewPreviewHtml(input, translationMap, primary, collapsedStages, columns, hiddenStages);
+  const html = buildOverviewPreviewHtml(input, translationMap, primary, collapsedStages, columns, hiddenStages, showStageNotes);
   await exportProjectOverviewPdfHtml(html, input, exportName);
 }
 

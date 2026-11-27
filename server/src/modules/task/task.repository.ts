@@ -9,10 +9,12 @@ import { files, uploadSessions } from "../../db/schema/files.js";
 import { projectNodes } from "../../db/schema/flow.js";
 import { notifyDeliveryMessages, wecomGroups } from "../../db/schema/notify.js";
 import { users } from "../../db/schema/identity.js";
+import { outboxEvents } from "../../db/schema/platform.js";
 import { projectAdditionalStages, projectStageNotes, projectStages, projects } from "../../db/schema/projects.js";
 import { issues } from "../../db/schema/reports.js";
 import { taskEvents, tasks } from "../../db/schema/tasks.js";
 import { syncProjectManagersToStageTasks } from "../../db/task-scope.js";
+import { STAGE_ADVANCED_GROUP_TEMPLATE, STAGE_COMPLETE_GROUP_TEMPLATE } from "../notify/index.js";
 import type { TaskListFilter, TaskSort } from "./task.query.js";
 
 export type TaskRow = typeof tasks.$inferSelect;
@@ -61,8 +63,9 @@ export interface TaskProjectNodeRow {
   status: string;
 }
 
-/** 项目群绑定可用性窄读面：任务模块只读激活态，不反向依赖 project 模块。 */
+/** 项目群绑定的启用和激活状态。 */
 export interface TaskGroupBindingRow {
+  enabled: boolean;
   activatedAt: Date | null;
 }
 
@@ -380,10 +383,10 @@ export class TaskRepository {
     return result;
   }
 
-  /** 临时任务群同步前置校验：项目群绑定行；未绑定 = null。只读 wecom_groups，避免 task → project 的反向模块依赖。 */
+  /** 群同步前置校验：项目群绑定行，未绑定为空。 */
   async findGroupBinding(projectId: string, client: DbClient = this.database.db): Promise<TaskGroupBindingRow | null> {
     const rows = await client
-      .select({ activatedAt: wecomGroups.activatedAt })
+      .select({ enabled: wecomGroups.enabled, activatedAt: wecomGroups.activatedAt })
       .from(wecomGroups)
       .where(eq(wecomGroups.projectId, projectId))
       .limit(1);
@@ -766,38 +769,55 @@ export class TaskRepository {
     return { overdue: Number(row?.overdue ?? 0), done: Number(row?.done ?? 0), total: Number(row?.total ?? 0) };
   }
 
-  /**
-   * 阶段完成通知串行化：并发完成同阶段最后两项任务时，只有拿到事务锁的后一笔能判断“全完成”，
-   * 避免两边都看不到对方未提交的 done 行而漏发。锁随事务提交 / 回滚自动释放。
-   */
-  async lockStageCompletion(client: DbClient, projectId: string, stageKey: string): Promise<void> {
-    await client.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${projectId + ":" + stageKey}, 0))`,
-    );
+  /** 成功送达的历史播报以项目及阶段标识为准，目标群的展示名可能带掩码。 */
+  async findSentStageNotices(client: DbClient, projectId: string): Promise<Map<string, Date>> {
+    const rows = await client
+      .select({
+        stageKey: sql<string | null>`coalesce(${notifyDeliveryMessages.payload}->>'stageKey', ${projectStages.stageKey})`,
+        sentAt: notifyDeliveryMessages.sentAt,
+      })
+      .from(notifyDeliveryMessages)
+      .leftJoin(projectStages, and(
+        eq(notifyDeliveryMessages.templateCode, STAGE_ADVANCED_GROUP_TEMPLATE),
+        eq(projectStages.projectId, projectId),
+        sql`${projectStages.id}::text = ${notifyDeliveryMessages.refId}`,
+      ))
+      .where(and(
+        eq(notifyDeliveryMessages.channel, "wecom_group"),
+        inArray(notifyDeliveryMessages.templateCode, [STAGE_COMPLETE_GROUP_TEMPLATE, STAGE_ADVANCED_GROUP_TEMPLATE]),
+        eq(notifyDeliveryMessages.lastState, "sent"),
+        sql`${notifyDeliveryMessages.payload}->>'projectId' = ${projectId}`,
+      ))
+      .orderBy(desc(notifyDeliveryMessages.sentAt));
+    const sent = new Map<string, Date>();
+    for (const { stageKey, sentAt } of rows) {
+      if (stageKey !== null && sentAt !== null) sent.set(stageKey, sentAt);
+    }
+    return sent;
   }
 
-  /**
-   * 阶段完成群通知是否已成功送达（永久留档 notify_delivery_messages）：
-   * 同一项目同一阶段只播报一次；阶段回退后再次完成也不重复发。
-   */
-  async hasSentStageCompletionNotice(
+  async stageNoticeQueue(
     client: DbClient,
-    projectId: string,
-    stageKey: string,
-  ): Promise<boolean> {
+    dedupeKeys: string[],
+  ): Promise<Map<string, "sending" | "failed">> {
     const rows = await client
-      .select({ id: notifyDeliveryMessages.id })
-      .from(notifyDeliveryMessages)
-      .where(
-        and(
-          eq(notifyDeliveryMessages.templateCode, "STAGE_COMPLETE_GROUP"),
-          eq(notifyDeliveryMessages.recipientLabel, "project:" + projectId),
-          eq(notifyDeliveryMessages.lastState, "sent"),
-          sql`${notifyDeliveryMessages.payload}->>${"stageKey"} = ${stageKey}`,
-        ),
-      )
-      .limit(1);
-    return rows.length > 0;
+      .select({ dedupeKey: outboxEvents.dedupeKey, status: outboxEvents.status })
+      .from(outboxEvents)
+      .where(and(
+        inArray(outboxEvents.dedupeKey, dedupeKeys),
+        inArray(outboxEvents.status, ["pending", "processing", "dead"]),
+      ));
+    return new Map(rows.map((row) => [row.dedupeKey, row.status === "dead" ? "failed" : "sending"]));
+  }
+
+  /** 用户重试终态失败的同一条播报，保留已有的投递尝试。 */
+  async resetFailedStageNotice(client: DbClient, dedupeKey: string): Promise<void> {
+    await client.update(notifyDeliveryMessages)
+      .set({ lastState: "pending", lastError: null, updatedAt: sql`greatest(now(), ${notifyDeliveryMessages.updatedAt})` })
+      .where(and(
+        eq(notifyDeliveryMessages.sourceDedupeKey, dedupeKey),
+        eq(notifyDeliveryMessages.lastState, "dead"),
+      ));
   }
 
   /** 全项目按阶段的任务计数（GET /projects/{id}/stages 的 tasks 完成度）。 */

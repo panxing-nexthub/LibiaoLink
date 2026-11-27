@@ -14,6 +14,7 @@ import { ProjectFilesPanel } from "./components/ProjectFilesPanel";
 import { ProjectViewGrantsPanel } from "./components/ProjectViewGrantsPanel";
 import { ReportIssuePanel } from "./components/ReportIssuePanel";
 import { StakeholderPanel } from "./components/StakeholderPanel";
+import { StageCompletionNotices } from "./components/StageCompletionNotices";
 import { Toast, ToastConfirm } from "./components/Toast";
 import { useFocusTrap } from "./components/useFocusTrap";
 import { TableScrollbar } from "./components/TableScrollbar";
@@ -1434,7 +1435,16 @@ export default function ProjectDetail({ me, project, view, dailySub, materialSub
           {activeView === "项目总览" ? (
             <>
               {/* 汇总卡（M3-07 刀 1 后半）：最慢 / 最新阶段由服务端按任务聚合（GET /projects/{id}/summary） */}
-              <ProjectSummary summary={summary} />
+              <ProjectSummary summary={currentSummary} stageNotices={
+                currentSummary?.stageNotices?.length ? (
+                  <StageCompletionNotices
+                    projectId={project.id}
+                    notices={currentSummary.stageNotices}
+                    canSend={projectEditable}
+                    onRefresh={refreshSummary}
+                  />
+                ) : undefined
+              } />
               <TaskBoard tasks={tasks} members={members} managerMembers={managerMembers} customDeliverableTypes={customDeliverableTypes} onCreateDeliverableType={createDeliverableType} skeletonStages={boardStages} additionalStages={additionalStages} stageNotes={currentSummary?.stageNotes} manageStages={canManageStages ? {
                 create: (key) => saveStageChange(() => createAdditionalStage(project.id, key)),
                 remove: (id) => saveStageChange(() => deleteAdditionalStage(project.id, id)),

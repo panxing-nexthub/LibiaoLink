@@ -34,6 +34,7 @@ import {
   type NotifyDeliveryMessageRow,
 } from "./notify.delivery-archive.repository.js";
 import { NotifyGroupRepository, type GroupStakeholderRow } from "./notify.group.repository.js";
+import { STAGE_ADVANCED_GROUP_TEMPLATE, STAGE_COMPLETE_GROUP_TEMPLATE, stageCompletionNoticeKey } from "./notify.constants.js";
 import type { ActorAuthorization } from "../identity/index.js";
 import { can, canSeeField, PermissionService } from "../permission/index.js";
 import {
@@ -47,6 +48,7 @@ import { renderDailyReportIssuePoster, renderDailyReportPoster } from "./daily-r
 import { renderR06Poster } from "./r06.poster.js";
 import { renderMaterialReissuePoster } from "./material-reissue.poster.js";
 import { renderStageCompletePoster } from "./stage-complete.poster.js";
+import type { StageCompletePosterData } from "./stage-complete.poster.types.js";
 import { describeWecomFailure } from "./wecom.errors.js";
 import { applyMarkdownHardBreaks, truncateUtf8Bytes } from "./wecom.text.js";
 
@@ -521,6 +523,21 @@ export class NotifyGroupService {
         error: "群播报载荷非法（缺 projectId / body 或超长）：" + row.dedupeKey,
       };
     }
+    // 阶段播报仅消费项目总览手动排队的消息，旧自动任务直接结束。
+    if (message.templateCode === STAGE_ADVANCED_GROUP_TEMPLATE) return { outcome: "done" };
+    let stagePoster: StageCompletePosterData | null = null;
+    if (message.templateCode === STAGE_COMPLETE_GROUP_TEMPLATE) {
+      const stageKey = message.stageKey;
+      if (stageKey == null || row.dedupeKey !== stageCompletionNoticeKey(message.projectId, stageKey)) {
+        return { outcome: "done" };
+      }
+      stagePoster = await this.repository.findStageCompletePosterData(message.projectId, stageKey, this.clock.now());
+      const stage = stagePoster?.stages.find((item) => item.key === stageKey);
+      // 排队期间取消了阶段完成，不发送过期的播报。
+      if (stage === undefined || stage.total === 0 || stage.done !== stage.total) {
+        return { outcome: "done" };
+      }
+    }
     // 旧喜报可能仍在队列中，而项目已恢复并改为异常归档。
     if (message.templateCode === "R06_GROUP" && await this.repository.isArchivedWithoutAcceptance(message.projectId)) {
       return { outcome: "done" };
@@ -673,8 +690,8 @@ export class NotifyGroupService {
         masked,
         dedupeKey: row.dedupeKey,
       });
-      const stagePosterAttempts = await this.sendStageCompletePoster({
-        message,
+      const stagePosterAttempts = stagePoster === null ? 0 : await this.sendStageCompletePoster({
+        data: stagePoster,
         chatid: binding.chatid,
         groupActivated: binding.activatedAt !== null,
         masked,
@@ -867,51 +884,38 @@ export class NotifyGroupService {
 
   /**
    * 大阶段完成海报：文字通知送达后追加 1280×720 PNG。
-   * 只认 STAGE_COMPLETE_GROUP + stageKey；数据读取 / 绘制 / 发送任一失败只留日志，不重发已送达文字。
+   * 绘制或发送失败仅记录日志，文字送达结果独立保留。
    */
   private async sendStageCompletePoster(input: {
-    message: NotifyGroupMessagePayload;
+    data: StageCompletePosterData;
     chatid: string;
     groupActivated: boolean;
     masked: string;
     dedupeKey: string;
   }): Promise<number> {
-    if (input.message.templateCode !== "STAGE_COMPLETE_GROUP" || input.message.stageKey === null || input.message.stageKey === undefined) {
-      return 0;
-    }
-    let data: Awaited<ReturnType<NotifyGroupRepository["findStageCompletePosterData"]>>;
-    try {
-      data = await this.repository.findStageCompletePosterData(
-        input.message.projectId,
-        input.message.stageKey,
-        this.clock.now(),
-      );
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      this.logger.warn("阶段完成海报数据读取失败，已跳过图片（文字已发送）：" + input.dedupeKey + " —— " + detail);
-      return 0;
-    }
-    if (data === null) {
-      this.logger.warn("阶段完成海报数据不存在，已跳过图片（文字已发送）：" + input.dedupeKey);
-      return 0;
-    }
-
     let content: Buffer;
     try {
-      content = await renderStageCompletePoster(data);
+      content = await renderStageCompletePoster(input.data);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.logger.warn("阶段完成海报生成失败，已跳过图片（文字已发送）：" + input.dedupeKey + " —— " + detail);
       return 0;
     }
-    const projectCode = data.projectCode.replace(/[^A-Za-z0-9._-]+/gu, "-");
-    const result = await this.aibot.sendGroupImage({
-      chatid: input.chatid,
-      content,
-      fileName: "STAGE-" + projectCode + "-" + data.stageKey + ".png",
-      mime: "image/png",
-      groupActivated: input.groupActivated,
-    });
+    const projectCode = input.data.projectCode.replace(/[^A-Za-z0-9._-]+/gu, "-");
+    let result: AibotSendResult;
+    try {
+      result = await this.aibot.sendGroupImage({
+        chatid: input.chatid,
+        content,
+        fileName: "STAGE-" + projectCode + "-" + input.data.stageKey + ".png",
+        mime: "image/png",
+        groupActivated: input.groupActivated,
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn("阶段完成海报投递异常（文字已发送）：" + input.dedupeKey + " —— " + detail);
+      return 0;
+    }
     if (!result.ok) {
       this.logger.warn(
         "阶段完成海报未送达（文字已发送）：" +

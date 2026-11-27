@@ -140,6 +140,15 @@ export const ProjectStageNotePutBodySchema = z.object({
 
 export type ProjectStageNote = z.infer<typeof ProjectStageNoteSchema>;
 
+/** 项目总览阶段播报条目，按原阶段汇总。 */
+export const ProjectStageNoticeSchema = z.object({
+  stageKey: StageKeySchema,
+  status: z.enum(["unsent", "sending", "failed", "sent"]),
+  sentAt: z.string().datetime().nullable().describe("首次成功送达的时间，尚未送达时为空"),
+}).openapi("ProjectStageNotice");
+
+export type ProjectStageNotice = z.infer<typeof ProjectStageNoticeSchema>;
+
 /**
  * 项目总览汇总卡：最慢阶段 / 最新阶段 / 逾期 / 已完成 / 总数。
  * 2026-09-24 定案：原 `currentStage`（= projects.stage_key 项目当前阶段）随本刀下线 —— 汇总卡改用两个任务派生字段；
@@ -159,6 +168,7 @@ export const ProjectSummarySchema = z
     total: z.number().int().min(0),
     additionalStages: z.array(AdditionalProjectStageSchema).optional(),
     stageNotes: z.array(ProjectStageNoteSchema).optional(),
+    stageNotices: z.array(ProjectStageNoticeSchema).optional(),
     hasUnfinishedTemporaryTask: z.boolean().optional().openapi({ description: "仅归档项目返回，表示是否仍可填报日报（另需具备填报权限）" }),
   })
   .openapi("ProjectSummary", { description: "项目总览汇总卡统计（任务派生；口径见 v0.2 §2.4 与前端功能需求 §3.4）" });

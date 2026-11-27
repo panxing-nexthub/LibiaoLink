@@ -2596,7 +2596,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 项目总览四格（最慢阶段 / 最新阶段 / 逾期 / 已完成 / 总数） */
+        /** 项目总览统计与阶段播报状态 */
         get: {
             parameters: {
                 query?: never;
@@ -2631,6 +2631,72 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{id}/stage-completion-notices/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 手动发送阶段完成播报到项目群（权限 project.update，发送中或已送达时幂等） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description UUID（主键与关联 ID） */
+                    id: components["schemas"]["Uuid"];
+                    /** @description 九阶段字典（v0.2 §2.5：售前规划 / 设计开发 / 加工采购 / 组装发货 / 硬件实施 / 软件部署 / 试运行 / 投产阶段 / 验收） */
+                    key: components["schemas"]["StageKey"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 已排队、正在发送或此前已送达 */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description 契约校验失败（VALIDATION_FAILED） */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 无权限（FORBIDDEN） */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+                /** @description 资源不存在或不可见（NOT_FOUND，统一 404 语义） */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiError"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -16602,6 +16668,16 @@ export interface components {
             /** @description 阶段备注，留空即清除 */
             note: string;
         };
+        ProjectStageNotice: {
+            stageKey: components["schemas"]["StageKey"];
+            /** @enum {string} */
+            status: "unsent" | "sending" | "failed" | "sent";
+            /**
+             * Format: date-time
+             * @description 首次成功送达的时间，尚未送达时为空
+             */
+            sentAt: string | null;
+        };
         /** @description 阶段状态与完成度（GET /projects/{id}/stages） */
         ProjectStageSummary: {
             id: components["schemas"]["Uuid"];
@@ -16637,6 +16713,7 @@ export interface components {
             total: number;
             additionalStages?: components["schemas"]["AdditionalProjectStage"][];
             stageNotes?: components["schemas"]["ProjectStageNote"][];
+            stageNotices?: components["schemas"]["ProjectStageNotice"][];
             /** @description 仅归档项目返回，表示是否仍可填报日报（另需具备填报权限） */
             hasUnfinishedTemporaryTask?: boolean;
         };

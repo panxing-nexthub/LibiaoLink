@@ -845,10 +845,24 @@ export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31["generate
     method: "get",
     path: "/api/v1/projects/{id}/summary",
     tags: ["projects"],
-    summary: "项目总览四格（最慢阶段 / 最新阶段 / 逾期 / 已完成 / 总数）",
+    summary: "项目总览统计与阶段播报状态",
     request: { params: idParams },
     responses: {
       200: { description: "总览统计", ...json(ProjectSummarySchema) },
+      404: commonErrors[404],
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/projects/{id}/stage-completion-notices/{key}",
+    tags: ["projects"],
+    summary: "手动发送阶段完成播报到项目群（权限 project.update，发送中或已送达时幂等）",
+    request: { params: stageParams },
+    responses: {
+      204: { description: "已排队、正在发送或此前已送达" },
+      400: commonErrors[400],
+      403: commonErrors[403],
       404: commonErrors[404],
     },
   });

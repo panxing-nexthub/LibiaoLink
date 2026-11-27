@@ -149,7 +149,18 @@ const DEFAULT_STAGE_PALETTE: StagePalette = {
 };
 
 function stagePaletteOf(stage: string): StagePalette {
-  return STAGE_PALETTE[stage] ?? DEFAULT_STAGE_PALETTE;
+  const exact = STAGE_PALETTE[stage];
+  if (exact !== undefined) {
+    return exact;
+  }
+  // 追加阶段（如「硬件实施1」「硬件实施2」「软件部署1」）沿用其所属基础阶段的配色：
+  // 按前缀匹配标准九阶段，找不到再退回默认石板灰。
+  for (const [name, palette] of Object.entries(STAGE_PALETTE)) {
+    if (stage.startsWith(name)) {
+      return palette;
+    }
+  }
+  return DEFAULT_STAGE_PALETTE;
 }
 
 /** 图例示例色（使用中性石板灰示范：实心 = 已完成进度，浅底 = 剩余工期，画布上按所属阶段分色）。 */
@@ -452,7 +463,8 @@ function buildBar(locale: Locale, task: ProjectTask): GanttBar {
   ]
     .filter((line) => line !== "")
     .join("\n");
-  const stage = STAGE_ORDER.includes(task.stage) ? task.stage : UNGROUPED;
+  // 保留任务原始阶段名（含追加阶段「硬件实施1」等），取色时由 stagePaletteOf 按前缀归到基础阶段。
+  const stage = task.stage === "" ? UNGROUPED : task.stage;
   return { task, stage, status, percent, start, end, done, milestone: start !== null && end !== null && start === end, label };
 }
 

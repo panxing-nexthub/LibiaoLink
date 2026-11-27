@@ -656,12 +656,17 @@ export function InlineNumberCell({
   onSave,
   disabled = false,
   disabledHint,
+  bare = false,
+  triggerClassName,
 }: {
   value: number;
   display: ReactNode;
   ariaLabel: string;
   suffix?: string;
   onSave: (value: number) => void;
+  /** 裸框模式：去掉液态玻璃小框，样式交给调用方。 */
+  bare?: boolean;
+  triggerClassName?: string;
   /** 锁定入口（Push 264 · P1-1 定档锁定）：透传 InlineCell —— 定档任务的行内入口不弹编辑浮层，点击改弹站点同款顶部 Toast。 */
   disabled?: boolean;
   /** 锁定说明文案（定档口径同 409 TASK_FINALIZED 提示文案；悬停 title 与点击 Toast 共用）。 */
@@ -678,6 +683,8 @@ export function InlineNumberCell({
       height={124}
       disabled={disabled}
       disabledHint={disabledHint}
+      bare={bare}
+      triggerClassName={triggerClassName}
       display={display}
       render={(close) => (
         <NumberEditor

@@ -2399,7 +2399,8 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
                               disabled={!datesEditable}
                               disabledHint={editHint}
                               placement="below"
-                              triggerClassName="tabular-nums text-[11px] text-slate-600"
+                              bare
+                              triggerClassName="rounded px-1 tabular-nums text-[11px] text-slate-600 hover:bg-slate-100/70"
                               display={rowTask === null || rowTask.startDate === "" ? <span className="text-slate-300">—</span> : mdText(locale, rowTask.startDate)}
                               onChange={(iso) => {
                                 const due = rowTask === null ? "" : rowTask.dueDate;
@@ -2415,7 +2416,8 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
                               disabled={!datesEditable}
                               disabledHint={editHint}
                               placement="below"
-                              triggerClassName="tabular-nums text-[11px] text-slate-600"
+                              bare
+                              triggerClassName="rounded px-1 tabular-nums text-[11px] text-slate-600 hover:bg-slate-100/70"
                               display={rowTask === null || rowTask.dueDate === "" ? <span className="text-slate-300">—</span> : mdText(locale, rowTask.dueDate)}
                               onChange={(iso) => {
                                 patchRowRange(rowTask === null ? "" : rowTask.startDate, iso);
@@ -2428,6 +2430,8 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
                               ariaLabel={t("board.edit.aria", { field: fieldText(locale, "预计所需施工人数") })}
                               disabled={!datesEditable}
                               disabledHint={editHint}
+                              bare
+                              triggerClassName="rounded px-1 tabular-nums text-[11px] text-slate-600 hover:bg-slate-100/70"
                               display={rowTask !== null && rowTask.headcount > 0 ? t("drawer.headcount.value", { n: rowTask.headcount }) : <span className="text-slate-300">—</span>}
                               onSave={(value) => {
                                 if (rowTask !== null) {

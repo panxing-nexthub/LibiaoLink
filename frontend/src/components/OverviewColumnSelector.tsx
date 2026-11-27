@@ -1,6 +1,5 @@
 import { fieldText, useLocale, useT } from "../i18n";
 import {
-  DEFAULT_OVERVIEW_TASK_COLUMNS,
   OVERVIEW_TASK_COLUMNS,
   type OverviewTaskColumnKey,
   type OverviewTaskColumns,
@@ -8,11 +7,20 @@ import {
 
 type OverviewColumnSelectorProps = {
   columns: OverviewTaskColumns;
+  showStageNotes: boolean;
   onChange: (next: OverviewTaskColumns) => void;
+  onToggleStageNotes: () => void;
+  onReset: () => void;
 };
 
 /** 任务明细的简单列显示开关：只控制预览与 PDF 是否展示列，不筛选行数据。 */
-export function OverviewColumnSelector({ columns, onChange }: OverviewColumnSelectorProps) {
+export function OverviewColumnSelector({
+  columns,
+  showStageNotes,
+  onChange,
+  onToggleStageNotes,
+  onReset,
+}: OverviewColumnSelectorProps) {
   const t = useT();
   const locale = useLocale();
   const selectedCount = OVERVIEW_TASK_COLUMNS.filter((column) => columns[column.key]).length;
@@ -32,7 +40,7 @@ export function OverviewColumnSelector({ columns, onChange }: OverviewColumnSele
         </div>
         <button
           type="button"
-          onClick={() => onChange({ ...DEFAULT_OVERVIEW_TASK_COLUMNS })}
+          onClick={onReset}
           className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-white hover:text-zinc-900"
         >
           {t("export.columns.reset")}
@@ -66,6 +74,23 @@ export function OverviewColumnSelector({ columns, onChange }: OverviewColumnSele
             </label>
           );
         })}
+        <label
+          data-overview-stage-notes=""
+          className={
+            "flex min-h-8 cursor-pointer items-center gap-2 rounded-lg border px-2 py-1.5 text-[11px] transition " +
+            (showStageNotes
+              ? "border-zinc-300 bg-white font-medium text-zinc-800 shadow-sm"
+              : "border-zinc-200 bg-white/50 text-zinc-500 hover:border-zinc-300 hover:bg-white")
+          }
+        >
+          <input
+            type="checkbox"
+            checked={showStageNotes}
+            onChange={onToggleStageNotes}
+            className="h-3.5 w-3.5 shrink-0 accent-zinc-900"
+          />
+          <span className="min-w-0 truncate">{t("export.columns.stageNotes")}</span>
+        </label>
       </div>
     </section>
   );

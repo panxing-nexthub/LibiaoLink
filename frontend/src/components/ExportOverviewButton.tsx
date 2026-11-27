@@ -73,6 +73,7 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
   const [collapsedStages, setCollapsedStages] = useState<readonly string[]>([]);
   const [hiddenStages, setHiddenStages] = useState<readonly string[]>([]);
   const [taskColumns, setTaskColumns] = useState<OverviewTaskColumns>({ ...DEFAULT_OVERVIEW_TASK_COLUMNS });
+  const [showStageNotes, setShowStageNotes] = useState(true);
   const defaultExportName = useMemo(
     () => defaultOverviewExportName(input.project),
     [input.project.code, input.project.description],
@@ -94,8 +95,8 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
   const visibleStageCount = stages.filter((stage) => !hiddenStages.includes(stage.name)).length;
 
   const previewTranslationRequest = useMemo(
-    () => overviewExportTranslationRequest(input, { primary, collapsedStages, hiddenStages, columns: taskColumns }),
-    [input.project, input.tasks, input.summary, primary, collapsedStages, hiddenStages],
+    () => overviewExportTranslationRequest(input, { primary, collapsedStages, hiddenStages, columns: taskColumns, showStageNotes }),
+    [input.project, input.tasks, input.summary, primary, collapsedStages, hiddenStages, showStageNotes],
   );
   const previewTranslationKey = useMemo(
     () => previewTranslationRequest.target + "\u0000" + previewTranslationRequest.texts.join("\u0001"),
@@ -105,8 +106,8 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
   const previewBusy = previewTranslating || !previewFrameReady || !previewTranslationReady;
 
   const previewHtml = useMemo(
-    () => (open ? buildOverviewPreviewHtml(input, previewTranslations, primary, collapsedStages, taskColumns, hiddenStages) : ""),
-    [open, input.project, input.tasks, input.summary, primary, collapsedStages, hiddenStages, taskColumns, previewTranslations],
+    () => (open ? buildOverviewPreviewHtml(input, previewTranslations, primary, collapsedStages, taskColumns, hiddenStages, showStageNotes) : ""),
+    [open, input.project, input.tasks, input.summary, primary, collapsedStages, hiddenStages, taskColumns, showStageNotes, previewTranslations],
   );
 
   /**
@@ -173,7 +174,7 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
     }
     setPreviewBootReady(false);
     setPreviewPages({ current: 1, total: 1 });
-    setPreviewBootHtml(buildOverviewPreviewHtml(input, EMPTY_PREVIEW_TRANSLATIONS, "zh", [], taskColumns));
+    setPreviewBootHtml(buildOverviewPreviewHtml(input, EMPTY_PREVIEW_TRANSLATIONS, "zh", [], taskColumns, [], true));
   }, [open]);
 
   useEffect(() => {
@@ -266,6 +267,7 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
         setCollapsedStages([]);
         setHiddenStages([]);
         setTaskColumns({ ...DEFAULT_OVERVIEW_TASK_COLUMNS });
+        setShowStageNotes(true);
         setExportName(defaultExportName);
       }
       return !previous;
@@ -298,6 +300,7 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
       collapsedStages,
       hiddenStages,
       columns: taskColumns,
+      showStageNotes,
       exportName: resolvedOverviewExportName(input.project, exportName),
     }, previewHtml);
   };
@@ -450,7 +453,16 @@ export function ExportOverviewButton({ input, stages, onExport, disabled = false
                   })}
                 </div>
 
-                <OverviewColumnSelector columns={taskColumns} onChange={setTaskColumns} />
+                <OverviewColumnSelector
+                  columns={taskColumns}
+                  showStageNotes={showStageNotes}
+                  onChange={setTaskColumns}
+                  onToggleStageNotes={() => setShowStageNotes((previous) => !previous)}
+                  onReset={() => {
+                    setTaskColumns({ ...DEFAULT_OVERVIEW_TASK_COLUMNS });
+                    setShowStageNotes(true);
+                  }}
+                />
 
                 <div className="my-4 h-px bg-zinc-100" />
                 <div className="mb-1 px-0.5 text-xs font-medium text-zinc-500">{t("export.content.title")}</div>

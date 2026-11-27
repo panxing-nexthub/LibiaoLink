@@ -150,7 +150,7 @@ function onTimeExpression(today: string): SQL<boolean | null> {
       else ${tasks.onTime}
     end)
     when ${tasks.plannedEnd} is not null and ${tasks.plannedEnd} < ${today}::date then false
-    else ${tasks.onTime}
+    else null
   end`;
 }
 

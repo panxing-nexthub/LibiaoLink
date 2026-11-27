@@ -8,7 +8,7 @@ from pathlib import Path
 import pymupdf as fitz
 from PIL import Image
 
-from worker import PageSummary, extension_of, extract_page_picture, file_kind, jsonable, parse_json_content
+from worker import PageSummary, extension_of, extract_page_picture, file_kind, find_agreement_background, jsonable, parse_json_content
 
 
 class WorkerUnitTests(unittest.TestCase):
@@ -90,6 +90,40 @@ class PictureExtractionTests(unittest.TestCase):
             page = doc.load_page(0)
             self.assertIsNone(extract_page_picture(page, Path(tmp), 0))
             doc.close()
+
+
+class AgreementBackgroundTests(unittest.TestCase):
+    @staticmethod
+    def _page(no: int, text: str) -> dict:
+        return {"pdfPage": no, "text": text}
+
+    @staticmethod
+    def _record(summary: str) -> dict:
+        return {"extraction": {"summary": summary}}
+
+    def test_background_skips_toc_and_supplier_intro(self):
+        pages = [
+            self._page(1, "目录 1 公司简介 2 项目概述 3 方案设计"),
+            self._page(2, "公司简介 立镖机器人 企业使命 研发投入 发明专利 技术优势"),
+            self._page(3, "项目概述 客户为某某科技有限公司 项目位于广州市 场地为1层播种区"),
+        ]
+        records = [
+            self._record("本页为技术协议第1页目录，列出公司简介、项目概述等章节。"),
+            self._record("本页为技术协议第2页，介绍立镖机器人公司简介、企业使命、研发投入与专利。"),
+            self._record("客户为某某科技有限公司，项目位于广州市，场地为1层播种区。"),
+        ]
+        result = find_agreement_background(pages, records)
+        self.assertEqual(result["status"], "found")
+        self.assertNotIn("立镖", result["value"])
+        self.assertNotIn("目录", result["value"])
+        self.assertIn("某某科技有限公司", result["value"])
+
+    def test_background_not_found_when_only_supplier_intro(self):
+        pages = [self._page(1, "公司简介 立镖机器人 企业使命 研发投入 技术优势")]
+        records = [self._record("本页为技术协议第1页，介绍立镖机器人公司简介与发展历程。")]
+        result = find_agreement_background(pages, records)
+        self.assertEqual(result["status"], "not_found")
+        self.assertIsNone(result["value"])
 
 
 if __name__ == "__main__":

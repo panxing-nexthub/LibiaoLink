@@ -105,7 +105,9 @@ export function buildSummaryDocument(
     },
   };
 
-  if (agreement !== null && agreement.background.status === "found" && agreement.background.value !== null) {
+  // 背景优先使用模型按文档口径整理的 background；只有模型未给出时才回退技术协议页面摘要。
+  const modelBackground = report.background?.text?.trim() ?? "";
+  if (modelBackground === "" && agreement !== null && agreement.background.status === "found" && agreement.background.value !== null) {
     document.background = { text: agreement.background.value };
   }
 

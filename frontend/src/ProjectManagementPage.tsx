@@ -1251,6 +1251,7 @@ function ReadOnlyCell({ value, label, cellKey }: { value: string; label: string;
 
 function EditableDateCell({
   valueIso,
+  hintIso = "",
   display,
   ariaLabel,
   cellKey,
@@ -1261,6 +1262,8 @@ function EditableDateCell({
   maxDate,
 }: {
   valueIso: string;
+  /** 空值时日历默认展开的年月（如「计划实施完成」跟随「计划实施开始」）。 */
+  hintIso?: string;
   display: string;
   ariaLabel: string;
   cellKey: string;
@@ -1274,6 +1277,7 @@ function EditableDateCell({
     <div data-project-management-cell={cellKey} className={compact ? "flex h-full shrink-0 items-stretch" : "flex min-h-11 items-stretch"}>
       <InlineDateCell
         valueIso={valueIso}
+        hintIso={hintIso}
         ariaLabel={ariaLabel}
         bare
         showAuto={showAuto}
@@ -1317,6 +1321,7 @@ function ImplementationDateCell({
       cellKey={cellKey}
       compact={compact}
       showAuto
+      hintIso={isStart ? "" : oppositeDate}
       maxDate={isStart ? oppositeDate : undefined}
       minDate={isStart ? undefined : oppositeDate}
       onChange={(iso) => onChange(row, field, iso === "" ? null : iso)}

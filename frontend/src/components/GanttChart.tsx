@@ -844,6 +844,13 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
   const weekendSet = useMemo(() => new Set(model === null ? [] : model.weekends), [model]);
 
   /**
+   * 右图容器（scrollRef）只在 model 非空时挂载。首屏任务还在加载 / 筛选到一条不剩时 model === null，
+   * 之前挂在这个节点上的原生监听（滚轮缩放、滚动条同步）会因拿不到节点而直接返回；
+   * 把这个状态放进依赖，节点出现后再补挂一次，避免「必须先点一下缩放 + / − 才能用 Ctrl + 滚轮」。
+   */
+  const hasTimeline = model !== null;
+
+  /**
    * 任务列表（Push 294）的分组（Push 295，业务口径「也要分类可以折叠 在甘特图里」+「要有阶段标题分类的」）：
    * 口径同左表 / 项目总览 —— 九个阶段按顺序 + 「临时任务」垫底、只出有任务的分组；
    * 折叠状态与左表共用同一份 `collapsed`（列表箭头 / 左表箭头 / 工具栏「全部折叠 / 全部展开」三处联动）。
@@ -898,7 +905,10 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
     }
   }, [dayWidth, scale]);
 
-  /** 按 Ctrl/Meta/Alt + 滚轮（或触控板双指捏合，浏览器默认以 ctrlKey wheel 事件派发）连续缩放时间轴。 */
+  /**
+   * 按 Ctrl/Meta/Alt + 滚轮（或触控板双指捏合，浏览器默认以 ctrlKey wheel 事件派发）连续缩放时间轴。
+   * 必须用原生非 passive 监听才能 preventDefault 掉浏览器整页缩放；依赖 hasTimeline 保证容器晚挂载时也能补上监听。
+   */
   useEffect(() => {
     const node = scrollRef.current;
     if (node === null) {
@@ -921,7 +931,7 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
     return () => {
       node.removeEventListener("wheel", onWheel);
     };
-  }, [applyDayWidth, dayWidth]);
+  }, [applyDayWidth, dayWidth, hasTimeline]);
 
   /** Esc = 取消拖动（不写回、回到原日期）并清掉选中。 */
   useEffect(() => {
@@ -1397,7 +1407,7 @@ export function GanttChart({ tasks, members, viewerId = "", stageOrder = STAGE_O
       observer.disconnect();
       window.clearTimeout(barHideTimerRef.current);
     };
-  }, [revealScrollbars, syncScrollbars]);
+  }, [revealScrollbars, syncScrollbars, hasTimeline]);
 
   /** 拖滑块 = 滚容器（两根共用；`size` = 该方向滑块长度，用来把拖动距离换算成滚动距离）。 */
   const beginScrollbarDrag = (event: ReactPointerEvent<HTMLDivElement>, orientation: "horizontal" | "vertical", size: number, track: number) => {

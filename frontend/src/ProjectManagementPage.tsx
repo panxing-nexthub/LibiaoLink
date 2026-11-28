@@ -19,6 +19,7 @@ import { fullDateText, stageText, useLocale, useT, type TextKey } from "./i18n";
 import type { ProjectManagerCandidate } from "./projectManagerCandidates";
 import { PROJECT_BASE_HASH, projectManagementHref, type ProjectManagementView } from "./useHashRoute";
 import { stageNameOf } from "./taskApi";
+import { fetchUsedRegions } from "./projectApi";
 import {
   createProjectManagementRecord,
   deleteProjectManagementRecord,
@@ -74,7 +75,6 @@ const MIN_TRAILING_EMPTY_ROWS = 5;
 const MIN_TABLE_ROWS = 6;
 const TEXT_AUTOSAVE_DELAY_MS = 450;
 const SNAPSHOT_REFRESH_INTERVAL_MS = 30_000;
-const NO_USED_REGIONS: Readonly<Record<string, number>> = {};
 
 const PM_STAGE_KEYS = [
   "not_started",
@@ -4767,6 +4767,26 @@ export default function ProjectManagementPage({
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadNonce, setLoadNonce] = useState(0);
+  /**
+   * 核心 projects 的全量 region 计数（「已有项目地区」的另一半数据源）：
+   * 表格记录与新项目弹窗共用同一口径 —— 有核心项目在用、但管理表还没建记录的地区也要能选到（如中国台湾）。
+   */
+  const [projectRegionCounts, setProjectRegionCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let cancelled = false;
+    fetchUsedRegions()
+      .then((counts) => {
+        if (!cancelled) {
+          setProjectRegionCounts(counts);
+        }
+      })
+      .catch(() => {
+        // 取不到 = 只按表格记录计数（不提示、不影响页面）
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadNonce]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PmRow | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -4868,6 +4888,26 @@ export default function ProjectManagementPage({
       left.label.localeCompare(right.label, locale),
     );
   }, [rows, dicts, locale]);
+  /**
+   * 表格地区单元格「已有项目地区」计数（2026-11-28 修「已有项目地区没有中国台湾」）：
+   * 管理表读写的是 project_management_records 独立记录，字典 usageCount 只数核心 projects；而「中国台湾 / 中国香港 / 中国澳门」
+   * 是前端固定候选（字典无此行、usageCount 恒 0）—— 只按字典计数会让已有记录的地区在「已有项目地区」页缺席。
+   * 数据源取并集：核心 projects 的 region facets（与新项目弹窗同一口径）∪ 当前表格记录落库值计数（同值取较大，避免重复计）。
+   */
+  const usedRegionCounts = useMemo(() => {
+    const counts: Record<string, number> = { ...projectRegionCounts };
+    const recordCounts: Record<string, number> = {};
+    for (const row of rows) {
+      if (isEmptyRow(row) || row.region.trim() === "" || row.region === "未分类") {
+        continue;
+      }
+      recordCounts[row.region] = (recordCounts[row.region] ?? 0) + 1;
+    }
+    for (const [value, count] of Object.entries(recordCounts)) {
+      counts[value] = Math.max(counts[value] ?? 0, count);
+    }
+    return counts;
+  }, [rows, projectRegionCounts]);
   const methodFilterOptions = useMemo(() => {
     const present = new Set(
       rows
@@ -6056,7 +6096,7 @@ export default function ProjectManagementPage({
                                   value={row.region === "未分类" ? "" : row.region}
                                   valueLabel={regionLabel}
                                   items={dicts.region}
-                                  usedRegions={NO_USED_REGIONS}
+                                  usedRegions={usedRegionCounts}
                                   onChange={(value) => {
                                     handleRegionChange(row, value);
                                   }}
